@@ -1,0 +1,279 @@
+/* NomosOS UYAP Köprüsü — popup stilleri (bağımlılıksız, sade). */
+
+:root {
+  --renk-metin: #16202b;
+  --renk-soluk: #64748b;
+  --renk-cizgi: #e2e8f0;
+  --renk-zemin: #ffffff;
+  --renk-kart: #f8fafc;
+  --renk-vurgu: #1e3a5f;
+  --renk-vurgu-metin: #ffffff;
+  --renk-hata: #b91c1c;
+  --renk-hata-zemin: #fef2f2;
+  --renk-basari: #15803d;
+  --renk-uyari-zemin: #fffbeb;
+  --renk-uyari-cizgi: #f59e0b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  width: 380px;
+  margin: 0;
+  padding: 0;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  color: var(--renk-metin);
+  background: var(--renk-zemin);
+}
+
+.baslik {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: var(--renk-vurgu);
+  color: var(--renk-vurgu-metin);
+}
+
+.baslik h1 {
+  margin: 0;
+  font-size: 15px;
+  letter-spacing: 0.5px;
+}
+
+.baslik .alt {
+  margin: 2px 0 0;
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.surum {
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+main {
+  padding: 12px 14px 16px;
+}
+
+.bolum h2 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.gizli {
+  display: none !important;
+}
+
+label {
+  display: block;
+  margin: 10px 0 4px;
+  font-size: 12px;
+  color: var(--renk-soluk);
+}
+
+label.onay {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--renk-metin);
+  margin: 10px 0 0;
+}
+
+input[type="text"],
+input[type="url"],
+input[type="number"] {
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid var(--renk-cizgi);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+button {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--renk-cizgi);
+  border-radius: 6px;
+  background: var(--renk-kart);
+  color: var(--renk-metin);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--renk-vurgu);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+button.birincil {
+  background: var(--renk-vurgu);
+  color: var(--renk-vurgu-metin);
+  border-color: var(--renk-vurgu);
+}
+
+button.tehlike {
+  color: var(--renk-hata);
+  border-color: #fecaca;
+}
+
+button.kucuk {
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.kart {
+  background: var(--renk-kart);
+  border: 1px solid var(--renk-cizgi);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.kart-satir {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+}
+
+.kart-satir .etiket {
+  color: var(--renk-soluk);
+}
+
+.kart-satir .deger {
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.sayaclar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.sayac {
+  background: var(--renk-kart);
+  border: 1px solid var(--renk-cizgi);
+  border-radius: 8px;
+  padding: 8px 4px;
+  text-align: center;
+}
+
+.sayac .sayi {
+  display: block;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.sayac-etiket {
+  font-size: 10px;
+  color: var(--renk-soluk);
+}
+
+.dugmeler {
+  display: flex;
+  gap: 8px;
+}
+
+.dugmeler button {
+  flex: 1;
+}
+
+.ipucu {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--renk-soluk);
+  line-height: 1.5;
+}
+
+.hata {
+  margin: 8px 0 0;
+  padding: 8px;
+  font-size: 12px;
+  color: var(--renk-hata);
+  background: var(--renk-hata-zemin);
+  border-radius: 6px;
+}
+
+.uyari {
+  margin: 0 0 10px;
+  padding: 9px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--renk-uyari-zemin);
+  border-left: 3px solid var(--renk-uyari-cizgi);
+  border-radius: 4px;
+}
+
+details {
+  margin-top: 12px;
+  border-top: 1px solid var(--renk-cizgi);
+  padding-top: 8px;
+}
+
+summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.liste {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.liste li {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--renk-cizgi);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.liste li:last-child {
+  border-bottom: none;
+}
+
+.liste .zaman {
+  color: var(--renk-soluk);
+  font-size: 10px;
+  display: block;
+}
+
+.durum-etiketi {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  border: 1px solid var(--renk-cizgi);
+}
+
+.durum-PENDING,
+.durum-INFLIGHT {
+  color: #92400e;
+  background: var(--renk-uyari-zemin);
+}
+
+.durum-DONE,
+.durum-DUPLICATE {
+  color: var(--renk-basari);
+  background: #f0fdf4;
+}
+
+.durum-FAILED {
+  color: var(--renk-hata);
+  background: var(--renk-hata-zemin);
+}

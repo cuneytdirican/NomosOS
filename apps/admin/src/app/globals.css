@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  color-scheme: dark;
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-steel-950 text-steel-100 antialiased;
+}
+
+/* Koyu zeminde okunur kaydırma çubukları */
+* {
+  scrollbar-color: #434a5c #12151c;
+  scrollbar-width: thin;
+}

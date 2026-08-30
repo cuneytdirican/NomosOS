@@ -1,0 +1,338 @@
+"use client";
+
+import { useEffect, useState, type ReactNode } from "react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { clearToken, getStoredUser, getToken, type StoredUser } from "@/lib/api";
+import { countPendingProposals } from "@/lib/faz2";
+
+interface NavItem {
+  href: string;
+  label: string;
+  icon: ReactNode;
+  exact?: boolean;
+  /** Sol menüde bekleyen öneri sayısını gösteren rozet. */
+  badge?: "proposals";
+}
+
+/**
+ * Menü öğeleri gruplanmıştır (Faz 3'te İcra, Finans, Faturalar, Zaman eklendi;
+ * düz liste 13 öğeye çıkınca taranamaz hâle geliyordu).
+ */
+const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
+  {
+    title: "Dosya",
+    items: [
+  {
+    href: "/app",
+    label: "Panel",
+    exact: true,
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path d="M2 4.25A2.25 2.25 0 0 1 4.25 2h3.5A2.25 2.25 0 0 1 10 4.25v3.5A2.25 2.25 0 0 1 7.75 10h-3.5A2.25 2.25 0 0 1 2 7.75v-3.5ZM12 4.25A2.25 2.25 0 0 1 14.25 2h1.5A2.25 2.25 0 0 1 18 4.25v3.5A2.25 2.25 0 0 1 15.75 10h-1.5A2.25 2.25 0 0 1 12 7.75v-3.5ZM2 14.25A2.25 2.25 0 0 1 4.25 12h1.5A2.25 2.25 0 0 1 8 14.25v1.5A2.25 2.25 0 0 1 5.75 18h-1.5A2.25 2.25 0 0 1 2 15.75v-1.5ZM10 14.25A2.25 2.25 0 0 1 12.25 12h3.5A2.25 2.25 0 0 1 18 14.25v1.5A2.25 2.25 0 0 1 15.75 18h-3.5A2.25 2.25 0 0 1 10 15.75v-1.5Z" />
+      </svg>
+    ),
+  },
+  {
+    href: "/app/muvekkiller",
+    label: "Müvekkiller",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path d="M7 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM14.5 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM1.615 16.428a1.224 1.224 0 0 1-.569-1.175 6.002 6.002 0 0 1 11.908 0c.058.467-.172.92-.57 1.174A9.953 9.953 0 0 1 7 18a9.953 9.953 0 0 1-5.385-1.572ZM14.5 16h-.106c.07-.297.088-.611.048-.933a7.47 7.47 0 0 0-1.588-3.755 4.502 4.502 0 0 1 5.874 2.636.818.818 0 0 1-.36.98A7.465 7.465 0 0 1 14.5 16Z" />
+      </svg>
+    ),
+  },
+  {
+    href: "/app/dosyalar",
+    label: "Dosyalar",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path d="M3.75 3A1.75 1.75 0 0 0 2 4.75v3.26a3.235 3.235 0 0 1 1.75-.51h12.5c.644 0 1.245.188 1.75.51V6.75A1.75 1.75 0 0 0 16.25 5h-4.836a.25.25 0 0 1-.177-.073L9.823 3.513A1.75 1.75 0 0 0 8.586 3H3.75ZM3.75 9A1.75 1.75 0 0 0 2 10.75v4.5c0 .966.784 1.75 1.75 1.75h12.5A1.75 1.75 0 0 0 18 15.25v-4.5A1.75 1.75 0 0 0 16.25 9H3.75Z" />
+      </svg>
+    ),
+  },
+  {
+    href: "/app/icra",
+    label: "İcra",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path d="M10 1.5a.75.75 0 0 1 .75.75v.62l5.06 1.35a.75.75 0 0 1-.14 1.48l-.36-.02 2.16 4.9a.75.75 0 0 1-.2.88 3.6 3.6 0 0 1-4.62 0 .75.75 0 0 1-.2-.88l2.14-4.86-3.84-1.02V15.5h2.5a.75.75 0 0 1 0 1.5h-6.5a.75.75 0 0 1 0-1.5h2.5V4.7L5.37 5.72l2.14 4.86a.75.75 0 0 1-.2.88 3.6 3.6 0 0 1-4.62 0 .75.75 0 0 1-.2-.88l2.16-4.9-.36.02a.75.75 0 0 1-.14-1.48l5.1-1.36v-.61A.75.75 0 0 1 10 1.5Z" />
+      </svg>
+    ),
+  },
+    ],
+  },
+  {
+    title: "Takvim",
+    items: [
+  {
+    href: "/app/durusmalar",
+    label: "Duruşmalar",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path
+          fillRule="evenodd"
+          d="M5.75 2a.75.75 0 0 1 .75.75V4h7V2.75a.75.75 0 0 1 1.5 0V4h.25A2.75 2.75 0 0 1 18 6.75v8.5A2.75 2.75 0 0 1 15.25 18H4.75A2.75 2.75 0 0 1 2 15.25v-8.5A2.75 2.75 0 0 1 4.75 4H5V2.75A.75.75 0 0 1 5.75 2Zm-1 5.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5c0-.69-.56-1.25-1.25-1.25H4.75Z"
+          clipRule="evenodd"
+        />
+      </svg>
+    ),
+  },
+  {
+    href: "/app/sureler",
+    label: "Süreler",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path
+          fillRule="evenodd"
+          d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z"
+          clipRule="evenodd"
+        />
+      </svg>
+    ),
+  },
+  {
+    href: "/app/gorevler",
+    label: "Görevler",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path
+          fillRule="evenodd"
+          d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z"
+          clipRule="evenodd"
+        />
+      </svg>
+    ),
+  },
+    ],
+  },
+  {
+    title: "Üretim",
+    items: [
+  {
+    href: "/app/oneriler",
+    label: "Öneriler",
+    badge: "proposals",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path d="M10 1a6 6 0 0 0-3.815 10.631C7.237 12.5 8 13.443 8 14.456v.644a.75.75 0 0 0 .572.729 6.016 6.016 0 0 0 2.856 0A.75.75 0 0 0 12 15.1v-.644c0-1.013.762-1.957 1.815-2.825A6 6 0 0 0 10 1ZM8.863 17.414a.75.75 0 0 0-.226 1.483 9.066 9.066 0 0 0 2.726 0 .75.75 0 0 0-.226-1.483 7.553 7.553 0 0 1-2.274 0Z" />
+      </svg>
+    ),
+  },
+  {
+    href: "/app/ictihat",
+    label: "İçtihat",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path
+          fillRule="evenodd"
+          d="M9.293 2.293a1 1 0 0 1 1.414 0l.5.5a1 1 0 0 1 0 1.414l-.379.379 4.293 4.293a.75.75 0 0 1-.53 1.28h-1.44l1.69 3.38a.75.75 0 0 1-.67 1.086h-4.5a.75.75 0 0 1-.67-1.086l1.69-3.38H9.25a.75.75 0 0 1-.53-1.28l1.72-1.72-1.5-1.5-1.72 1.72a.75.75 0 0 1-1.28.53v1.44l-3.38 1.69a.75.75 0 0 1-1.086-.67v-4.5a.75.75 0 0 1 1.086-.67l3.38 1.69V7.75a.75.75 0 0 1 1.28-.53l.379-.379-.379-.378a1 1 0 0 1 0-1.415l.5-.5ZM3.75 16.5a.75.75 0 0 0 0 1.5h12.5a.75.75 0 0 0 0-1.5H3.75Z"
+          clipRule="evenodd"
+        />
+      </svg>
+    ),
+  },
+    ],
+  },
+  {
+    title: "Para",
+    items: [
+      {
+        href: "/app/finans",
+        label: "Finans",
+        icon: (
+          <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+            <path
+              fillRule="evenodd"
+              d="M1 4.25A2.25 2.25 0 0 1 3.25 2h13.5A2.25 2.25 0 0 1 19 4.25v11.5A2.25 2.25 0 0 1 16.75 18H3.25A2.25 2.25 0 0 1 1 15.75V4.25Zm4.75 8.5a.75.75 0 0 0 1.5 0V9.31l1.72 1.72a.75.75 0 0 0 1.06 0l2-2 2.72 2.72a.75.75 0 1 0 1.06-1.06l-3.25-3.25a.75.75 0 0 0-1.06 0l-2 2-2.5-2.5a.75.75 0 0 0-1.25.56v5.25Z"
+              clipRule="evenodd"
+            />
+          </svg>
+        ),
+      },
+      {
+        href: "/app/faturalar",
+        label: "Faturalar",
+        icon: (
+          <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+            <path
+              fillRule="evenodd"
+              d="M4 2.75A1.75 1.75 0 0 1 5.75 1h8.5A1.75 1.75 0 0 1 16 2.75v15.06a.75.75 0 0 1-1.14.64L13 17.29l-1.86 1.16a.75.75 0 0 1-.79 0L8.5 17.29l-1.86 1.16a.75.75 0 0 1-.79 0L4 17.29l-.86.54A.75.75 0 0 1 2 17.19V2.75A1.75 1.75 0 0 1 3.75 1H4v1.75Zm3 2a.75.75 0 0 0 0 1.5h6a.75.75 0 0 0 0-1.5H7Zm0 3.5a.75.75 0 0 0 0 1.5h6a.75.75 0 0 0 0-1.5H7Zm0 3.5a.75.75 0 0 0 0 1.5h3.5a.75.75 0 0 0 0-1.5H7Z"
+              clipRule="evenodd"
+            />
+          </svg>
+        ),
+      },
+      {
+        href: "/app/zaman",
+        label: "Zaman Kaydı",
+        icon: (
+          <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+            <path
+              fillRule="evenodd"
+              d="M7.5 1.75A.75.75 0 0 1 8.25 1h3.5a.75.75 0 0 1 0 1.5h-1v1.29a7 7 0 0 1 3.36 1.4l.94-.94a.75.75 0 1 1 1.06 1.06l-.93.93A7 7 0 1 1 9.25 3.79V2.5h-1a.75.75 0 0 1-.75-.75ZM10.75 8a.75.75 0 0 0-1.5 0v3.25c0 .2.08.39.22.53l2 2a.75.75 0 1 0 1.06-1.06l-1.78-1.78V8Z"
+              clipRule="evenodd"
+            />
+          </svg>
+        ),
+      },
+    ],
+  },
+  {
+    title: "Ayarlar",
+    items: [
+  {
+    href: "/app/ayarlar/ai-saglayici",
+    label: "AI Sağlayıcı",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path
+          fillRule="evenodd"
+          d="M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.331 1.652a6.993 6.993 0 0 1 1.929 1.115l1.598-.54a1 1 0 0 1 1.186.447l1.18 2.044a1 1 0 0 1-.205 1.251l-1.267 1.113a7.047 7.047 0 0 1 0 2.228l1.267 1.113a1 1 0 0 1 .206 1.25l-1.18 2.045a1 1 0 0 1-1.187.447l-1.598-.54a6.993 6.993 0 0 1-1.929 1.115l-.33 1.652a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.331-1.652a6.993 6.993 0 0 1-1.929-1.115l-1.598.54a1 1 0 0 1-1.186-.447l-1.18-2.044a1 1 0 0 1 .205-1.251l1.267-1.114a7.05 7.05 0 0 1 0-2.227L1.821 7.773a1 1 0 0 1-.206-1.25l1.18-2.045a1 1 0 0 1 1.187-.447l1.598.54A6.992 6.992 0 0 1 7.51 3.456l.33-1.652ZM10 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+          clipRule="evenodd"
+        />
+      </svg>
+    ),
+  },
+    ],
+  },
+];
+
+export default function AppLayout({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [ready, setReady] = useState(false);
+  const [user, setUser] = useState<StoredUser | null>(null);
+  const [pendingProposals, setPendingProposals] = useState(0);
+
+  useEffect(() => {
+    if (!getToken()) {
+      router.replace("/giris");
+      return;
+    }
+    setUser(getStoredUser());
+    setReady(true);
+  }, [router]);
+
+  /**
+   * Bekleyen öneri rozeti. Uç henüz yayında değilse 0 döner ve rozet gizlenir;
+   * öneri onaylandığında sayfalar `nomosos:proposals-changed` olayını yayar.
+   */
+  useEffect(() => {
+    if (!ready) return;
+    let alive = true;
+    const refresh = () => {
+      void countPendingProposals().then((n) => {
+        if (alive) setPendingProposals(n);
+      });
+    };
+    refresh();
+    window.addEventListener("nomosos:proposals-changed", refresh);
+    const timer = window.setInterval(refresh, 120_000);
+    return () => {
+      alive = false;
+      window.removeEventListener("nomosos:proposals-changed", refresh);
+      window.clearInterval(timer);
+    };
+  }, [ready, pathname]);
+
+  function handleLogout() {
+    clearToken();
+    router.replace("/giris");
+  }
+
+  if (!ready) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm text-slate-500">
+        Oturum doğrulanıyor…
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-screen bg-slate-50">
+      {/* Sol menü */}
+      <aside className="fixed inset-y-0 left-0 z-30 flex w-60 flex-col bg-slate-900">
+        <div className="flex items-center gap-2 border-b border-slate-800 px-5 py-4">
+          <svg viewBox="0 0 32 32" className="h-8 w-8" aria-hidden="true">
+            <rect width="32" height="32" rx="7" className="fill-amber-500" />
+            <path
+              d="M16 6l2.1 4.6 4.9.6-3.6 3.4.9 4.9L16 17l-4.3 2.5.9-4.9L9 11.2l4.9-.6L16 6z"
+              className="fill-slate-900"
+            />
+            <rect x="8" y="23" width="16" height="2.5" rx="1.25" className="fill-slate-900" />
+          </svg>
+          <span className="text-lg font-bold text-white">
+            Nomos<span className="text-amber-400">OS</span>
+          </span>
+        </div>
+        <nav className="flex-1 overflow-y-auto p-3" aria-label="Ana menü">
+          {NAV_GROUPS.map((group, groupIndex) => (
+            <div key={group.title} className={groupIndex > 0 ? "mt-5" : ""}>
+              <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+                {group.title}
+              </p>
+              <div className="space-y-1">
+                {group.items.map((item) => {
+                  const active = item.exact
+                    ? pathname === item.href
+                    : pathname === item.href || pathname.startsWith(item.href + "/");
+                  const badgeCount = item.badge === "proposals" ? pendingProposals : 0;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      aria-current={active ? "page" : undefined}
+                      className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                        active
+                          ? "bg-amber-500 text-slate-900"
+                          : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                      }`}
+                    >
+                      {item.icon}
+                      <span className="flex-1">{item.label}</span>
+                      {badgeCount > 0 && (
+                        <span
+                          title={`${badgeCount} öneri onayınızı bekliyor`}
+                          className={`inline-flex min-w-[1.35rem] items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-bold ${
+                            active ? "bg-slate-900 text-amber-400" : "bg-amber-500 text-slate-900"
+                          }`}
+                        >
+                          {badgeCount > 99 ? "99+" : badgeCount}
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </nav>
+        <p className="border-t border-slate-800 px-5 py-3 text-[11px] text-slate-500">
+          NomosOS · AI-Native Legal OS
+        </p>
+      </aside>
+
+      {/* İçerik */}
+      <div className="ml-60 flex min-h-screen flex-1 flex-col">
+        <header className="sticky top-0 z-20 flex items-center justify-end gap-4 border-b border-slate-200 bg-white px-6 py-3">
+          <div className="text-right">
+            <p className="text-sm font-medium text-slate-900">{user?.fullName ?? user?.email ?? "Kullanıcı"}</p>
+            {user?.role && <p className="text-xs text-slate-500">{user.role}</p>}
+          </div>
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-amber-400">
+            {(user?.fullName ?? user?.email ?? "?").charAt(0).toUpperCase()}
+          </div>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
+          >
+            Çıkış
+          </button>
+        </header>
+        <main className="flex-1 p-6">{children}</main>
+      </div>
+    </div>
+  );
+}

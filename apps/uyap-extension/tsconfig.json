@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    // DÜZELTİLDİ (kod denetimi, bulgu 14): "node" tipleri buradan kaldırıldı.
+    // Tarayıcı kodunda Buffer/process/__dirname ve Node'un setTimeout aşırı yüklemesi
+    // (NodeJS.Timeout) görünür olmamalı; testler ayrı projede derlenir (tsconfig.test.json).
+    "types": ["chrome"],
+    "noEmit": true,
+    "declaration": false,
+    "sourceMap": false,
+    "verbatimModuleSyntax": false,
+    "allowJs": false
+  },
+  "include": ["src"]
+}

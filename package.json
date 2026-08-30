@@ -1,0 +1,24 @@
+{
+  "name": "nomosos",
+  "private": true,
+  "version": "0.1.0",
+  "description": "NomosOS — AI-Native Legal Operating System (Türk hukuk büroları için)",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "db:generate": "pnpm --filter @nomosos/db generate",
+    "db:migrate": "pnpm --filter @nomosos/db migrate:dev",
+    "db:deploy": "pnpm --filter @nomosos/db migrate:deploy",
+    "db:seed": "pnpm --filter @nomosos/db seed"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2"
+  }
+}

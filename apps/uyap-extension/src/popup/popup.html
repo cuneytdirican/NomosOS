@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NomosOS UYAP Köprüsü</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="baslik">
+      <div>
+        <h1>NomosOS</h1>
+        <p class="alt">UYAP Köprüsü</p>
+      </div>
+      <span class="surum" id="surum"></span>
+    </header>
+
+    <main>
+      <!-- Parser kırılma uyarısı -->
+      <section id="parserUyari" class="uyari gizli" role="alert"></section>
+
+      <!-- Eşleştirme ekranı -->
+      <section id="eslestirmeBolumu" class="bolum gizli">
+        <h2>Büronuzla eşleştirin</h2>
+        <p class="ipucu">
+          NomosOS'ta <strong>Ayarlar → UYAP Eklentisi</strong> ekranından eşleştirme kodu üretin ve
+          aşağıya girin.
+        </p>
+        <label for="apiAdresi">NomosOS sunucu adresi</label>
+        <input id="apiAdresi" type="url" inputmode="url" placeholder="https://app.nomosos.com" />
+        <label for="eslestirmeKodu">Eşleştirme kodu</label>
+        <input id="eslestirmeKodu" type="text" autocomplete="off" placeholder="ör. 8H4K-92QD-11" />
+        <button id="eslestirBtn" class="birincil" type="button">Eşleştir</button>
+        <p id="eslestirmeHata" class="hata gizli" role="alert"></p>
+      </section>
+
+      <!-- Durum ekranı -->
+      <section id="durumBolumu" class="bolum gizli">
+        <div class="kart">
+          <div class="kart-satir">
+            <span class="etiket">Büro</span>
+            <span id="tenantAdi" class="deger">—</span>
+          </div>
+          <div class="kart-satir">
+            <span class="etiket">Kullanıcı</span>
+            <span id="kullaniciAdi" class="deger">—</span>
+          </div>
+          <div class="kart-satir">
+            <span class="etiket">Son senkron</span>
+            <span id="sonSenkron" class="deger">—</span>
+          </div>
+        </div>
+
+        <div class="sayaclar">
+          <div class="sayac">
+            <span id="izlenenDosya" class="sayi">0</span>
+            <span class="sayac-etiket">izlenen dosya</span>
+          </div>
+          <div class="sayac">
+            <span id="kuyrukBekleyen" class="sayi">0</span>
+            <span class="sayac-etiket">kuyrukta</span>
+          </div>
+          <div class="sayac">
+            <span id="kuyrukHatali" class="sayi">0</span>
+            <span class="sayac-etiket">hatalı</span>
+          </div>
+          <div class="sayac">
+            <span id="onayBekleyen" class="sayi">0</span>
+            <span class="sayac-etiket">onay bekliyor</span>
+          </div>
+        </div>
+
+        <div class="dugmeler">
+          <button id="senkronBtn" class="birincil" type="button">Şimdi senkronize et</button>
+          <button id="yenidenDeneBtn" type="button">Başarısızları yeniden dene</button>
+        </div>
+        <p id="senkronDurum" class="ipucu" role="status"></p>
+
+        <details id="kuyrukBolumu">
+          <summary>Aktarım kuyruğu</summary>
+          <ul id="kuyrukListesi" class="liste"></ul>
+          <button id="kuyrukTemizleBtn" class="kucuk" type="button">Kuyruğu temizle</button>
+        </details>
+
+        <details id="hataBolumu">
+          <summary>Olaylar ve hatalar</summary>
+          <ul id="hataListesi" class="liste"></ul>
+        </details>
+
+        <details id="ayarBolumu">
+          <summary>Ayarlar</summary>
+          <label class="onay">
+            <input id="otomatikSenkron" type="checkbox" />
+            Periyodik senkron açık
+          </label>
+          <label for="senkronAralik">Senkron aralığı (dakika)</label>
+          <input id="senkronAralik" type="number" min="5" max="1440" step="5" />
+          <label class="onay">
+            <input id="dugmeEnjeksiyon" type="checkbox" />
+            UYAP sayfalarına aktarım düğmeleri ekle
+          </label>
+          <label for="cihazAdi">Cihaz adı</label>
+          <input id="cihazAdi" type="text" maxlength="60" />
+          <button id="ayarKaydetBtn" type="button">Ayarları kaydet</button>
+          <button id="baglantiKesBtn" class="tehlike" type="button">Bağlantıyı kes</button>
+        </details>
+
+        <p class="ipucu">
+          Senkron yalnızca tarayıcı açık ve UYAP oturumunuz aktifken çalışır. Eklenti UYAP'a
+          hiçbir veri yazmaz; gönderimlerinizi her zaman siz imzalar ve onaylarsınız.
+        </p>
+      </section>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

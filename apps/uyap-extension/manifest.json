@@ -1,0 +1,51 @@
+{
+  "manifest_version": 3,
+  "name": "NomosOS UYAP Köprüsü",
+  "short_name": "NomosOS UYAP",
+  "version": "0.1.0",
+  "description": "UYAP Avukat Portalı ile NomosOS arasında güvenli, yarı otomatik dosya, safahat ve evrak köprüsü. Kullanıcı adına imzasız gönderim yapmaz.",
+  "minimum_chrome_version": "116",
+  "permissions": ["storage", "unlimitedStorage", "alarms"],
+  "host_permissions": [
+    "https://avukatbeta.uyap.gov.tr/*",
+    "https://avukat.uyap.gov.tr/*",
+    "https://app.nomosos.com/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://avukatbeta.uyap.gov.tr/*", "https://avukat.uyap.gov.tr/*"],
+      "js": ["content/inject.js"],
+      "css": ["content/inject.css"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "NomosOS UYAP Köprüsü",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}

@@ -1,0 +1,1772 @@
+// NomosOS çekirdek veri modeli
+// docs/02-veri-modeli.md ile birebir uyumludur; değişiklikler iki yerde birden yapılmalıdır.
+// Tüm iş verileri tenantId ile çok-kiracılı (multi-tenant) ayrıştırılır.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Kiracı ve kullanıcı ----------
+
+/// Büronun AI veri politikası (docs/04-kvkk-veri-guvenligi.md).
+/// SADECE_YEREL seçildiğinde dış sağlayıcıya (adres tabanlı tespit) hiçbir
+/// istek yapılamaz; yanlışlıkla eklenmiş bir bulut sağlayıcısı sessiz yedek
+/// rota olamaz.
+enum AiPolicy {
+  SERBEST
+  SADECE_YEREL
+}
+
+model Tenant {
+  id              String   @id @default(uuid())
+  name            String // Büro adı
+  /// SERBEST | SADECE_YEREL — dış AI sağlayıcısı kullanımına izin var mı?
+  aiPolicy        AiPolicy @default(SERBEST)
+  /// Otomatik belge hattının dış sağlayıcıya MASKELİ metin göndermesine
+  /// verilen tek seferlik açık rıza. false ise hattın AI adımları ATLANIR
+  /// ve belge triyaja düşer (docs/04, kabul kriteri 1).
+  autoMaskConsent Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  users             User[]
+  clients           Client[]
+  cases             Case[]
+  deadlineRules     DeadlineRule[]
+  caseNotes         CaseNote[]
+  caseDecisions     CaseDecision[]
+  aiProviderConfigs AiProviderConfig[]
+  aiTaskRoutes      AiTaskRoute[]
+  auditLogs         AuditLog[]
+}
+
+enum UserRole {
+  ADMIN
+  PARTNER
+  AVUKAT
+  STAJYER
+  SEKRETER
+}
+
+model User {
+  id           String   @id @default(uuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  role         UserRole
+  barNumber    String? // Baro sicil no
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  responsibleCases Case[]          @relation("ResponsibleUser")
+  assignedTasks    Task[]          @relation("Assignee")
+  reviewTasks      Task[]          @relation("Reviewer")
+  deadlines        Deadline[]      @relation("DeadlineOwner")
+  timelineEvents   TimelineEvent[]
+  caseNotes        CaseNote[]
+  taskStatusLogs   TaskStatusLog[]
+  aiUsageLogs      AiUsageLog[]
+  timeEntries      TimeEntry[]
+
+  @@index([tenantId])
+}
+
+// ---------- Müvekkil (CRM çekirdeği) ----------
+
+enum ClientType {
+  GERCEK_KISI
+  TUZEL_KISI
+}
+
+model Client {
+  id            String     @id @default(uuid())
+  tenantId      String
+  tenant        Tenant     @relation(fields: [tenantId], references: [id])
+  type          ClientType
+  name          String // Ad soyad veya ticaret unvanı
+  tckn          String? // Gerçek kişi — KVKK: uygulama katmanında maskeli gösterim
+  taxNumber     String? // Tüzel kişi vergi no
+  taxOffice     String?
+  email         String?
+  phone         String?
+  address       String?
+  iban          String?
+  notes         String?
+  /// Segment etiketi: "Kurumsal" | "Bireysel" | serbest metin
+  category      String?
+  /// Büro içi müvekkil referans kodu (örn. "MV-2026-001")
+  referenceCode String?
+  isActive      Boolean    @default(true)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  contacts         ClientContact[]
+  cases            Case[]
+  powerOfAttorneys PowerOfAttorney[]
+  financialEntries FinancialEntry[]
+  feeAgreements    FeeAgreement[]
+  timeEntries      TimeEntry[]
+  invoices         Invoice[]
+  payments         Payment[]
+
+  @@index([tenantId])
+  @@index([tenantId, name])
+  @@index([tenantId, category])
+  @@index([tenantId, referenceCode])
+}
+
+/// Tüzel kişi yetkilileri / ilgili kişiler
+model ClientContact {
+  id       String  @id @default(uuid())
+  clientId String
+  client   Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  fullName String
+  title    String? // Görevi (örn. Genel Müdür)
+  email    String?
+  phone    String?
+  notes    String?
+
+  @@index([clientId])
+}
+
+// ---------- Dosya (sistemin merkezi) ----------
+
+enum CaseType {
+  DAVA
+  ICRA
+  ARABULUCULUK
+  CEZA
+  DANISMANLIK
+}
+
+enum CaseStatus {
+  ACIK
+  DERDEST
+  KARAR
+  ISTINAF
+  TEMYIZ
+  KESINLESTI
+  ICRADA
+  KAPANDI
+  ARSIV
+}
+
+model Case {
+  id                String     @id @default(uuid())
+  tenantId          String
+  tenant            Tenant     @relation(fields: [tenantId], references: [id])
+  clientId          String
+  client            Client     @relation(fields: [clientId], references: [id])
+  responsibleUserId String?
+  responsibleUser   User?      @relation("ResponsibleUser", fields: [responsibleUserId], references: [id])
+  type              CaseType
+  status            CaseStatus @default(ACIK)
+  title             String
+  courtName         String? // Örn. "İstanbul 12. İş Mahkemesi" / "Ankara 4. İcra Dairesi"
+  fileNumber        String? // Esas no, örn. 2026/145
+  judgeName         String?
+  subject           String? // Dava konusu / takip konusu
+  amount            Decimal?   @db.Decimal(18, 2) // Dava değeri / takip tutarı (TRY)
+  openedAt          DateTime   @default(now())
+  closedAt          DateTime?
+  /// Denormalize: en yakın gelecek duruşma tarihi — duruşma yazımlarında güncellenir
+  nextHearingAt     DateTime?
+  /// Dosyadaki son hareket zamanı (safahat/not/karar/duruşma yazımı)
+  lastActivityAt    DateTime?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  parties          CaseParty[]
+  hearings         Hearing[]
+  deadlines        Deadline[]
+  tasks            Task[]
+  documents        Document[]
+  timelineEvents   TimelineEvent[]
+  notes            CaseNote[]
+  decisions        CaseDecision[]
+  powerOfAttorneys PowerOfAttorney[]
+  financialEntries FinancialEntry[]
+
+  documentChunks  DocumentChunk[]
+  actionProposals DocumentActionProposal[]
+  chatSessions    ChatSession[]
+  smartNotes      SmartNote[]
+  analysisReports CaseAnalysisReport[]
+  petitions       Petition[]
+  caseLawRefs     CaseLawReference[]
+
+  /// Faz 3 — icra takibi (bir Case en fazla bir icra dosyasına karşılık gelir)
+  enforcementFile EnforcementFile?
+  feeAgreements   FeeAgreement[]
+  timeEntries     TimeEntry[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, nextHearingAt])
+  @@index([tenantId, lastActivityAt])
+  @@index([clientId])
+}
+
+enum PartyRole {
+  DAVACI
+  DAVALI
+  MUDAHIL
+  ALACAKLI
+  BORCLU
+  SANIK
+  MUSTEKI
+  KATILAN
+  TANIK
+  DIGER
+}
+
+model CaseParty {
+  id         String    @id @default(uuid())
+  caseId     String
+  case       Case      @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  role       PartyRole
+  name       String
+  isClient   Boolean   @default(false) // Bu taraf bizim müvekkilimiz mi
+  lawyerName String? // Karşı taraf vekili
+  notes      String?
+
+  @@index([caseId])
+}
+
+// ---------- Duruşma ----------
+
+enum HearingType {
+  DURUSMA
+  ON_INCELEME
+  KESIF
+  E_DURUSMA
+  MUZAKERE
+  DIGER
+}
+
+enum HearingStatus {
+  PLANLANDI
+  YAPILDI
+  ERTELENDI
+  IPTAL
+}
+
+model Hearing {
+  id          String        @id @default(uuid())
+  tenantId    String
+  caseId      String
+  case        Case          @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  type        HearingType   @default(DURUSMA)
+  status      HearingStatus @default(PLANLANDI)
+  date        DateTime
+  courtroom   String?
+  note        String? // Ara karar / sonuç özeti
+  /// Duruşma hazırlığının tamamlandığı an
+  preparedAt  DateTime?
+  /// Duruşma hazırlık notu / brifing özeti
+  prepSummary String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([tenantId, date])
+  @@index([tenantId, status, date])
+  @@index([caseId])
+}
+
+// ---------- Süre / Deadline ----------
+
+enum DeadlineSource {
+  MANUEL
+  KURAL // Deterministik kural motoru hesabı
+  AI_ONERISI // AI tespiti — avukat onayı olmadan kesinleşmez
+}
+
+enum DeadlineStatus {
+  BEKLIYOR // AI önerisi: onay bekliyor
+  ONAYLANDI
+  TAMAMLANDI
+  KACIRILDI
+  IPTAL
+}
+
+model Deadline {
+  id            String         @id @default(uuid())
+  tenantId      String
+  caseId        String
+  case          Case           @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  ownerId       String?
+  owner         User?          @relation("DeadlineOwner", fields: [ownerId], references: [id])
+  title         String // Örn. "İstinaf süresi son günü"
+  /// Gün hassasiyetli değer; motor UTC gün başı üretir. @db.Date, negatif ofsetli
+  /// saat dilimlerinde gün kaymasını önler (Holiday.date ile aynı sözleşme).
+  dueDate       DateTime       @db.Date
+  source        DeadlineSource @default(MANUEL)
+  status        DeadlineStatus @default(ONAYLANDI)
+  legalBasis    String? // Dayanak: örn. "HMK m.345 — 2 hafta"
+  computeNote   String? // Hesap izi: tebliğ tarihi, yöntem, tatil kaydırması
+  /// Hesabın dayandığı DeadlineRule.key (örn. "HMK_CEVAP")
+  ruleKey       String?
+  /// Süreyi başlatan olay tarihi (tebliğ/karar/olay)
+  triggerDate   DateTime?
+  /// Tebligat yöntemi — bazı sürelerde başlangıç gününü etkiler
+  serviceMethod ServiceMethod?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([tenantId, dueDate])
+  @@index([tenantId, status, dueDate])
+  @@index([caseId])
+  @@index([ruleKey])
+}
+
+// ---------- Süre motoru: kurallar ve tatiller ----------
+
+enum DurationUnit {
+  GUN
+  HAFTA
+  AY
+  YIL
+}
+
+/// Tebligat yöntemi — süre başlangıcını etkileyebilir
+enum ServiceMethod {
+  ELDEN
+  POSTA
+  ETEBLIGAT
+  DURUSMADA
+  DIGER
+}
+
+/// Adli tatil uzaması rejimi — yargı koluna göre gün sayısı ve çapa değişir.
+enum RecessExtensionRule {
+  HMK_104 // Adli tatilin bittiği günden itibaren 1 hafta
+  IYUK_8 // Ara vermenin sona erdiği günü izleyen tarihten itibaren 7 gün
+  CMK_331 // Tatilin bittiği günden itibaren 3 gün
+}
+
+/// Sürenin tabi olduğu usul kanunu — hesap izindeki madde referansları için.
+enum ProcedureCode {
+  HMK
+  IIK
+  CMK
+  IYUK
+}
+
+/// Kanuni süre kuralı. tenantId null ise sistem kuralıdır (tüm bürolar görür).
+model DeadlineRule {
+  id                    String              @id @default(uuid())
+  tenantId              String?
+  tenant                Tenant?             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  key                   String // Örn. "HMK_CEVAP"
+  name                  String // Örn. "Cevap dilekçesi süresi"
+  description           String?
+  durationValue         Int
+  durationUnit          DurationUnit
+  legalBasis            String // Örn. "HMK m.127 — 2 hafta"
+  caseTypes             String[] // CaseType değerleri; boş ise tüm dosya tipleri
+  /// Bu kuralın süresi adli tatilde uzar mı (HMK m.104). İcra takip süreleri ve
+  /// HMK m.103 istisnaları için false. REJİM KARARI KURALDAN GELİR, istemciden DEĞİL.
+  judicialRecessApplies Boolean             @default(true)
+  /// Adli tatil uzaması rejimi: HMK_104 (+7) | IYUK_8 (+1+7) | CMK_331 (+3)
+  recessRule            RecessExtensionRule @default(HMK_104)
+  /// Hesap izindeki madde referanslarının seçileceği usul kanunu
+  procedureCode         ProcedureCode       @default(HMK)
+  isActive              Boolean             @default(true)
+  isSystem              Boolean             @default(false)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@index([key])
+  @@index([isActive])
+}
+
+enum HolidayType {
+  RESMI_TATIL
+  ADLI_TATIL
+}
+
+/// Resmi tatil ve adli tatil günleri — süre motoru bunları çalışmayan gün sayar.
+model Holiday {
+  id            String      @id @default(uuid())
+  date          DateTime    @db.Date
+  name          String
+  type          HolidayType
+  year          Int
+  /// Arife günü (2429 s.K. m.2/A) — saat 13.00'e kadar mesai vardır.
+  /// TAM TATİL DEĞİLDİR: HMK m.93 kaydırmasını TETİKLEMEZ.
+  isHalfDay     Boolean     @default(false)
+  /// Hicri takvime bağlı, resmî ilanla kesinleşecek tarih (Ramazan/Kurban).
+  isApproximate Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+
+  /// Aynı güne birden fazla resmî tatil düşebilir (ör. bayram + 19 Mayıs);
+  /// tekillik ad ile birlikte kurulur.
+  @@unique([date, type, name])
+  @@index([year])
+  @@index([type, date])
+}
+
+// ---------- Görev / Workflow ----------
+
+enum TaskStatus {
+  ACIK
+  DEVAM_EDIYOR
+  KONTROLDE
+  ONAY_BEKLIYOR
+  TAMAMLANDI
+  IPTAL
+}
+
+enum TaskPriority {
+  DUSUK
+  NORMAL
+  YUKSEK
+  KRITIK
+}
+
+model Task {
+  id          String       @id @default(uuid())
+  tenantId    String
+  caseId      String?
+  case        Case?        @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  title       String
+  description String?
+  assigneeId  String
+  assignee    User         @relation("Assignee", fields: [assigneeId], references: [id])
+  reviewerId  String?
+  reviewer    User?        @relation("Reviewer", fields: [reviewerId], references: [id])
+  status      TaskStatus   @default(ACIK)
+  priority    TaskPriority @default(NORMAL)
+  dueDate     DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  statusLogs TaskStatusLog[]
+
+  @@index([tenantId, status])
+  @@index([assigneeId, status])
+  @@index([tenantId, dueDate])
+  @@index([caseId])
+}
+
+/// Görev durum geçiş günlüğü — workflow denetim izi
+model TaskStatusLog {
+  id         String      @id @default(uuid())
+  taskId     String
+  task       Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fromStatus TaskStatus?
+  toStatus   TaskStatus
+  userId     String
+  user       User        @relation(fields: [userId], references: [id])
+  note       String?
+  createdAt  DateTime    @default(now())
+
+  @@index([taskId, createdAt])
+  @@index([userId])
+}
+
+// ---------- Belge ----------
+
+enum DocumentClass {
+  DILEKCE
+  TENSIP_ZAPTI
+  ARA_KARAR
+  GEREKCELI_KARAR
+  BILIRKISI_RAPORU
+  DURUSMA_TUTANAGI
+  TEBLIGAT
+  MUZEKKERE
+  VEKALETNAME
+  SOZLESME
+  DELIL
+  FATURA
+  ICRA_EVRAKI
+  DIGER
+}
+
+/// Belge işleme hattı adım durumu (OCR / parçalama / gömme).
+enum ProcessingStatus {
+  BEKLIYOR
+  TAMAM
+  BASARISIZ
+  GEREKSIZ // Adım bu belge için uygulanamaz (örn. metin katmanı zaten var / görselsiz)
+}
+
+model Document {
+  id          String            @id @default(uuid())
+  tenantId    String
+  caseId      String?
+  case        Case?             @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  name        String
+  class       DocumentClass     @default(DIGER)
+  classSource String? // MANUEL | AI (AI sınıflandırdıysa güven skoru ile)
+  mimeType    String?
+  sizeBytes   Int?
+  storageKey  String // MinIO/S3 nesne anahtarı
+  uploadedBy  String? // User id
+  aiSummary   String? // AI tarafından üretilen kısa özet
+  /// Metin çıkarma sonucu — HAM metin (maskesiz). LLM'e giderken scanPii'den geçirilir.
+  ocrText     String?
+  ocrStatus   ProcessingStatus?
+  chunkStatus ProcessingStatus?
+  /// İçerik SHA-256 (hex) — aynı kiracıda yinelenen yüklemeyi engellemek için.
+  hash        String?
+  /// MANUEL | UYAP | SISTEM
+  source      String?
+  pageCount   Int?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  chunks    DocumentChunk[]
+  pipelines PipelineRun[]
+  proposals DocumentActionProposal[]
+
+  @@index([tenantId])
+  @@index([caseId])
+  @@index([tenantId, hash])
+  @@index([tenantId, ocrStatus])
+}
+
+/// Belgenin RAG için bölünmüş parçası. İÇERİK MASKELİ SAKLANIR (KVKK):
+/// content alanına yazmadan önce packages/ai scanPii/maskText uygulanır.
+/// pgvector Faz 3'e bırakıldı — embedding Float[] olarak tutulur, benzerlik JS'te kosinüs ile.
+model DocumentChunk {
+  id             String   @id @default(uuid())
+  tenantId       String
+  documentId     String
+  document       Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  caseId         String?
+  case           Case?    @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  index          Int // Belge içindeki sıra (0'dan başlar)
+  content        String // MASKELİ metin
+  tokenCount     Int?
+  embedding      Float[] // Boş dizi = gömme üretilmedi (anahtar kelime yedeği kullanılır)
+  embeddingModel String?
+  sourceLabel    String // Atıf etiketi, örn. "Bilirkişi Raporu · s.3"
+  createdAt      DateTime @default(now())
+
+  @@index([tenantId, documentId])
+  @@index([caseId])
+}
+
+enum PipelineStatus {
+  BEKLIYOR
+  CALISIYOR
+  TAMAM
+  BASARISIZ
+  KISMI // Bazı adımlar başarılı, bazıları başarısız
+}
+
+/// Belge otomatik aksiyon hattının bir çalıştırması (Faz 2'de senkron).
+model PipelineRun {
+  id           String         @id @default(uuid())
+  tenantId     String
+  documentId   String
+  document     Document       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  status       PipelineStatus @default(BEKLIYOR)
+  startedAt    DateTime       @default(now())
+  finishedAt   DateTime?
+  errorMessage String?
+  /// Adım adım sonuç (JSON dizi): [{ step, status, durationMs, error? }]
+  stepsJson    String?
+
+  @@index([tenantId, startedAt])
+  @@index([documentId])
+  @@index([tenantId, status])
+}
+
+enum ProposalType {
+  GOREV
+  SURE
+  SAFAHAT
+  MUVEKKIL_BILGILENDIRME
+  DOSYA_ESLESTIRME
+  DURUSMA_GUNCELLEME
+}
+
+enum ProposalStatus {
+  BEKLIYOR
+  ONAYLANDI
+  REDDEDILDI
+  UYGULANDI
+}
+
+/// AI'nın belgeden çıkardığı AKSİYON ÖNERİSİ. Avukat onaylamadan hiçbir kayıt oluşmaz.
+/// Süre önerilerinde tarih AI'dan DEĞİL, onay anında deterministik motordan hesaplanır.
+model DocumentActionProposal {
+  id          String         @id @default(uuid())
+  tenantId    String
+  documentId  String
+  document    Document       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  caseId      String?
+  case        Case?          @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  type        ProposalType
+  status      ProposalStatus @default(BEKLIYOR)
+  title       String
+  /// Öneriye özgü veri (JSON): görev/süre/safahat alanları
+  payloadJson String
+  confidence  Float?
+  reasoning   String?
+  /// Belgeden birebir alıntı — kaynak gösterme zorunluluğu (uydurma iddia elemesi)
+  sourceQuote String?
+  decidedBy   String? // User id
+  decidedAt   DateTime?
+  createdAt   DateTime       @default(now())
+
+  @@index([tenantId, status])
+  @@index([documentId])
+  @@index([caseId])
+}
+
+// ---------- AI dosya asistanı (sohbet) ----------
+
+model ChatSession {
+  id        String   @id @default(uuid())
+  tenantId  String
+  userId    String // User id
+  caseId    String?
+  case      Case?    @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  title     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages ChatMessage[]
+
+  @@index([tenantId, userId, updatedAt])
+  @@index([caseId])
+}
+
+enum ChatRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+model ChatMessage {
+  id            String      @id @default(uuid())
+  sessionId     String
+  session       ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role          ChatRole
+  content       String
+  /// Atıf listesi (JSON dizi): [{ label, documentId?, chunkId?, quote? }]
+  citationsJson String?
+  model         String?
+  aiUsageLogId  String?
+  createdAt     DateTime    @default(now())
+
+  @@index([sessionId, createdAt])
+}
+
+// ---------- Akıllı notlar ve dosya analizi ----------
+
+enum NoteKind {
+  GENEL
+  DURUSMA_HAZIRLIK
+  STRATEJI
+  HATIRLATMA
+}
+
+/// Not kaynağı — AI üretimi notlar avukat onayına kadar öneri niteliğindedir.
+enum NoteSource {
+  MANUEL
+  AI
+}
+
+model SmartNote {
+  id         String     @id @default(uuid())
+  tenantId   String
+  caseId     String
+  case       Case       @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  userId     String? // User id — AI üretimlerinde null olabilir
+  content    String
+  kind       NoteKind   @default(GENEL)
+  source     NoteSource @default(MANUEL)
+  /// AI üretimi notlar için avukat onayı; MANUEL notlarda oluştururken true yazılır.
+  isApproved Boolean    @default(false)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@index([tenantId, caseId])
+  @@index([caseId, kind])
+  @@index([tenantId, isApproved])
+}
+
+/// Dosya analiz raporu — DEĞİŞTİRİLEMEZ. Yeni analiz = yeni kayıt (versiyon güncellenmez).
+model CaseAnalysisReport {
+  id          String   @id @default(uuid())
+  tenantId    String
+  caseId      String
+  case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  /// Rapor gövdesi (JSON): özet, riskler, güçlü/zayıf yönler, atıflar
+  contentJson String
+  model       String?
+  createdBy   String // User id
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId, caseId, createdAt])
+}
+
+// ---------- Safahat / zaman çizelgesi ----------
+
+model TimelineEvent {
+  id        String   @id @default(uuid())
+  tenantId  String
+  caseId    String
+  case      Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  date      DateTime @default(now())
+  title     String // Örn. "Bilirkişi raporu tebliğ edildi"
+  detail    String?
+  source    String? // MANUEL | UYAP | SISTEM | AI
+  createdAt DateTime @default(now())
+
+  @@index([caseId, date])
+}
+
+// ---------- Dosya notları ----------
+
+/// Dosyaya iliştirilen serbest not. Sabitlenen notlar dosya başında görünür.
+model CaseNote {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  caseId    String
+  case      Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  content   String
+  isPinned  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([caseId, createdAt])
+  @@index([caseId, isPinned])
+}
+
+// ---------- Kararlar ----------
+
+enum DecisionType {
+  ARA_KARAR
+  GEREKCELI_KARAR
+  ISTINAF_KARARI
+  TEMYIZ_KARARI
+  KESIN_KARAR
+}
+
+/// Dosyada verilen kararlar — süre motorunun tetikleyicisi olabilir.
+model CaseDecision {
+  id         String       @id @default(uuid())
+  tenantId   String
+  tenant     Tenant       @relation(fields: [tenantId], references: [id])
+  caseId     String
+  case       Case         @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  type       DecisionType
+  date       DateTime
+  summary    String
+  outcome    String? // Örn. "Kabul" / "Kısmen kabul" / "Red"
+  documentId String? // İlgili belge (Document.id)
+  createdAt  DateTime     @default(now())
+
+  @@index([tenantId, date])
+  @@index([caseId, date])
+}
+
+// ---------- Vekaletname ----------
+
+model PowerOfAttorney {
+  id         String    @id @default(uuid())
+  tenantId   String
+  clientId   String
+  client     Client    @relation(fields: [clientId], references: [id])
+  caseId     String?
+  case       Case?     @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  notary     String? // Noter adı
+  number     String? // Yevmiye no
+  issuedAt   DateTime
+  expiresAt  DateTime?
+  revokedAt  DateTime? // Azil tarihi
+  scope      String? // Kapsam metni
+  documentId String? // Taranmış vekaletname belgesi
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([tenantId])
+  @@index([clientId])
+}
+
+// ---------- Finans ----------
+
+enum FinancialEntryType {
+  TAHAKKUK
+  TAHSILAT
+  AVANS
+  MASRAF
+  HARC
+  VEKALET_UCRETI
+  DANISMANLIK
+  IADE
+}
+
+model FinancialEntry {
+  id          String             @id @default(uuid())
+  tenantId    String
+  clientId    String?
+  client      Client?            @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  caseId      String?
+  case        Case?              @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  type        FinancialEntryType
+  amount      Decimal            @db.Decimal(18, 2)
+  currency    String             @default("TRY")
+  date        DateTime           @default(now())
+  description String?
+  /// Faz 3 — bu kalem hangi faturaya aktarıldı (Invoice.id). İLİŞKİ DEĞİL, skaler:
+  /// fatura silinse bile muhasebe kaydı ayakta kalmalıdır.
+  invoiceId   String?
+  /// Faturalanabilir mi (masraf/harç yansıtılmayacaksa false)
+  isBillable  Boolean            @default(true)
+  /// Kalem bazlı KDV oranı (%). null = KDV'siz / oran fatura satırında belirlenir.
+  vatRate     Decimal?           @db.Decimal(5, 2)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@index([tenantId, date])
+  @@index([clientId])
+  @@index([caseId])
+  @@index([tenantId, invoiceId])
+  @@index([tenantId, isBillable])
+}
+
+// ---------- AI katmanı (BYO-LLM) ----------
+
+enum AiProviderType {
+  ANTHROPIC
+  OPENAI_COMPAT // OpenAI + Azure/OpenRouter/Groq/vLLM gibi uyumlu endpoint'ler
+  OLLAMA
+  GEMINI
+  CUSTOM // Tamamen özel endpoint: header + alan eşlemesi kullanıcı tanımlı
+}
+
+model AiProviderConfig {
+  id              String         @id @default(uuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id])
+  name            String // Kullanıcının verdiği ad, örn. "Büro Claude hesabı"
+  type            AiProviderType
+  encryptedApiKey String? // AES-256-GCM ile şifreli (MASTER_ENCRYPTION_KEY)
+  baseUrl         String? // OPENAI_COMPAT / OLLAMA / CUSTOM için
+  defaultModel    String
+  headersJson     String? // CUSTOM: ek header'lar (JSON)
+  mappingJson     String? // CUSTOM: istek/yanıt alan eşlemesi (JSON)
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  taskRoutes  AiTaskRoute[]
+  aiUsageLogs AiUsageLog[]
+
+  @@index([tenantId])
+}
+
+/// Görev tipi → sağlayıcı + model eşlemesi (görev başına model seçimi)
+model AiTaskRoute {
+  id               String           @id @default(uuid())
+  tenantId         String
+  tenant           Tenant           @relation(fields: [tenantId], references: [id])
+  taskType         String // @nomosos/shared AI_TASK_TYPES değerlerinden
+  providerConfigId String
+  providerConfig   AiProviderConfig @relation(fields: [providerConfigId], references: [id], onDelete: Cascade)
+  model            String
+
+  @@unique([tenantId, taskType])
+}
+
+model AiUsageLog {
+  id               String            @id @default(uuid())
+  tenantId         String
+  userId           String?
+  user             User?             @relation(fields: [userId], references: [id])
+  providerConfigId String?
+  providerConfig   AiProviderConfig? @relation(fields: [providerConfigId], references: [id], onDelete: SetNull)
+  taskType         String
+  model            String
+  inputTokens      Int?
+  outputTokens     Int?
+  durationMs       Int?
+  piiMasked        Boolean           @default(false) // Gönderim öncesi maskeleme uygulandı mı
+  createdAt        DateTime          @default(now())
+
+  @@index([tenantId, createdAt])
+}
+
+// ---------- Dilekçe üretimi ----------
+
+enum PetitionType {
+  DAVA_DILEKCESI
+  CEVAP
+  CEVABA_CEVAP
+  IKINCI_CEVAP
+  ISTINAF
+  TEMYIZ
+  ITIRAZ
+  DELIL_LISTESI
+  ISLAH
+  BILIRKISI_ITIRAZ
+  ICRA_TAKIP_TALEBI
+  SIKAYET
+  BEYAN
+  DIGER
+}
+
+/// Dilekçe şablonu. tenantId null ise SİSTEM şablonudur (tüm bürolar görür).
+/// DİKKAT: nullable tenantId nedeniyle @@unique([tenantId, key]) ile upsert YAPILAMAZ —
+/// DeadlineRule'daki gibi findFirst + create/update deseni kullanılır.
+model PetitionTemplate {
+  id           String       @id @default(uuid())
+  tenantId     String?
+  key          String // Örn. "SISTEM_DAVA_DILEKCESI"
+  name         String
+  petitionType PetitionType
+  /// Bölüm tanımları (JSON dizi): [{ title, hint?, required? }] — başlıklar
+  /// packages/udf PETITION_SECTION_TITLES ile uyumludur.
+  sectionsJson String
+  isSystem     Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+
+  petitions Petition[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@index([petitionType])
+}
+
+enum PetitionStatus {
+  TASLAK
+  TEYIT_EDILIYOR // Atıf/kaynak doğrulaması sürüyor
+  TEYIT_EDILDI
+  INCELEMEDE // Avukat incelemesi
+  HAZIR
+  DISA_AKTARILDI // UDF/PDF çıktısı alındı
+  GONDERILDI
+}
+
+model Petition {
+  id               String            @id @default(uuid())
+  tenantId         String
+  caseId           String
+  case             Case              @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  templateId       String?
+  template         PetitionTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  type             PetitionType
+  title            String
+  status           PetitionStatus    @default(TASLAK)
+  /// Aktif sürüm (PetitionVersion.id) — ilişki kurulmaz, döngüyü önlemek için skaler.
+  currentVersionId String?
+  createdBy        String // User id
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  versions PetitionVersion[]
+
+  @@index([tenantId, status])
+  @@index([caseId, updatedAt])
+}
+
+/// Dilekçe sürümü — DEĞİŞTİRİLEMEZ (immutable). Her düzenleme yeni sürüm üretir.
+model PetitionVersion {
+  id           String   @id @default(uuid())
+  petitionId   String
+  petition     Petition @relation(fields: [petitionId], references: [id], onDelete: Cascade)
+  versionNo    Int
+  /// Bölüm gövdeleri (JSON): [{ title, body }]
+  sectionsJson String
+  /// Bölümlerden üretilen düz metin (UDF/PDF çıktısı ve atıf denetimi için)
+  plainText    String
+  createdBy    String // User id
+  note         String?
+  createdAt    DateTime @default(now())
+
+  @@unique([petitionId, versionNo])
+  @@index([petitionId, createdAt])
+}
+
+// ---------- İçtihat / mevzuat ----------
+
+/// İçtihat kaydı — KİRACIDAN BAĞIMSIZ ortak havuz (tenantId YOKTUR).
+/// Kiracıya özgü hiçbir veri buraya yazılmaz.
+model CaseLawDocument {
+  id                String    @id @default(uuid())
+  court             String // Örn. "Yargıtay 9. Hukuk Dairesi"
+  chamber           String?
+  caseNumber        String // Esas no
+  decisionNumber    String // Karar no
+  decisionDate      DateTime?
+  summary           String?
+  fullText          String?
+  sourceUrl         String?
+  sourceAdapter     String // Kaydı getiren adaptör, örn. "SEED" | "UYAP" | "MANUEL"
+  fetchedAt         DateTime  @default(now())
+  /// Kaydı SİSTEME GİREN kiracı. null = kamusal/sistem kaydı (seed, resmî
+  /// adaptörler) ve tüm bürolarca görülür.
+  ///
+  /// GÜVENLİK: Havuz ortaktır ama YAZMA ORTAK DEĞİLDİR. Bu alan olmadan
+  /// (court, caseNumber, decisionNumber) upsert'i, B kiracısının A kiracısının
+  /// girdiği emsalin metnini EZMESİNE (içerik zehirlenmesi) ve A'nın elle
+  /// girdiği serbest metnin tüm kiracılara açılmasına imkân veriyordu.
+  /// Elle girilen (MANUEL) kayıtlar yalnızca sahibine görünür ve yalnızca
+  /// sahibi tarafından güncellenebilir.
+  createdByTenantId String?
+
+  references CaseLawReference[]
+
+  @@unique([court, caseNumber, decisionNumber])
+  @@index([court])
+  @@index([decisionDate])
+  @@index([createdByTenantId])
+}
+
+enum RefStatus {
+  ADAY // AI önerisi — avukat henüz karar vermedi
+  KABUL
+  RED
+}
+
+/// Bir dosyaya iliştirilen içtihat atfı (kiracıya ait).
+model CaseLawReference {
+  id            String          @id @default(uuid())
+  tenantId      String
+  caseId        String
+  case          Case            @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  caseLawId     String
+  caseLaw       CaseLawDocument @relation(fields: [caseLawId], references: [id], onDelete: Cascade)
+  status        RefStatus       @default(ADAY)
+  relevanceNote String?
+  addedBy       String // User id
+  createdAt     DateTime        @default(now())
+
+  @@unique([caseId, caseLawId])
+  @@index([tenantId, status])
+  @@index([caseLawId])
+}
+
+enum CitationStatus {
+  DOGRULANDI
+  BULUNAMADI
+  BELIRSIZ
+}
+
+/// AI çıktısındaki ham atıfların doğrulama izi (madde/içtihat uydurmasına karşı).
+model CitationCheck {
+  id          String         @id @default(uuid())
+  tenantId    String
+  sourceType  String // PETITION | CHAT | ANALYSIS
+  sourceId    String
+  rawCitation String // Metinden çıkarılan ham atıf, örn. "HMK m.317/2"
+  status      CitationStatus
+  note        String?
+  checkedAt   DateTime       @default(now())
+
+  @@index([tenantId, sourceType, sourceId])
+  @@index([tenantId, status])
+}
+
+// ---------- Denetim ----------
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  userId    String?
+  action    String // Örn. "CLIENT_CREATE", "AI_CHAT", "DOCUMENT_DOWNLOAD"
+  entity    String? // Etkilenen entity adı
+  entityId  String?
+  detail    String?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+}
+
+// ===========================================================================
+// FAZ 3 — A) İCRA TAKİBİ (docs/moduller/05-icra-modulu.md)
+// ===========================================================================
+// PARA: tüm tutarlar Decimal(18,2). Hesaplarda JS float KULLANILMAZ;
+// Prisma.Decimal veya tamsayı kuruş aritmetiği zorunludur.
+
+/// İcra takibinin türü (İİK)
+enum EnforcementType {
+  ILAMLI
+  ILAMSIZ
+  KAMBIYO
+  REHNIN_PARAYA_CEVRILMESI
+  IPOTEGIN_PARAYA_CEVRILMESI
+  NAFAKA
+  TAHLIYE
+}
+
+/// Takibin bulunduğu aşama — safahat ilerledikçe güncellenir.
+enum EnforcementStage {
+  TAKIP_TALEBI
+  ODEME_EMRI_TEBLIG
+  ITIRAZ
+  ITIRAZIN_KALDIRILMASI
+  KESINLESME
+  HACIZ
+  SATIS
+  TAHSILAT
+  ACIZ_VESIKASI
+  KAPANDI
+}
+
+/// İcra dosyası — bir Case kaydının icra uzantısıdır (1:1).
+/// Dosya (Case) silinirse icra uzantısı da silinir.
+model EnforcementFile {
+  id                   String           @id @default(uuid())
+  tenantId             String
+  /// Bir icra dosyası tam olarak bir Case'e bağlıdır.
+  caseId               String           @unique
+  case                 Case             @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  officeName           String // İcra dairesi, örn. "İstanbul 9. İcra Dairesi"
+  fileNumber           String // Örn. "2026/1234"
+  trackingType         EnforcementType
+  stage                EnforcementStage @default(TAKIP_TALEBI)
+  /// Asıl alacak (takip çıkışındaki ana para)
+  principalAmount      Decimal          @db.Decimal(18, 2)
+  /// Yıllık faiz oranı (%). Faiz hesabı DETERMİNİSTİKTİR, AI hesaplamaz.
+  interestRate         Decimal?         @db.Decimal(5, 2)
+  currency             String           @default("TRY")
+  requestDate          DateTime // Takip talebi tarihi
+  paymentOrderServedAt DateTime? // Ödeme emri tebliğ tarihi — süre motorunun çapası
+  objectionDate        DateTime? // Borçlu itiraz tarihi
+  finalizedAt          DateTime? // Takibin kesinleştiği tarih
+  closedAt             DateTime?
+  /// Borçluya dair serbest metin (unvan/adres/vergi no). KVKK: dış LLM'e
+  /// giderken packages/ai scanPii/maskText uygulanır.
+  debtorInfo           String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  actions     EnforcementAction[]
+  assets      AssetRecord[]
+  collections CollectionRecord[]
+  scores      CollectionScore[]
+
+  @@index([tenantId])
+  @@index([tenantId, stage])
+  @@index([tenantId, requestDate])
+  @@index([tenantId, fileNumber])
+}
+
+/// İcra dosyasındaki işlem türü
+enum EnforcementActionType {
+  TAKIP_TALEBI
+  ODEME_EMRI
+  ITIRAZ
+  ITIRAZIN_IPTALI
+  HACIZ_TALEBI
+  HACIZ_UYGULAMA
+  KIYMET_TAKDIRI
+  SATIS_TALEBI
+  IHALE
+  TAHSILAT
+  HARC_ODEME
+  MASRAF
+  DIGER
+}
+
+/// İcra safahatı — dosyada yapılan her işlemin kaydı.
+model EnforcementAction {
+  id                String                @id @default(uuid())
+  tenantId          String
+  enforcementFileId String
+  enforcementFile   EnforcementFile       @relation(fields: [enforcementFileId], references: [id], onDelete: Cascade)
+  type              EnforcementActionType
+  date              DateTime
+  description       String
+  /// Harç/masraf/tahsilat gibi parasal işlemlerde tutar
+  amount            Decimal?              @db.Decimal(18, 2)
+  resultNote        String?
+  createdBy         String // User id
+  createdAt         DateTime              @default(now())
+
+  @@index([enforcementFileId, date])
+  @@index([tenantId, date])
+  @@index([tenantId, type])
+}
+
+enum AssetType {
+  TASINMAZ
+  ARAC
+  BANKA_HESABI
+  MAAS
+  ALACAK
+  HISSE
+  DIGER
+}
+
+enum AssetStatus {
+  TESPIT_EDILDI
+  HACZEDILDI
+  SATISA_CIKARILDI
+  SATILDI
+  SERBEST_BIRAKILDI
+}
+
+/// Borçlu malvarlığı kaydı (UYAP/banka/tapu sorgu sonuçları).
+/// KVKK: hesap no / plaka gibi alanlar description içinde maskeli gösterilir.
+model AssetRecord {
+  id                String          @id @default(uuid())
+  tenantId          String
+  enforcementFileId String
+  enforcementFile   EnforcementFile @relation(fields: [enforcementFileId], references: [id], onDelete: Cascade)
+  assetType         AssetType
+  description       String
+  estimatedValue    Decimal?        @db.Decimal(18, 2)
+  status            AssetStatus     @default(TESPIT_EDILDI)
+  discoveredAt      DateTime
+  note              String?
+
+  @@index([enforcementFileId])
+  @@index([tenantId, status])
+  @@index([tenantId, assetType])
+}
+
+enum CollectionMethod {
+  BANKA
+  KASA
+  HACIZ_SATIS
+  MAAS_KESINTISI
+  ANLASMA
+  DIGER
+}
+
+/// İcra dosyasında yapılan tahsilat. Bakiye hesabı deterministiktir.
+model CollectionRecord {
+  id                String           @id @default(uuid())
+  tenantId          String
+  enforcementFileId String
+  enforcementFile   EnforcementFile  @relation(fields: [enforcementFileId], references: [id], onDelete: Cascade)
+  amount            Decimal          @db.Decimal(18, 2)
+  date              DateTime
+  method            CollectionMethod
+  note              String?
+  createdBy         String // User id
+  createdAt         DateTime         @default(now())
+
+  @@index([enforcementFileId, date])
+  @@index([tenantId, date])
+}
+
+enum ScoreBand {
+  DUSUK
+  ORTA
+  YUKSEK
+}
+
+/// Tahsilat ihtimali skoru — DEĞİŞTİRİLEMEZ, her hesap yeni kayıttır.
+/// Skor KURAL TABANLI sinyallerden üretilir (ruleSignalsJson); AI yalnızca
+/// yorum yazar (aiCommentary). AI TEK BAŞINA PARASAL KARAR VERMEZ.
+model CollectionScore {
+  id                String          @id @default(uuid())
+  tenantId          String
+  enforcementFileId String
+  enforcementFile   EnforcementFile @relation(fields: [enforcementFileId], references: [id], onDelete: Cascade)
+  /// 0-100 — deterministik sinyallerden hesaplanır
+  score             Int
+  band              ScoreBand
+  /// Deterministik sinyaller (JSON): [{ key, label, weight, value, contribution }]
+  ruleSignalsJson   String
+  /// AI yorumu — öneri niteliğindedir, skoru DEĞİŞTİRMEZ
+  aiCommentary      String?
+  model             String?
+  computedAt        DateTime        @default(now())
+  computedBy        String? // User id — sistem hesaplarında null
+
+  @@index([tenantId, enforcementFileId, computedAt])
+  @@index([enforcementFileId, computedAt])
+}
+
+// ===========================================================================
+// FAZ 3 — B) FİNANS & FATURALAMA (docs/moduller/08, 09)
+// ===========================================================================
+
+enum FeeType {
+  SABIT
+  SAATLIK
+  BASARI_PRIMI
+  DOSYA_BAZLI
+  AYLIK_DANISMANLIK
+  KARMA
+}
+
+enum AgreementStatus {
+  TASLAK
+  AKTIF
+  SONA_ERDI
+  FESIH
+}
+
+/// Avukatlık ücret sözleşmesi. KDV oranı ALAN olarak tutulur (koda gömülmez);
+/// varsayılan %20'dir, sözleşme bazında değiştirilebilir.
+model FeeAgreement {
+  id             String          @id @default(uuid())
+  tenantId       String
+  clientId       String
+  client         Client          @relation(fields: [clientId], references: [id])
+  caseId         String?
+  case           Case?           @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  type           FeeType
+  /// SABIT / DOSYA_BAZLI / AYLIK_DANISMANLIK tutarı
+  amount         Decimal?        @db.Decimal(18, 2)
+  /// SAATLIK sözleşmelerde saat ücreti
+  hourlyRate     Decimal?        @db.Decimal(18, 2)
+  /// BASARI_PRIMI yüzdesi (%)
+  successPercent Decimal?        @db.Decimal(5, 2)
+  currency       String          @default("TRY")
+  /// KDV oranı (%) — sabit değil, sözleşme alanıdır
+  vatRate        Decimal         @default(20) @db.Decimal(5, 2)
+  startDate      DateTime
+  endDate        DateTime?
+  terms          String?
+  status         AgreementStatus @default(TASLAK)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([tenantId, status])
+  @@index([clientId])
+  @@index([caseId])
+  @@index([tenantId, startDate])
+}
+
+/// Zaman kaydı (billable hours). minutes TAMSAYIDIR — dakika üzerinden
+/// hesaplanır, saate çevrim yalnız gösterimde/faturalamada yapılır.
+model TimeEntry {
+  id          String   @id @default(uuid())
+  tenantId    String
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  caseId      String?
+  case        Case?    @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  clientId    String?
+  client      Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  date        DateTime
+  minutes     Int
+  description String
+  billable    Boolean  @default(true)
+  /// Kayıt anındaki saat ücreti (sözleşme sonradan değişse de fatura sabit kalır)
+  hourlyRate  Decimal? @db.Decimal(18, 2)
+  /// Faturalandıysa Invoice.id — İLİŞKİ DEĞİL, skaler (fatura iptalinde
+  /// zaman kaydı silinmez, alan boşaltılır).
+  invoiceId   String?
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId, date])
+  @@index([userId, date])
+  @@index([caseId])
+  @@index([clientId])
+  @@index([tenantId, invoiceId])
+  @@index([tenantId, billable, date])
+}
+
+enum InvoiceStatus {
+  TASLAK
+  GONDERILDI
+  KISMI_ODENDI
+  ODENDI
+  IPTAL
+  IADE
+}
+
+/// e-Fatura durumu. GİB'e GERÇEK BAĞLANTI YOKTUR — NoopEInvoiceAdapter
+/// kaydı YOK/BEKLIYOR'da bırakır ve "entegratör yapılandırılmamış" der.
+enum EInvoiceStatus {
+  YOK
+  BEKLIYOR
+  GONDERILDI
+  KABUL
+  RED
+  IPTAL
+}
+
+/// Müvekkil faturası (tenant içi). Toplamlar Decimal aritmetiğiyle hesaplanır;
+/// subtotal + vatAmount = total değişmezi uygulama katmanında korunur.
+model Invoice {
+  id             String         @id @default(uuid())
+  tenantId       String
+  clientId       String
+  client         Client         @relation(fields: [clientId], references: [id])
+  /// Seri-sıra no, örn. "NOM2026000001". TASLAK aşamasında null olabilir;
+  /// Postgres'te NULL'lar birbirinden farklı sayıldığı için birden çok
+  /// numarasız taslak @@unique([tenantId, invoiceNo]) ile çakışmaz.
+  invoiceNo      String?
+  issueDate      DateTime
+  dueDate        DateTime?
+  subtotal       Decimal        @db.Decimal(18, 2)
+  vatAmount      Decimal        @db.Decimal(18, 2)
+  total          Decimal        @db.Decimal(18, 2)
+  currency       String         @default("TRY")
+  status         InvoiceStatus  @default(TASLAK)
+  eInvoiceStatus EInvoiceStatus @default(YOK)
+  eInvoiceUuid   String?
+  note           String?
+  createdBy      String // User id
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  lines    InvoiceLine[]
+  payments Payment[]
+
+  @@unique([tenantId, invoiceNo])
+  @@index([tenantId, status])
+  @@index([tenantId, issueDate])
+  @@index([clientId])
+  @@index([tenantId, eInvoiceStatus])
+}
+
+/// Fatura satırı. lineTotal = quantity * unitPrice (KDV hariç) — Decimal ile
+/// hesaplanır, JS float ile DEĞİL.
+model InvoiceLine {
+  id          String  @id @default(uuid())
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Decimal @default(1) @db.Decimal(12, 2)
+  unitPrice   Decimal @db.Decimal(18, 2)
+  vatRate     Decimal @db.Decimal(5, 2)
+  lineTotal   Decimal @db.Decimal(18, 2)
+  /// TIME_ENTRY | FEE_AGREEMENT | EXPENSE | MANUEL — satırın nereden geldiği
+  sourceType  String?
+  /// Kaynak kaydın id'si (TimeEntry.id / FeeAgreement.id / FinancialEntry.id)
+  sourceId    String?
+
+  @@index([invoiceId])
+  @@index([sourceType, sourceId])
+}
+
+enum PaymentMethod {
+  HAVALE
+  KREDI_KARTI
+  NAKIT
+  CEK
+  SENET
+  MAHSUP
+  DIGER
+}
+
+/// Müvekkilden alınan tahsilat (tenant içi). Platform aboneliği tahsilatı
+/// AYRI modeldir: PaymentRecord.
+model Payment {
+  id        String        @id @default(uuid())
+  tenantId  String
+  invoiceId String?
+  invoice   Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  clientId  String
+  client    Client        @relation(fields: [clientId], references: [id])
+  amount    Decimal       @db.Decimal(18, 2)
+  date      DateTime
+  method    PaymentMethod
+  reference String? // Dekont / işlem referansı
+  note      String?
+  createdBy String // User id
+  createdAt DateTime      @default(now())
+
+  @@index([tenantId, date])
+  @@index([invoiceId])
+  @@index([clientId])
+  @@index([tenantId, method])
+}
+
+// ===========================================================================
+// FAZ 3 — C) PLATFORM / SİSTEM YÖNETİM PANELİ (docs/moduller/25)
+// ===========================================================================
+// PlatformUser, tenant User'dan TAMAMEN AYRIDIR: ayrı login, ayrı guard,
+// JWT payload { sub, role, aud: "platform" }. Platform tabloları tenantId'yi
+// SKALER tutar (Tenant'a FK YOKTUR) — denetim ve faturalama kayıtları,
+// tenant silinse dahi ayakta kalmalıdır.
+
+enum PlatformRole {
+  SUPER_ADMIN
+  OPS_ADMIN
+  BILLING_ADMIN
+  SUPPORT_AGENT
+  ANALYST_READONLY
+}
+
+/// Platform yöneticisi. Tenant User tablosuyla HİÇBİR ilişkisi yoktur;
+/// e-posta uzayları da ayrıdır.
+model PlatformUser {
+  id              String       @id @default(uuid())
+  email           String       @unique
+  passwordHash    String
+  fullName        String
+  role            PlatformRole
+  isActive        Boolean      @default(true)
+  /// TOTP gizli anahtarı — AES-256-GCM ile şifreli saklanır (MASTER_ENCRYPTION_KEY).
+  /// ASLA düz metin dönülmez; yalnız kurulum anında QR üretiminde kullanılır.
+  twoFactorSecret String?
+  lastLoginAt     DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  auditLogs     PlatformAuditLog[]
+  supportGrants SupportAccessGrant[]
+
+  @@index([role])
+  @@index([isActive])
+}
+
+/// Abonelik planı tanımı (SOLO | BURO | ENTERPRISE)
+model PlanTier {
+  id                  String   @id @default(uuid())
+  key                 String   @unique // SOLO | BURO | ENTERPRISE
+  name                String
+  monthlyPricePerUser Decimal? @db.Decimal(18, 2)
+  maxUsers            Int? // null = sınırsız
+  /// Özellik listesi (JSON): { "aiCallQuota": 5000, "modules": [...] }
+  featuresJson        String
+  isActive            Boolean  @default(true)
+
+  @@index([isActive])
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELED
+}
+
+/// Tenant aboneliği — tenant başına tek kayıt.
+/// planKey değişimi ve askıya alma DÖRT-GÖZ onayına tabidir
+/// (PlatformApprovalRequest üzerinden yürür).
+model Subscription {
+  id                 String             @id @default(uuid())
+  tenantId           String             @unique
+  planKey            String // PlanTier.key — skaler (plan silinse abonelik ayakta kalır)
+  status             SubscriptionStatus @default(TRIAL)
+  seats              Int                @default(1)
+  trialEndsAt        DateTime?
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  canceledAt         DateTime?
+  note               String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  payments PaymentRecord[]
+
+  @@index([status])
+  @@index([planKey])
+  @@index([currentPeriodEnd])
+}
+
+enum PlatformPaymentStatus {
+  BEKLIYOR
+  BASARILI
+  BASARISIZ
+  IADE
+}
+
+/// PLATFORM tahsilatı (büronun NomosOS aboneliğine ödediği para).
+/// Tenant'ın müvekkilinden aldığı Payment ile KARIŞTIRILMAZ.
+model PaymentRecord {
+  id             String                @id @default(uuid())
+  tenantId       String
+  subscriptionId String?
+  subscription   Subscription?         @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  amount         Decimal               @db.Decimal(18, 2)
+  currency       String                @default("TRY")
+  status         PlatformPaymentStatus @default(BEKLIYOR)
+  method         String? // Ödeme sağlayıcısı yöntemi (serbest metin)
+  providerRef    String? // Sağlayıcı işlem referansı
+  paidAt         DateTime?
+  failureReason  String?
+  createdAt      DateTime              @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([status, createdAt])
+  @@index([subscriptionId])
+}
+
+/// PLATFORM faturası (NomosOS → büro). Tenant'ın kendi Invoice'ından ayrıdır.
+model InvoiceRecord {
+  id        String        @id @default(uuid())
+  tenantId  String
+  number    String? // Platform fatura numarası
+  amount    Decimal       @db.Decimal(18, 2)
+  vatAmount Decimal       @db.Decimal(18, 2)
+  total     Decimal       @db.Decimal(18, 2)
+  issueDate DateTime
+  status    InvoiceStatus @default(TASLAK)
+  pdfKey    String? // S3/MinIO nesne anahtarı
+  createdAt DateTime      @default(now())
+
+  @@unique([number])
+  @@index([tenantId, issueDate])
+  @@index([status])
+}
+
+/// Çalışma zamanı sistem ayarı (bakım modu, kota varsayılanları vb.)
+model SystemSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  valueJson   String
+  description String?
+  updatedBy   String? // PlatformUser id
+  updatedAt   DateTime @default(now()) @updatedAt
+}
+
+/// Özellik bayrağı. Global açık değilse enabledTenantIdsJson listesindeki
+/// kiracılarda açıktır (JSON string dizisi).
+model FeatureFlag {
+  id                   String   @id @default(uuid())
+  key                  String   @unique
+  description          String?
+  isEnabledGlobally    Boolean  @default(false)
+  /// JSON string dizisi: ["tenantId1", "tenantId2"]
+  enabledTenantIdsJson String?
+  updatedBy            String? // PlatformUser id
+  updatedAt            DateTime @default(now()) @updatedAt
+}
+
+enum AnnouncementSeverity {
+  BILGI
+  UYARI
+  KRITIK
+}
+
+enum AnnouncementAudience {
+  TUM
+  PLAN_BAZLI
+  TENANT_BAZLI
+}
+
+/// Platform duyurusu (bakım, sürüm notu, kritik uyarı).
+model Announcement {
+  id          String               @id @default(uuid())
+  title       String
+  body        String
+  severity    AnnouncementSeverity @default(BILGI)
+  audience    AnnouncementAudience @default(TUM)
+  /// Hedef (JSON): PLAN_BAZLI → { "planKeys": [...] }, TENANT_BAZLI → { "tenantIds": [...] }
+  targetJson  String?
+  publishedAt DateTime?
+  expiresAt   DateTime?
+  createdBy   String // PlatformUser id
+  createdAt   DateTime             @default(now())
+
+  @@index([publishedAt])
+  @@index([severity])
+}
+
+/// Platform tarafı denetim izi. Tenant AuditLog'undan AYRIDIR.
+/// Destek erişimi gibi işlemler HER İKİSİNE birden yazılır.
+model PlatformAuditLog {
+  id             String        @id @default(uuid())
+  platformUserId String?
+  platformUser   PlatformUser? @relation(fields: [platformUserId], references: [id], onDelete: SetNull)
+  action         String // Örn. "TENANT_SUSPEND", "SUPPORT_GRANT_CREATE"
+  entity         String?
+  entityId       String?
+  tenantId       String? // İlgili kiracı — FK YOK (kiracı silinse iz kalır)
+  detail         String?
+  ipAddress      String?
+  createdAt      DateTime      @default(now())
+
+  @@index([createdAt])
+  @@index([platformUserId])
+  @@index([tenantId])
+  @@index([action, createdAt])
+}
+
+/// Günlük tenant kullanım fotoğrafı. ANALYST_READONLY yalnızca bu tür
+/// TOPLULAŞTIRILMIŞ sayıları görebilir; müvekkil/dosya/belge içeriğini göremez.
+model UsageSnapshot {
+  id             String   @id @default(uuid())
+  tenantId       String
+  /// Gün hassasiyetli (@db.Date) — saat dilimi kaymasını önler
+  date           DateTime @db.Date
+  activeUsers    Int      @default(0)
+  caseCount      Int      @default(0)
+  documentCount  Int      @default(0)
+  aiCallCount    Int      @default(0)
+  aiInputTokens  Int      @default(0)
+  aiOutputTokens Int      @default(0)
+  /// DİKKAT: BigInt — JSON.stringify doğrudan SERİLEŞTİREMEZ.
+  /// API katmanında Number()/String()'e çevrilerek dönülmelidir.
+  storageBytes   BigInt?
+  createdAt      DateTime @default(now())
+
+  @@unique([tenantId, date])
+  @@index([date])
+  @@index([tenantId, date])
+}
+
+/// Destek erişim kapsamı. IMPERSONATION YASAKTIR — destek personeli
+/// kullanıcı kimliğine bürünemez, yalnız kapsamlı ve süreli erişim alır.
+enum SupportScope {
+  SADECE_USTVERI // Yalnız sayılar/üstveri
+  YAPILANDIRMA // Ayarlar, sağlayıcı yapılandırması (içerik yok)
+  ICERIK_MASKELI // İçerik görünür ama PII maskeli
+}
+
+/// Süreli destek erişim yetkisi. Gerekçe ZORUNLU, varsayılan 4 saat,
+/// AZAMİ 24 saat. Oluşturma ve iptal hem PlatformAuditLog'a hem ilgili
+/// tenant'ın AuditLog'una yazılır.
+model SupportAccessGrant {
+  id             String       @id @default(uuid())
+  tenantId       String
+  platformUserId String
+  platformUser   PlatformUser @relation(fields: [platformUserId], references: [id], onDelete: Cascade)
+  reason         String
+  scope          SupportScope @default(SADECE_USTVERI)
+  grantedAt      DateTime     @default(now())
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  revokedBy      String? // PlatformUser id
+
+  @@index([tenantId, expiresAt])
+  @@index([platformUserId, expiresAt])
+  @@index([expiresAt])
+}
+
+enum ApprovalStatus {
+  BEKLIYOR
+  ONAYLANDI
+  REDDEDILDI
+  SURESI_DOLDU
+}
+
+/// DÖRT-GÖZ onay talebi. Plan değiştirme, tenant askıya alma, iade, tenant
+/// silme gibi işlemler doğrudan yapılmaz. TALEP EDEN KENDİ TALEBİNİ ONAYLAYAMAZ
+/// (decidedBy != requestedBy sunucuda zorlanır). 72 saat zaman aşımı.
+model PlatformApprovalRequest {
+  id           String         @id @default(uuid())
+  requestedBy  String // PlatformUser id
+  action       String // Örn. "TENANT_SUSPEND", "SUBSCRIPTION_PLAN_CHANGE", "REFUND"
+  /// İşlem parametreleri (JSON) — onaylandığında bu payload uygulanır
+  payloadJson  String
+  tenantId     String?
+  status       ApprovalStatus @default(BEKLIYOR)
+  decidedBy    String? // PlatformUser id — requestedBy ile AYNI OLAMAZ
+  decidedAt    DateTime?
+  decisionNote String?
+  expiresAt    DateTime // Oluşturma + 72 saat
+  createdAt    DateTime       @default(now())
+
+  @@index([status, expiresAt])
+  @@index([requestedBy])
+  @@index([tenantId])
+  @@index([createdAt])
+}

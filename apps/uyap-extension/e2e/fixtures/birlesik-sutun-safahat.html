@@ -1,0 +1,43 @@
+<!doctype html>
+<!--
+  Sahte UYAP "Safahat" sekmesi — AYRI BİR "İşlem Türü" SÜTUNU YOK.
+  Tek bir "İşlem Açıklaması" sütunu var. Eski çözümlemede "İşlem" etiketi bu başlığa
+  tolerans yoluyla eşleşiyor, `islem` ile `aciklama` AYNI hücreden okunuyordu
+  (sessiz yanlış alan — hukuki/kod denetimi bulgusu 13).
+  Beklenen davranış: parse REQUIRED_FIELD_MISSING ile düşer.
+-->
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <title>Safahat - UYAP Avukat Portalı</title>
+  </head>
+  <body>
+    <div id="dosyaDetayForm">
+      <span id="dosyaDetayForm:safahatDosyaNo">2026/145</span>
+      <table id="dosyaDetayForm:safahatTable" class="ui-datatable-data">
+        <thead>
+          <tr>
+            <th>Sıra No</th>
+            <th>İşlem Tarihi</th>
+            <th>İşlem Açıklaması</th>
+            <th>Birim</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td>14.02.2026 10:05</td>
+            <td>Dava dilekçesi ile dosya açıldı.</td>
+            <td>İstanbul 12. İş Mahkemesi</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>18.02.2026 09:41</td>
+            <td>Tensip zaptı düzenlendi.</td>
+            <td>İstanbul 12. İş Mahkemesi</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </body>
+</html>

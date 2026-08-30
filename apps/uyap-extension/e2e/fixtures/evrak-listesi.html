@@ -1,0 +1,73 @@
+<!doctype html>
+<!--
+  Sahte UYAP "Evrak Listesi" sekmesi.
+  3. satırda bilinçli olarak indirme bağlantısı YOKTUR: parser bunu uyarı olarak
+  raporlar, uydurma bağlantı üretmez.
+-->
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <title>Evraklar - UYAP Avukat Portalı</title>
+  </head>
+  <body>
+    <div id="evrakForm">
+      <span id="evrakForm:evrakDosyaNo">2026/145</span>
+      <table id="evrakForm:evrakListesiTable" class="ui-datatable-data">
+        <thead>
+          <tr>
+            <th>Sıra</th>
+            <th>Evrak Türü</th>
+            <th>Evrak Adı</th>
+            <th>Gönderen</th>
+            <th>Evrak Tarihi</th>
+            <th>Boyut</th>
+            <th>İşlem</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr data-evrakid="99001">
+            <td>1</td>
+            <td>Tensip Zaptı</td>
+            <td>tensip_zapti.udf</td>
+            <td>İstanbul 12. İş Mahkemesi</td>
+            <td>18.02.2026</td>
+            <td>124 KB</td>
+            <td>
+              <a
+                class="evrak-indir"
+                data-evrakid="99001"
+                href="/evrak/indir.jsf?dosyaId=1234567&amp;evrakId=99001"
+                >İndir</a
+              >
+            </td>
+          </tr>
+          <tr data-evrakid="99002">
+            <td>2</td>
+            <td>Ara Karar</td>
+            <td>ara_karar_2026145.pdf</td>
+            <td>İstanbul 12. İş Mahkemesi</td>
+            <td>02.03.2026 14:20</td>
+            <td>1,2 MB</td>
+            <td>
+              <a
+                class="evrak-indir"
+                data-evrakid="99002"
+                href="/evrak/indir.jsf?dosyaId=1234567&amp;evrakId=99002"
+                >İndir</a
+              >
+            </td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>Bilirkişi Raporu</td>
+            <td>bilirkisi_raporu.pdf</td>
+            <td>Bilirkişi Heyeti</td>
+            <td>21.04.2026</td>
+            <td>3,4 MB</td>
+            <td><span class="pasif">Erişim yok</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </body>
+</html>

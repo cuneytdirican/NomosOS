@@ -1,0 +1,504 @@
+"use client";
+
+/**
+ * Partner / Avukat paneli (Modül 18 — Faz 1 kesiti).
+ *
+ * Birincil veri kaynağı: GET /dashboard/summary (tek çağrı).
+ * Uç henüz yayında değilse eski çoklu çağrı düzenine (hearings + deadlines/upcoming
+ * + tasks + cases + clients) sessizce düşer; panel her koşulda çalışır.
+ */
+
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { ApiError, api, asList } from "@/lib/api";
+import { firstCount, listOf } from "@/lib/dashboard";
+import { listProposals } from "@/lib/faz2";
+import type {
+  ActionProposal,
+  CaseSummary,
+  Client,
+  DashboardSummary,
+  Deadline,
+  Hearing,
+  Task,
+} from "@/lib/types";
+import { Badge, Card, EmptyState, ErrorBox, Spinner, StatCard } from "@/components/ui";
+import { TaskProgress } from "@/components/task-progress";
+import {
+  DEADLINE_SOURCE_LABELS,
+  DEADLINE_SOURCE_TONES,
+  HEARING_TYPE_LABELS,
+  PROPOSAL_TYPE_LABELS,
+  PROPOSAL_TYPE_TONES,
+  TASK_PRIORITY_LABELS,
+  TASK_PRIORITY_TONES,
+  addDays,
+  daysUntil,
+  fmtDate,
+  fmtDayHeading,
+  fmtTime,
+  labelOf,
+  remainingLabel,
+  startOfWeek,
+  toIsoDate,
+  urgencyRowClass,
+  urgencyTone,
+} from "@/lib/labels";
+
+interface PanelData {
+  activeCases: number;
+  clientCount: number;
+  openTasks: number;
+  hearingCount: number;
+  criticalCount: number;
+  hearings: Hearing[];
+  criticalDeadlines: Deadline[];
+  riskyDeadlines: Deadline[];
+  myTasks: Task[];
+  degraded: boolean;
+}
+
+const EMPTY: PanelData = {
+  activeCases: 0,
+  clientCount: 0,
+  openTasks: 0,
+  hearingCount: 0,
+  criticalCount: 0,
+  hearings: [],
+  criticalDeadlines: [],
+  riskyDeadlines: [],
+  myTasks: [],
+  degraded: false,
+};
+
+export default function PanelPage() {
+  const [data, setData] = useState<PanelData>(EMPTY);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [proposals, setProposals] = useState<ActionProposal[]>([]);
+
+  /** Bekleyen AI önerileri — uç yoksa kart gizlenir, panel etkilenmez. */
+  useEffect(() => {
+    let alive = true;
+    listProposals({ status: "BEKLIYOR", limit: 50 })
+      .then((list) => {
+        if (alive) setProposals(list);
+      })
+      .catch(() => {
+        if (alive) setProposals([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const loadLegacy = useCallback(async (): Promise<PanelData> => {
+    const today = new Date();
+    const weekStart = startOfWeek(today);
+    const [hearingsRes, deadlinesRes, tasksRes, casesRes, clientsRes] = await Promise.allSettled([
+      api<unknown>("/hearings", {
+        query: { from: toIsoDate(weekStart), to: toIsoDate(addDays(weekStart, 6)) },
+      }),
+      api<unknown>("/deadlines/upcoming", { query: { days: 14 } }),
+      api<unknown>("/tasks", { query: { status: "ACIK" } }),
+      api<unknown>("/cases", { query: { limit: "200" } }),
+      api<unknown>("/clients", { query: { limit: "100" } }),
+    ]);
+
+    const hearings = hearingsRes.status === "fulfilled" ? asList<Hearing>(hearingsRes.value) : [];
+    const deadlines =
+      deadlinesRes.status === "fulfilled" ? asList<Deadline>(deadlinesRes.value) : [];
+    const tasks = tasksRes.status === "fulfilled" ? asList<Task>(tasksRes.value) : [];
+    const cases = casesRes.status === "fulfilled" ? asList<CaseSummary>(casesRes.value) : [];
+    const clients = clientsRes.status === "fulfilled" ? asList<Client>(clientsRes.value) : [];
+
+    const closed = new Set(["KAPANDI", "ARSIV"]);
+    const critical = deadlines.filter((d) => daysUntil(d.dueDate) <= 3);
+    return {
+      activeCases: cases.filter((c) => !closed.has(c.status ?? "")).length,
+      clientCount: clients.length,
+      openTasks: tasks.length,
+      hearingCount: hearings.length,
+      criticalCount: critical.length,
+      hearings,
+      criticalDeadlines: critical,
+      riskyDeadlines: deadlines.filter(
+        (d) => d.source === "AI_ONERISI" || d.status === "BEKLIYOR",
+      ),
+      myTasks: tasks.slice(0, 8),
+      degraded: true,
+    };
+  }, []);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const summary = await api<DashboardSummary>("/dashboard/summary");
+      const hearings = listOf<Hearing>(summary.hearingsThisWeek);
+      const critical = listOf<Deadline>(summary.criticalDeadlines);
+      const risky = listOf<Deadline>(summary.riskyDeadlines);
+      const myTasks = listOf<Task>(summary.myTasks);
+      setData({
+        activeCases: firstCount(summary.activeCases, summary.counts?.activeCases),
+        clientCount: firstCount(summary.clientCount, summary.counts?.clientCount),
+        openTasks: firstCount(summary.openTasks, summary.counts?.openTasks, myTasks),
+        hearingCount: firstCount(summary.hearingsThisWeek, summary.counts?.hearingsThisWeek),
+        criticalCount: firstCount(summary.criticalDeadlines, summary.counts?.criticalDeadlines),
+        hearings,
+        criticalDeadlines: critical,
+        riskyDeadlines: risky,
+        myTasks,
+        degraded: false,
+      });
+      setLoading(false);
+      return;
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 0) {
+        setError(err.message);
+        setLoading(false);
+        return;
+      }
+      try {
+        setData(await loadLegacy());
+      } catch (fallbackErr) {
+        setError(
+          fallbackErr instanceof ApiError ? fallbackErr.message : "Panel verisi yüklenemedi.",
+        );
+      } finally {
+        setLoading(false);
+      }
+    }
+  }, [loadLegacy]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const hearingCount = data.hearingCount;
+  const criticalCount = data.criticalCount;
+
+  // Duruşmaları güne göre grupla
+  const hearingsByDay = groupByDay(data.hearings);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Panel</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Bugün müdahale etmeniz gerekenler: duruşmalar, kritik süreler ve açık görevleriniz.
+          </p>
+        </div>
+        <p className="text-xs text-slate-400">
+          {new Date().toLocaleDateString("tr-TR", {
+            weekday: "long",
+            day: "2-digit",
+            month: "long",
+            year: "numeric",
+          })}
+        </p>
+      </div>
+
+      {error && <ErrorBox message={error} />}
+
+      {loading ? (
+        <Spinner label="Panel hazırlanıyor…" />
+      ) : (
+        <>
+          {/* KPI şeridi */}
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+            <StatCard
+              label="Aktif Dosya"
+              value={data.activeCases}
+              hint="Kapanmamış dava, icra ve danışmanlık"
+              tone="navy"
+              href="/app/dosyalar"
+            />
+            <StatCard
+              label="Bu Hafta Duruşma"
+              value={hearingCount}
+              hint="Pazartesi–Pazar aralığı"
+              tone="slate"
+              href="/app/durusmalar"
+            />
+            <StatCard
+              label="Kritik Süre"
+              value={criticalCount}
+              hint="3 gün ve altı"
+              tone={criticalCount > 0 ? "red" : "slate"}
+              href="/app/sureler"
+            />
+            <StatCard
+              label="Açık Görev"
+              value={data.openTasks}
+              hint="Tamamlanmamış görevler"
+              tone="slate"
+              href="/app/gorevler"
+            />
+            <StatCard
+              label="Müvekkil"
+              value={data.clientCount}
+              hint="Kayıtlı müvekkil sayısı"
+              tone="gold"
+              href="/app/muvekkiller"
+            />
+          </div>
+
+          {/* Bekleyen AI önerileri — belge hattının ürettiği aksiyonlar */}
+          {proposals.length > 0 && (
+            <Card
+              title={`Bekleyen Öneriler (${proposals.length})`}
+              action={
+                <Link
+                  href="/app/oneriler"
+                  className="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-amber-400"
+                >
+                  Onay kuyruğuna git →
+                </Link>
+              }
+            >
+              <p className="text-xs text-slate-500">
+                Yüklenen belgelerden AI&apos;ın çıkardığı görev, süre ve safahat önerileri. Siz
+                onaylamadan hiçbiri kayda geçmez.
+              </p>
+              <ul className="mt-3 space-y-2">
+                {proposals.slice(0, 5).map((p) => (
+                  <li
+                    key={p.id}
+                    className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-900">{p.title}</p>
+                      <p className="mt-0.5 truncate text-xs text-slate-500">
+                        {p.case?.title ? `${p.case.title} · ` : ""}
+                        {p.document?.name ?? "kaynak belge —"}
+                      </p>
+                    </div>
+                    <Badge tone={PROPOSAL_TYPE_TONES[p.type] ?? "gray"}>
+                      {labelOf(PROPOSAL_TYPE_LABELS, p.type)}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+              {proposals.length > 5 && (
+                <p className="mt-2 text-xs text-slate-400">
+                  ve {proposals.length - 5} öneri daha…
+                </p>
+              )}
+            </Card>
+          )}
+
+          {/* Onay bekleyen / riskli süre uyarısı */}
+          {data.riskyDeadlines.length > 0 && (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 px-5 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-amber-900">
+                    {data.riskyDeadlines.length} süre onay bekliyor veya risk taşıyor
+                  </p>
+                  <p className="mt-0.5 text-xs text-amber-800">
+                    AI önerileri avukat onayı olmadan kesin süre sayılmaz — inceleyip onaylayın.
+                  </p>
+                </div>
+                <Link
+                  href="/app/sureler"
+                  className="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-amber-400"
+                >
+                  İncele ve Onayla →
+                </Link>
+              </div>
+              <ul className="mt-3 space-y-1">
+                {data.riskyDeadlines.slice(0, 3).map((d) => (
+                  <li key={d.id} className="text-xs text-amber-900">
+                    • {d.title} — {fmtDate(d.dueDate)}
+                    {d.case?.title ? ` · ${d.case.title}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Üç sütun */}
+          <div className="grid gap-6 xl:grid-cols-3">
+            {/* Bu haftaki duruşmalar */}
+            <Card
+              title="Bu Haftaki Duruşmalar"
+              action={
+                <Link
+                  href="/app/durusmalar"
+                  className="text-xs font-medium text-amber-600 hover:text-amber-500"
+                >
+                  Tümü →
+                </Link>
+              }
+            >
+              {data.hearings.length === 0 ? (
+                <EmptyState message="Bu hafta planlı duruşma yok." />
+              ) : (
+                <div className="space-y-4">
+                  {hearingsByDay.map(([day, items]) => (
+                    <div key={day}>
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        {fmtDayHeading(items[0].date)}
+                      </p>
+                      <ul className="space-y-2">
+                        {items.map((h) => (
+                          <li
+                            key={h.id}
+                            className="rounded-lg border border-slate-200 px-3 py-2 hover:border-slate-300"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-slate-900">
+                                  {fmtTime(h.date)}
+                                  {h.courtroom ? ` · Salon ${h.courtroom}` : ""}
+                                </p>
+                                <p className="truncate text-xs text-slate-600">
+                                  {h.case ? (
+                                    <Link
+                                      href={`/app/dosyalar/${h.case.id}`}
+                                      className="hover:text-amber-600"
+                                    >
+                                      {h.case.title}
+                                    </Link>
+                                  ) : (
+                                    "Dosya"
+                                  )}
+                                </p>
+                                {h.case?.courtName && (
+                                  <p className="truncate text-[11px] text-slate-400">
+                                    {h.case.courtName}
+                                  </p>
+                                )}
+                              </div>
+                              <Badge tone="navy">{labelOf(HEARING_TYPE_LABELS, h.type)}</Badge>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+
+            {/* Kritik süreler */}
+            <Card
+              title="Kritik Süreler"
+              action={
+                <Link
+                  href="/app/sureler"
+                  className="text-xs font-medium text-amber-600 hover:text-amber-500"
+                >
+                  Tümü →
+                </Link>
+              }
+            >
+              {data.criticalDeadlines.length === 0 ? (
+                <EmptyState message="Kritik süre yok. Takvim temiz." />
+              ) : (
+                <ul className="space-y-2">
+                  {data.criticalDeadlines.map((d) => {
+                    const days = daysUntil(d.dueDate);
+                    return (
+                      <li
+                        key={d.id}
+                        className={`rounded-lg border border-slate-200 px-3 py-2.5 ${urgencyRowClass(days)}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-slate-900">{d.title}</p>
+                            <p className="mt-0.5 truncate text-xs text-slate-500">
+                              {fmtDate(d.dueDate)}
+                              {d.case?.title ? ` · ${d.case.title}` : ""}
+                            </p>
+                            {d.legalBasis && (
+                              <p className="mt-0.5 truncate text-[11px] text-slate-400">
+                                {d.legalBasis}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex shrink-0 flex-col items-end gap-1">
+                            <Badge tone={urgencyTone(days)}>{remainingLabel(days)}</Badge>
+                            {d.source && (
+                              <Badge tone={DEADLINE_SOURCE_TONES[d.source] ?? "gray"}>
+                                {labelOf(DEADLINE_SOURCE_LABELS, d.source)}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Card>
+
+            {/* Görevlerim */}
+            <Card
+              title="Görevlerim"
+              action={
+                <Link
+                  href="/app/gorevler"
+                  className="text-xs font-medium text-amber-600 hover:text-amber-500"
+                >
+                  Tümü →
+                </Link>
+              }
+            >
+              {data.myTasks.length === 0 ? (
+                <EmptyState message="Açık göreviniz yok. Harika!" />
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {data.myTasks.map((t) => (
+                    <li key={t.id} className="py-3 first:pt-0 last:pb-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-slate-900">{t.title}</p>
+                          <p className="mt-0.5 text-xs text-slate-500">
+                            {t.dueDate ? `Son tarih: ${fmtDate(t.dueDate)}` : "Son tarih yok"}
+                            {t.case?.title ? ` · ${t.case.title}` : ""}
+                          </p>
+                        </div>
+                        {t.priority && (
+                          <Badge tone={TASK_PRIORITY_TONES[t.priority] ?? "gray"}>
+                            {labelOf(TASK_PRIORITY_LABELS, t.priority)}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="mt-2">
+                        <TaskProgress status={t.status} compact />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+          </div>
+
+          {data.degraded && (
+            <p className="text-xs text-slate-400">
+              Not: <code>/dashboard/summary</code> ucuna ulaşılamadığı için panel tekil uçlardan
+              derlendi.
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Duruşmaları takvim gününe göre gruplar (sıralı). */
+function groupByDay(hearings: Hearing[]): Array<[string, Hearing[]]> {
+  const map = new Map<string, Hearing[]>();
+  for (const h of [...hearings].sort((a, b) => a.date.localeCompare(b.date))) {
+    const d = new Date(h.date);
+    if (Number.isNaN(d.getTime())) continue;
+    const key = toIsoDate(d);
+    const bucket = map.get(key);
+    if (bucket) bucket.push(h);
+    else map.set(key, [h]);
+  }
+  return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+}

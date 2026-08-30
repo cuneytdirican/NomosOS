@@ -1,0 +1,116 @@
+/* NomosOS UYAP Köprüsü — UYAP sayfalarına enjekte edilen arayüz.
+   UYAP'ın kendi stilleriyle çakışmamak için tüm sınıflar "nomosos-" ön ekiyle başlar. */
+
+#nomosos-uyap-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483000;
+  width: 240px;
+  padding: 10px 12px;
+  background: #ffffff;
+  border: 1px solid #d7dee7;
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(15, 30, 50, 0.18);
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 12px;
+  color: #16202b;
+  line-height: 1.45;
+}
+
+#nomosos-uyap-panel .nomosos-panel-baslik {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e7ecf2;
+}
+
+#nomosos-uyap-panel .nomosos-logo {
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: #1e3a5f;
+}
+
+#nomosos-uyap-panel .nomosos-panel-alt {
+  font-size: 10px;
+  color: #64748b;
+}
+
+#nomosos-uyap-panel .nomosos-panel-govde {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#nomosos-uyap-panel .nomosos-aktar-btn {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid #1e3a5f;
+  border-radius: 6px;
+  background: #1e3a5f;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+#nomosos-uyap-panel .nomosos-aktar-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+#nomosos-uyap-panel .nomosos-panel-durum {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #475569;
+  min-height: 14px;
+}
+
+#nomosos-uyap-panel .nomosos-panel-durum[data-tone="hata"] {
+  color: #b91c1c;
+}
+
+#nomosos-uyap-panel .nomosos-panel-durum[data-tone="basari"] {
+  color: #15803d;
+}
+
+.nomosos-satir-btn {
+  margin-left: 6px;
+  padding: 2px 8px;
+  border: 1px solid #1e3a5f;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #1e3a5f;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.nomosos-satir-btn:hover:not(:disabled) {
+  background: #1e3a5f;
+  color: #ffffff;
+}
+
+.nomosos-satir-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+#nomosos-uyap-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2147483001;
+  padding: 10px 16px;
+  background: #fffbeb;
+  border-bottom: 3px solid #f59e0b;
+  color: #7c2d12;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+}

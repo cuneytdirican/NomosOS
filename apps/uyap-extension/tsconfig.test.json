@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // Testler Node üzerinde (vitest + jsdom) koşar: node:fs / node:url importları ve
+    // vitest global tipleri yalnız BURADA görünür.
+    "types": ["chrome", "node", "vitest/globals"]
+  },
+  "include": ["src", "e2e", "vitest.config.ts"]
+}

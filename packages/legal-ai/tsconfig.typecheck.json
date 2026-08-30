@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // DÜZELTİLDİ (kod denetimi, bulgu 3): testler ne `build` ne `typecheck` sırasında
+    // derleniyordu; testlerdeki tip hataları ancak vitest (esbuild, tip atlar) koşarken
+    // fark edilebiliyordu. Bu proje `packages/udf` desenini birebir izler.
+    "noEmit": true,
+    "rootDir": ".",
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src", "vitest.config.ts"],
+  "exclude": ["dist", "node_modules"]
+}
