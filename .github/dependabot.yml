@@ -1,0 +1,92 @@
+version: 2
+
+# NomosOS bağımlılık güncellemeleri.
+# pnpm workspace kökü ve tüm çalışma alanı paketleri taranır; gürültüyü azaltmak
+# için güncellemeler mantıklı kümelere gruplanır.
+
+updates:
+  # ---------------------------------------------------------------------------
+  # npm / pnpm — kök + tüm workspace paketleri
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: "npm"
+    directories:
+      - "/"
+      - "/apps/*"
+      - "/packages/*"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Istanbul"
+    open-pull-requests-limit: 8
+    versioning-strategy: "increase"
+    labels:
+      - "bagimlilik"
+      - "otomatik"
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+      include: "scope"
+    groups:
+      # Prisma ve istemcisi birlikte yükseltilmeli; sürüm uyuşmazlığı
+      # migration üretimini bozar.
+      prisma:
+        patterns:
+          - "prisma"
+          - "@prisma/*"
+      nestjs:
+        patterns:
+          - "@nestjs/*"
+          - "reflect-metadata"
+          - "rxjs"
+      next-react:
+        patterns:
+          - "next"
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+          - "eslint-config-next"
+      tailwind:
+        patterns:
+          - "tailwindcss"
+          - "@tailwindcss/*"
+          - "postcss"
+          - "autoprefixer"
+      derleme-araclari:
+        patterns:
+          - "typescript"
+          - "turbo"
+          - "tsx"
+          - "esbuild"
+          - "vitest"
+          - "@vitest/*"
+          - "@types/*"
+      # Kalan her şey: yalnızca minor + patch tek PR'da toplanır.
+      diger-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ---------------------------------------------------------------------------
+  # GitHub Actions — hattın kendi bağımlılıkları
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Istanbul"
+    open-pull-requests-limit: 3
+    labels:
+      - "ci"
+      - "otomatik"
+    commit-message:
+      prefix: "ci(actions)"
+    groups:
+      actions:
+        patterns:
+          - "*"

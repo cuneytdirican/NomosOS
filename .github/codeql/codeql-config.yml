@@ -1,0 +1,22 @@
+name: "NomosOS CodeQL yapılandırması"
+
+# Analiz edilecek yollar. Üretim kaynağı dışındaki her şey elenir; aksi hâlde
+# derleme çıktıları ve üçüncü taraf kod analizi hem yavaşlatır hem gürültü üretir.
+paths:
+  - apps
+  - packages
+
+paths-ignore:
+  - "**/node_modules"
+  - "**/dist"
+  - "**/.next"
+  - "**/.turbo"
+  - "**/coverage"
+  - "**/*.min.js"
+  - "**/*.test.ts"
+  - "**/*.spec.ts"
+  - "**/__tests__"
+  - "packages/db/prisma/migrations"
+
+# Not: sorgu takımı (security-and-quality) workflow içinde `queries:` ile
+# verilir; burada tekrar edilmez.

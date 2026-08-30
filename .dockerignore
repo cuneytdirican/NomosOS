@@ -1,0 +1,75 @@
+# NomosOS — Docker build bağlamından hariç tutulanlar
+#
+# NEDEN ÖNEMLİ: build bağlamı depo köküdür (docker build -f apps/*/Dockerfile .).
+# Bu dosya olmadan .env (gerçek sırlar), .git (tüm geçmiş) ve host'a ait
+# node_modules imaja kopyalanır. Sırların imaj katmanına girmesi, imajı bir
+# kayıt defterine (registry) gönderdiğiniz anda KVKK ihlali demektir.
+
+# --- Bağımlılıklar (imaj içinde yeniden kurulur) ---
+node_modules
+**/node_modules
+.pnpm-store
+
+# --- Build çıktıları (imaj içinde yeniden üretilir) ---
+.next
+**/.next
+dist
+**/dist
+build
+**/build
+out
+**/out
+*.tsbuildinfo
+**/*.tsbuildinfo
+next-env.d.ts
+
+# --- Önbellekler ---
+.turbo
+**/.turbo
+.cache
+**/.cache
+coverage
+**/coverage
+
+# --- Sürüm kontrolü ---
+.git
+.gitignore
+.github
+
+# --- Kayıtlar ---
+*.log
+**/*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# --- SIRLAR: asla imaja girmemeli ---
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+docker-compose.prod.env
+*.pem
+*.key
+*.p12
+*.pfx
+
+# --- Yerel araç/IDE ---
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+.claude
+
+# --- Docker'ın kendisi (imaja gerek yok) ---
+Dockerfile
+**/Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# --- Chrome eklentisi paketleri (API/web/admin imajlarında kullanılmaz) ---
+apps/uyap-extension/dist
+*.zip
+*.crx
