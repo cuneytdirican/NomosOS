@@ -106,6 +106,17 @@ function Shell({ children }: { children: ReactNode }) {
         <div className="border-t border-steel-800 px-5 py-3 text-[11px] leading-relaxed text-steel-500">
           <p>Platform operasyonu · impersonation yoktur</p>
           <p className="mt-1">Tenant verisine tek kapı: süreli, maskeli destek erişimi</p>
+          {/* docs/08 §3.13 — künye pazarlama sitesi, /app ve panelde aynı biçimde durur. */}
+          <p className="mt-2">
+            <a
+              href="https://mindaeon.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-steel-500 transition-colors hover:text-accent-300 hover:underline"
+            >
+              Developed by MindAeon AI
+            </a>
+          </p>
         </div>
       </aside>
 

@@ -339,3 +339,48 @@ export function DataRow({ label, children }: { label: string; children: ReactNod
     </div>
   );
 }
+
+// ---------- Faz 4 eklemeleri (yalnız EKLEME) ----------
+
+/**
+ * Açılır bölüm — "neden bu skor", "kaynak alıntıları" gibi ikinci düzey
+ * gerekçelerin varsayılan olarak kapalı durmasını sağlar.
+ *
+ * `<details>` kullanılır: klavye ve ekran okuyucu desteği tarayıcıdan gelir,
+ * JavaScript kapalıyken de açılır.
+ */
+export function Disclosure({
+  summary,
+  children,
+  defaultOpen = false,
+  className = "",
+}: {
+  summary: ReactNode;
+  children: ReactNode;
+  defaultOpen?: boolean;
+  className?: string;
+}) {
+  return (
+    <details
+      open={defaultOpen}
+      className={`group rounded-lg border border-slate-200 bg-white ${className}`}
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50">
+        <span className="min-w-0">{summary}</span>
+        <svg
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          aria-hidden="true"
+          className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-open:rotate-180"
+        >
+          <path
+            fillRule="evenodd"
+            d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z"
+            clipRule="evenodd"
+          />
+        </svg>
+      </summary>
+      <div className="border-t border-slate-100 px-3 py-3">{children}</div>
+    </details>
+  );
+}

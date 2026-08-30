@@ -208,6 +208,14 @@ model Case {
   feeAgreements   FeeAgreement[]
   timeEntries     TimeEntry[]
 
+  /// Faz 4 — strateji, simülasyon, risk, delil, bilirkişi
+  strategies     Strategy[]
+  simulationRuns SimulationRun[]
+  riskScores     RiskScore[]
+  claims         Claim[]
+  evidences      Evidence[]
+  expertReports  ExpertReport[]
+
   @@index([tenantId])
   @@index([tenantId, status])
   @@index([tenantId, nextHearingAt])
@@ -907,7 +915,18 @@ model AiUsageLog {
   piiMasked        Boolean           @default(false) // Gönderim öncesi maskeleme uygulandı mı
   createdAt        DateTime          @default(now())
 
+  /// Modül 26 — bu çağrıdan TAHSİL EDİLEN kredi. null = kredi hattı devrede
+  /// değil (BYO-LLM tenant'ı) veya ücretsiz görev. 0 = kredili görev ama
+  /// başarısız/boş yanıt nedeniyle mahsup yapılmadı.
+  creditsCharged Int?
+  /// İÇ MUHASEBE — kullanıcıya GÖSTERİLMEZ. ModelPrice üzerinden hesaplanan
+  /// gerçek sağlayıcı maliyeti: (girdiToken/1M × girdiFiyat) + (çıktıToken/1M × çıktıFiyat).
+  estimatedCost  Decimal? @db.Decimal(12, 4)
+  /// estimatedCost'un para birimi (ModelPrice.currency'den kopyalanır, genelde "USD").
+  costCurrency   String?
+
   @@index([tenantId, createdAt])
+  @@index([tenantId, taskType, createdAt])
 }
 
 // ---------- Dilekçe üretimi ----------
@@ -1791,4 +1810,619 @@ model PlatformApprovalRequest {
   @@index([requestedBy])
   @@index([tenantId])
   @@index([createdAt])
+}
+
+// ===========================================================================
+// FAZ 4 — A) STRATEJİ MOTORU (docs/moduller/15-strateji-motoru.md)
+// ===========================================================================
+// ÜRÜN İLKESİ: strateji ağacı bir ÖNERİDİR. Hiçbir düğüm kendiliğinden
+// Task/Deadline/Petition kaydına dönüşmez; avukat aktarımı açıkça onaylar.
+
+enum StrategyStatus {
+  TASLAK /// Henüz yayına alınmamış ilk taslak
+  GUNCEL /// Yayındaki sürüm dosyanın bugünkü haliyle uyumlu
+  BAYAT /// Dosyada yeni olay var; strateji yeniden üretilmeli
+}
+
+/// Dosyanın 9 halkalı argüman zinciri. Gövde `StrategyVersion.treeJson`
+/// içindedir; `StrategyNode` aynı ağacın sorgulanabilir normalize kopyasıdır.
+model Strategy {
+  id       String @id @default(uuid())
+  tenantId String
+  caseId   String
+  case     Case   @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  title    String
+
+  status StrategyStatus @default(TASLAK)
+
+  /// Yayındaki sürüm (StrategyVersion.id). Petition/currentVersionId ile aynı
+  /// gerekçeyle SKALER tutulur: iki yönlü zorunlu ilişki döngü yaratır.
+  currentVersionId String?
+
+  createdBy String // User id
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  versions StrategyVersion[]
+  nodes    StrategyNode[]
+
+  @@index([tenantId, status])
+  @@index([caseId, updatedAt])
+}
+
+/// Strateji sürümü — DEĞİŞTİRİLEMEZ (immutable). Her yeniden üretim yeni
+/// sürümdür; eski sürüm "o gün ne düşünmüştük" sorusunun kanıtıdır.
+model StrategyVersion {
+  id         String   @id @default(uuid())
+  strategyId String
+  strategy   Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  versionNo  Int
+  /// Ağacın tam anlık görüntüsü (JSON):
+  /// { nodes: [{ id, nodeType, content, strength, sourceRef, children: [...] }], generatedAt, model }
+  treeJson   String
+  /// Bu sürümde ne değişti — AI üretir, avukat düzenleyebilir.
+  summary    String?
+  model      String? // Üreten model; elle yazılan sürümlerde null
+  createdBy  String // User id
+  createdAt  DateTime @default(now())
+
+  @@unique([strategyId, versionNo])
+  @@index([strategyId, createdAt])
+}
+
+enum StrategyNodeType {
+  KARSI_ARGUMAN
+  BIZIM_ARGUMAN
+  DELIL
+  HUKUKI_DAYANAK
+  ZAYIF_NOKTA
+  KARSI_CEVAP
+  SENARYO
+  RISK
+}
+
+/// Ağacın normalize düğümü — filtreleme/raporlama için. Gövde kaynağı
+/// StrategyVersion.treeJson'dır; bu tablo ondan türetilir.
+model StrategyNode {
+  id         String           @id @default(uuid())
+  tenantId   String
+  strategyId String
+  strategy   Strategy         @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  parentId   String?
+  parent     StrategyNode?    @relation("StrategyNodeTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children   StrategyNode[]   @relation("StrategyNodeTree")
+  nodeType   StrategyNodeType
+  content    String
+  /// Argüman gücü 1-5 (uygulama katmanında sınırlanır; 1 = çok zayıf).
+  strength   Int?
+  /// Dayanak izi: "DOC:<documentId>" | "CASELAW:<id>" | "MEVZUAT:TBK m.112".
+  /// Atıflar KAYIT ÜZERİNDEN doğrulanır; LLM'e "bu karar var mı" sorulmaz.
+  sourceRef  String?
+  orderIndex Int              @default(0)
+  createdAt  DateTime         @default(now())
+
+  @@index([tenantId, strategyId])
+  @@index([strategyId, parentId, orderIndex])
+}
+
+// ===========================================================================
+// FAZ 4 — B) SİMÜLASYON MODLARI (docs/moduller/16-simulasyon-modlari.md)
+// ===========================================================================
+
+enum SimulationMode {
+  KARSI_TARAF_AVUKATI /// "Karşı taraf avukatı olsam ne yapardım"
+  HAKIM_GOZU /// Hakim gözüyle dosyanın zayıf/güçlü yanları
+  KAYBETTIREN_HUSUSLAR /// Bu davayı kaybettirecek hususlar
+  KARSI_DILEKCE_ZAYIFLIK /// Karşı dilekçedeki zayıf noktalar
+  BILIRKISI_ODAGI /// Bilirkişinin odaklanacağı teknik noktalar
+}
+
+/// Bir simülasyon koşusu. `inputSnapshotJson` TEKRARLANABİLİRLİK içindir:
+/// koşuya hangi belge/strateji sürümünün girdiği kayıt altındadır; aksi halde
+/// aynı komut ay sonra bambaşka bir sonuç üretir ve çıktı savunulamaz.
+model SimulationRun {
+  id                String         @id @default(uuid())
+  tenantId          String
+  caseId            String
+  case              Case           @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  mode              SimulationMode
+  /// Girdi künyesi (JSON): { documentIds, strategyVersionId?, params, generatedAt }
+  inputSnapshotJson String
+  /// Mod şemasına uygun çıktı (JSON): { findings: [{ rank, title, body, severity, sourceRefs }] }
+  outputJson        String
+  model             String?
+  durationMs        Int?
+  createdBy         String // User id
+  createdAt         DateTime       @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([caseId, mode, createdAt])
+}
+
+// ===========================================================================
+// FAZ 4 — C) RİSK MOTORU (docs/moduller/17-risk-motoru.md)
+// ===========================================================================
+// HİBRİT KURAL: taban skoru DETERMİNİSTİK sinyaller üretir (ruleSignalsJson),
+// AI yalnız sınırlı düzeltme (±25) önerir ve BANDI TEK BAŞINA DEĞİŞTİREMEZ —
+// CollectionScore'daki ilkenin aynısı.
+
+enum RiskDimension {
+  GENEL /// Ağırlıklı bileşke
+  HUKUKI
+  SURE
+  DELIL
+  TAHSILAT
+  USUL
+  ICTIHAT
+  KARSI_TARAF
+}
+
+enum RiskBand {
+  DUSUK
+  ORTA
+  YUKSEK
+}
+
+/// Dosya × boyut başına GÜNCEL skor (tek satır; geçmiş RiskScoreHistory'de).
+model RiskScore {
+  id              String        @id @default(uuid())
+  tenantId        String
+  caseId          String
+  case            Case          @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  dimension       RiskDimension
+  /// 0-100 — kural tabanı + AI düzeltmesi uygulanmış NİHAİ skor.
+  score           Int
+  /// 0-100 — YALNIZ deterministik kural sinyallerinden gelen taban.
+  /// SAKLANIR, `score - aiAdjustment` ile GERİ HESAPLANMAZ: 0-100 kırpması
+  /// devreye girdiğinde (taban 85 + AI 25 → skor 100) ters çevirme yanlış
+  /// sonuç verir ve avukata deterministik tabanı olduğundan düşük gösterirdi.
+  /// Sütun öncesi satırlarda null'dur; okuyucu o durumda geri hesaba düşer.
+  baseScore       Int?
+  /// Bant DAİMA kural tabanından türer; AI düzeltmesi bandı değiştirmez.
+  band            RiskBand
+  /// Deterministik sinyaller (JSON): [{ key, label, weight, value, contribution }]
+  ruleSignalsJson String
+  /// AI'ın skora katkısı (-25..+25). Bandı etkilemez.
+  aiAdjustment    Int?
+  /// AI yorumu — ÖNERİDİR, skoru tek başına belirlemez.
+  aiCommentary    String?
+  model           String?
+  computedAt      DateTime      @default(now())
+  computedBy      String? // User id — gece hesabında null
+
+  @@unique([caseId, dimension])
+  @@index([tenantId, dimension, band])
+  @@index([tenantId, computedAt])
+}
+
+/// Append-only zaman serisi — risk eğrisi ve "ne zaman kızardı" sorusu için.
+/// GÜNCELLENMEZ, SİLİNMEZ.
+model RiskScoreHistory {
+  id              String        @id @default(uuid())
+  tenantId        String
+  caseId          String
+  dimension       RiskDimension
+  score           Int
+  /// Deterministik kural tabanı (bkz. RiskScore.baseScore).
+  baseScore       Int?
+  band            RiskBand
+  ruleSignalsJson String
+  aiAdjustment    Int?
+  computedAt      DateTime      @default(now())
+
+  @@index([tenantId, caseId, dimension, computedAt])
+  @@index([caseId, computedAt])
+}
+
+/// Avukatın elle bant geçersiz kılması. GEREKÇE ZORUNLUDUR — gerekçesiz
+/// override, risk motorunu sessizce kapatmanın yoludur.
+model RiskOverride {
+  id        String        @id @default(uuid())
+  tenantId  String
+  caseId    String
+  dimension RiskDimension
+  band      RiskBand
+  reason    String // ZORUNLU
+  createdBy String // User id
+  createdAt DateTime      @default(now())
+  /// null = süresiz. Dolduğunda hesaplanan bant yeniden geçerli olur.
+  expiresAt DateTime?
+
+  @@index([tenantId, caseId, dimension])
+  @@index([caseId, createdAt])
+}
+
+// ===========================================================================
+// FAZ 4 — D) DELİL YÖNETİMİ (docs/moduller/14-delil-yonetimi.md)
+// ===========================================================================
+// İddia × Delil matrisi: hangi vakıayı hangi delil taşıyor, hangisi boşta.
+
+enum ClaimSide {
+  BIZ
+  KARSI_TARAF
+}
+
+enum ClaimStatus {
+  ACIK
+  DESTEKLENIYOR
+  ZAYIF
+  CURUTULDU
+}
+
+/// İddia / vakıa — matrisin satırı. Karşı tarafın iddiaları da izlenir.
+model Claim {
+  id         String      @id @default(uuid())
+  tenantId   String
+  caseId     String
+  case       Case        @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  side       ClaimSide
+  text       String
+  orderIndex Int         @default(0)
+  status     ClaimStatus @default(ACIK)
+  createdBy  String // User id
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  evidenceLinks ClaimEvidenceLink[]
+  legalBases    ClaimLegalBasis[]
+
+  @@index([tenantId, caseId])
+  @@index([caseId, side, orderIndex])
+}
+
+enum EvidenceType {
+  BELGE
+  FOTOGRAF
+  VIDEO
+  SES
+  TANIK
+  BILIRKISI
+  KESIF
+  DIGER
+}
+
+enum EvidenceStatus {
+  PLANLANAN /// Toplanacak — delil boşluğu raporunun kaynağı
+  TOPLANDI
+  SUNULDU
+  KABUL
+  RED
+}
+
+/// Delil — matrisin sütunu.
+model Evidence {
+  id          String         @id @default(uuid())
+  tenantId    String
+  caseId      String
+  case        Case           @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  type        EvidenceType
+  title       String
+  description String?
+  /// Bağlı belge (Document.id). İlişki kurulmaz: belge silinse de delil
+  /// kaydının kendisi (ve matristeki yeri) korunmalıdır.
+  documentId  String?
+  witnessName String? // TANIK tipinde
+  obtainedAt  DateTime?
+  status      EvidenceStatus @default(PLANLANAN)
+  createdBy   String // User id
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  claimLinks ClaimEvidenceLink[]
+
+  @@index([tenantId, caseId])
+  @@index([caseId, status])
+  @@index([documentId])
+}
+
+/// Matrisin HÜCRESİ: bu delil bu iddiayı ne kadar taşıyor.
+model ClaimEvidenceLink {
+  id         String   @id @default(uuid())
+  tenantId   String
+  claimId    String
+  claim      Claim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  evidenceId String
+  evidence   Evidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  /// Destek gücü 1-5 — AVUKAT değerlendirmesi (AI önerse de avukat onaylar).
+  strength   Int?
+  note       String?
+  createdBy  String // User id
+  createdAt  DateTime @default(now())
+
+  @@unique([claimId, evidenceId])
+  @@index([tenantId, claimId])
+  @@index([evidenceId])
+}
+
+/// İddianın hukuki dayanağı. `reference` serbest metindir ("TBK m.112");
+/// içtihat dayanağı verildiğinde `caseLawId` KAYIT ÜZERİNDEN doğrulanır.
+model ClaimLegalBasis {
+  id        String   @id @default(uuid())
+  tenantId  String
+  claimId   String
+  claim     Claim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  reference String // Örn. "TBK m.112", "Yarg. 15. HD 2019/1234 E."
+  /// CaseLawDocument.id — skaler. İçtihat havuzu kiracıdan bağımsız olduğu için
+  /// FK kurulmaz; doğrulama caselaw modülünde kayıt aramasıyla yapılır.
+  caseLawId String?
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, claimId])
+  @@index([caseLawId])
+}
+
+// ===========================================================================
+// FAZ 4 — E) BİLİRKİŞİ (docs/moduller/13-bilirkisi.md)
+// ===========================================================================
+
+/// Bilirkişi kişi kaydı — büro içi hafıza ("bu bilirkişiyle daha önce ne oldu").
+model Expert {
+  id          String   @id @default(uuid())
+  tenantId    String
+  fullName    String
+  specialty   String? // Örn. "İnşaat Yüksek Mühendisi"
+  institution String?
+  note        String? // Büro içi değerlendirme
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId, fullName])
+}
+
+enum ExpertReportType {
+  ASIL
+  EK
+  UZMAN_MUTALAASI /// Taraf uzman görüşü (HMK m.293)
+}
+
+/// Bilirkişi raporu. `servedAt` (TEBLİĞ) itiraz süresini tetikleyen tarihtir;
+/// süre hesabı DETERMİNİSTİK motorda yapılır, burada saklanmaz.
+model ExpertReport {
+  id             String           @id @default(uuid())
+  tenantId       String
+  caseId         String
+  case           Case             @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  /// Expert.id — skaler; bilirkişi kaydı silinse de rapor korunur.
+  expertId       String?
+  reportType     ExpertReportType @default(ASIL)
+  /// Document.id — rapor belgesi (OCR'lı).
+  documentId     String?
+  receivedAt     DateTime
+  /// Tebliğ tarihi — itiraz süresinin TETİKLEYİCİSİ.
+  servedAt       DateTime?
+  summary        String? // AI teknik özeti — avukat onaylı
+  conclusionText String? // Raporun sonuç bölümü (aynen)
+  createdBy      String // User id
+  createdAt      DateTime         @default(now())
+
+  objections ExpertObjection[]
+
+  @@index([tenantId, caseId])
+  @@index([caseId, receivedAt])
+}
+
+enum ObjectionStatus {
+  TASLAK
+  SUNULDU
+  KABUL
+  RED
+}
+
+/// Rapora itiraz. `points` madde listesidir; dilekçeye aktarım
+/// `petitionId` ile izlenir, süre kaydı `deadlineId` ile bağlanır.
+model ExpertObjection {
+  id             String          @id @default(uuid())
+  tenantId       String
+  expertReportId String
+  expertReport   ExpertReport    @relation(fields: [expertReportId], references: [id], onDelete: Cascade)
+  /// Petition.id — skaler (itiraz dilekçesi ayrı yaşam döngüsüne sahiptir).
+  petitionId     String?
+  /// İtiraz maddeleri (JSON): [{ no, topic, summary, sourceRef? }]
+  points         String
+  status         ObjectionStatus @default(TASLAK)
+  /// Deadline.id — hesaplanan itiraz süresi kaydı (skaler).
+  deadlineId     String?
+  createdBy      String // User id
+  createdAt      DateTime        @default(now())
+
+  @@index([tenantId, expertReportId])
+  @@index([petitionId])
+  @@index([deadlineId])
+}
+
+/// İki rapor arasındaki fark analizi (asıl ↔ ek rapor). AI ÜRETİR, ÖNERİDİR.
+model ExpertReportDiff {
+  id              String   @id @default(uuid())
+  tenantId        String
+  caseId          String
+  baseReportId    String // ExpertReport.id
+  compareReportId String // ExpertReport.id
+  /// Fark özeti (JSON): [{ topic, before, after, changeType, significance }]
+  diffJson        String
+  model           String?
+  createdAt       DateTime @default(now())
+
+  @@index([tenantId, caseId, createdAt])
+  @@index([baseReportId, compareReportId])
+}
+
+// ===========================================================================
+// FAZ 4 — F) ÇATIŞMA KONTROLÜ (docs/moduller/11-conflict-check.md)
+// ===========================================================================
+// AĞIRLIKLI DETERMİNİSTİK: eşleşmeler kayıt taramasından çıkar (Client,
+// CaseParty). AI yalnız "bağlı şirket olabilir" gibi çıkarım ekler ve
+// kararı VERMEZ — kararı PARTNER/ADMIN verir, gerekçesiyle.
+
+enum ConflictResult {
+  TEMIZ
+  DIKKAT
+  CAKISMA
+}
+
+enum ConflictDecision {
+  DEVAM
+  REDDEDILDI
+  BEKLEMEDE
+}
+
+model ConflictCheck {
+  id           String            @id @default(uuid())
+  tenantId     String
+  query        String // Aranan ad/unvan (girildiği hali)
+  context      String? // Hangi iş için tarandı (dava konusu, sektör)
+  result       ConflictResult
+  hitCount     Int               @default(0)
+  decidedBy    String? // User id — PARTNER/ADMIN
+  decision     ConflictDecision?
+  decisionNote String?
+  createdBy    String // User id
+  createdAt    DateTime          @default(now())
+
+  hits ConflictHit[]
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, result])
+}
+
+enum ConflictMatchType {
+  MEVCUT_MUVEKKIL
+  KARSI_TARAF
+  ESKI_MUVEKKIL
+  BAGLI_SIRKET
+  DOSYADA_GECEN
+  BENZER_AD
+}
+
+model ConflictHit {
+  id              String            @id @default(uuid())
+  conflictCheckId String
+  conflictCheck   ConflictCheck     @relation(fields: [conflictCheckId], references: [id], onDelete: Cascade)
+  matchType       ConflictMatchType
+  entityType      String // "Client" | "CaseParty" | "Case"
+  entityId        String?
+  matchedName     String
+  /// 0.0 - 1.0 benzerlik. Skor bir SIRALAMA aracıdır, karar değildir.
+  similarity      Float
+  /// AÇIK dosyadaki karşı taraf eşleşmesi — benzerlik CAKISMA eşiğinin altında
+  /// kalsa bile sonucu ÇAKIŞMA'ya yükseltir (Modül 11, iş kuralı 4).
+  /// AYRI ALAN OLARAK SAKLANIR: karar mantığı `note` cümlesinin içinden
+  /// okunursa, kayıt geri yüklendiğinde çakışmanın hangi satırdan geldiği
+  /// yapısal olarak kaybolur.
+  escalated       Boolean           @default(false)
+  caseId          String? // Eşleşmenin geçtiği dosya (skaler)
+  note            String?
+
+  @@index([conflictCheckId])
+  @@index([caseId])
+}
+
+// ===========================================================================
+// MODÜL 26 — AI KOTA VE KREDİ SİSTEMİ (docs/moduller/26-ai-kota-kredi-sistemi.md)
+// ===========================================================================
+// İLKE: kullanıcıya token değil KREDİ satılır. Kota dolduğunda YALNIZCA kredili
+// AI işlemleri durur; dosya/duruşma/süre/görev/belge akışları ÇALIŞMAYA DEVAM
+// EDER. BYO-LLM tenant'ında kredi kontrolü hiç devreye girmez.
+
+/// Tenant kredi cüzdanı.
+/// kullanılabilir = (includedCredits − includedConsumed) + purchasedCredits − reservedCredits
+model CreditWallet {
+  id       String @id @default(uuid())
+  tenantId String @unique
+
+  /// Abonelik dönemi (UTC gün başı).
+  periodStart DateTime
+  periodEnd   DateTime
+
+  /// Dönem başında tahsis edilen dahil kota. DEVRETMEZ — dönem sonunda sıfırlanır.
+  includedCredits  Int
+  includedConsumed Int @default(0)
+  /// Satın alınan bakiye — DEVREDER, süresi dolmaz. Tüketim sırası: önce dahil kota.
+  purchasedCredits Int @default(0)
+  /// Devam eden çağrılar için rezerve. Eşzamanlı isteklerin bakiyeyi negatife
+  /// düşürmesini önler (kabul kriteri 2).
+  reservedCredits  Int @default(0)
+  /// Rezervasyon sayacının 0'dan yukarı çıktığı an. Süreç çağrı ortasında
+  /// ölürse (deploy, OOM, kill) `settle`/`release` hiç çalışmaz ve rezerve
+  /// kredi KALICI olarak kilitlenirdi; süpürücü bu damgaya bakarak sahipsiz
+  /// rezervasyonu serbest bırakır. Sayaç sıfırlandığında null'a döner.
+  reservedSince    DateTime?
+
+  /// CreditPackage.key — null = otomatik yükleme KAPALI (varsayılan).
+  autoTopUpPackageKey String?
+
+  /// Belge hattı kotası — sınıflandırma/çıkarma ücretsizdir, adetle sınırlanır.
+  documentQuota Int
+  documentUsed  Int @default(0)
+
+  updatedAt DateTime @updatedAt
+}
+
+enum CreditTxType {
+  TAHSIS /// Dönem başı dahil kota tahsisi
+  TUKETIM /// Negatif amount
+  SATIN_ALMA
+  IADE /// Başarısız çağrı / rezervasyon iadesi
+  DUZELTME /// Platform tarafı manuel düzeltme (dört-göz)
+  SURESI_DOLDU /// Dönem sonunda sıfırlanan dahil kota
+}
+
+/// Hareket defteri — APPEND-ONLY. `balanceAfter` mutabakat testinin dayanağıdır:
+/// hareketlerin toplamı ile cüzdan bakiyesi her zaman tutmalıdır.
+model CreditTransaction {
+  id       String       @id @default(uuid())
+  tenantId String
+  userId   String?
+  type     CreditTxType
+  /// Tüketimde NEGATİF, tahsis/satın almada pozitif.
+  amount   Int
+
+  taskType     String? // Hangi AI görevi
+  caseId       String? // İzlenebilirlik (skaler)
+  aiUsageLogId String? // AiUsageLog.id — maliyet/marj eşleştirmesi (skaler)
+
+  /// Hareketten SONRAKİ kullanılabilir bakiye — denetim için.
+  balanceAfter Int
+  note         String?
+  createdAt    DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, type, createdAt])
+  @@index([aiUsageLogId])
+}
+
+/// Görev başına kredi fiyat listesi. PLATFORM PANELİNDEN değiştirilir —
+/// ücretsiz liste KODA GÖMÜLMEZ, `isFree` alanından okunur (iş kuralı 3).
+model AiTaskCost {
+  id          String   @id @default(uuid())
+  taskType    String   @unique
+  credits     Int
+  isFree      Boolean  @default(false)
+  description String?
+  updatedBy   String? // PlatformUser id
+  updatedAt   DateTime @updatedAt
+}
+
+/// İÇ MALİYET tablosu — kullanıcıya gösterilmez. Geçmiş fiyatlar KORUNUR;
+/// fiyat değişikliği geriye dönük uygulanmaz (iş kuralı 10).
+model ModelPrice {
+  id               String         @id @default(uuid())
+  providerType     AiProviderType
+  model            String
+  inputPricePer1M  Decimal        @db.Decimal(12, 4)
+  outputPricePer1M Decimal        @db.Decimal(12, 4)
+  currency         String         @default("USD")
+  effectiveFrom    DateTime
+
+  @@unique([providerType, model, effectiveFrom])
+  @@index([providerType, model, effectiveFrom])
+}
+
+/// Satın alınabilir ek kredi paketi. Fiyat bir İŞ KARARIDIR; panelden güncellenir.
+model CreditPackage {
+  id       String  @id @default(uuid())
+  key      String  @unique // "EK_500" | "EK_2000" | "EK_10000"
+  credits  Int
+  price    Decimal @db.Decimal(18, 2)
+  currency String  @default("TRY")
+  isActive Boolean @default(true)
 }

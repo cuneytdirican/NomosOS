@@ -28,6 +28,7 @@ import type { TypeOf, ZodTypeAny } from "zod";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { assertAiPolicyAllows } from "../common/ai-policy";
+import { creditRunContext } from "../credits/credit-context";
 import { providerUnreachable } from "../common/errors";
 import type { AuthUser } from "../common/types";
 
@@ -288,6 +289,17 @@ export class AssistantLlmService {
         durationMs,
         piiMasked: gated.piiMasked,
       },
+    });
+
+    // MODÜL 26 KANCASI — gerçek token'ı kredi kapısına bildirir. Bağlam yoksa
+    // (ücretsiz görev / BYO-LLM tenant'ı) hiçbir şey yapmaz.
+    creditRunContext.record({
+      aiUsageLogId: usageLog.id,
+      taskType: logTaskType,
+      model,
+      providerType: config.type,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
     });
 
     await this.audit.log({

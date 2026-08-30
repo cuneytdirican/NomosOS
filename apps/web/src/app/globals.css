@@ -9,3 +9,136 @@ html {
 body {
   @apply bg-slate-50 text-slate-900 antialiased;
 }
+
+/* ==========================================================================
+   Pazarlama sitesi (docs/08-tanitim-sitesi-icerik.md)
+   --------------------------------------------------------------------------
+   Bütün pazarlama token'ları `.marketing` kapsamında tanımlıdır. Uygulama
+   sayfaları (/app/**) koyu lacivert + amber temayı kullanmaya devam eder;
+   bu blok oraya sızmaz.
+   ========================================================================== */
+
+:root {
+  /* Serif başlık: Google Fonts kurulmaz — sistem serif yığını kullanılır. */
+  --font-serif-legal: Lora, "Source Serif 4", Georgia, "Times New Roman", Times, serif;
+  --font-sans-legal: Inter, "Segoe UI", ui-sans-serif, system-ui, -apple-system, "Helvetica Neue",
+    Arial, sans-serif;
+}
+
+.marketing {
+  /* Palet — docs/08 §1.2 */
+  --ink: #0f1b33;
+  --ink-soft: #2c3a57;
+  --gold: #b8963e;
+  --gold-soft: #e8dcc0;
+  --paper: #faf8f4;
+  --paper-alt: #f2efe9;
+  --rule: #dcd6ca;
+  --text: #1f2937;
+
+  font-family: var(--font-sans-legal);
+  background-color: var(--paper);
+  color: var(--text);
+  line-height: 1.7;
+}
+
+/* Serif başlık + sans gövde bu sitenin imzasıdır. */
+.marketing h1,
+.marketing h2,
+.marketing h3,
+.marketing .serif {
+  font-family: var(--font-serif-legal);
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  font-weight: 600;
+}
+
+/* Rakam ve tablo hizası */
+.marketing .tnum,
+.marketing table {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Bölüm üst etiketi: küçük punto, harf aralığı açık, altın. */
+.marketing .kicker {
+  font-family: var(--font-sans-legal);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #7a6220; /* --gold koyulaştırılmış: kağıt zeminde AA kontrast */
+}
+
+/* İnce ayraç çizgisi ve altın bölüm ayracı */
+.marketing .rule {
+  border-top: 1px solid var(--rule);
+}
+
+.marketing .gold-rule {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  opacity: 0.55;
+}
+
+/* Odak halkası — klavye gezinimi her yerde görünür olmalı. */
+.marketing a:focus-visible,
+.marketing button:focus-visible,
+.marketing summary:focus-visible,
+.marketing input:focus-visible,
+.marketing select:focus-visible,
+.marketing textarea:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Ölçülü hareket: yalnızca yumuşak fade-in. Parallax/sayaç/slider yok. */
+.marketing .fade-in {
+  animation: marketing-fade-in 420ms ease-out both;
+}
+
+@keyframes marketing-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marketing .fade-in {
+    animation: none;
+  }
+}
+
+/* SSS: details/summary — varsayılan üçgen işareti kaldırılır. */
+.marketing details > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.marketing details > summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Geliştirici künyesi (docs/08 §3.13) */
+.marketing .credit {
+  font-size: 13px;
+  color: var(--ink-soft);
+  opacity: 0.7;
+}
+
+.marketing .credit a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.marketing .credit a:hover,
+.marketing .credit a:focus-visible {
+  color: var(--gold);
+  text-decoration: underline;
+}

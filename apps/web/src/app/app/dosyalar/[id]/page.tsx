@@ -67,6 +67,11 @@ import { DocumentsTab } from "@/components/documents-tab";
 import { PetitionsTab } from "@/components/petitions-tab";
 import { ProposalCard } from "@/components/proposal-card";
 import { ToastStack, useToasts } from "@/components/ai-ui";
+import { EvidenceTab } from "../../_components/evidence-tab";
+import { ExpertTab } from "../../_components/expert-tab";
+import { RiskTab } from "../../_components/risk-tab";
+import { SimulationTab } from "../../_components/simulation-tab";
+import { StrategyTab } from "../../_components/strategy-tab";
 import {
   CASE_STATUS_LABELS,
   CASE_STATUS_TONES,
@@ -110,6 +115,11 @@ const TABS = [
   { key: "notlar", label: "Notlar" },
   { key: "gorevler", label: "Görevler" },
   { key: "belgeler", label: "Belgeler" },
+  { key: "deliller", label: "Deliller" },
+  { key: "bilirkisi", label: "Bilirkişi" },
+  { key: "strateji", label: "Strateji" },
+  { key: "risk", label: "Risk" },
+  { key: "simulasyon", label: "Simülasyon" },
   { key: "oneriler", label: "Öneriler" },
   { key: "dilekceler", label: "Dilekçeler" },
   { key: "ai", label: "AI Asistan" },
@@ -780,6 +790,35 @@ export default function DosyaDetayPage({ params }: { params: Promise<{ id: strin
             void loadProposals();
             window.dispatchEvent(new Event("nomosos:proposals-changed"));
           }}
+          onNotify={push}
+        />
+      )}
+
+      {/* ---------- Faz 4: Deliller ---------- */}
+      {tab === "deliller" && <EvidenceTab caseId={id} onNotify={push} />}
+
+      {/* ---------- Faz 4: Bilirkişi ---------- */}
+      {tab === "bilirkisi" && (
+        <ExpertTab
+          caseId={id}
+          onNotify={push}
+          onOpenDeadlineWizard={() => setWizardOpen(true)}
+        />
+      )}
+
+      {/* ---------- Faz 4: Strateji ---------- */}
+      {tab === "strateji" && (
+        <StrategyTab caseId={id} onNotify={push} onGoToRisk={() => setTab("risk")} />
+      )}
+
+      {/* ---------- Faz 4: Risk ---------- */}
+      {tab === "risk" && <RiskTab caseId={id} onNotify={push} />}
+
+      {/* ---------- Faz 4: Simülasyon ---------- */}
+      {tab === "simulasyon" && (
+        <SimulationTab
+          caseId={id}
+          documents={documents as DocumentItem[]}
           onNotify={push}
         />
       )}

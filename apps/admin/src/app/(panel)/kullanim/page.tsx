@@ -13,7 +13,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useListResource } from "@/lib/useResource";
+import { useListResource, useResource } from "@/lib/useResource";
 import { useAdminSession } from "@/lib/session";
 import { EP } from "@/lib/endpoints";
 import { can, isMasked } from "@/lib/rbac";
@@ -24,6 +24,7 @@ import {
   AI_TASK_TYPE_LABELS,
   daysAgo,
   fmtCompact,
+  fmtMoney,
   fmtNumber,
   fmtPercent,
   labelOf,
@@ -32,7 +33,7 @@ import {
   type AiGroupBy,
 } from "@/lib/labels";
 import { exportCsv } from "@/lib/csv";
-import type { AdminAiMetricRow, AdminUsagePoint } from "@/lib/types";
+import type { AdminAiMetricRow, AdminMarginReport, AdminUsagePoint } from "@/lib/types";
 import {
   Badge,
   BarList,
@@ -75,6 +76,26 @@ function UsageAnalytics() {
   const usage = useListResource<AdminUsagePoint>(EP.metrics.usage, {
     query: { from, to },
   });
+
+  /**
+   * MODÜL 26 — maliyet / gelir / marj.
+   *
+   * Yönetilen AI modunda AI maliyeti NOMOSOS'undur; "panel token sayar,
+   * fiyatlamaz" ilkesi yalnızca BYO-LLM büroları için geçerlidir. Rapora
+   * yetkisi olmayan rol için istek HİÇ atılmaz (403 gürültüsü olmasın).
+   */
+  const canSeeMargin = can(role, "credits.margin.view");
+  const margin = useResource<AdminMarginReport>(canSeeMargin ? EP.credits.margin : null, {
+    query: { from, to },
+  });
+  /** tenantId → marj satırı. Maskeli görünümde kimlik yok, eşleme kurulamaz. */
+  const marginByTenant = useMemo(() => {
+    const map = new Map<string, AdminMarginReport["items"][number]>();
+    for (const r of margin.data?.items ?? []) {
+      if (r.tenantId) map.set(r.tenantId, r);
+    }
+    return map;
+  }, [margin.data]);
 
   /** Gruplama anahtarına göre satır etiketi. Tenant kırılımında maskeleme uygulanır. */
   const rowLabel = useMemo(
@@ -215,6 +236,49 @@ function UsageAnalytics() {
       align: "right",
       render: (r) => (r.p95Ms === null || r.p95Ms === undefined ? "—" : `${fmtNumber(r.p95Ms)} ms`),
     },
+    // --- Modül 26: maliyet / gelir / marj (yalnız tenant kırılımında) ---
+    ...(groupBy === "tenant" && canSeeMargin
+      ? ([
+          {
+            key: "cost",
+            header: "Maliyet (USD)",
+            align: "right",
+            render: (r: AdminAiMetricRow) => {
+              const m = r.tenantId ? marginByTenant.get(r.tenantId) : undefined;
+              return m ? (
+                <span className="font-mono">{fmtMoney(m.maliyetUsd, "USD")}</span>
+              ) : (
+                <span className="text-steel-600">—</span>
+              );
+            },
+          },
+          {
+            key: "revenue",
+            header: "Gelir (TL)",
+            align: "right",
+            render: (r: AdminAiMetricRow) => {
+              const m = r.tenantId ? marginByTenant.get(r.tenantId) : undefined;
+              if (!m) return <span className="text-steel-600">—</span>;
+              if (m.mod !== "YONETILEN") return <Badge tone="green">BYO-LLM</Badge>;
+              return m.gelirTl ? fmtMoney(m.gelirTl, "TRY") : <span className="text-steel-600">—</span>;
+            },
+          },
+          {
+            key: "margin",
+            header: "Marj",
+            align: "right",
+            render: (r: AdminAiMetricRow) => {
+              const m = r.tenantId ? marginByTenant.get(r.tenantId) : undefined;
+              if (!m || m.marjTl === null) return <span className="text-steel-600">—</span>;
+              return (
+                <span className={Number(m.marjTl) < 0 ? "text-red-300" : "text-green-300"}>
+                  {fmtMoney(m.marjTl, "TRY")}
+                </span>
+              );
+            },
+          },
+        ] as Array<Column<AdminAiMetricRow>>)
+      : []),
   ];
 
   return (
@@ -269,12 +333,28 @@ function UsageAnalytics() {
         }
       />
 
-      <WarningBox title="Panel token sayar, fiyatlamaz">
-        BYO-LLM gereği <strong>maliyet büronun kendi sağlayıcı hesabındadır</strong>; bu ekranda
-        &quot;AI maliyeti (TL)&quot; kolonu yoktur. OLLAMA/CUSTOM çağrılarında sağlayıcı token
-        bilgisi dönmeyebilir — bu kayıtlar &quot;token bilgisi yok&quot; olarak{" "}
-        <strong>ayrı sayılır, sıfır varsayılmaz</strong>.
+      <WarningBox title="Maliyet YALNIZCA yönetilen AI modunda NomosOS'undur">
+        <strong>BYO-LLM</strong> bürolarında maliyet kendi sağlayıcı hesaplarındadır ve o
+        satırlarda marj hesaplanmaz — Modül 25&apos;in &quot;panel token sayar, fiyatlamaz&quot;
+        ilkesi yalnızca onlar için geçerlidir. <strong>Yönetilen AI</strong> modunda her çağrı
+        NomosOS&apos;un gideridir; maliyet/gelir/marj kolonları tenant kırılımında görünür ve{" "}
+        <strong>iç muhasebedir, kullanıcıya gösterilmez</strong>. OLLAMA/CUSTOM çağrılarında
+        sağlayıcı token bilgisi dönmeyebilir — bu kayıtlar &quot;token bilgisi yok&quot; olarak{" "}
+        <strong>ayrı sayılır, sıfır varsayılmaz</strong> ve maliyetleri fiyatlanamaz.
       </WarningBox>
+
+      {canSeeMargin && (
+        <InfoBox title="Kredi ve fiyat yönetimi">
+          Kredi cüzdanları, manuel tahsis (dört-göz), kredi fiyat listesi ve model maliyet tablosu{" "}
+          <Link href="/krediler" className="text-accent-300 underline">
+            Kredi &amp; Fiyatlar
+          </Link>{" "}
+          ekranındadır.
+          {margin.data && !margin.data.marjHesaplanabilir && margin.data.marjUyarisi
+            ? ` ${margin.data.marjUyarisi}`
+            : ""}
+        </InfoBox>
+      )}
 
       {anonymous && (
         <InfoBox title="Takma adlı görünüm (🔒)">

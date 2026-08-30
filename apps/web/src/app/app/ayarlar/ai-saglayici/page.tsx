@@ -17,6 +17,8 @@ import {
   Textarea,
 } from "@/components/ui";
 import { AI_PROVIDER_TYPE_LABELS, labelOf } from "@/lib/labels";
+// Modül 26 — kredi modu rozeti ("Limitsiz mod aktif" / kalan kota).
+import { useWallet } from "@/components/credits";
 import {
   AI_PROVIDER_TYPES,
   AI_TASK_TYPES,
@@ -65,6 +67,7 @@ const MODEL_PLACEHOLDERS: Record<AiProviderType, string> = {
 type TestState = { status: "idle" | "busy" | "ok" | "fail"; message?: string };
 
 export default function AiSaglayiciPage() {
+  const { wallet } = useWallet();
   const [providers, setProviders] = useState<AiProvider[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -244,6 +247,43 @@ export default function AiSaglayiciPage() {
           + Yeni Sağlayıcı
         </Button>
       </div>
+
+      {/* ---------- Kredi modu (Modül 26) ---------- */}
+      {wallet &&
+        (wallet.limitsiz ? (
+          <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+            <p className="font-semibold">
+              <span aria-hidden="true">∞</span> Limitsiz mod aktif — abonelikte %30 indirim
+              uygulanıyor
+            </p>
+            <p className="mt-1">
+              Kendi API anahtarınızı kullandığınız için <strong>kredi kotası uygulanmaz</strong>.
+              AI maliyeti kendi sağlayıcı hesabınızdadır; NomosOS yalnızca kullanım kaydı
+              (görev, model, token) tutar.
+            </p>
+          </div>
+        ) : (
+          wallet.cuzdan && (
+            <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+              <p>
+                Yönetilen AI modundasınız: bu dönem{" "}
+                <strong className="tabular-nums">{wallet.cuzdan.kullanilabilir}</strong> krediniz
+                kaldı.{" "}
+                <a
+                  href="/app/ayarlar/ai-kullanim"
+                  className="font-medium text-slate-900 underline underline-offset-2"
+                >
+                  Kullanım dökümü
+                </a>
+              </p>
+              <p className="mt-1 text-slate-500">
+                Aşağıdan kendi API anahtarınızı bağlarsanız kredi limitleri tamamen kalkar ve
+                abonelikte %30 indirim uygulanır. Değişiklik, büronuz için platform tarafında
+                kaydedilir.
+              </p>
+            </div>
+          )
+        ))}
 
       {/* Sağlayıcı listesi */}
       <Card title="Tanımlı Sağlayıcılar">

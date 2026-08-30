@@ -28,6 +28,7 @@ import type {
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { assertAiPolicyAllows, tenantAiPolicy } from "../common/ai-policy";
+import { creditRunContext } from "../credits/credit-context";
 import { providerUnreachable } from "../common/errors";
 import { assertRole, ROLE_SETS } from "../common/roles";
 import type { AuthUser } from "../common/types";
@@ -273,7 +274,7 @@ export class AiService {
     }
     const durationMs = Date.now() - startedAt;
 
-    await this.prisma.client.aiUsageLog.create({
+    const usageLog = await this.prisma.client.aiUsageLog.create({
       data: {
         tenantId: user.tenantId,
         userId: user.userId,
@@ -285,6 +286,16 @@ export class AiService {
         durationMs,
         piiMasked,
       },
+    });
+
+    // MODÜL 26 KANCASI — gerçek token'ı kredi kapısına bildirir.
+    creditRunContext.record({
+      aiUsageLogId: usageLog.id,
+      taskType: "CASE_CHAT",
+      model,
+      providerType: config.type,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
     });
     await this.audit.log({
       tenantId: user.tenantId,

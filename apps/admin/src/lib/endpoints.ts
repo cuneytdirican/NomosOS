@@ -22,6 +22,10 @@
  *   GET    /support-access     ·  DELETE /support-access/:id
  *   GET    /audit
  *   GET    /platform-users     ·  POST /platform-users  ·  PATCH|DELETE /platform-users/:id
+ *   GET    /credits/tenants    ·  GET /credits/tenants/:id  ·  PATCH /credits/tenants/:id (dört-göz)
+ *   GET    /credits/costs      ·  PATCH /credits/costs
+ *   GET    /credits/margin?from=&to=  ·  GET /credits/anomalies
+ *   GET    /model-prices       ·  POST|PATCH /model-prices
  */
 
 export const EP = {
@@ -75,6 +79,17 @@ export const EP = {
     revoke: (id: string) => `/support-access/${encodeURIComponent(id)}`,
   },
   audit: "/audit",
+  /** Modül 26 — AI kota ve kredi sistemi. */
+  credits: {
+    tenants: "/credits/tenants",
+    tenantDetail: (id: string) => `/credits/tenants/${encodeURIComponent(id)}`,
+    /** PATCH — dört-göz onay talebi üretir, işlemi UYGULAMAZ. */
+    adjust: (id: string) => `/credits/tenants/${encodeURIComponent(id)}`,
+    costs: "/credits/costs",
+    margin: "/credits/margin",
+    anomalies: "/credits/anomalies",
+  },
+  modelPrices: "/model-prices",
   platformUsers: {
     list: "/platform-users",
     create: "/platform-users",

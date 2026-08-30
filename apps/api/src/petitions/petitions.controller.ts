@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } fr
 import { PetitionsService } from "./petitions.service";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AiThrottle } from "../common/guards/ai-rate-limit.guard";
+import { AiCredits } from "../credits/ai-credits.decorator";
 import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe";
 import type { AuthUser } from "../common/types";
 import {
@@ -96,6 +97,8 @@ export class PetitionsController {
   /** PETITION_DRAFT — dosya bağlamından bölüm bölüm AI taslağı. */
   @Post(":id/generate")
   @AiThrottle(2)
+  // Taslak dosyanın tamamından üretilir; yolda dilekçe kimliği durur.
+  @AiCredits("PETITION_DRAFT", { parentCaseId: { kind: "PETITION", param: "id" } })
   @HttpCode(200)
   generate(
     @CurrentUser() user: AuthUser,
@@ -108,6 +111,7 @@ export class PetitionsController {
   /** PETITION_SECTION_REWRITE — yalnızca hedef bölüm değişir. */
   @Post(":id/sections/:key/rewrite")
   @AiThrottle(1)
+  @AiCredits("PETITION_SECTION_REWRITE", { parentCaseId: { kind: "PETITION", param: "id" } })
   @HttpCode(200)
   rewriteSection(
     @CurrentUser() user: AuthUser,

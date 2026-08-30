@@ -24,7 +24,16 @@ import type {
 } from "@/lib/types";
 import { Badge, Card, EmptyState, ErrorBox, Spinner, StatCard } from "@/components/ui";
 import { TaskProgress } from "@/components/task-progress";
+import { riskOffice } from "./_lib/faz4";
+import type { RiskCaseRow } from "./_lib/faz4-types";
 import {
+  RISK_BANDS,
+  RISK_BAND_BARS,
+  RISK_BAND_DOTS,
+  RISK_BAND_LABELS,
+  RISK_BAND_TONES,
+  RISK_DIMENSION_LABELS,
+  riskBandOf,
   DEADLINE_SOURCE_LABELS,
   DEADLINE_SOURCE_TONES,
   HEARING_TYPE_LABELS,
@@ -76,6 +85,22 @@ export default function PanelPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [proposals, setProposals] = useState<ActionProposal[]>([]);
+  /** Riskli dosyalar — uç yoksa kart gizlenir, panel etkilenmez. */
+  const [riskRows, setRiskRows] = useState<RiskCaseRow[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    riskOffice({ limit: 100 })
+      .then((rows) => {
+        if (alive) setRiskRows(rows);
+      })
+      .catch(() => {
+        if (alive) setRiskRows([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   /** Bekleyen AI önerileri — uç yoksa kart gizlenir, panel etkilenmez. */
   useEffect(() => {
@@ -289,6 +314,9 @@ export default function PanelPage() {
             </Card>
           )}
 
+          {/* Riskli dosyalar — Risk Motoru (Modül 17) beslemesi */}
+          {riskRows.length > 0 && <RiskyCasesCard rows={riskRows} />}
+
           {/* Onay bekleyen / riskli süre uyarısı */}
           {data.riskyDeadlines.length > 0 && (
             <div className="rounded-xl border border-amber-300 bg-amber-50 px-5 py-4">
@@ -486,6 +514,91 @@ export default function PanelPage() {
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * Riskli dosyalar kartı — bant dağılımı + en riskli 5 dosya.
+ *
+ * Sayılar `GET /risk/office` satırlarından türetilir; böylece panel ile
+ * `/app/riskli-dosyalar` sayfası AYNI kaynaktan beslenir ve iki ekran farklı
+ * sayı göstermez (Modül 17, kabul kriteri 6).
+ */
+function RiskyCasesCard({ rows }: { rows: RiskCaseRow[] }) {
+  const counts: Record<string, number> = { DUSUK: 0, ORTA: 0, YUKSEK: 0 };
+  for (const r of rows) {
+    const key = String(r.band ?? riskBandOf(r.score));
+    if (counts[key] !== undefined) counts[key] += 1;
+  }
+  const top = [...rows].sort((a, b) => b.score - a.score).slice(0, 5);
+
+  return (
+    <Card
+      title={`Riskli Dosyalar (${counts.YUKSEK} yüksek · ${counts.ORTA} orta)`}
+      action={
+        <Link
+          href="/app/riskli-dosyalar"
+          className="text-xs font-medium text-amber-600 hover:text-amber-500"
+        >
+          Tümü →
+        </Link>
+      }
+    >
+      <div className="flex flex-wrap gap-2">
+        {RISK_BANDS.map((b) => (
+          <span
+            key={b}
+            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600"
+          >
+            {RISK_BAND_DOTS[b]} {labelOf(RISK_BAND_LABELS, b)}:{" "}
+            <strong className="text-slate-900">{counts[b] ?? 0}</strong>
+          </span>
+        ))}
+      </div>
+
+      <ul className="mt-3 space-y-2">
+        {top.map((r) => {
+          const band = String(r.band ?? riskBandOf(r.score));
+          const title = r.case?.title ?? r.caseTitle ?? "Dosya";
+          const top1 = r.topDimension ?? r.dimension ?? null;
+          return (
+            <li
+              key={r.caseId}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2"
+            >
+              <div className="min-w-0">
+                <Link
+                  href={`/app/dosyalar/${r.caseId}?sekme=risk`}
+                  className="text-sm font-medium text-slate-900 hover:text-amber-600"
+                >
+                  {title}
+                </Link>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {top1
+                    ? `Baskın boyut: ${labelOf(RISK_DIMENSION_LABELS, String(top1))}`
+                    : "Genel skor"}
+                  {r.responsibleUser?.fullName ? ` · ${r.responsibleUser.fullName}` : ""}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="h-2 w-20 overflow-hidden rounded-full bg-slate-100">
+                  <span
+                    className={`block h-full rounded-full ${RISK_BAND_BARS[band] ?? "bg-slate-400"}`}
+                    style={{ width: `${Math.max(0, Math.min(100, r.score))}%` }}
+                  />
+                </span>
+                <Badge tone={RISK_BAND_TONES[band] ?? "gray"}>{r.score}</Badge>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      <p className="mt-3 text-[11px] leading-5 text-slate-400">
+        Skor tabanı deterministik kural sinyalleridir; AI düzeltmesi ±25 ile sınırlıdır ve
+        bandı tek başına değiştiremez.
+      </p>
+    </Card>
   );
 }
 

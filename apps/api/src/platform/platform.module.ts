@@ -96,6 +96,11 @@ import { PlatformUsersService } from "./users/platform-users.service";
   ],
   // UsageSnapshotService dışa açılır: Faz 6'da BullMQ repeatable job bu
   // servisi çağıracaktır (kod hazır, zamanlayıcı bağlanacak).
-  exports: [UsageSnapshotService],
+  //
+  // PlatformApprovalsService dışa açılır: Modül 26 (CreditsModule) manuel kredi
+  // tahsisi için DÖRT-GÖZ talebi açar. Yalnız TALEP açma yönü dışarı verilir;
+  // onaylanan talebi uygulayan executor kimseyi geri çağırmadığı için modüller
+  // arasında döngü doğmaz.
+  exports: [UsageSnapshotService, PlatformApprovalsService],
 })
 export class PlatformModule {}

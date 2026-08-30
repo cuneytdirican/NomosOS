@@ -25,6 +25,14 @@ import { EnforcementModule } from "./enforcement/enforcement.module";
 import { FinanceModule } from "./finance/finance.module";
 import { BillingModule } from "./billing/billing.module";
 import { PlatformModule } from "./platform/platform.module";
+// --- Faz 4 modülleri ---
+import { ConflictModule } from "./conflict/conflict.module";
+import { ExpertModule } from "./expert/expert.module";
+import { EvidenceModule } from "./evidence/evidence.module";
+import { StrategyModule } from "./strategy/strategy.module";
+import { SimulationModule } from "./simulation/simulation.module";
+import { RiskModule } from "./risk/risk.module";
+import { CreditsModule } from "./credits/credits.module";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
 import { TenantStatusGuard } from "./common/guards/tenant-status.guard";
 
@@ -113,6 +121,33 @@ function requireJwtSecret(config: ConfigService): string {
     // Kiracı JwtAuthGuard'ı bu uçlarda @Public() ile atlanır; yerine
     // PlatformJwtGuard + PlatformPermissionGuard devreye girer.
     PlatformModule,
+    // --- Faz 4 modülleri ---
+    // Altısı da CaselawModule'den SONRA gelir: ortak BYO-LLM koşu yürütücüsünü
+    // (AiRunnerService) + CitationVerifyService'i oradan alırlar.
+    // Çıkar çatışması (Modül 11) — çekirdeği deterministik, AI opsiyonel.
+    ConflictModule,
+    // Bilirkişi (Modül 13) → CaselawModule + DeadlineRulesModule (HMK m.281).
+    ExpertModule,
+    // Delil yönetimi (Modül 14). EvidenceMatrixService'i dışa aktarır; risk ve
+    // strateji aynı deterministik "desteksiz iddia" hesabını okur.
+    EvidenceModule,
+    // Strateji motoru (Modül 15).
+    StrategyModule,
+    // Simülasyon modları (Modül 16) → StrategyModule. Sıra bağlayıcıdır.
+    SimulationModule,
+    // Risk motoru (Modül 17). Strateji/simülasyon verisini Prisma'dan SAYAR,
+    // o modülleri import ETMEZ — böylece döngü oluşmaz.
+    RiskModule,
+    // AI kota ve kredi sistemi (Modül 26).
+    // PlatformModule'den SONRA: elle kredi düzeltmesi dört-göz onayı ister.
+    // Kredi kapısı (CreditsInterceptor) bu modül tarafından APP_INTERCEPTOR
+    // olarak sağlanır; yani GLOBAL'dir ama yalnız @AiCredits() metadata'sı
+    // taşıyan uçlarda iş yapar. Modül bazlı kurulum yanlış olurdu: sarmalanan
+    // 18 uç sekiz ayrı modüle dağılmış durumda ve her birine ayrı ayrı
+    // interceptor bağlamak, yeni bir AI ucu eklendiğinde sessizce ücretsiz
+    // kalmasına yol açardı. Global kapı + açık dekoratör, "unutulursa
+    // ücretlendirilmez" hatasını tek bir görünür satıra indirger.
+    CreditsModule,
   ],
   /**
    * GUARD SIRASI ÖNEMLİDİR — dizideki sıra çalışma sırasıdır.

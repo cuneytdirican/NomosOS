@@ -8,10 +8,11 @@
     "build": "prisma generate && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "generate": "prisma generate",
-    "migrate:dev": "prisma migrate dev",
-    "migrate:deploy": "prisma migrate deploy",
-    "seed": "tsx src/seed.ts",
-    "studio": "prisma studio"
+    "migrate:dev": "node scripts/with-root-env.mjs prisma migrate dev",
+    "migrate:deploy": "node scripts/with-root-env.mjs prisma migrate deploy",
+    "migrate:status": "node scripts/with-root-env.mjs prisma migrate status",
+    "seed": "node scripts/with-root-env.mjs tsx src/seed.ts",
+    "studio": "node scripts/with-root-env.mjs prisma studio"
   },
   "dependencies": {
     "@prisma/client": "^6.2.1",

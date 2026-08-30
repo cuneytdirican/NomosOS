@@ -11,6 +11,7 @@ import {
 } from "@nestjs/common";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AiThrottle } from "../common/guards/ai-rate-limit.guard";
+import { AiCredits } from "../credits/ai-credits.decorator";
 import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe";
 import type { AuthUser } from "../common/types";
 import { AssistantService } from "./assistant.service";
@@ -72,6 +73,12 @@ export class AssistantController {
 
   @Post("chat")
   @AiThrottle(1)
+  // Sohbet dosya bağlamıyla çalışır ama kimlik YOLDA değil GÖVDEDE durur.
+  // Bağlam ölçüme katılmazsa 400 belge parçalı bir dosyanın sohbeti de taban
+  // fiyattan (2 kredi) geçer ve 50 kredi tavanı hiç tetiklenmez.
+  @AiCredits("CASE_CHAT", {
+    caseIdFrom: (body) => (body as { caseId?: string } | undefined)?.caseId,
+  })
   @HttpCode(200)
   chat(
     @CurrentUser() user: AuthUser,
@@ -99,6 +106,7 @@ export class AssistantController {
 
   @Post("analyze/:caseId")
   @AiThrottle(3)
+  @AiCredits("CASE_FULL_ANALYSIS", { caseIdParam: "caseId" })
   @HttpCode(200)
   analyze(
     @CurrentUser() user: AuthUser,
@@ -127,6 +135,9 @@ export class AssistantController {
 
   @Post("notes")
   @AiThrottle(1)
+  @AiCredits("SMART_NOTE", {
+    caseIdFrom: (body) => (body as { caseId?: string } | undefined)?.caseId,
+  })
   createNote(
     @CurrentUser() user: AuthUser,
     @Body(new ZodValidationPipe(createNoteSchema)) body: CreateNoteInput,
@@ -153,6 +164,7 @@ export class AssistantController {
    */
   @Post("office-query")
   @AiThrottle(1)
+  @AiCredits("OFFICE_QUERY")
   @HttpCode(200)
   office(
     @CurrentUser() user: AuthUser,

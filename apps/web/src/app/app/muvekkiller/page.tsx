@@ -8,6 +8,9 @@ import type { Client } from "@/lib/types";
 import { Badge, Button, Card, EmptyState, ErrorBox, Field, Input, Modal, Select, Spinner } from "@/components/ui";
 import { CLIENT_TYPE_LABELS, fmtDate, labelOf } from "@/lib/labels";
 import { CLIENT_TYPES, type ClientType } from "@nomosos/shared";
+import { ConflictResultCard } from "../_components/conflict-result";
+import { quickConflictCheck } from "../_lib/faz4";
+import type { ConflictCheck } from "../_lib/faz4-types";
 
 interface NewClientForm {
   type: ClientType;
@@ -35,6 +38,17 @@ export default function MuvekkillerPage() {
   const [form, setForm] = useState<NewClientForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  /**
+   * ÇATIŞMA ÖN TARAMASI (Modül 11).
+   *
+   * Ad yazıldıkça arka planda tarama yapılır ve DİKKAT/ÇAKIŞMA çıkarsa kayıttan
+   * ÖNCE uyarı kartı gösterilir. Uyarı KAYDI ENGELLEMEZ: modülün tavrı
+   * "engelleme değil uyarı"dır (iş kuralı 1) ve tarama ucu yayında değilse
+   * `quickConflictCheck` sessizce null döner — form akışı hiçbir koşulda durmaz.
+   */
+  const [conflict, setConflict] = useState<ConflictCheck | null>(null);
+  const [conflictBusy, setConflictBusy] = useState(false);
 
   /**
    * ARAMA VE SAYFALAMA SUNUCUDA YAPILIR.
@@ -67,6 +81,36 @@ export default function MuvekkillerPage() {
     return () => clearTimeout(timer);
   }, [load, search, page]);
 
+  useEffect(() => {
+    if (!modalOpen) return;
+    const name = form.name.trim();
+    if (name.length < 3) {
+      setConflict(null);
+      return;
+    }
+    let alive = true;
+    setConflictBusy(true);
+    const timer = setTimeout(() => {
+      void quickConflictCheck(name)
+        .then((res) => {
+          if (alive) setConflict(res);
+        })
+        .finally(() => {
+          if (alive) setConflictBusy(false);
+        });
+    }, 600);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [modalOpen, form.name]);
+
+  function closeModal() {
+    setModalOpen(false);
+    setConflict(null);
+    setSaveError(null);
+  }
+
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSaving(true);
@@ -81,7 +125,7 @@ export default function MuvekkillerPage() {
           phone: form.phone.trim() || undefined,
         },
       });
-      setModalOpen(false);
+      closeModal();
       setForm(EMPTY_FORM);
       void load(search, page);
     } catch (err) {
@@ -202,7 +246,7 @@ export default function MuvekkillerPage() {
         )}
       </Card>
 
-      <Modal open={modalOpen} title="Yeni Müvekkil" onClose={() => setModalOpen(false)}>
+      <Modal open={modalOpen} title="Yeni Müvekkil" onClose={closeModal}>
         <form onSubmit={handleCreate} className="space-y-4">
           <Field label="Müvekkil türü">
             <Select
@@ -224,6 +268,19 @@ export default function MuvekkillerPage() {
               required
             />
           </Field>
+
+          {/* Çatışma ön taraması — kaydı ENGELLEMEZ, yalnızca uyarır. */}
+          {conflictBusy && (
+            <p className="text-xs text-slate-500">Çatışma taraması yapılıyor…</p>
+          )}
+          {conflict && String(conflict.result) !== "TEMIZ" && (
+            <ConflictResultCard check={conflict} compact />
+          )}
+          {conflict && String(conflict.result) === "TEMIZ" && (
+            <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+              🟢 Çatışma taraması temiz — büro kayıtlarında eşleşme bulunamadı.
+            </p>
+          )}
           <Field label="E-posta">
             <Input
               type="email"
@@ -243,8 +300,13 @@ export default function MuvekkillerPage() {
 
           {saveError && <ErrorBox message={saveError} />}
 
-          <div className="flex justify-end gap-3 pt-2">
-            <Button variant="secondary" onClick={() => setModalOpen(false)}>
+          <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
+            {conflict && String(conflict.result) === "CAKISMA" && (
+              <p className="mr-auto max-w-xs text-[11px] leading-4 text-red-700">
+                Uyarıya rağmen kaydedebilirsiniz; tarama ve kararınız kayıt altındadır.
+              </p>
+            )}
+            <Button variant="secondary" onClick={closeModal}>
               Vazgeç
             </Button>
             <Button type="submit" disabled={saving}>

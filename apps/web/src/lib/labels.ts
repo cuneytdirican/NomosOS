@@ -984,6 +984,483 @@ export function maskTckn(value: string | null | undefined): string {
   return `${v.slice(0, 3)}${"*".repeat(Math.max(0, v.length - 5))}${v.slice(-2)}`;
 }
 
+// =====================================================================
+// Faz 4 — Strateji, Simülasyon, Risk, Delil, Bilirkişi, Çakışma
+//
+// EKLEME ONLY: bu bölümün üstündeki hiçbir sabit değiştirilmedi.
+// =====================================================================
+
+// ---------- Strateji Motoru (Modül 15) ----------
+
+export const STRATEGY_STATUS_LABELS: Record<string, string> = {
+  TASLAK: "Taslak",
+  GUNCEL: "Güncel",
+  BAYAT: "Güncellenmeli",
+};
+
+export const STRATEGY_STATUS_TONES: Record<string, BadgeTone> = {
+  TASLAK: "gray",
+  GUNCEL: "green",
+  BAYAT: "yellow",
+};
+
+export const STRATEGY_NODE_TYPE_LABELS: Record<string, string> = {
+  KARSI_ARGUMAN: "Karşı Taraf Argümanı",
+  BIZIM_ARGUMAN: "Bizim Argümanımız",
+  DELIL: "Delil",
+  HUKUKI_DAYANAK: "Hukuki Dayanak",
+  ZAYIF_NOKTA: "Zayıf Nokta",
+  KARSI_CEVAP: "Karşı Cevap",
+  SENARYO: "Alternatif Senaryo",
+  RISK: "Risk Notu",
+};
+
+/**
+ * Stratejinin 9 HALKALI ZİNCİRİ (Modül 15, "Amaç" bölümü).
+ *
+ * Zincirin ilk sekiz halkası `StrategyNodeType` enum'unun sekiz değeriyle
+ * BİREBİR eşleşir. Dokuzuncu halka (`__RISK_SKORU`) bir düğüm tipi DEĞİLDİR:
+ * risk skoru Risk Motoru'nun (Modül 17) deterministik çıktısıdır ve iş kuralı
+ * gereği strateji üzerinden elle değiştirilemez. Bu yüzden ekranda ayrı bir
+ * "özet halka" olarak, risk kartından okunarak gösterilir.
+ */
+export const STRATEGY_CHAIN = [
+  { key: "KARSI_ARGUMAN", label: "Karşı Tarafın Argümanları" },
+  { key: "BIZIM_ARGUMAN", label: "Bizim Argümanlarımız" },
+  { key: "DELIL", label: "Deliller" },
+  { key: "HUKUKI_DAYANAK", label: "Hukuki Dayanak" },
+  { key: "ZAYIF_NOKTA", label: "Zayıf Noktalarımız" },
+  { key: "KARSI_CEVAP", label: "Karşı Cevaplar" },
+  { key: "SENARYO", label: "Alternatif Senaryolar" },
+  { key: "RISK", label: "Risk Notları" },
+  { key: "__RISK_SKORU", label: "Genel Risk Skoru" },
+] as const;
+
+export const STRATEGY_NODE_TYPES = STRATEGY_CHAIN.filter(
+  (r) => !r.key.startsWith("__"),
+).map((r) => r.key) as readonly string[];
+
+/** Düğüm gücü — hem enum (DUSUK/ORTA/YUKSEK) hem 1–10 sayısı gelebilir. */
+export const NODE_STRENGTH_LABELS: Record<string, string> = {
+  DUSUK: "Zayıf",
+  ORTA: "Orta",
+  YUKSEK: "Güçlü",
+  LOW: "Zayıf",
+  MEDIUM: "Orta",
+  HIGH: "Güçlü",
+};
+
+export const NODE_STRENGTH_TONES: Record<string, BadgeTone> = {
+  DUSUK: "gray",
+  ORTA: "yellow",
+  YUKSEK: "green",
+  LOW: "gray",
+  MEDIUM: "yellow",
+  HIGH: "green",
+};
+
+/** `strength` alanı serbest biçimlidir; ekranda tek biçime indirger. */
+export function strengthLabel(value: string | number | null | undefined): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number") return `Güç ${value}/10`;
+  const key = value.toUpperCase();
+  return NODE_STRENGTH_LABELS[key] ?? value;
+}
+
+export function strengthTone(value: string | number | null | undefined): BadgeTone {
+  if (value === null || value === undefined || value === "") return "gray";
+  if (typeof value === "number") {
+    if (value >= 8) return "green";
+    if (value >= 5) return "yellow";
+    return "gray";
+  }
+  return NODE_STRENGTH_TONES[value.toUpperCase()] ?? "gray";
+}
+
+// ---------- Simülasyon Modları (Modül 16) ----------
+
+export const SIMULATION_MODES = [
+  "KARSI_TARAF_AVUKATI",
+  "HAKIM_GOZU",
+  "KAYBETTIREN_HUSUSLAR",
+  "KARSI_DILEKCE_ZAYIFLIK",
+  "BILIRKISI_ODAGI",
+] as const;
+
+export type SimulationModeKey = (typeof SIMULATION_MODES)[number];
+
+export const SIMULATION_MODE_LABELS: Record<string, string> = {
+  KARSI_TARAF_AVUKATI: "Karşı Taraf Avukatı",
+  HAKIM_GOZU: "Hakim Gözü",
+  KAYBETTIREN_HUSUSLAR: "Kaybettiren Hususlar",
+  KARSI_DILEKCE_ZAYIFLIK: "Karşı Dilekçe Zayıflıkları",
+  BILIRKISI_ODAGI: "Bilirkişi Odağı",
+};
+
+export const SIMULATION_MODE_HINTS: Record<string, string> = {
+  KARSI_TARAF_AVUKATI:
+    "Karşı vekilin yerine geçer: bize karşı kurulabilecek en güçlü argümanları güç sırasıyla çıkarır.",
+  HAKIM_GOZU:
+    "Dosyayı önce usul (görev, husumet, süre), sonra esas yönünden değerlendirir. Kesin hüküm kurmaz.",
+  KAYBETTIREN_HUSUSLAR:
+    "Davayı kaybettirebilecek hususları olasılık ve önlem önerisiyle listeler.",
+  KARSI_DILEKCE_ZAYIFLIK:
+    "Karşı tarafın seçilen dilekçesindeki çelişki, dayanaksızlık ve usul açıklarını çıkarır.",
+  BILIRKISI_ODAGI:
+    "Bilirkişinin teknik olarak takılacağı noktaları ve delil durumumuzu raporlar.",
+};
+
+export const SIMULATION_MODE_TONES: Record<string, BadgeTone> = {
+  KARSI_TARAF_AVUKATI: "red",
+  HAKIM_GOZU: "navy",
+  KAYBETTIREN_HUSUSLAR: "danger",
+  KARSI_DILEKCE_ZAYIFLIK: "yellow",
+  BILIRKISI_ODAGI: "blue",
+};
+
+export const SEVERITY_LABELS: Record<string, string> = {
+  LOW: "Düşük",
+  MED: "Orta",
+  MEDIUM: "Orta",
+  HIGH: "Yüksek",
+  CRITICAL: "Kritik",
+  DUSUK: "Düşük",
+  ORTA: "Orta",
+  YUKSEK: "Yüksek",
+  KRITIK: "Kritik",
+};
+
+export const SEVERITY_TONES: Record<string, BadgeTone> = {
+  LOW: "gray",
+  MED: "yellow",
+  MEDIUM: "yellow",
+  HIGH: "red",
+  CRITICAL: "danger",
+  DUSUK: "gray",
+  ORTA: "yellow",
+  YUKSEK: "red",
+  KRITIK: "danger",
+};
+
+export const LEANING_LABELS: Record<string, string> = {
+  LEHIMIZE: "Lehimize eğilim",
+  ALEYHIMIZE: "Aleyhimize eğilim",
+  BELIRSIZ: "Belirsiz",
+};
+
+export const LEANING_TONES: Record<string, BadgeTone> = {
+  LEHIMIZE: "green",
+  ALEYHIMIZE: "red",
+  BELIRSIZ: "gray",
+};
+
+export const WEAKNESS_TYPE_LABELS: Record<string, string> = {
+  CELISKI: "Çelişki",
+  DAYANAKSIZ: "Dayanaksız iddia",
+  USUL: "Usul açığı",
+  EKSIK_DELIL: "Eksik delil",
+};
+
+export const EVIDENCE_STATE_LABELS: Record<string, string> = {
+  GUCLU: "Delilimiz güçlü",
+  EKSIK: "Delilimiz eksik",
+  YOK: "Delilimiz yok",
+};
+
+export const EVIDENCE_STATE_TONES: Record<string, BadgeTone> = {
+  GUCLU: "green",
+  EKSIK: "yellow",
+  YOK: "red",
+};
+
+// ---------- Risk Motoru (Modül 17) ----------
+
+/** GENEL en başta; ardından yedi boyut (kart düzeni buna göre kurulur). */
+export const RISK_DIMENSIONS = [
+  "GENEL",
+  "HUKUKI",
+  "SURE",
+  "DELIL",
+  "TAHSILAT",
+  "USUL",
+  "ICTIHAT",
+  "KARSI_TARAF",
+] as const;
+
+export type RiskDimensionKey = (typeof RISK_DIMENSIONS)[number];
+
+export const RISK_DIMENSION_LABELS: Record<string, string> = {
+  GENEL: "Genel Risk",
+  HUKUKI: "Hukuki Risk",
+  SURE: "Süre Riski",
+  DELIL: "Delil Riski",
+  TAHSILAT: "Tahsilat Riski",
+  USUL: "Usul Riski",
+  ICTIHAT: "İçtihat Riski",
+  KARSI_TARAF: "Karşı Taraf Riski",
+};
+
+export const RISK_DIMENSION_HINTS: Record<string, string> = {
+  GENEL: "Boyutların ağırlıklı bileşkesi. Doğrudan yazılamaz, boyutlardan türer.",
+  HUKUKI: "Esasa ilişkin zayıflıklar, aleyhe hukuki durum.",
+  SURE: "Kaçırılmış veya yaklaşan süreler. Kaçırılmış süre bandı koşulsuz yükseltir.",
+  DELIL: "Desteksiz veya tek delille duran iddiaların oranı.",
+  TAHSILAT: "Alacağın tahsil edilebilirliği, malvarlığı ve gecikme.",
+  USUL: "Görev, yetki, husumet, dava şartları.",
+  ICTIHAT: "Yerleşik içtihadın dosya aleyhine olma ihtimali.",
+  KARSI_TARAF: "Karşı vekilin usul stratejisi ve dosyadaki davranış örüntüsü.",
+};
+
+/**
+ * RİSK BANDI TONLARI — `SCORE_BAND_TONES` İLE KARIŞTIRMAYIN.
+ *
+ * `SCORE_BAND_TONES` tahsilat İHTİMALİ içindir: orada YUKSEK = iyi (yeşil).
+ * Riskte yön terstir: YUKSEK = kötü (kırmızı). Aynı enum adlarını taşıdıkları
+ * için tek harita kullanılması, 🔴 bir dosyayı yeşil göstermeye yeterdi.
+ */
+export const RISK_BAND_LABELS: Record<string, string> = {
+  DUSUK: "Düşük",
+  ORTA: "Orta",
+  YUKSEK: "Yüksek",
+};
+
+export const RISK_BAND_TONES: Record<string, BadgeTone> = {
+  DUSUK: "green",
+  ORTA: "yellow",
+  YUKSEK: "danger",
+};
+
+export const RISK_BAND_DOTS: Record<string, string> = {
+  DUSUK: "🟢",
+  ORTA: "🟡",
+  YUKSEK: "🔴",
+};
+
+export const RISK_BANDS = ["DUSUK", "ORTA", "YUKSEK"] as const;
+
+/** Skor çubuğunun dolgu rengi (bant ile aynı yön). */
+export const RISK_BAND_BARS: Record<string, string> = {
+  DUSUK: "bg-emerald-500",
+  ORTA: "bg-amber-500",
+  YUKSEK: "bg-red-600",
+};
+
+/**
+ * Bant EŞİKLERİ — 0–39 düşük, 40–69 orta, 70–100 yüksek (Modül 17).
+ *
+ * Bandı SUNUCU üretir; bu yardımcı yalnızca bandı gelmemiş bir satırı ekranda
+ * boş bırakmamak içindir. Sunucudan gelen `band` her zaman önceliklidir.
+ */
+export function riskBandOf(score: number | null | undefined): string {
+  if (score === null || score === undefined || Number.isNaN(score)) return "DUSUK";
+  if (score >= 70) return "YUKSEK";
+  if (score >= 40) return "ORTA";
+  return "DUSUK";
+}
+
+export const RISK_SIGNAL_SOURCE_LABELS: Record<string, string> = {
+  KURAL: "Kural",
+  RULE: "Kural",
+  AI: "AI",
+};
+
+// ---------- Delil Yönetimi (Modül 14) ----------
+
+export const CLAIM_SIDES = ["BIZ", "KARSI_TARAF"] as const;
+
+export const CLAIM_SIDE_LABELS: Record<string, string> = {
+  BIZ: "Bizim iddiamız",
+  KARSI_TARAF: "Karşı tarafın iddiası",
+};
+
+export const CLAIM_SIDE_TONES: Record<string, BadgeTone> = {
+  BIZ: "navy",
+  KARSI_TARAF: "red",
+};
+
+export const CLAIM_STATUSES = ["ACIK", "DESTEKLENIYOR", "ZAYIF", "CURUTULDU"] as const;
+
+export const CLAIM_STATUS_LABELS: Record<string, string> = {
+  ACIK: "Açık",
+  DESTEKLENIYOR: "Destekleniyor",
+  ZAYIF: "Zayıf",
+  CURUTULDU: "Çürütüldü",
+};
+
+export const CLAIM_STATUS_TONES: Record<string, BadgeTone> = {
+  ACIK: "blue",
+  DESTEKLENIYOR: "green",
+  ZAYIF: "yellow",
+  CURUTULDU: "gray",
+};
+
+export const EVIDENCE_TYPES = [
+  "BELGE",
+  "FOTOGRAF",
+  "VIDEO",
+  "SES",
+  "TANIK",
+  "BILIRKISI",
+  "KESIF",
+  "DIGER",
+] as const;
+
+export const EVIDENCE_TYPE_LABELS: Record<string, string> = {
+  BELGE: "Belge",
+  FOTOGRAF: "Fotoğraf",
+  VIDEO: "Video",
+  SES: "Ses Kaydı",
+  TANIK: "Tanık",
+  BILIRKISI: "Bilirkişi",
+  KESIF: "Keşif",
+  DIGER: "Diğer",
+};
+
+export const EVIDENCE_TYPE_ICONS: Record<string, string> = {
+  BELGE: "📄",
+  FOTOGRAF: "🖼️",
+  VIDEO: "🎬",
+  SES: "🎧",
+  TANIK: "🗣️",
+  BILIRKISI: "🔬",
+  KESIF: "📍",
+  DIGER: "📎",
+};
+
+export const EVIDENCE_STATUSES = [
+  "PLANLANAN",
+  "TOPLANDI",
+  "SUNULDU",
+  "KABUL",
+  "RED",
+] as const;
+
+export const EVIDENCE_STATUS_LABELS: Record<string, string> = {
+  PLANLANAN: "Planlanan",
+  TOPLANDI: "Toplandı",
+  SUNULDU: "Sunuldu",
+  KABUL: "Kabul edildi",
+  RED: "Reddedildi",
+};
+
+export const EVIDENCE_STATUS_TONES: Record<string, BadgeTone> = {
+  PLANLANAN: "gray",
+  TOPLANDI: "blue",
+  SUNULDU: "navy",
+  KABUL: "green",
+  RED: "red",
+};
+
+// ---------- Bilirkişi (Modül 13) ----------
+
+export const EXPERT_REPORT_TYPES = ["ASIL", "EK", "UZMAN_MUTALAASI"] as const;
+
+export const EXPERT_REPORT_TYPE_LABELS: Record<string, string> = {
+  ASIL: "Kök Rapor",
+  EK: "Ek Rapor",
+  UZMAN_MUTALAASI: "Uzman Mütalaası",
+};
+
+export const EXPERT_REPORT_TYPE_TONES: Record<string, BadgeTone> = {
+  ASIL: "navy",
+  EK: "blue",
+  UZMAN_MUTALAASI: "gold",
+};
+
+export const OBJECTION_STATUS_LABELS: Record<string, string> = {
+  TASLAK: "Taslak",
+  SUNULDU: "Sunuldu",
+  KABUL: "Kabul",
+  RED: "Red",
+};
+
+export const OBJECTION_STATUS_TONES: Record<string, BadgeTone> = {
+  TASLAK: "gray",
+  SUNULDU: "blue",
+  KABUL: "green",
+  RED: "red",
+};
+
+/** İki rapor arasındaki değişimin yönü (AI fark tablosu). */
+export const DIFF_DIRECTION_LABELS: Record<string, string> = {
+  LEHIMIZE: "Lehimize değişti",
+  ALEYHIMIZE: "Aleyhimize değişti",
+  DEGISMEDI: "Değişmedi",
+  YENI: "Yeni tespit",
+  KALDIRILDI: "Kaldırıldı",
+};
+
+export const DIFF_DIRECTION_TONES: Record<string, BadgeTone> = {
+  LEHIMIZE: "green",
+  ALEYHIMIZE: "red",
+  DEGISMEDI: "gray",
+  YENI: "yellow",
+  KALDIRILDI: "gray",
+};
+
+// ---------- Çakışma / Conflict Check (Modül 11) ----------
+
+export const CONFLICT_RESULTS = ["TEMIZ", "DIKKAT", "CAKISMA"] as const;
+
+export const CONFLICT_RESULT_LABELS: Record<string, string> = {
+  TEMIZ: "Temiz",
+  DIKKAT: "Dikkat",
+  CAKISMA: "Çakışma ihtimali",
+};
+
+export const CONFLICT_RESULT_TONES: Record<string, BadgeTone> = {
+  TEMIZ: "green",
+  DIKKAT: "yellow",
+  CAKISMA: "danger",
+};
+
+export const CONFLICT_RESULT_DOTS: Record<string, string> = {
+  TEMIZ: "🟢",
+  DIKKAT: "🟡",
+  CAKISMA: "🔴",
+};
+
+export const CONFLICT_DECISIONS = ["DEVAM", "REDDEDILDI", "BEKLEMEDE"] as const;
+
+export const CONFLICT_DECISION_LABELS: Record<string, string> = {
+  DEVAM: "Devam edildi",
+  REDDEDILDI: "İş reddedildi",
+  BEKLEMEDE: "Beklemede",
+};
+
+export const CONFLICT_DECISION_TONES: Record<string, BadgeTone> = {
+  DEVAM: "green",
+  REDDEDILDI: "red",
+  BEKLEMEDE: "yellow",
+};
+
+export const CONFLICT_MATCH_TYPE_LABELS: Record<string, string> = {
+  MEVCUT_MUVEKKIL: "Mevcut müvekkil",
+  KARSI_TARAF: "Karşı taraf",
+  ESKI_MUVEKKIL: "Eski müvekkil",
+  BAGLI_SIRKET: "Bağlı şirket",
+  DOSYADA_GECEN: "Dosyada geçen taraf",
+  BENZER_AD: "Benzer ad",
+};
+
+export const CONFLICT_MATCH_TYPE_TONES: Record<string, BadgeTone> = {
+  MEVCUT_MUVEKKIL: "blue",
+  KARSI_TARAF: "danger",
+  ESKI_MUVEKKIL: "yellow",
+  BAGLI_SIRKET: "gold",
+  DOSYADA_GECEN: "navy",
+  BENZER_AD: "gray",
+};
+
+/** Benzerlik 0–1 ya da 0–100 gelebilir; ikisini de yüzdeye çevirir. */
+export function similarityPercent(value: number | string | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  if (Number.isNaN(n)) return null;
+  const pct = n <= 1 ? n * 100 : n;
+  return Math.max(0, Math.min(100, Math.round(pct)));
+}
+
 /** Görev iş akışı sırası — ilerleme göstergesi için. */
 export const TASK_WORKFLOW = [
   "ACIK",

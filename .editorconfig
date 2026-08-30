@@ -1,0 +1,26 @@
+# NomosOS — düzenleyici sözleşmesi.
+#
+# `charset = utf-8` (utf-8-bom DEĞİL): depodaki üç TSX/CSS dosyası UTF-8 BOM ile
+# başlıyordu — `import` satırından önce görünmez bir karakter. SWC bunu tolere
+# ediyor ama lint, diff ve dosya birleştirme zincirlerinde sürprize yol açar
+# (BOM'lu bir dosyanın ilk satırı, BOM'suz eşiyle asla eşleşmez).
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.md]
+# Markdown'da satır sonundaki iki boşluk anlamlıdır (zorunlu satır sonu).
+trim_trailing_whitespace = false
+
+[*.{sql,prisma}]
+indent_size = 2
+
+[Makefile]
+indent_style = tab

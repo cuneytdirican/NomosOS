@@ -1,0 +1,638 @@
+/**
+ * NomosOS tanıtım sitesi — bütün metinler burada toplanır.
+ *
+ * Kaynak: docs/08-tanitim-sitesi-icerik.md (§3). Metinler o dokümandan BİREBİR alınmıştır;
+ * bileşenler metin gömmez, yalnızca buradan okur. Metin güncellemesi tek dosyadan yapılır.
+ */
+
+export const site = {
+  name: "NomosOS",
+  legalNote:
+    "NomosOS bir hukuk bürosu değildir ve hukuki danışmanlık vermez. Sistem tarafından üretilen çıktılar avukat denetimine tabidir.",
+  copyright: `© ${new Date().getFullYear()} NomosOS`,
+  credit: {
+    prefix: "Developed by",
+    label: "MindAeon AI",
+    href: "https://mindaeon.com",
+  },
+  contact: {
+    email: "iletisim@nomosos.com",
+    demoEmail: "demo@nomosos.com",
+  },
+} as const;
+
+/* --------------------------------------------------------------------------
+ * Üst gezinme
+ * ----------------------------------------------------------------------- */
+
+export const nav = {
+  links: [
+    { href: "/#moduller", label: "Özellikler" },
+    { href: "/guvenlik", label: "Güvenlik" },
+    { href: "/fiyatlandirma", label: "Fiyatlandırma" },
+    { href: "/#sss", label: "SSS" },
+  ],
+  login: { href: "/giris", label: "Giriş Yap" },
+  cta: { href: "/demo", label: "Demo Talep Edin" },
+} as const;
+
+/* --------------------------------------------------------------------------
+ * 3.1 Hero
+ * ----------------------------------------------------------------------- */
+
+export const hero = {
+  kicker: "HUKUK BÜROSU İŞLETİM SİSTEMİ",
+  title: "Büronuzun bütün işi. Tek sistemde.",
+  lead: "Müvekkil, dosya, duruşma, süre, icra ve finans yönetimi; üzerinde çalışan bir yapay zekâ katmanı. Kendi yapay zekânızı bağlayın, verileriniz büronuzdan çıkmasın.",
+  primary: { href: "/demo", label: "Demo Talep Edin" },
+  secondary: { href: "#moduller", label: "Özellikleri İnceleyin" },
+  trustStrip: [
+    "Deterministik süre hesabı",
+    "KVKK uyumlu veri mimarisi",
+    "Kendi LLM'inizi bağlayın",
+    "UYAP entegrasyonu",
+  ],
+} as const;
+
+/** Hero mockup'ında kullanılan örnek panel verisi (gerçek veri değildir). */
+export const heroMockup = {
+  sampleBadge: "örnek veri",
+  windowTitle: "NomosOS · Panel",
+  deadlines: {
+    title: "Yaklaşan süreler",
+    rows: [
+      { case: "2026/412 E. — Alacak", type: "İstinaf süresi", due: "01.09.2026", left: "2 gün" },
+      { case: "2026/188 E. — İşe iade", type: "Cevap dilekçesi", due: "04.09.2026", left: "5 gün" },
+      { case: "2025/2210 E. — Tapu iptali", type: "Bilirkişi rapor itirazı", due: "09.09.2026", left: "10 gün" },
+    ],
+  },
+  hearings: {
+    title: "Bugünün duruşmaları",
+    rows: [
+      { time: "09:30", court: "Ankara 7. Asliye Hukuk", case: "2026/412 E." },
+      { time: "11:00", court: "Ankara 3. İş Mahkemesi", case: "2026/188 E." },
+      { time: "14:15", court: "Ankara 12. İcra Hukuk", case: "2026/77 E." },
+    ],
+  },
+  queue: {
+    title: "Onay bekleyen öneriler",
+    value: "6",
+    note: "Her öneri gerekçesi ve kaynak cümlesiyle listelenir.",
+  },
+} as const;
+
+/* --------------------------------------------------------------------------
+ * 3.2 Sorun
+ * ----------------------------------------------------------------------- */
+
+export const problem = {
+  kicker: "NEDEN NOMOSOS",
+  title: "Dosyanız yedi ayrı yerde duruyor.",
+  paragraphs: [
+    "Duruşma takviminiz bir yerde, dosya evrakı UYAP'ta, müvekkil bilgileri Excel'de, tahsilat takibi bir başka defterde. Süreler ajandada — ya da hafızada.",
+    "Bir mahkeme kararı tebliğ edildiğinde şu soruların yanıtını aramak zorunda kalıyorsunuz: Hangi dosyaydı? Süre ne zaman doluyor? Kim ilgilenecek? Müvekkile ne yazacağız?",
+  ],
+  /** Son paragrafta "onayınıza sunar" vurgulanır. */
+  closing: {
+    before: "NomosOS bu soruların yanıtını, evrak sisteme girdiği anda kendisi çıkarır — ve ",
+    strong: "onayınıza sunar.",
+  },
+  cards: [
+    {
+      title: "Süre riski",
+      text: "Bir sürenin kaçması, dosyanın kaybedilmesi demektir.",
+    },
+    {
+      title: "Dağınık bilgi",
+      text: "Müvekkil aradığında 15 dakika dosya incelemek zorunda kalıyorsunuz.",
+    },
+    {
+      title: "Görünmeyen tahsilat",
+      text: "Hangi müvekkilden ne kadar alacağınız var, tek ekranda görünmüyor.",
+    },
+  ],
+} as const;
+
+/* --------------------------------------------------------------------------
+ * 3.3 Modüller (12 kart)
+ * ----------------------------------------------------------------------- */
+
+export const modules = {
+  kicker: "MODÜLLER",
+  title: "Büronun tamamı, tek sistemde.",
+  items: [
+    {
+      title: "Müvekkil Yönetimi",
+      text: "Gerçek ve tüzel kişi kartları, yetkililer, vekâletnameler, sözleşmeler. Bir müvekkilin bütün dosyaları, tahsilatları ve iletişim geçmişi tek ekranda.",
+    },
+    {
+      title: "Dava Dosyası",
+      text: "Taraflar, safahat, duruşmalar, deliller, kararlar, istinaf ve temyiz süreci. Dosyanın açılıştan kapanışa bütün yaşam döngüsü.",
+    },
+    {
+      title: "Duruşma Yönetimi",
+      text: "Bugünün duruşmaları sabah açtığınız ilk ekranda. Duruşma öncesi hazırlık paketi: son gelişmeler, karşı tarafın beyanları, sorulacak sorular.",
+    },
+    {
+      title: "Süre Takibi",
+      text: "Tebliğ tarihinden son güne kadar hesabı sistem yapar; her adımı gösterir. Kaçırılan sürenin bedelini bilen bir sistem.",
+    },
+    {
+      title: "Görev ve İş Akışı",
+      text: "Kim yapacak, kim kontrol edecek, kim onaylayacak. Avukat, stajyer, sekreter ve partner arasında net iş akışı.",
+    },
+    {
+      title: "Belge Yönetimi",
+      text: "Evrak sisteme girer girmez sınıflandırılır, dosyaya bağlanır, süresi tespit edilir ve size aksiyon önerisi sunulur.",
+    },
+    {
+      title: "İcra Takibi",
+      text: "Takip talebinden tahsilata bütün aşamalar, borçlu malvarlığı kaydı, faiz ve bakiye hesabı, İcra Copilot analizleri.",
+    },
+    {
+      title: "Finans",
+      text: "Tahakkuk, tahsilat, avans, masraf ve harç takibi. Müvekkil bazlı alacak durumu ve yaşlandırma tablosu.",
+    },
+    {
+      title: "Faturalama",
+      text: "Ücret sözleşmeleri, zaman kaydı, zaman kayıtlarından fatura üretimi, e-Fatura/e-Arşiv altyapısı.",
+    },
+    {
+      title: "Dilekçe Stüdyosu",
+      text: "Dosya bilgilerinden bölüm bölüm dilekçe taslağı. UDF formatında dışa aktarım. Atıflar doğrulanmadan “hazır” olmaz.",
+    },
+    {
+      title: "İçtihat Araştırma",
+      text: "Karar arama, özetleme ve dosyaya emsal olarak bağlama. Her atıf kayıt üzerinden doğrulanır.",
+    },
+    {
+      title: "UYAP Köprüsü",
+      text: "Tarayıcı eklentisiyle dosya, safahat ve evrak aktarımı. UYAP'ın yerine geçmez; üzerine bir operasyon katmanı kurar.",
+    },
+  ],
+} as const;
+
+/* --------------------------------------------------------------------------
+ * 3.4 Süre motoru
+ * ----------------------------------------------------------------------- */
+
+export const deadline = {
+  kicker: "ÖNE ÇIKAN",
+  title: "Süreyi yapay zekâ değil, kural motoru hesaplar.",
+  paragraphs: [
+    "Bir sürenin yanlış hesaplanması meslekî sorumluluk doğurur. Bu yüzden NomosOS'ta süre hesabı yapay zekâya bırakılmaz: tebliğ tarihi, tebligat yöntemi, mevzuat hükmü, adli tatil ve resmî tatil takvimi kullanılarak deterministik olarak hesaplanır.",
+    "Yapay zekânın görevi yalnızca tespit etmektir: “Bu belgede süre başlatan bir olay var.” Hesabı motor yapar, kararı siz verirsiniz.",
+  ],
+  /** Vurgulanacak kelime öbeği (ilk paragraf içinde kalın gösterilir). */
+  emphasis: "deterministik olarak",
+  /**
+   * HESAP İZİ ARTIK BURADA DEĞİL — `deadline-trace.ts` içinde MOTORDAN üretilir.
+   *
+   * Elle yazıldığı sürece motordan sapıyordu: 3. adım "HMK m.92: tebliğ günü
+   * hesaba katılmaz" diyordu, oysa örnek HMK m.345 istinaf süresidir ve birimi
+   * HAFTA'dır — m.92/1 GÜN sürelerine aittir. Motor bu ayrımı bilerek yapar ve
+   * "HMK m.91 + m.92/2 · karşılık gelen gün" der. Sonuç tarihi doğru, gerekçe
+   * yanlıştı; bir hukuk ürününde asıl satılan gerekçedir.
+   *
+   * Aşağıda yalnız MOTORDAN GELMEYEN sunum metinleri kalır.
+   */
+  trace: {
+    sampleBadge: "örnek veri",
+    resultLabel: "SON GÜN",
+    note: "Hesabın her adımı görünür. Neye güvendiğinizi bilirsiniz.",
+    engineNote:
+      "Bu iz elle yazılmamıştır: her satır, süre motorunun bu girdi için ürettiği " +
+      "açıklamanın kendisidir.",
+  },
+  footnote:
+    "18 hazır süre kuralı — HMK, İİK, CMK, İYUK, TKHK ve İş Kanunu hükümleriyle; büroya özel kural tanımlanabilir.",
+} as const;
+
+/* --------------------------------------------------------------------------
+ * 3.5 Belge → Aksiyon hattı
+ * ----------------------------------------------------------------------- */
+
+export const pipeline = {
+  kicker: "ÖNE ÇIKAN",
+  title: "Evrak geldi. Sistem ne yapılacağını çıkardı.",
+  lead: "Bugün belge yüklemek bir arşivleme işidir. NomosOS'ta belge, sürecin başlangıcıdır.",
+  steps: [
+    { title: "Evrak sisteme girer", detail: "UYAP eklentisi veya yükleme" },
+    {
+      title: "Metin çıkarılır ve sınıflandırılır",
+      detail: "ara karar · bilirkişi raporu · tebligat …",
+    },
+    { title: "İlgili dosyayla eşleştirilir", detail: "" },
+    { title: "Süre başlatan olaylar tespit edilir", detail: "kural motoru hesaplar" },
+    { title: "Görev, süre ve safahat kaydı ÖNERİLİR", detail: "" },
+    { title: "Siz onaylarsınız", detail: "sistem uygular" },
+  ],
+  callout: {
+    title: "Onaysız kayıt oluşmaz.",
+    text: "Sistem hiçbir kaydı kendiliğinden oluşturmaz. Her öneri, gerekçesi ve belgeden alınan kaynak cümlesiyle birlikte onay kuyruğunuza düşer. Onaylamadığınız hiçbir şey dosyanıza işlenmez.",
+  },
+} as const;
+
+/* --------------------------------------------------------------------------
+ * 3.6 Yapay zekâ
+ * ----------------------------------------------------------------------- */
+
+export const ai = {
+  kicker: "YAPAY ZEKÂ",
+  title: "Yapay zekâ önerir. Kararı siz verirsiniz.",
+  lead: "NomosOS'ta yapay zekâ, dosyanızın bütün verisi üzerinde çalışan bir katmandır — ayrı bir sohbet penceresi değil.",
+  cards: [
+    {
+      title: "Dosya Asistanı",
+      text: "“Bu dosyada bilirkişi ne dedi?” diye sorun; yanıt, hangi belgenin hangi bölümüne dayandığını göstererek gelir. Kaynaksız cevap vermez.",
+    },
+    {
+      title: "Dilekçe Stüdyosu",
+      text: "Dosya bilgilerinden bölüm bölüm taslak: konu, açıklamalar, hukuki sebepler, deliller, sonuç ve istem. UDF olarak dışa aktarın.",
+    },
+    {
+      title: "İcra Copilot",
+      text: "Borçlunun malvarlığı ve işlem geçmişi analizi, sonraki adım önerileri, tahsilat ihtimali değerlendirmesi.",
+    },
+    {
+      title: "Duruşma Hazırlığı",
+      text: "Duruşmadan önce dosya özeti, son gelişmeler, karşı tarafın beyanları, eksik deliller ve sorulacak sorular.",
+    },
+  ],
+  hallucination: {
+    title: "Uydurma içtihat sorunu.",
+    text: "Yapay zekâ modelleri, var olmayan Yargıtay kararlarını gerçekmiş gibi üretebilir. NomosOS'ta bir dilekçedeki her atıf, kayıt üzerinden doğrulanır — modele “bu karar var mı” diye sorulmaz, kayıtta aranır.",
+    strong: "Doğrulanmamış atıf içeren bir dilekçe “hazır” durumuna geçemez.",
+  },
+} as const;
+
+/* --------------------------------------------------------------------------
+ * 3.7 BYO-LLM / veri egemenliği
+ * ----------------------------------------------------------------------- */
+
+export const byollm = {
+  kicker: "VERİ EGEMENLİĞİ",
+  title: "Verileriniz kimin sunucusunda?",
+  lead: "NomosOS'u kendi yapay zekâ aboneliğinizle kullanabilirsiniz. Hangi modeli kullanacağınıza siz karar verirsiniz — ve bu kararı sonradan değiştirebilirsiniz.",
+  providers: [
+    "Anthropic Claude",
+    "OpenAI",
+    "Google Gemini",
+    "OpenAI uyumlu her servis (Azure, OpenRouter, Groq, vLLM)",
+    "Ollama ile yerel model",
+    "Kendi özel sunucunuz",
+  ],
+  callout:
+    "Yerel model (Ollama) veya büro içi kendi sunucunuzu seçtiğinizde, dosya içerikleri büronuzun ağından hiç çıkmaz. Kurumsal müvekkil portföyü olan bürolar için tasarlanmış bir seçenektir.",
+  points: [
+    {
+      title: "Sınırsız kullanım",
+      text: "Kendi anahtarınızı bağladığınızda yapay zekâ kullanımınızda NomosOS tarafından bir sınır uygulanmaz.",
+    },
+    {
+      title: "Abonelikte indirim",
+      text: "Kendi sağlayıcınızı kullanan bürolar için %30 indirim.",
+    },
+    {
+      title: "Bağımlılık yok",
+      text: "Sağlayıcınızı istediğiniz zaman değiştirirsiniz; verileriniz sizde kalır.",
+    },
+  ],
+} as const;
+
+/* --------------------------------------------------------------------------
+ * 3.8 UYAP
+ * ----------------------------------------------------------------------- */
+
+export const uyap = {
+  kicker: "ENTEGRASYON",
+  title: "UYAP'ın yerine geçmez. Üzerine bir katman kurar.",
+  paragraphs: [
+    "Tarayıcı eklentisi, kendi UYAP oturumunuz üzerinden çalışır. Dosya listesi, safahat, duruşma bilgileri ve evraklar NomosOS'a aktarılır; gelen her evrak otomatik aksiyon hattına girer.",
+  ],
+  signature: {
+    before: "Hazırladığınız dilekçeyi UDF formatında dışa aktarır, UYAP ekranını sizin için doldurur — ancak ",
+    strong: "e-imzanızı siz atar, gönderimi siz onaylarsınız.",
+    after: " Sistem sizin adınıza hiçbir evrak göndermez.",
+  },
+  note: "UYAP oturum ve e-imza bilgileriniz NomosOS'a hiçbir şekilde aktarılmaz.",
+} as const;
+
+/** UYAP köprüsü mockup'ı (gerçek veri değildir). */
+export const uyapMockup = {
+  sampleBadge: "örnek veri",
+  windowTitle: "NomosOS · UYAP Köprüsü",
+  rows: [
+    { label: "Dosya listesi", detail: "142 dosya eşleşti", state: "Aktarıldı" },
+    { label: "Safahat", detail: "38 yeni kayıt", state: "Aktarıldı" },
+    { label: "Duruşma bilgileri", detail: "9 duruşma güncellendi", state: "Aktarıldı" },
+    { label: "Evrak", detail: "5 evrak aksiyon hattına girdi", state: "İşleniyor" },
+    { label: "Dilekçe gönderimi", detail: "e-imza sizde", state: "Onayınızda" },
+  ],
+} as const;
+
+/* --------------------------------------------------------------------------
+ * 3.11 SSS
+ * ----------------------------------------------------------------------- */
+
+export const faq = {
+  kicker: "SSS",
+  title: "Sık sorulan sorular",
+  items: [
+    {
+      q: "Verilerimiz nerede saklanıyor?",
+      a: "Dosya ve belgeleriniz NomosOS altyapısında, şifreli olarak saklanır. Kurumsal planda Türkiye'de barındırma ve kendi sunucunuzda kurulum seçenekleri sunulur.",
+    },
+    {
+      q: "Yapay zekâ müvekkil verilerimizi öğrenir mi?",
+      a: "Hayır. Verileriniz model eğitiminde kullanılmaz. Yapay zekâya gönderilen metinlerde kişisel veriler tespit edilip maskelenir ve gönderim onayınıza sunulur.",
+    },
+    {
+      q: "Kendi yapay zekâ aboneliğimizi kullanabilir miyiz?",
+      a: "Evet. Anthropic, OpenAI, Gemini, OpenAI uyumlu servisler, Ollama ile yerel model veya kendi özel sunucunuz desteklenir. Bu durumda kullanım sınırı uygulanmaz ve aboneliğinizde indirim yapılır.",
+    },
+    {
+      q: "Süreleri sistem mi hesaplıyor? Güvenilir mi?",
+      a: "Süre hesabı yapay zekâ ile değil, mevzuat hükümleri, tebligat yöntemi ve resmî/adli tatil takvimi kullanılarak deterministik olarak yapılır. Hesabın her adımı gösterilir. Nihai kontrol ve sorumluluk avukata aittir.",
+    },
+    {
+      q: "UYAP entegrasyonu nasıl çalışıyor?",
+      a: "Tarayıcı eklentisi, sizin kendi UYAP oturumunuz üzerinden çalışır. UYAP şifreniz veya e-imzanız NomosOS'a aktarılmaz. Sistem sizin adınıza evrak göndermez.",
+    },
+    {
+      q: "Yapay zekânın ürettiği dilekçeye güvenebilir miyim?",
+      a: "Üretilen her metin bir taslaktır ve avukat denetiminden geçmelidir. Atıf yapılan içtihatlar kayıt üzerinden doğrulanır; doğrulanmamış atıf içeren dilekçe “hazır” durumuna geçemez.",
+    },
+    {
+      q: "Mevcut dosyalarımızı aktarabilir miyiz?",
+      a: "Evet. UYAP eklentisiyle dosya, safahat ve evrak aktarımı yapılır; ayrıca toplu veri aktarımı için destek sağlanır.",
+    },
+    {
+      q: "Ekibimizin farklı yetkileri olabilir mi?",
+      a: "Evet. Partner, avukat, stajyer ve sekreter rolleri için ayrı yetki düzeyleri tanımlıdır ve sunucu tarafında uygulanır.",
+    },
+    {
+      q: "İnternet olmadan çalışır mı?",
+      a: "NomosOS bulut tabanlıdır. Kurumsal planda büro içi kurulum seçeneği değerlendirilir.",
+    },
+    {
+      q: "Sözleşmeyi istediğimiz zaman sonlandırabilir miyiz?",
+      a: "Evet. Sonlandırma durumunda bütün dosya ve belge verileriniz standart biçimde dışa aktarılır.",
+    },
+  ],
+} as const;
+
+/* --------------------------------------------------------------------------
+ * 3.12 Kapanış / demo
+ * ----------------------------------------------------------------------- */
+
+export const closing = {
+  title: "Büronuzu bir sonraki duruşmaya hazırlayalım.",
+  paragraphs: [
+    "Size büronuzun kendi dosya yapısı üzerinden 30 dakikalık bir tanıtım yapalım. Demo sonunda, sisteme kendi dosyalarınızdan biriyle bakabilirsiniz.",
+  ],
+  cta: { href: "/demo", label: "Demo Talep Edin" },
+} as const;
+
+/* --------------------------------------------------------------------------
+ * 3.13 Alt bilgi
+ * ----------------------------------------------------------------------- */
+
+export const footer = {
+  blurb:
+    "Türk hukuk büroları için müvekkil, dosya, duruşma, süre, icra ve finans yönetimi; üzerinde çalışan bir yapay zekâ katmanı.",
+  columns: [
+    {
+      title: "Ürün",
+      links: [
+        { href: "/#moduller", label: "Özellikler" },
+        { href: "/guvenlik", label: "Güvenlik" },
+        { href: "/fiyatlandirma", label: "Fiyatlandırma" },
+        { href: "/#uyap", label: "UYAP Eklentisi" },
+      ],
+    },
+    {
+      title: "Kaynaklar",
+      links: [
+        { href: "/#sss", label: "SSS" },
+        { href: "/demo", label: "Demo" },
+        { href: "/#sss", label: "Yardım" },
+      ],
+    },
+    {
+      // Dört bağlantı da eskiden AYNI üç cümlelik kutuya iniyordu ("tam
+      // metinler sözleşme sürecinde paylaşılır"). Üçü artık gerçek metin
+      // sayfalarına gider; veri işleme protokolü gerçekten sözleşmeye bağlı
+      // olduğu için güvenlik sayfasındaki açıklamasında kalır.
+      title: "Yasal",
+      links: [
+        { href: "/kvkk-aydinlatma", label: "KVKK Aydınlatma Metni" },
+        { href: "/kullanim-kosullari", label: "Kullanım Koşulları" },
+        { href: "/guvenlik#veri-isleme", label: "Veri İşleme Protokolü" },
+        { href: "/cerez-politikasi", label: "Çerez Politikası" },
+      ],
+    },
+  ],
+  contactColumn: {
+    title: "İletişim",
+    lines: ["iletisim@nomosos.com", "demo@nomosos.com"],
+  },
+} as const;
+
+/* --------------------------------------------------------------------------
+ * 3.9 Güvenlik ve KVKK sayfası (/guvenlik)
+ * ----------------------------------------------------------------------- */
+
+export const security = {
+  kicker: "GÜVENLİK VE KVKK",
+  title: "Müvekkil verisi, en hassas veridir.",
+  lead: "Bir hukuk bürosunun elindeki veri; kimlik bilgisi, sağlık verisi, mali durum ve aile hayatına ilişkin bilgiler içerir. NomosOS bu veriyi buna göre ele alır.",
+  sections: [
+    {
+      id: "kisisel-veri-tespiti",
+      title: "Otomatik kişisel veri tespiti",
+      text: "Yapay zekâ sağlayıcısına gönderilecek metinde TC kimlik numarası, IBAN, telefon ve e-posta otomatik tespit edilir; maskelenir ve gönderim öncesi onayınıza sunulur. Bu sorumluluk kullanıcıya bırakılmaz.",
+      strong: "gönderim öncesi onayınıza sunulur.",
+    },
+    {
+      id: "yerel-model",
+      title: "Yerel model seçeneği",
+      text: "Ollama veya büro içi sunucunuzu kullandığınızda veri büronuzun ağından çıkmaz.",
+      strong: "",
+    },
+    {
+      id: "model-egitimi",
+      title: "Verileriniz model eğitiminde kullanılmaz",
+      text: "Müvekkil dosyalarınız hiçbir koşulda yapay zekâ modeli eğitmek için kullanılmaz. Veri sorumlusu sizsiniz, NomosOS veri işleyendir; sözleşme setine veri işleme protokolü dahildir.",
+      strong: "",
+    },
+    {
+      id: "denetim-izi",
+      title: "Denetim izi",
+      text: "Kim, hangi kayda, ne zaman erişti; hangi veri hangi yapay zekâ sağlayıcısına gitti — tamamı kayıt altındadır.",
+      strong: "",
+    },
+    {
+      id: "erisim-yetkileri",
+      title: "Erişim yetkileri",
+      text: "Partner, avukat, stajyer ve sekreter rolleri için ayrı yetki düzeyleri; yetkiler sunucu tarafında uygulanır.",
+      strong: "",
+    },
+    {
+      id: "destek-erisimi",
+      title: "Destek erişimi",
+      text: "NomosOS ekibi verilerinize erişemez. Zorunlu bir destek talebinde erişim; gerekçeli, süreli (en fazla 24 saat), kişisel verileri maskeli ve iki tarafta da kayıtlıdır. Sizin adınıza sisteme girme (impersonation) özelliği yoktur.",
+      strong: "Sizin adınıza sisteme girme (impersonation) özelliği yoktur.",
+    },
+  ],
+  /** Alt bilgideki yasal bağlantıların indiği kısa açıklamalar. */
+  legalNotes: [
+    {
+      id: "veri-isleme",
+      text: "Veri sorumlusu büronuzdur; NomosOS veri işleyen sıfatıyla hareket eder. Sözleşme setine veri işleme protokolü dahildir ve talebiniz üzerine imzalanır.",
+    },
+    {
+      id: "kullanim-kosullari",
+      text: "Kullanım koşullarının ve KVKK aydınlatma metninin tam metni bu sitede yayımlanmıştır: /kullanim-kosullari ve /kvkk-aydinlatma. Abonelik ve hizmet seviyesi sözleşmeleri sözleşme sürecinde imzalanır.",
+    },
+    {
+      id: "cerez",
+      text: "Tanıtım sitesinde yalnızca oturumun çalışması için gereken zorunlu çerezler kullanılır; reklam veya profilleme amaçlı izleme yapılmaz. Tam metin: /cerez-politikasi.",
+    },
+  ],
+} as const;
+
+/* --------------------------------------------------------------------------
+ * 3.10 Fiyatlandırma sayfası (/fiyatlandirma)
+ * ----------------------------------------------------------------------- */
+
+export const pricing = {
+  kicker: "FİYATLANDIRMA",
+  title: "Büronuzun ölçeğine göre.",
+  lead: "Bütün planlar dosya, müvekkil, duruşma, süre ve görev yönetiminin tamamını içerir. Planlar yapay zekâ kullanım hacmine göre ayrışır.",
+  plans: ["Solo", "Büro", "Kurumsal"],
+  rows: [
+    {
+      label: "Kimin için",
+      values: [
+        "Bağımsız avukat",
+        "3+ avukatlı bürolar",
+        "Kurumsal hukuk departmanları ve büyük bürolar",
+      ],
+    },
+    { label: "Kullanıcı", values: ["1", "Sınırsız (kullanıcı başına ücret)", "Sınırsız"] },
+    { label: "Bütün modüller", values: ["✓", "✓", "✓"] },
+    { label: "UYAP eklentisi", values: ["✓", "✓", "✓"] },
+    {
+      label: "Aylık AI kredisi",
+      values: ["500", "Kullanıcı başına 400 (havuzlanmış)", "Sözleşmeye bağlı"],
+    },
+    {
+      label: "Aylık belge işleme",
+      values: ["200", "Kullanıcı başına 250", "Sözleşmeye bağlı"],
+    },
+    { label: "Kendi LLM'inizi bağlama", values: ["✓", "✓", "✓"] },
+    { label: "Yerel/özel model (Private AI)", values: ["—", "✓", "✓"] },
+    { label: "Müvekkil portalı", values: ["—", "✓", "✓"] },
+    { label: "Öncelikli destek", values: ["—", "—", "✓"] },
+    { label: "Kurulum ve eğitim", values: ["—", "—", "✓"] },
+  ],
+  credits: {
+    title: "Yapay zekâ kredisi nedir?",
+    intro:
+      "Dosya analizi, dilekçe taslağı, duruşma hazırlığı gibi yapay zekâ işlemleri kredi tüketir. Her işlemin kaç kredi olduğunu, işlemi başlatmadan önce görürsünüz.",
+    blocks: [
+      {
+        title: "Kredi tüketmeyen işlemler",
+        text: "süre hesabı, belge sınıflandırma, evrakın dosyaya bağlanması, atıf doğrulama ve dosya/müvekkil/duruşma yönetiminin tamamı.",
+      },
+      {
+        title: "Krediniz biterse ne olur?",
+        text: "Dosya yönetimi, süreler, duruşmalar ve belge işleme çalışmaya devam eder; yalnızca kredili yapay zekâ işlemleri durur. Ek kredi alabilir veya kendi yapay zekâ anahtarınızı bağlayarak sınırı tamamen kaldırabilirsiniz.",
+      },
+      {
+        title: "Kendi anahtarınızı bağlarsanız",
+        text: "kredi sınırı uygulanmaz ve aboneliğinizde %30 indirim yapılır.",
+      },
+    ],
+  },
+  footnote:
+    "Fiyatlar için demo talebi oluşturun; büronuzun büyüklüğüne göre teklif hazırlıyoruz.",
+  cta: { href: "/demo", label: "Demo Talep Edin" },
+  a11y: {
+    tableCaption: "NomosOS plan karşılaştırma tablosu: Solo, Büro ve Kurumsal",
+    featureColumn: "Özellik",
+    included: "Dahil",
+    notIncluded: "Dahil değil",
+  },
+} as const;
+
+/* --------------------------------------------------------------------------
+ * Demo sayfası (/demo)
+ * ----------------------------------------------------------------------- */
+
+export const demo = {
+  kicker: "DEMO TALEBİ",
+  title: "Büronuzu bir sonraki duruşmaya hazırlayalım.",
+  lead: "Size büronuzun kendi dosya yapısı üzerinden 30 dakikalık bir tanıtım yapalım. Demo sonunda, sisteme kendi dosyalarınızdan biriyle bakabilirsiniz.",
+  fields: {
+    fullName: { label: "Ad soyad", placeholder: "Av. Ad Soyad" },
+    barAssociation: { label: "Baro / büro adı", placeholder: "Ankara Barosu — Örnek Hukuk Bürosu" },
+    email: { label: "E-posta", placeholder: "ad.soyad@buronuz.av.tr" },
+    phone: { label: "Telefon", placeholder: "0 (5xx) xxx xx xx" },
+    lawyerCount: { label: "Avukat sayısı", options: ["1", "2-5", "6-20", "20+"] },
+    message: { label: "Mesaj (opsiyonel)", placeholder: "Büronuzun çalışma biçimi hakkında kısa not" },
+  },
+  /**
+   * KVKK ONAY METNİ — "okudum" beyanı KALDIRILDI.
+   *
+   * Form, ziyaretçiye "KVKK aydınlatma metnini okudum" beyanı yaptırıyor ve
+   * `/guvenlik#kvkk-aydinlatma` çıpasına bağlanıyordu; o çıpanın indiği kutuda
+   * ise aydınlatma metni YOKTU ("tam metinler sözleşme sürecinde paylaşılır"
+   * yazıyordu). Yani yayımlanmamış bir metnin okunduğu beyan ettiriliyordu.
+   *
+   * İki taraflı düzeltildi: (a) `/kvkk-aydinlatma` sayfasında gerçek aydınlatma
+   * metni yayımlandı ve bağlantı oraya gidiyor; (b) beyan, kullanıcının
+   * gerçekten yapabileceği bir beyana indirildi — açık rıza. Aydınlatma,
+   * KVKK m.10 gereği veri toplama ANINDA erişilebilir durumdadır.
+   */
+  consent: {
+    label:
+      "İletişim bilgilerimin demo talebi kapsamında işlenmesini onaylıyorum. " +
+      "Verilerinizin nasıl işlendiğini aydınlatma metninde bulabilirsiniz:",
+    linkLabel: "KVKK Aydınlatma Metni",
+    linkHref: "/kvkk-aydinlatma",
+    error: "Talebi gönderebilmek için kişisel verilerinizin işlenmesine onay vermeniz gerekir.",
+  },
+  submitLabel: "Demo Talep Edin",
+  submittingLabel: "Gönderiliyor…",
+  success: {
+    title: "Talebiniz alındı.",
+    text: "Ekibimiz bir iş günü içinde size dönecek. Acil bir durumda doğrudan demo@nomosos.com adresine yazabilirsiniz.",
+  },
+  /**
+   * İLETİM YAPILANDIRILMAMIŞ / BAŞARISIZ DALI.
+   * Talep gerçekten iletilmediyse "alındı" DENMEZ; kullanıcıya e-posta yolu
+   * verilir ve girdiği bilgiler hazır doldurulur.
+   */
+  fallback: {
+    title: "Talebinizi e-postayla iletin.",
+    text:
+      "Formu doğrudan gönderemedik; talebiniz henüz bize ulaşmadı. Aşağıdaki düğme, " +
+      "girdiğiniz bilgilerle hazırlanmış bir e-posta açar — göndermeniz yeterli.",
+    action: "E-posta ile gönder",
+    mailTo: "demo@nomosos.com",
+    mailSubject: "NomosOS demo talebi",
+    mailto: "mailto:demo@nomosos.com?subject=NomosOS%20demo%20talebi",
+    error: "Talep gönderilemedi. Lütfen bilgileri kontrol edip tekrar deneyin.",
+  },
+  sidebar: {
+    title: "Demoda ne konuşuyoruz?",
+    items: [
+      "Büronuzun dosya yapısı ve mevcut süre takibi düzeni",
+      "UYAP eklentisiyle veri aktarımının nasıl kurulduğu",
+      "Yapay zekâ sağlayıcısı tercihi: bulut, yerel model veya kendi sunucunuz",
+      "Ekip rolleri, onay akışı ve yetki düzeyleri",
+    ],
+  },
+} as const;

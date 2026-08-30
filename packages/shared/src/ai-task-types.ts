@@ -8,6 +8,9 @@ export const AI_TASK_TYPES = [
   "CASE_CHAT",
   "CASE_FULL_ANALYSIS",
   "SMART_NOTE",
+  "OFFICE_QUERY",
+  // RAG indeksleme — gömme çağrısı (ücretsiz, yüksek hacim).
+  "EMBEDDING",
   // Modül 06 — Belge → otomatik aksiyon
   "DOCUMENT_CLASSIFY",
   "DOCUMENT_EXTRACT",
@@ -32,6 +35,9 @@ export const AI_TASK_TYPES = [
   "POA_SCOPE_ANALYSIS",
   // Modül 13 — Bilirkişi
   "EXPERT_REPORT_DIFF",
+  // Modül 14 — Delil yönetimi
+  "EVIDENCE_MATRIX",
+  "EVIDENCE_GAP",
   // Modül 15/16/17 — Strateji, simülasyon, risk
   "STRATEGY_BUILD",
   "OPPONENT_SIMULATION",
@@ -52,6 +58,8 @@ export const AI_TASK_TYPE_LABELS: Record<AiTaskType, string> = {
   CASE_CHAT: "Dosya sohbeti (soru-cevap)",
   CASE_FULL_ANALYSIS: "Tam dosya analizi raporu",
   SMART_NOTE: "Akıllı not önerisi",
+  OFFICE_QUERY: "Büro geneli sorgu (veri minimizasyonlu plan)",
+  EMBEDDING: "Gömme / RAG indeksleme",
   DOCUMENT_CLASSIFY: "Belge sınıflandırma",
   DOCUMENT_EXTRACT: "Belgeden yapılandırılmış veri çıkarma",
   DEADLINE_DETECT: "Belgeden süre tespiti (öneri)",
@@ -67,6 +75,8 @@ export const AI_TASK_TYPE_LABELS: Record<AiTaskType, string> = {
   CONFLICT_INFERENCE: "Çıkar çatışması çıkarımı",
   POA_SCOPE_ANALYSIS: "Vekaletname kapsam analizi",
   EXPERT_REPORT_DIFF: "Bilirkişi raporu karşılaştırma",
+  EVIDENCE_MATRIX: "İddia × delil matrisi önerisi",
+  EVIDENCE_GAP: "Delil boşluğu tespiti",
   STRATEGY_BUILD: "Dava stratejisi oluşturma",
   OPPONENT_SIMULATION: "Karşı taraf avukatı simülasyonu",
   JUDGE_SIMULATION: "Hakim gözüyle analiz",

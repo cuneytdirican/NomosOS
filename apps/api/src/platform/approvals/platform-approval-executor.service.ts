@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { Prisma, type PlatformApprovalRequest, type PlatformRole, type SupportScope } from "@nomosos/db";
 import { PrismaService } from "../../prisma/prisma.service";
+import { adjustmentRejection } from "../../credits/credit-plans";
 import { PlatformAuditService } from "../platform-audit.service";
 import { MAINTENANCE_SETTING_KEY, SUPPORT_GRANT_MAX_HOURS } from "../platform.constants";
 import { ADMIN_ROLES } from "../platform-permissions";
@@ -8,6 +9,7 @@ import { assertTransition } from "../subscriptions/subscription-state";
 import type { PlatformAuthUser } from "../platform.types";
 import {
   APPROVAL_ACTIONS,
+  type CreditManualAdjustPayload,
   type FeatureFlagGlobalPayload,
   type MaintenanceLockPayload,
   type PaymentRefundPayload,
@@ -77,6 +79,8 @@ export class PlatformApprovalExecutorService {
         return this.resetCredentials(payload as PlatformUserCredentialResetPayload, approver);
       case APPROVAL_ACTIONS.PLAN_PRICE_CHANGE:
         return this.changePlanPrice(payload as PlanPriceChangePayload, approver);
+      case APPROVAL_ACTIONS.CREDIT_MANUAL_ADJUST:
+        return this.adjustCredits(payload as CreditManualAdjustPayload, approver);
       default:
         throw new BadRequestException(
           `Bu onay talebinin işlemi (${request.action}) uygulanabilir değil. ` +
@@ -584,5 +588,200 @@ export class PlatformApprovalExecutorService {
       `${plan.key} planı fiyatı güncellendi (${updated.monthlyPricePerUser?.toFixed(2) ?? "-"}). ` +
       `${affected} aktif abonelik cari dönem sonunda etkilenecek.`
     );
+  }
+
+  /**
+   * MANUEL KREDİ TAHSİSİ / KOTA DÜZELTMESİ (Modül 26, iş kuralı 9).
+   *
+   * NEDEN BURADA VE PRİSMA İLE: bu sınıfın kuralı "yalnız Prisma ve denetim
+   * servisini tanır, kimseyi geri çağırmaz"dır. `CreditService`i çağırmak
+   * PlatformModule → CreditsModule → PlatformModule döngüsü yaratırdı
+   * (kredi modülü dört-göz talebi açmak için onay servisine ihtiyaç duyar).
+   * Cüzdan yazımı birkaç satırdır ve o döngüye değmez.
+   *
+   * BAKİYE NEGATİFE ÇEKİLEMEZ: onay 72 saate kadar beklemiş olabilir; talebin
+   * açıldığı andaki doğrulama BUGÜN hâlâ geçerli olmayabilir. Bu yüzden kapı
+   * UYGULAMA ANINDA yeniden kurulur.
+   */
+  private async adjustCredits(
+    payload: CreditManualAdjustPayload,
+    approver: PlatformAuthUser
+  ): Promise<string> {
+    const wallet = await this.prisma.client.creditWallet.findUnique({
+      where: { tenantId: payload.tenantId },
+    });
+    if (!wallet) {
+      throw new NotFoundException(
+        "Bu büro için kredi cüzdanı bulunamadı; düzeltme uygulanamadı."
+      );
+    }
+
+    const done: string[] = [];
+    const delta = payload.deltaCredits ? Math.trunc(payload.deltaCredits) : 0;
+    const rejection = adjustmentRejection(wallet, delta);
+    if (rejection) throw new BadRequestException(rejection);
+
+    /**
+     * HAREKET DEFTERİ, CÜZDANLA AYNI İŞLEMDE VE AYNI TUTARDA.
+     *
+     * Denetimde KRİTİK bulgu: bu metot cüzdan bakiyesini değiştirip
+     * `CreditTransaction.amount = 0` yazıyordu. `renewPeriod` yolunda
+     * `includedConsumed = 0` yapılıyor, yani daha önce TÜKETİLMİŞ kredi
+     * bakiyeye geri dönüyor; yanan kota için `SURESI_DOLDU` hareketi hiç
+     * yazılmıyordu. Örnek: included=500, consumed=300 → bakiye 200, defter 200
+     * (tutarlı). Yenileme sonrası bakiye 500, defter 200 → KALICI +300 sapma
+     * ve deftere görünmeden yaratılmış kredi.
+     *
+     * `CreditService.renewPeriod` aynı işi doğru yapar (`SURESI_DOLDU` +
+     * `TAHSIS`) ama bu sınıfın kuralı "yalnız Prisma'yı tanır, kimseyi geri
+     * çağırmaz"dır (PlatformModule ↔ CreditsModule döngüsü). Bu yüzden aynı
+     * MUHASEBE burada tekrarlanır — eksik değil, birebir.
+     *
+     * Cüzdan güncellemesi ile hareket yazımı TEK `$transaction` içindedir:
+     * ikisi ayrı yazılırken ikincisi düşerse defter eksik kalırdı.
+     */
+    const ledger: { type: "DUZELTME" | "TAHSIS" | "SURESI_DOLDU"; amount: number; note: string }[] =
+      [];
+
+    const data: Prisma.CreditWalletUpdateInput = {};
+    if (delta !== 0) {
+      data.purchasedCredits = { increment: delta };
+      done.push(`${delta > 0 ? "+" : ""}${delta} kredi`);
+      ledger.push({
+        type: "DUZELTME",
+        amount: delta,
+        note:
+          `PLATFORM DÜZELTMESİ (dört-göz onaylı, onaylayan ${approver.email}). ` +
+          `Gerekçe: ${payload.reason}`,
+      });
+    }
+
+    // Dönem yenileme ile dahil kota değişimi AYNI kovayı oynatır; ikisi birlikte
+    // gelirse yenilemenin yeni kotası, ayarlanan `includedCredits` olur.
+    const nextIncluded = payload.includedCredits ?? wallet.includedCredits;
+
+    if (payload.renewPeriod) {
+      // Dönem yenileme: dahil kota SIFIRLANIR (devretmez), satın alınan KORUNUR.
+      const now = new Date();
+      data.includedConsumed = 0;
+      data.documentUsed = 0;
+      data.periodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      data.periodEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+      data.includedCredits = nextIncluded;
+      done.push("dönem yenilendi (dahil kota sıfırlandı, satın alınan korundu)");
+
+      // 1) Kullanılmayan dahil kota YANAR — deftere negatif olarak geçer.
+      const expiring = Math.max(0, wallet.includedCredits - wallet.includedConsumed);
+      if (expiring > 0) {
+        ledger.push({
+          type: "SURESI_DOLDU",
+          amount: -expiring,
+          note:
+            `Dönem sonunda kullanılmayan ${expiring} dahil kredi sıfırlandı (devretmez). ` +
+            `Dört-göz onaylı yenileme, onaylayan ${approver.email}.`,
+        });
+      }
+      // 2) Yeni dönemin kotası TAHSİS edilir — deftere pozitif olarak geçer.
+      ledger.push({
+        type: "TAHSIS",
+        amount: nextIncluded,
+        note:
+          `Dönem başı dahil kota tahsisi: ${nextIncluded} kredi (dört-göz onaylı). ` +
+          `Gerekçe: ${payload.reason}`,
+      });
+    } else if (payload.includedCredits !== undefined) {
+      data.includedCredits = payload.includedCredits;
+      done.push(`dahil kota ${wallet.includedCredits} → ${payload.includedCredits}`);
+      // Yenileme yok: yalnız kotanın FARKI kadar bakiye değişir.
+      const diff = payload.includedCredits - wallet.includedCredits;
+      if (diff !== 0) {
+        ledger.push({
+          type: "TAHSIS",
+          amount: diff,
+          note:
+            `Dahil kota ${wallet.includedCredits} → ${payload.includedCredits} olarak ayarlandı ` +
+            `(dört-göz onaylı, onaylayan ${approver.email}). Dahil kota DEVRETMEZ; ` +
+            `satın alınan krediler korunur. Gerekçe: ${payload.reason}`,
+        });
+      }
+    }
+
+    if (payload.documentQuota !== undefined) {
+      data.documentQuota = payload.documentQuota;
+      done.push(`belge kotası ${wallet.documentQuota} → ${payload.documentQuota}`);
+      // Belge kotası KREDİ DEĞİLDİR; hareket defterine girmez.
+    }
+
+    const updated = Object.keys(data).length
+      ? await this.prisma.client.$transaction(async (tx) => {
+          const row = await tx.creditWallet.update({
+            where: { tenantId: payload.tenantId },
+            data,
+          });
+          const balanceAfter =
+            row.includedCredits - row.includedConsumed + row.purchasedCredits;
+          for (const entry of ledger) {
+            await tx.creditTransaction.create({
+              data: {
+                tenantId: payload.tenantId,
+                type: entry.type,
+                amount: entry.amount,
+                balanceAfter,
+                note: entry.note,
+              },
+            });
+          }
+          return row;
+        })
+      : wallet;
+
+    // BYO-LLM muafiyeti — SystemSetting listesine yazılır (kredi kapısının
+    // okuduğu tek kaynak). Kredi modülünün önbelleği en geç 30 sn içinde düşer.
+    if (payload.byoLlm !== undefined) {
+      const key = "credits.byo_llm_tenants";
+      const setting = await this.prisma.client.systemSetting.findUnique({ where: { key } });
+      let ids: string[] = [];
+      try {
+        const parsed = setting ? (JSON.parse(setting.valueJson) as { tenantIds?: unknown }) : null;
+        if (Array.isArray(parsed?.tenantIds)) {
+          ids = parsed.tenantIds.filter((v): v is string => typeof v === "string");
+        }
+      } catch {
+        ids = [];
+      }
+      const next = new Set(ids);
+      if (payload.byoLlm) next.add(payload.tenantId);
+      else next.delete(payload.tenantId);
+      const valueJson = JSON.stringify({ tenantIds: [...next].sort() });
+
+      await this.prisma.client.systemSetting.upsert({
+        where: { key },
+        create: {
+          key,
+          valueJson,
+          description:
+            "Kredi kapısından MUAF tenant'lar (BYO-LLM). Bu bürolarda AI maliyeti kendi " +
+            "sağlayıcı hesaplarındadır; kota uygulanmaz.",
+          updatedBy: approver.id,
+        },
+        update: { valueJson, updatedBy: approver.id },
+      });
+      done.push(`BYO-LLM muafiyeti ${payload.byoLlm ? "AÇILDI" : "KAPATILDI"}`);
+    }
+
+    if (done.length === 0) {
+      throw new BadRequestException("Onay talebinde uygulanacak bir kredi değişikliği yok.");
+    }
+
+    await this.audit.log({
+      actor: approver,
+      action: "CREDIT_MANUAL_ADJUST",
+      entity: "CreditWallet",
+      entityId: updated.id,
+      tenantId: payload.tenantId,
+      detail: `${done.join(" · ")}. Gerekçe: ${payload.reason}`,
+    });
+
+    return `Kredi düzeltmesi uygulandı: ${done.join(" · ")}.`;
   }
 }

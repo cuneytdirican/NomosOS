@@ -1018,6 +1018,501 @@ async function seedFinance(clientId: string, caseId: string, userId: string) {
 }
 
 // ---------------------------------------------------------------------------
+// Modül 26 — AI kredi sistemi (fiyat listesi, paketler, model maliyetleri)
+// ---------------------------------------------------------------------------
+//
+// FİYATLAR PANELDEN DEĞİŞTİRİLEBİLİR. Bu yüzden seed "varsa DOKUNMA" mantığıyla
+// çalışır: platform yöneticisinin panelden yaptığı fiyat düzeltmesi bir sonraki
+// seed çalıştırmasında geri alınmaz. Yeni bir görev tipi eklendiğinde satırı
+// oluşur, mevcut satırlar korunur.
+
+type TaskCostSeed = { taskType: string; credits: number; isFree: boolean; description: string };
+
+/**
+ * docs/moduller/26-ai-kota-kredi-sistemi.md "Kredi Fiyat Listesi" tablosunun
+ * TAMAMI + Faz 4'ün yeni görevleri.
+ *
+ * ÜCRETSİZ LİSTESİ KODA GÖMÜLMEZ (iş kuralı 3): kredi motoru bu satırların
+ * `isFree` alanını okur. Ücretsiz olanlar ürünün can damarındaki yüksek hacimli
+ * işlerdir — belge sınıflandırmayı krediye bağlarsak büro belge yüklemekten
+ * kaçınır ve belge→otomatik aksiyon hattı ölür.
+ */
+const AI_TASK_COSTS: TaskCostSeed[] = [
+  // ---- Ücretsiz (kredi tüketmez) ----
+  { taskType: "DOCUMENT_CLASSIFY", credits: 0, isFree: true, description: "Belge sınıflandırma — yüksek hacim, değer döngüsünün girişi." },
+  { taskType: "DOCUMENT_EXTRACT", credits: 0, isFree: true, description: "Belgeden yapılandırılmış veri çıkarma — belge hattı bütün olarak ücretsiz." },
+  { taskType: "DEADLINE_DETECT", credits: 0, isFree: true, description: "Belgeden süre tespiti — süre kaçırmaya yol açabilecek hiçbir şey krediye bağlanmaz." },
+  { taskType: "CITATION_VERIFY", credits: 0, isFree: true, description: "Atıf doğrulama — KAYIT ARAMASI, LLM çağrısı değil." },
+  { taskType: "EMBEDDING", credits: 0, isFree: true, description: "Gömme / RAG indeksleme (embedTexts) — yüksek hacim, ucuz model yeterli." },
+  {
+    taskType: "CASELAW_SUMMARIZE",
+    credits: 0,
+    isFree: true,
+    description:
+      "Karar özeti. ÇİFT TAHSİLAT OLMASIN diye ücretsizdir: spec'te 'içtihat AI arama + özet' TEK KALEM 5 kredidir ve CASELAW_SEARCH üzerinden tahsil edilir.",
+  },
+
+  // ---- Kredili (muhakeme gerektiren, tek seferde yüksek değer) ----
+  { taskType: "CASE_CHAT", credits: 2, isFree: false, description: "Dosya sohbeti — bir soru-cevap." },
+  { taskType: "OFFICE_QUERY", credits: 3, isFree: false, description: "Büro geneli sorgu (veri minimizasyonlu plan)." },
+  { taskType: "SMART_NOTE", credits: 3, isFree: false, description: "Akıllı not önerisi." },
+  { taskType: "CLIENT_STATUS_SUMMARY", credits: 5, isFree: false, description: "Müvekkil durum özeti." },
+  { taskType: "CASELAW_SEARCH", credits: 5, isFree: false, description: "İçtihat AI arama + özet (CASELAW_SUMMARIZE dahil, tek tahsilat)." },
+  { taskType: "PETITION_SECTION_REWRITE", credits: 5, isFree: false, description: "Dilekçe bölümü yeniden yazımı." },
+  { taskType: "ENFORCEMENT_ANALYSIS", credits: 10, isFree: false, description: "İcra Copilot komutu." },
+  { taskType: "COLLECTION_LIKELIHOOD", credits: 15, isFree: false, description: "Tahsilat ihtimali — AI yalnız yorum yazar, skoru kural motoru üretir." },
+  { taskType: "HEARING_PREP", credits: 15, isFree: false, description: "Duruşma hazırlık paketi." },
+  { taskType: "RISK_ASSESS", credits: 15, isFree: false, description: "Dosya risk değerlendirmesi (Faz 4) — AI düzeltmesi ±25, bandı değiştirmez." },
+  { taskType: "CASE_FULL_ANALYSIS", credits: 20, isFree: false, description: "Tam dosya analizi." },
+  { taskType: "OPPONENT_SIMULATION", credits: 20, isFree: false, description: "Karşı taraf avukatı simülasyonu (Faz 4)." },
+  { taskType: "EXPERT_REPORT_DIFF", credits: 20, isFree: false, description: "Bilirkişi raporu karşılaştırma (Faz 4)." },
+  { taskType: "CONTRACT_REVIEW", credits: 20, isFree: false, description: "Sözleşme incelemesi (Faz 5)." },
+  { taskType: "PETITION_DRAFT", credits: 25, isFree: false, description: "Dilekçe taslağı (tam)." },
+  { taskType: "STRATEGY_BUILD", credits: 30, isFree: false, description: "Dava stratejisi oluşturma (Faz 4) — 9 halkalı zincir." },
+
+  // ---- Faz 4'ün yeni görevleri ----
+  { taskType: "JUDGE_SIMULATION", credits: 20, isFree: false, description: "Hakim gözüyle analiz (Faz 4)." },
+  { taskType: "EVIDENCE_MATRIX", credits: 15, isFree: false, description: "İddia × delil matrisi önerisi (Faz 4)." },
+  { taskType: "EVIDENCE_GAP", credits: 10, isFree: false, description: "Delil boşluğu tespiti (Faz 4)." },
+  { taskType: "CONFLICT_INFERENCE", credits: 5, isFree: false, description: "Çıkar çatışması çıkarımı — tarama ağırlıklı deterministiktir, AI yalnız bağlı şirket çıkarımı ekler." },
+
+  // ---- Katalogda olup spec fiyat tablosunda GEÇMEYEN görevler ----
+  // Satırı olmayan görev tipi kredi motorunda TANIMSIZ davranıştır (fail-open =
+  // bedava AI, fail-closed = çalışmayan özellik). Bu yüzden makul bir başlangıç
+  // fiyatıyla eklendiler; kesin fiyat bir İŞ KARARIDIR, panelden güncellenir.
+  { taskType: "POA_SCOPE_ANALYSIS", credits: 10, isFree: false, description: "Vekaletname kapsam analizi (Modül 12). Fiyat tahminidir — panelden doğrulanmalı." },
+  { taskType: "CLIENT_FINANCIAL_SUMMARY", credits: 5, isFree: false, description: "Müvekkil finans özeti (Modül 08). Fiyat tahminidir — panelden doğrulanmalı." },
+  {
+    taskType: "DAILY_PRIORITIZE",
+    credits: 2,
+    isFree: false,
+    description:
+      "Günlük öncelik listesi (Modül 18). DİKKAT: panel açılışında tetiklenirse hızla kredi yakar — çağrı sıklığı uygulama katmanında günde bir ile sınırlanmalı.",
+  },
+];
+
+async function seedAiTaskCosts(): Promise<number> {
+  let created = 0;
+  for (const c of AI_TASK_COSTS) {
+    const existing = await prisma.aiTaskCost.findUnique({ where: { taskType: c.taskType } });
+    if (existing) continue; // Panelden değiştirilmiş fiyatı EZME.
+    await prisma.aiTaskCost.create({ data: c });
+    created += 1;
+  }
+  return created;
+}
+
+/**
+ * Ek kredi paketleri: 500 · 2.000 · 10.000 (docs/moduller/26).
+ *
+ * FİYAT BİR İŞ KARARIDIR ve bu dosyada sabitlenmemiştir — buradaki TL değerleri
+ * TEMSİLİDİR, platform panelinden güncellenir. Uyulan tek kural spec'ten gelir:
+ * paket birim fiyatı, dahil kotanın örtük birim fiyatından EN AZ %20 yüksek
+ * olmalı (dahil kota aboneliğin değer önerisi kalsın, ek paket "aşım" fiyatı olsun).
+ * Buradaki kademeli iskonto (0,80 → 0,70 → 0,60 TL/kredi) o kuralı bozmayacak
+ * biçimde seçilmiştir.
+ */
+const CREDIT_PACKAGES = [
+  { key: "EK_500", credits: 500, price: "400.00", currency: "TRY" },
+  { key: "EK_2000", credits: 2000, price: "1400.00", currency: "TRY" },
+  { key: "EK_10000", credits: 10000, price: "6000.00", currency: "TRY" },
+];
+
+async function seedCreditPackages(): Promise<number> {
+  let created = 0;
+  for (const p of CREDIT_PACKAGES) {
+    const existing = await prisma.creditPackage.findUnique({ where: { key: p.key } });
+    if (existing) continue;
+    await prisma.creditPackage.create({ data: p });
+    created += 1;
+  }
+  return created;
+}
+
+/**
+ * İÇ MALİYET tablosu — kullanıcıya GÖSTERİLMEZ, marj raporunun girdisidir.
+ *
+ * DİKKAT: sağlayıcı fiyatları sık değişir. Anthropic satırları güncel liste
+ * fiyatlarıdır; OpenAI/Gemini satırları YAKLAŞIKTIR ve PANELDEN DOĞRULANMALIDIR
+ * (/api/admin/v1/model-prices). Fiyat değişikliği geriye dönük uygulanmaz:
+ * yeni fiyat YENİ bir effectiveFrom satırı olarak eklenir, eski satır korunur
+ * (iş kuralı 10) — bu yüzden unique anahtar (provider, model, effectiveFrom).
+ */
+const MODEL_PRICE_EFFECTIVE_FROM = utc(2026, 1, 1);
+
+const MODEL_PRICES: Array<{
+  providerType: Prisma.ModelPriceUncheckedCreateInput["providerType"];
+  model: string;
+  inputPricePer1M: string;
+  outputPricePer1M: string;
+}> = [
+  // Anthropic — liste fiyatları (USD / 1M token)
+  { providerType: "ANTHROPIC", model: "claude-opus-5", inputPricePer1M: "5.0000", outputPricePer1M: "25.0000" },
+  { providerType: "ANTHROPIC", model: "claude-sonnet-5", inputPricePer1M: "2.0000", outputPricePer1M: "10.0000" },
+  { providerType: "ANTHROPIC", model: "claude-sonnet-4-6", inputPricePer1M: "3.0000", outputPricePer1M: "15.0000" },
+  { providerType: "ANTHROPIC", model: "claude-haiku-4-5", inputPricePer1M: "1.0000", outputPricePer1M: "5.0000" },
+  // OpenAI uyumlu — YAKLAŞIK, panelden doğrulanmalı
+  { providerType: "OPENAI_COMPAT", model: "gpt-4o", inputPricePer1M: "2.5000", outputPricePer1M: "10.0000" },
+  { providerType: "OPENAI_COMPAT", model: "gpt-4o-mini", inputPricePer1M: "0.1500", outputPricePer1M: "0.6000" },
+  { providerType: "OPENAI_COMPAT", model: "text-embedding-3-small", inputPricePer1M: "0.0200", outputPricePer1M: "0.0000" },
+  // Gemini — YAKLAŞIK, panelden doğrulanmalı
+  { providerType: "GEMINI", model: "gemini-2.0-flash", inputPricePer1M: "0.1000", outputPricePer1M: "0.4000" },
+  { providerType: "GEMINI", model: "gemini-1.5-pro", inputPricePer1M: "1.2500", outputPricePer1M: "5.0000" },
+  // Yerel çalıştırma — sağlayıcıya ödenen bedel YOKTUR (donanım gideri ayrı kalem).
+  { providerType: "OLLAMA", model: "llama3.1:8b", inputPricePer1M: "0.0000", outputPricePer1M: "0.0000" },
+];
+
+async function seedModelPrices(): Promise<number> {
+  let created = 0;
+  for (const p of MODEL_PRICES) {
+    const existing = await prisma.modelPrice.findUnique({
+      where: {
+        providerType_model_effectiveFrom: {
+          providerType: p.providerType,
+          model: p.model,
+          effectiveFrom: MODEL_PRICE_EFFECTIVE_FROM,
+        },
+      },
+    });
+    if (existing) continue;
+    await prisma.modelPrice.create({ data: { ...p, currency: "USD", effectiveFrom: MODEL_PRICE_EFFECTIVE_FROM } });
+    created += 1;
+  }
+  return created;
+}
+
+/** İçinde bulunulan ayın ilk günü ve ertesi ayın ilk günü (UTC gün başı). */
+function currentPeriod(): { periodStart: Date; periodEnd: Date } {
+  const now = new Date();
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  return {
+    periodStart: new Date(Date.UTC(y, m, 1)),
+    periodEnd: new Date(Date.UTC(y, m + 1, 1)), // dönem sonu DIŞLAYICI
+  };
+}
+
+/**
+ * Demo tenant cüzdanı — Solo planı kotası (500 kredi / 200 belge).
+ *
+ * IDEMPOTENT ve VERİ KORUYUCU: cüzdan varsa tüketim alanları SIFIRLANMAZ.
+ * Seed'in `includedConsumed`/`purchasedCredits` alanlarını ezmesi, hareket
+ * defteri (CreditTransaction) ile cüzdan bakiyesi arasındaki mutabakatı bozar.
+ */
+async function seedCreditWallet(): Promise<boolean> {
+  const existing = await prisma.creditWallet.findUnique({ where: { tenantId: TENANT_ID } });
+  if (existing) return false;
+  const { periodStart, periodEnd } = currentPeriod();
+  await prisma.creditWallet.create({
+    data: {
+      tenantId: TENANT_ID,
+      periodStart,
+      periodEnd,
+      includedCredits: 500,
+      documentQuota: 200,
+    },
+  });
+  // Dönem başı tahsisi hareket defterine de yazılır; mutabakat testi bunu bekler.
+  await prisma.creditTransaction.create({
+    data: {
+      tenantId: TENANT_ID,
+      type: "TAHSIS",
+      amount: 500,
+      balanceAfter: 500,
+      note: "Dönem başı dahil kota tahsisi (Solo planı — 500 kredi). Dahil kota DEVRETMEZ.",
+    },
+  });
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Faz 4 — delil matrisi, bilirkişi, risk demo verisi
+// ---------------------------------------------------------------------------
+
+/**
+ * İddia × delil matrisi + risk skoru seti.
+ *
+ * DİKKAT: buradaki hiçbir kayıt AI çıktısı DEĞİLDİR; hepsi "avukat girmiş"
+ * kabul edilir. AI önerileri ürün akışında ayrı bir onay adımından geçer.
+ */
+async function seedEvidenceMatrix(caseId: string, userId: string) {
+  const claims: Array<{ side: "BIZ" | "KARSI_TARAF"; text: string; status: "ACIK" | "DESTEKLENIYOR" | "ZAYIF" | "CURUTULDU" }> = [
+    { side: "BIZ", text: "Taraflar arasında 14.02.2025 tarihli yazılı çerçeve sözleşme kurulmuştur.", status: "DESTEKLENIYOR" },
+    { side: "BIZ", text: "Müvekkil edimini tam ve zamanında ifa etmiş, teslim tutanakla belgelenmiştir.", status: "DESTEKLENIYOR" },
+    { side: "BIZ", text: "Davalı, muaccel hale gelen 1.240.000 TL bedeli ödememiştir.", status: "ACIK" },
+    { side: "KARSI_TARAF", text: "Teslim edilen mal ayıplıdır; bu nedenle bedelden indirim gerekir.", status: "ZAYIF" },
+  ];
+
+  const claimRecords: Array<{ id: string; text: string }> = [];
+  let claimCount = 0;
+  for (const [i, c] of claims.entries()) {
+    let rec = await prisma.claim.findFirst({ where: { caseId, text: c.text } });
+    if (!rec) {
+      rec = await prisma.claim.create({
+        data: { tenantId: TENANT_ID, caseId, side: c.side, text: c.text, status: c.status, orderIndex: i, createdBy: userId },
+      });
+      claimCount += 1;
+    }
+    claimRecords.push({ id: rec.id, text: rec.text });
+  }
+
+  const evidences: Array<Omit<Prisma.EvidenceUncheckedCreateInput, "tenantId" | "caseId" | "createdBy">> = [
+    { type: "BELGE", title: "14.02.2025 tarihli çerçeve sözleşme (ıslak imzalı)", status: "SUNULDU", obtainedAt: utc(2026, 1, 20) },
+    { type: "BELGE", title: "18.03.2025 tarihli teslim tutanağı", description: "Karşı taraf yetkilisinin kaşe ve imzasını taşır.", status: "SUNULDU", obtainedAt: utc(2026, 1, 20) },
+    { type: "BELGE", title: "Fatura ve cari hesap ekstresi (2025/1-2025/9)", status: "SUNULDU", obtainedAt: utc(2026, 2, 4) },
+    { type: "TANIK", title: "Teslim sırasında hazır bulunan depo sorumlusu", witnessName: "Hasan Yıldırım", description: "Malın ayıpsız teslim alındığına ilişkin beyan.", status: "PLANLANAN" },
+    { type: "BILIRKISI", title: "Ticari defterler üzerinde bilirkişi incelemesi", description: "Cari hesap mutabakatının teyidi için talep edilecek.", status: "PLANLANAN" },
+  ];
+
+  const evidenceRecords: Array<{ id: string; title: string }> = [];
+  let evidenceCount = 0;
+  for (const e of evidences) {
+    let rec = await prisma.evidence.findFirst({ where: { caseId, title: e.title as string } });
+    if (!rec) {
+      rec = await prisma.evidence.create({ data: { ...e, tenantId: TENANT_ID, caseId, createdBy: userId } });
+      evidenceCount += 1;
+    }
+    evidenceRecords.push({ id: rec.id, title: rec.title });
+  }
+
+  // Matris hücreleri: [iddia sırası, delil sırası, güç(1-5), not]
+  const cells: Array<[number, number, number, string]> = [
+    [0, 0, 5, "Sözleşmenin kuruluşunu doğrudan ispatlar."],
+    [1, 1, 5, "İfanın gerçekleştiğini doğrudan ispatlar."],
+    [1, 3, 3, "Tanık beyanı tutanağı destekler; tek başına yeterli değildir."],
+    [2, 2, 4, "Muacceliyet ve bakiye alacağı gösterir."],
+    [2, 4, 3, "Bilirkişi incelemesi bakiyeyi teyit edecektir."],
+    [3, 1, 4, "KARŞI DELİL: ayıpsız teslim, ayıp iddiasını zayıflatır."],
+  ];
+  let linkCount = 0;
+  for (const [ci, ei, strength, note] of cells) {
+    const claim = claimRecords[ci];
+    const evidence = evidenceRecords[ei];
+    const existing = await prisma.claimEvidenceLink.findUnique({
+      where: { claimId_evidenceId: { claimId: claim.id, evidenceId: evidence.id } },
+    });
+    if (existing) continue;
+    await prisma.claimEvidenceLink.create({
+      data: { tenantId: TENANT_ID, claimId: claim.id, evidenceId: evidence.id, strength, note, createdBy: userId },
+    });
+    linkCount += 1;
+  }
+
+  // Hukuki dayanaklar — atıf METNİ; doğrulama caselaw modülünde kayıt üzerinden yapılır.
+  const bases: Array<[number, string, string]> = [
+    [0, "TBK m.1", "Sözleşmenin kurulması — karşılıklı ve birbirine uygun irade beyanı."],
+    [2, "TBK m.117", "Temerrüt ve muacceliyet."],
+    [3, "TTK m.23/c", "Ticari satımda ayıp ihbarı süresi — süresinde ihbar yoksa ayıp iddiası dinlenmez."],
+  ];
+  let basisCount = 0;
+  for (const [ci, reference, note] of bases) {
+    const claim = claimRecords[ci];
+    const existing = await prisma.claimLegalBasis.findFirst({ where: { claimId: claim.id, reference } });
+    if (existing) continue;
+    await prisma.claimLegalBasis.create({ data: { tenantId: TENANT_ID, claimId: claim.id, reference, note } });
+    basisCount += 1;
+  }
+
+  return { claimCount, evidenceCount, linkCount, basisCount };
+}
+
+/** Bilirkişi kaydı + rapor (c5 — ayıplı hammadde dosyası; ara kararla heyet atanmıştı). */
+async function seedExpert(caseId: string, userId: string) {
+  const fullName = "Prof. Dr. Serkan Aydın";
+  let expert = await prisma.expert.findFirst({ where: { tenantId: TENANT_ID, fullName } });
+  let expertCreated = false;
+  if (!expert) {
+    expert = await prisma.expert.create({
+      data: {
+        tenantId: TENANT_ID,
+        fullName,
+        specialty: "Kimya Mühendisliği — polimer hammadde analizi",
+        institution: "Bursa Bilirkişilik Bölge Kurulu",
+        note: "[DEMO VERİ] Önceki dosyada teknik analizi güçlü, zarar hesabında yüzeysel kalmıştı.",
+      },
+    });
+    expertCreated = true;
+  }
+
+  let reportCreated = false;
+  let report = await prisma.expertReport.findFirst({ where: { caseId, reportType: "ASIL" } });
+  if (!report) {
+    report = await prisma.expertReport.create({
+      data: {
+        tenantId: TENANT_ID,
+        caseId,
+        expertId: expert.id,
+        reportType: "ASIL",
+        receivedAt: utc(2026, 4, 14),
+        // TEBLİĞ tarihi itiraz süresini tetikler; sürenin kendisi deterministik
+        // motorda hesaplanır (HMK m.281 — 2 hafta), burada saklanmaz.
+        servedAt: utc(2026, 4, 21),
+        summary: "[DEMO VERİ] Hammadde numunelerinde standart dışı nem oranı tespit edilmiş; ayıp iddiası kısmen doğrulanmıştır.",
+        conclusionText:
+          "Dava konusu partide ayıp bulunduğu, ancak zararın davacının talep ettiği tutarın altında kaldığı kanaatine varılmıştır.",
+        createdBy: userId,
+      },
+    });
+    reportCreated = true;
+  }
+
+  let objectionCreated = false;
+  const objectionExists = await prisma.expertObjection.findFirst({ where: { expertReportId: report.id } });
+  if (!objectionExists) {
+    await prisma.expertObjection.create({
+      data: {
+        tenantId: TENANT_ID,
+        expertReportId: report.id,
+        points: JSON.stringify([
+          { no: 1, topic: "Numune seçimi", summary: "Numuneler yalnız tek partiden alınmış; temsil kabiliyeti tartışmalıdır." },
+          { no: 2, topic: "Zarar hesabı yöntemi", summary: "Kâr kaybı kalemi hiç değerlendirilmemiştir." },
+          { no: 3, topic: "Ek rapor talebi", summary: "Aynı heyetten ek rapor alınması talep edilmektedir." },
+        ]),
+        status: "SUNULDU",
+        createdBy: userId,
+      },
+    });
+    objectionCreated = true;
+  }
+
+  return { expertCreated, reportCreated, objectionCreated };
+}
+
+/**
+ * Risk skoru seti — 7 alt boyut + GENEL bileşke (8 satır).
+ *
+ * HİBRİT: `score` deterministik kural sinyallerinden gelir, `aiAdjustment` yalnız
+ * sınırlı bir düzeltmedir ve BANDI DEĞİŞTİRMEZ. Demo veride bant, kural tabanıyla
+ * (score - aiAdjustment) tutarlı seçilmiştir: <40 DUSUK, 40-69 ORTA, >=70 YUKSEK.
+ */
+async function seedRiskScores(caseId: string, userId: string) {
+  const rows: Array<{
+    dimension: Prisma.RiskScoreUncheckedCreateInput["dimension"];
+    score: number;
+    band: "DUSUK" | "ORTA" | "YUKSEK";
+    aiAdjustment: number;
+    signals: Array<{ key: string; label: string; weight: number; value: number; contribution: number }>;
+    commentary: string;
+  }> = [
+    {
+      dimension: "HUKUKI",
+      score: 34,
+      band: "DUSUK",
+      aiAdjustment: -4,
+      signals: [
+        { key: "YAZILI_SOZLESME", label: "Yazılı sözleşme mevcut", weight: 25, value: 1, contribution: -25 },
+        { key: "TESLIM_TUTANAGI", label: "İfa tutanakla belgeli", weight: 15, value: 1, contribution: -15 },
+      ],
+      commentary: "[DEMO VERİ] Sözleşmesel dayanak güçlü; ayıp savunmasının süresinde ihbar edilmemesi lehimize.",
+    },
+    {
+      dimension: "SURE",
+      score: 22,
+      band: "DUSUK",
+      aiAdjustment: 0,
+      signals: [
+        { key: "GECIKMIS_SURE_YOK", label: "Gecikmiş süre kaydı yok", weight: 30, value: 0, contribution: 0 },
+        { key: "YAKLASAN_SURE", label: "14 gün içinde dolan süre sayısı", weight: 10, value: 1, contribution: 10 },
+      ],
+      commentary: "[DEMO VERİ] Yaklaşan tek süre takipte; risk düşük.",
+    },
+    {
+      dimension: "DELIL",
+      score: 48,
+      band: "ORTA",
+      aiAdjustment: 6,
+      signals: [
+        { key: "DESTEKSIZ_IDDIA", label: "Delilsiz iddia sayısı", weight: 20, value: 1, contribution: 20 },
+        { key: "TOPLANMAMIS_DELIL", label: "PLANLANAN durumundaki delil sayısı", weight: 12, value: 2, contribution: 24 },
+      ],
+      commentary: "[DEMO VERİ] Tanık ve bilirkişi delili henüz toplanmadı; matriste iki boşluk var.",
+    },
+    {
+      dimension: "TAHSILAT",
+      score: 61,
+      band: "ORTA",
+      aiAdjustment: 5,
+      signals: [
+        { key: "BORCLU_MALVARLIGI", label: "Tespit edilen malvarlığı yetersiz", weight: 30, value: 1, contribution: 30 },
+        { key: "GECMIS_ODEME", label: "Kısmi ödeme geçmişi var", weight: 15, value: 1, contribution: -15 },
+      ],
+      commentary: "[DEMO VERİ] Karar alınsa dahi tahsilat riski orta; malvarlığı araştırması genişletilmeli.",
+    },
+    {
+      dimension: "USUL",
+      score: 26,
+      band: "DUSUK",
+      aiAdjustment: -2,
+      signals: [{ key: "GOREV_YETKI", label: "Görev/yetki itirazı riski", weight: 25, value: 0, contribution: 0 }],
+      commentary: "[DEMO VERİ] Görev ve yetki tartışmasız; usuli risk düşük.",
+    },
+    {
+      dimension: "ICTIHAT",
+      score: 41,
+      band: "ORTA",
+      aiAdjustment: 3,
+      signals: [{ key: "AYKIRI_ICTIHAT", label: "Aleyhe içtihat sayısı", weight: 20, value: 1, contribution: 20 }],
+      commentary: "[DEMO VERİ] Ayıp ihbarı süresine ilişkin aleyhe bir daire kararı mevcut; ayırt edilebilir.",
+    },
+    {
+      dimension: "KARSI_TARAF",
+      score: 55,
+      band: "ORTA",
+      aiAdjustment: 4,
+      signals: [{ key: "AKTIF_SAVUNMA", label: "Karşı taraf aktif ve vekille temsil ediliyor", weight: 20, value: 1, contribution: 20 }],
+      commentary: "[DEMO VERİ] Karşı taraf her aşamada dilekçe veriyor; uzayan yargılama beklenmeli.",
+    },
+    {
+      dimension: "GENEL",
+      score: 44,
+      band: "ORTA",
+      aiAdjustment: 2,
+      signals: [{ key: "AGIRLIKLI_BILESKE", label: "Boyut skorlarının ağırlıklı ortalaması", weight: 100, value: 44, contribution: 44 }],
+      commentary: "[DEMO VERİ] Esas yönünden güçlü, tahsilat ve delil yönünden izlenmesi gereken dosya.",
+    },
+  ];
+
+  let scoreCount = 0;
+  let historyCount = 0;
+  for (const r of rows) {
+    const signalsJson = JSON.stringify(r.signals);
+    const existing = await prisma.riskScore.findUnique({
+      where: { caseId_dimension: { caseId, dimension: r.dimension } },
+    });
+    if (existing) continue;
+    await prisma.riskScore.create({
+      data: {
+        tenantId: TENANT_ID,
+        caseId,
+        dimension: r.dimension,
+        score: r.score,
+        band: r.band,
+        ruleSignalsJson: signalsJson,
+        aiAdjustment: r.aiAdjustment,
+        aiCommentary: r.commentary,
+        computedBy: userId,
+      },
+    });
+    scoreCount += 1;
+    // Append-only seride ilk nokta — risk eğrisinin başlangıcı.
+    await prisma.riskScoreHistory.create({
+      data: {
+        tenantId: TENANT_ID,
+        caseId,
+        dimension: r.dimension,
+        score: r.score,
+        band: r.band,
+        ruleSignalsJson: signalsJson,
+        aiAdjustment: r.aiAdjustment,
+        computedAt: utcDaysAgo(1),
+      },
+    });
+    historyCount += 1;
+  }
+  return { scoreCount, historyCount };
+}
+
+// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 
@@ -1469,6 +1964,24 @@ async function main() {
   const subscriptionCreated = await seedSubscription();
   const usageCount = await seedUsageSnapshots();
 
+  // ---- Modül 26: AI kredi sistemi ----------------------------------------
+
+  const taskCostCount = await seedAiTaskCosts();
+  const packageCount = await seedCreditPackages();
+  const modelPriceCount = await seedModelPrices();
+  const walletCreated = await seedCreditWallet();
+
+  // ---- Faz 4: delil / bilirkişi / risk ------------------------------------
+  //
+  // Matris ve risk seti c1'e (ticari alacak davası) bağlanır — derdest dosya,
+  // iddia/delil örgüsü en zengin olan. Bilirkişi raporu c5'e bağlanır: ara
+  // kararla kimya mühendisi bilirkişi atanan dosya ODUR; raporu başka dosyaya
+  // koymak safahatla çelişirdi.
+
+  const matrix = await seedEvidenceMatrix(c1.record.id, avukat.id);
+  const expert = await seedExpert(c5.record.id, partner.id);
+  const risk = await seedRiskScores(c1.record.id, partner.id);
+
   // ---- Özet --------------------------------------------------------------
 
   const [
@@ -1560,6 +2073,59 @@ async function main() {
     `Plan: ${planTotal} (eklenen ${planCount}) | Platform kullanıcısı: ${platformUserTotal} (eklenen ${platformUserCount}) | ` +
       `Abonelik: ${subscriptionTotal} (yeni: ${subscriptionCreated}) | Kullanım fotoğrafı: ${usageTotal} (eklenen ${usageCount})`,
   );
+  const [
+    taskCostTotal,
+    freeTaskCostTotal,
+    packageTotal,
+    modelPriceTotal,
+    walletTotal,
+    creditTxTotal,
+    claimTotal,
+    evidenceTotal,
+    linkTotal,
+    basisTotal,
+    expertTotal,
+    expertReportTotal,
+    objectionTotal,
+    riskScoreTotal,
+    riskHistoryTotal,
+  ] = await Promise.all([
+    prisma.aiTaskCost.count(),
+    prisma.aiTaskCost.count({ where: { isFree: true } }),
+    prisma.creditPackage.count(),
+    prisma.modelPrice.count(),
+    prisma.creditWallet.count({ where: { tenantId: TENANT_ID } }),
+    prisma.creditTransaction.count({ where: { tenantId: TENANT_ID } }),
+    prisma.claim.count({ where: { tenantId: TENANT_ID } }),
+    prisma.evidence.count({ where: { tenantId: TENANT_ID } }),
+    prisma.claimEvidenceLink.count({ where: { tenantId: TENANT_ID } }),
+    prisma.claimLegalBasis.count({ where: { tenantId: TENANT_ID } }),
+    prisma.expert.count({ where: { tenantId: TENANT_ID } }),
+    prisma.expertReport.count({ where: { tenantId: TENANT_ID } }),
+    prisma.expertObjection.count({ where: { tenantId: TENANT_ID } }),
+    prisma.riskScore.count({ where: { tenantId: TENANT_ID } }),
+    prisma.riskScoreHistory.count({ where: { tenantId: TENANT_ID } }),
+  ]);
+
+  console.log(
+    `AI görev fiyatı: ${taskCostTotal} (eklenen ${taskCostCount}, ÜCRETSİZ ${freeTaskCostTotal}) | ` +
+      `Kredi paketi: ${packageTotal} (eklenen ${packageCount}) | Model fiyatı: ${modelPriceTotal} (eklenen ${modelPriceCount}) | ` +
+      `Cüzdan: ${walletTotal} (yeni: ${walletCreated}) | Kredi hareketi: ${creditTxTotal}`,
+  );
+  console.log(
+    `İddia: ${claimTotal} (eklenen ${matrix.claimCount}) | Delil: ${evidenceTotal} (eklenen ${matrix.evidenceCount}) | ` +
+      `Matris bağı: ${linkTotal} (eklenen ${matrix.linkCount}) | Hukuki dayanak: ${basisTotal} (eklenen ${matrix.basisCount})`,
+  );
+  console.log(
+    `Bilirkişi: ${expertTotal} (yeni: ${expert.expertCreated}) | Rapor: ${expertReportTotal} (yeni: ${expert.reportCreated}) | ` +
+      `İtiraz: ${objectionTotal} (yeni: ${expert.objectionCreated}) | ` +
+      `Risk skoru: ${riskScoreTotal} (eklenen ${risk.scoreCount}) | Risk geçmişi: ${riskHistoryTotal} (eklenen ${risk.historyCount})`,
+  );
+  console.log(
+    "NOT: kredi fiyatları ve paket TL değerleri TEMSİLİDİR — iş kararıdır, platform panelinden güncellenir. " +
+      "OpenAI/Gemini model fiyatları YAKLAŞIKTIR ve doğrulanmalıdır.",
+  );
+
   console.log(
     "Giriş: partner@demo.nomosos.local / Demo1234!  " +
       "(rol matrisi denemesi için: avukat@ · sekreter@ · stajyer@demo.nomosos.local)",

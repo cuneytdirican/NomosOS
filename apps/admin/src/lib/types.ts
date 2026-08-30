@@ -397,3 +397,103 @@ export interface AdminMutationResult {
   message?: string;
   requiresApproval?: boolean;
 }
+
+// -------------------------------------------------- Modül 26: kredi sistemi
+
+export type AdminBillingMode = "YONETILEN" | "BYO_LLM" | "SINIRSIZ";
+
+/** GET /credits/tenants — tenant başına kota ve tüketim. */
+export interface AdminCreditTenantRow {
+  /** ANALYST/maskeli görünümde null döner. */
+  tenantId: string | null;
+  tenantAdi: string;
+  mod: AdminBillingMode;
+  plan: string | null;
+  koltuk: number | null;
+  abonelikDurumu: string | null;
+  donemBaslangic: Iso;
+  donemBitis: Iso;
+  dahilKota: number;
+  dahilTuketilen: number;
+  satinAlinan: number;
+  rezerve: number;
+  kullanilabilir: number;
+  kullanimYuzdesi: number;
+  belgeKotasi: number;
+  belgeKullanilan: number;
+  otomatikYukleme: string | null;
+  toplamTuketilenKredi: number;
+  tuketimHareketi: number;
+}
+
+/** GET /credits/costs — görev başına kredi fiyatı (AiTaskCost). */
+export interface AdminTaskCost {
+  id: string;
+  taskType: string;
+  credits: number;
+  isFree: boolean;
+  description?: string | null;
+  updatedBy?: string | null;
+  updatedAt?: Iso;
+}
+
+/** GET /model-prices — İÇ MALİYET tablosu, kullanıcıya gösterilmez. */
+export interface AdminModelPrice {
+  id: string;
+  providerType: string;
+  model: string;
+  inputPricePer1M: string;
+  outputPricePer1M: string;
+  currency: string;
+  effectiveFrom: Iso;
+  /** Bugün yürürlükte olan satır mı? (aynı model için birden çok satır olabilir) */
+  yururlukte: boolean;
+}
+
+/** GET /credits/margin — maliyet / gelir / marj (iç muhasebe). */
+export interface AdminMarginRow {
+  tenantId: string | null;
+  tenantAdi: string;
+  mod: AdminBillingMode;
+  cagri: number;
+  /** Token bilgisi dönmediği için fiyatlanamayan çağrılar — SIFIR SAYILMAZ. */
+  fiyatlanamayanCagri: number;
+  girdiToken: number;
+  ciktiToken: number;
+  maliyetUsd: string;
+  maliyetTl: string | null;
+  tahsilEdilenKredi: number;
+  gelirTl: string | null;
+  marjTl: string | null;
+  marjYuzde: string | null;
+}
+
+export interface AdminMarginReport {
+  donem: { from: Iso; to: Iso };
+  maskeli: boolean;
+  parametreler: {
+    krediBirimFiyati: string | null;
+    paraBirimi: string;
+    usdTryKuru: string | null;
+    kaynak: string;
+  };
+  /** Kur ve birim fiyat tanımlı değilse false — marj UYDURULMAZ. */
+  marjHesaplanabilir: boolean;
+  marjUyarisi: string | null;
+  toplam: {
+    maliyetUsd: string;
+    tahsilEdilenKredi: number;
+    gelirTl: string | null;
+    marjTl: string | null;
+  };
+  items: AdminMarginRow[];
+  not: string;
+}
+
+/** GET /credits/anomalies — anormal tüketim UYARISI (kesme değil). */
+export interface AdminCreditAnomaly {
+  tenantId: string;
+  sonSaat: number;
+  saatlikOrtalama: number;
+  kat: number | null;
+}

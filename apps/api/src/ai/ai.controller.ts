@@ -11,6 +11,7 @@ import {
 import { AiService } from "./ai.service";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AiThrottle } from "../common/guards/ai-rate-limit.guard";
+import { AiCredits } from "../credits/ai-credits.decorator";
 import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe";
 import type { AuthUser } from "../common/types";
 
@@ -88,6 +89,10 @@ export class AiController {
 
   @Post("chat")
   @AiThrottle(1)
+  // Dosya kimliği gövdededir; bağlam uzunluğu ölçüme buradan katılır.
+  @AiCredits("CASE_CHAT", {
+    caseIdFrom: (body) => (body as { caseId?: string } | undefined)?.caseId,
+  })
   @HttpCode(200)
   chat(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(caseChatSchema)) body: CaseChatInput) {
     return this.aiService.chat(user, body);

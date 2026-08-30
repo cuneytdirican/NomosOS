@@ -87,7 +87,18 @@ export type AdminAction =
   | "tenant.notes"
   | "announcement.view"
   | "approval.view"
-  | "approval.decide";
+  | "approval.decide"
+  // --- Modül 26: AI kota ve kredi sistemi ---
+  /** Tenant başına kredi kotası ve tüketimi. */
+  | "credits.tenant.view"
+  /** Manuel kredi tahsisi/düzeltme — HER ROLDE dört-göz (iş kuralı 9). */
+  | "credits.tenant.adjust"
+  /** Kredi fiyat listesi ve model fiyat tablosu — okuma. */
+  | "credits.pricing.view"
+  /** Kredi fiyat listesi ve model fiyat tablosu — yazma (SUPER_ADMIN). */
+  | "credits.pricing.write"
+  /** Maliyet / gelir / marj raporu — ANALYST_READONLY takma adlı görür. */
+  | "credits.margin.view";
 
 type Matrix = Record<AdminAction, Record<AdminRole, PermissionLevel>>;
 
@@ -389,6 +400,55 @@ export const PERMISSION_MATRIX: Matrix = {
     SUPPORT_AGENT: N,
     ANALYST_READONLY: N,
   },
+
+  // --- Modül 26 (docs/moduller/26 §API Uçları) ---
+  // | GET /credits/tenants | OPS, BILLING, SUPER |
+  //
+  // SUPPORT_AGENT SPEC TABLOSUNDA YOKTU ve `read` verilmişti: destek personeli
+  // büro adını, cüzdan bakiyesini ve son 25 kredi hareketini görebiliyordu.
+  // Kredi bakiyesi bir DESTEK verisi değil, ticari veridir; destek talebinin
+  // çözümü için gerekmez. Spec'e döndürüldü.
+  "credits.tenant.view": {
+    SUPER_ADMIN: "full",
+    OPS_ADMIN: "full",
+    BILLING_ADMIN: "full",
+    SUPPORT_AGENT: N,
+    // Analiste tenant kimliği kapalıdır; marj raporunu takma adla görür.
+    ANALYST_READONLY: N,
+  },
+  // | PATCH /credits/tenants/:id | BILLING, SUPER (dört-göz) |
+  "credits.tenant.adjust": {
+    SUPER_ADMIN: "four_eyes",
+    OPS_ADMIN: N,
+    BILLING_ADMIN: "four_eyes",
+    SUPPORT_AGENT: N,
+    ANALYST_READONLY: N,
+  },
+  "credits.pricing.view": {
+    SUPER_ADMIN: "full",
+    OPS_ADMIN: "read",
+    BILLING_ADMIN: "read",
+    SUPPORT_AGENT: N,
+    ANALYST_READONLY: N,
+  },
+  // | GET/PATCH /credits/costs · /model-prices | SUPER |
+  "credits.pricing.write": {
+    SUPER_ADMIN: "full",
+    OPS_ADMIN: N,
+    BILLING_ADMIN: N,
+    SUPPORT_AGENT: N,
+    ANALYST_READONLY: N,
+  },
+  // | GET /credits/margin | BILLING, SUPER, ANALYST (salt-okur) |
+  "credits.margin.view": {
+    SUPER_ADMIN: "full",
+    OPS_ADMIN: N,
+    BILLING_ADMIN: "full",
+    SUPPORT_AGENT: N,
+    // 🔒 masked — kabul kriteri 12: marjı GÖRÜR, fiyat listesini DEĞİŞTİREMEZ.
+    // Tenant kimliği takma adla döner (Pseudonymizer).
+    ANALYST_READONLY: "masked",
+  },
 };
 
 export const ACTION_LABELS: Record<AdminAction, string> = {
@@ -434,6 +494,11 @@ export const ACTION_LABELS: Record<AdminAction, string> = {
   "announcement.view": "Duyuru listesi",
   "approval.view": "Onay kuyruğu görüntüleme",
   "approval.decide": "Onay verme / reddetme",
+  "credits.tenant.view": "Kredi kotası ve tüketimi görüntüleme",
+  "credits.tenant.adjust": "Manuel kredi tahsisi / düzeltme",
+  "credits.pricing.view": "Kredi ve model fiyat listesi görüntüleme",
+  "credits.pricing.write": "Kredi ve model fiyat listesi düzenleme",
+  "credits.margin.view": "AI maliyet / gelir / marj raporu",
 };
 
 /** Rol için işlem seviyesi. Bilinmeyen rol → hiçbir şey. */
@@ -496,6 +561,12 @@ export const FOUR_EYES_ACTIONS: readonly AdminAction[] = [
    */
   "platform_user.manage",
   "plan.catalog.write",
+  /**
+   * Manuel kredi tahsisi (Modül 26, iş kuralı 9): kredi paraya eşdeğerdir ve
+   * tek imzayla yaratılabilseydi dört-göz kuralının "para" ayağı delinirdi —
+   * iade iki imza isterken bedava 10.000 kredi bir imza isteyemez.
+   */
+  "credits.tenant.adjust",
 ];
 
 export function isFourEyesAction(action: AdminAction): boolean {

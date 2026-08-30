@@ -11,6 +11,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AiThrottle } from "../common/guards/ai-rate-limit.guard";
+import { AiCredits } from "../credits/ai-credits.decorator";
 import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe";
 import type { AuthUser } from "../common/types";
 import { EnforcementCopilotService } from "./copilot.service";
@@ -197,6 +198,16 @@ export class EnforcementController {
    */
   @Post(":id/copilot")
   @AiThrottle(1)
+  @AiCredits("ENFORCEMENT_ANALYSIS", {
+    // TAHSILAT_IHTIMALI ayrı bir kalemdir (15 kredi); diğer beş komut
+    // ENFORCEMENT_ANALYSIS (10 kredi) fiyatından geçer.
+    taskTypeFrom: (body) =>
+      (body as { command?: string } | undefined)?.command === "TAHSILAT_IHTIMALI"
+        ? "COLLECTION_LIKELIHOOD"
+        : undefined,
+    // Yolda icra dosyası kimliği var; bağlam ise bağlı DAVA dosyasında durur.
+    parentCaseId: { kind: "ENFORCEMENT", param: "id" },
+  })
   @HttpCode(200)
   copilotRun(
     @CurrentUser() user: AuthUser,

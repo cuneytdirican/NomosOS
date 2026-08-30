@@ -157,6 +157,32 @@ export class DocumentsService {
     if (input.caseId) {
       await touchCase(this.prisma.client, input.caseId);
     }
+
+    // ---- BELGE KOTASI SAYACI (Modül 26) --------------------------------
+    //
+    // `CreditWallet.documentUsed` hiçbir yerde artırılmıyordu: alan okunuyor,
+    // dönem yenilemesinde sıfırlanıyor ama hiç işlenmiyordu. Belge hattı
+    // (sınıflandırma / çıkarma / süre tespiti) bilinçli olarak ÜCRETSİZDİR ve
+    // öyle kalmalıdır — belgeyi krediye bağlamak büroyu belge yüklemekten
+    // caydırır ve ürünün değer döngüsünü öldürür. Ama o hattın TEK sınırı
+    // belge kotasıydı ve o sınır bağlı değildi.
+    //
+    // SAYAÇ ENGELLEMEZ (iş kuralı 6, kabul kriteri 5): kota aşılsa bile
+    // yükleme her koşulda çalışır. Aşım platform panelinde görünür ve bir
+    // satış konuşması üretir; avukatın işini durdurmaz.
+    //
+    // Sayaç hatası yüklemeyi BOZMAZ: belge güvenle saklanmıştır.
+    try {
+      await this.prisma.client.creditWallet.updateMany({
+        where: { tenantId: user.tenantId },
+        data: { documentUsed: { increment: 1 } },
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Belge kotası sayacı artırılamadı (${document.id}): ${(err as Error).message}`,
+      );
+    }
+
     await this.audit.log({
       tenantId: user.tenantId,
       userId: user.userId,

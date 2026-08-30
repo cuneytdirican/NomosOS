@@ -53,6 +53,15 @@ export const APPROVAL_ACTIONS = {
    * Ad/açıklama/`isActive` değişiklikleri doğrudan kalır.
    */
   PLAN_PRICE_CHANGE: "PLAN_PRICE_CHANGE",
+  /**
+   * MANUEL KREDİ TAHSİSİ / DÜZELTME (Modül 26, iş kuralı 9).
+   *
+   * Kredi paraya eşdeğerdir: bir panel kullanıcısı tek imzayla bir büroya
+   * 10.000 kredi yazabilseydi, iadeyi dört-göze bağlamanın anlamı kalmazdı
+   * (aynı değeri kredi olarak vermek serbest olurdu). BYO-LLM muafiyeti de
+   * bu talebe dâhildir; muafiyet, kotayı tamamen kaldıran bir ticari karardır.
+   */
+  CREDIT_MANUAL_ADJUST: "CREDIT_MANUAL_ADJUST",
 } as const;
 
 export type ApprovalActionKey = (typeof APPROVAL_ACTIONS)[keyof typeof APPROVAL_ACTIONS];
@@ -77,6 +86,7 @@ export const APPROVAL_REQUIRED_PERMISSION: Record<ApprovalActionKey, AdminAction
   PLATFORM_USER_CREATE: "platform_user.manage",
   PLATFORM_USER_CREDENTIAL_RESET: "platform_user.manage",
   PLAN_PRICE_CHANGE: "plan.catalog.write",
+  CREDIT_MANUAL_ADJUST: "credits.tenant.adjust",
 };
 
 export const APPROVAL_LABELS: Record<ApprovalActionKey, string> = {
@@ -92,6 +102,7 @@ export const APPROVAL_LABELS: Record<ApprovalActionKey, string> = {
   PLATFORM_USER_CREATE: "Panel kullanıcısı açma",
   PLATFORM_USER_CREDENTIAL_RESET: "Panel kullanıcısının parola/2FA sıfırlaması",
   PLAN_PRICE_CHANGE: "Plan kataloğu fiyat değişikliği",
+  CREDIT_MANUAL_ADJUST: "Manuel kredi tahsisi / kota düzeltmesi",
 };
 
 export function isApprovalAction(value: string): value is ApprovalActionKey {
@@ -174,5 +185,24 @@ export interface PlanPriceChangePayload {
   planId: string;
   /** null → fiyat kaldırılıyor ("fiyatsız" plan). */
   monthlyPricePerUser: string | null;
+  reason: string;
+}
+
+/**
+ * Manuel kredi tahsisi / kota düzeltmesi (Modül 26).
+ * Alanların hepsi opsiyoneldir; talep en az birini taşımak zorundadır
+ * (uç tarafında Zod ile zorlanır, executor ayrıca kendi kapısını kurar).
+ */
+export interface CreditManualAdjustPayload {
+  tenantId: string;
+  /** Satın alınmış bakiyeye eklenecek/çıkarılacak kredi. */
+  deltaCredits?: number;
+  /** Dönem dahil kotasını yeniden belirle (Enterprise sözleşmeleri). */
+  includedCredits?: number;
+  documentQuota?: number;
+  /** BYO-LLM muafiyeti — kredi kapısı tamamen devre dışı kalır. */
+  byoLlm?: boolean;
+  /** Dönemi yenile: dahil kota sıfırlanır, satın alınan bakiye korunur. */
+  renewPeriod?: boolean;
   reason: string;
 }

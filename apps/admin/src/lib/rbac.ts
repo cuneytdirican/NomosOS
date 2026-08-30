@@ -93,7 +93,18 @@ export type AdminAction =
   | "tenant.notes"
   | "announcement.view"
   | "approval.view"
-  | "approval.decide";
+  | "approval.decide"
+  // --- Modül 26: AI kota ve kredi sistemi ---
+  /** Tenant başına kredi kotası ve tüketimi. */
+  | "credits.tenant.view"
+  /** Manuel kredi tahsisi/düzeltme — her rolde dört-göz. */
+  | "credits.tenant.adjust"
+  /** Kredi ve model fiyat listesi — okuma. */
+  | "credits.pricing.view"
+  /** Kredi ve model fiyat listesi — yazma (SUPER_ADMIN). */
+  | "credits.pricing.write"
+  /** Maliyet / gelir / marj raporu — ANALYST_READONLY takma adlı görür. */
+  | "credits.margin.view";
 
 type Matrix = Record<AdminAction, Record<AdminRole, PermissionLevel>>;
 
@@ -439,6 +450,44 @@ export const PERMISSION_MATRIX: Matrix = {
     SUPPORT_AGENT: N,
     ANALYST_READONLY: N,
   },
+
+  // --- Modül 26 (docs/moduller/26 §API Uçları) ---
+  "credits.tenant.view": {
+    SUPER_ADMIN: "full",
+    OPS_ADMIN: "full",
+    BILLING_ADMIN: "full",
+    SUPPORT_AGENT: "read",
+    ANALYST_READONLY: N,
+  },
+  "credits.tenant.adjust": {
+    SUPER_ADMIN: "four_eyes",
+    OPS_ADMIN: N,
+    BILLING_ADMIN: "four_eyes",
+    SUPPORT_AGENT: N,
+    ANALYST_READONLY: N,
+  },
+  "credits.pricing.view": {
+    SUPER_ADMIN: "full",
+    OPS_ADMIN: "read",
+    BILLING_ADMIN: "read",
+    SUPPORT_AGENT: N,
+    ANALYST_READONLY: N,
+  },
+  "credits.pricing.write": {
+    SUPER_ADMIN: "full",
+    OPS_ADMIN: N,
+    BILLING_ADMIN: N,
+    SUPPORT_AGENT: N,
+    ANALYST_READONLY: N,
+  },
+  // Kabul kriteri 12: marjı GÖRÜR, fiyat listesini DEĞİŞTİREMEZ.
+  "credits.margin.view": {
+    SUPER_ADMIN: "full",
+    OPS_ADMIN: N,
+    BILLING_ADMIN: "full",
+    SUPPORT_AGENT: N,
+    ANALYST_READONLY: "masked",
+  },
 };
 
 /** İşlem etiketleri — onay kuyruğu ve yetki matrisi ekranında Türkçe gösterim. */
@@ -485,6 +534,11 @@ export const ACTION_LABELS: Record<AdminAction, string> = {
   "announcement.view": "Duyuru listesi",
   "approval.view": "Onay kuyruğu görüntüle",
   "approval.decide": "Onay ver / reddet",
+  "credits.tenant.view": "Kredi kotası ve tüketimi görüntüleme",
+  "credits.tenant.adjust": "Manuel kredi tahsisi / düzeltme",
+  "credits.pricing.view": "Kredi ve model fiyat listesi görüntüleme",
+  "credits.pricing.write": "Kredi ve model fiyat listesi düzenleme",
+  "credits.margin.view": "AI maliyet / gelir / marj raporu",
 };
 
 /** Rol için işlem seviyesi. Bilinmeyen rol → hiçbir şey. */
@@ -550,6 +604,8 @@ export const FOUR_EYES_ACTIONS: readonly AdminAction[] = [
   // ve katalog fiyatı değişikliği de iki imza ister.
   "platform_user.manage",
   "plan.catalog.write",
+  // Modül 26: kredi paraya eşdeğerdir; tek imzayla yaratılamaz.
+  "credits.tenant.adjust",
 ];
 
 export function isFourEyesAction(action: AdminAction): boolean {

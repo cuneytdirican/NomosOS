@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
 import { AiThrottle } from "../common/guards/ai-rate-limit.guard";
+import { AiCredits } from "../credits/ai-credits.decorator";
 import { CaselawService } from "./caselaw.service";
 import { CitationVerifyService } from "./citation-verify.service";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
@@ -78,6 +79,11 @@ export class CaselawController {
    */
   @Post("ai-search")
   @AiThrottle(6)
+  // Dosya bağlamı verilmişse ölçüme katılır: gövde 80 bayt olsa bile çağrı
+  // 1 planlama + N özetlemedir ve dosya bağlamıyla beslenir.
+  @AiCredits("CASELAW_SEARCH", {
+    caseIdFrom: (body) => (body as { caseId?: string } | undefined)?.caseId,
+  })
   @HttpCode(200)
   aiSearch(
     @CurrentUser() user: AuthUser,
@@ -102,6 +108,7 @@ export class CaselawController {
 
   @Post(":id/summarize")
   @AiThrottle(1)
+  @AiCredits("CASELAW_SUMMARIZE")
   @HttpCode(200)
   summarize(
     @CurrentUser() user: AuthUser,

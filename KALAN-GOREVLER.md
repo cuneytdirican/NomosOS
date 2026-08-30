@@ -21,12 +21,20 @@
 | 1 | Faz 1 — Legal Core (CRM, dava, duruşma, süre motoru, görev) | ✅ |
 | 2 | Faz 2 — AI asistan/RAG, belge→aksiyon hattı, dilekçe, içtihat, UYAP eklentisi | ✅ |
 | 3 | Faz 3 — İcra + Copilot, finans, faturalama, platform admin API | ✅ |
-| 4 | **Faz 4 + tanıtım sitesi + Modül 26 kredi sistemi** | 🔄 çalışıyor (wf `92e538a6`) |
-| 5 | **Faz 5 — Müvekkil portalı, iletişim merkezi, vekaletname, e-Fatura, sözleşme + e-imza** | ⏳ sırada |
-| 6 | **Faz 6 — Kurumsal raporlama, mobil uygulama** | ⏳ |
-| 7 | **Üretim dağıtımı** — `docs/uretim-dagitimi.md`, CI, Docker üretim profili | ⏳ |
+| 4 | Faz 4 (strateji/simülasyon/risk/delil/bilirkişi/çakışma) + tanıtım sitesi + Modül 26 kredi sistemi | ✅ |
+| 7 | Üretim dağıtımı — `docs/uretim-dagitimi.md`, CI, Docker üretim profili | ✅ ⚠️ |
+| 5 | **Faz 5 — Müvekkil portalı, iletişim merkezi, vekaletname, e-Fatura, sözleşme + e-imza** | ⏳ SIRADA |
+| 6 | **Faz 6 — Kurumsal raporlama, mobil uygulama, zamanlanmış işler** | ⏳ |
 | 8 | **DERİN DENETİM** (aşağıdaki prompt) | ⏳ |
 | 9 | Final GitHub gönderimi + kapanış raporu | ⏳ |
+
+### ⚠️ Açık engel — CI dosyaları gönderilemedi
+
+`.github/workflows/ci.yml`, `security.yml` ve `README.md` yerelde hazır ancak GitHub'a
+**gönderilemedi**: token'da `workflow` yetkisi yok (GitHub, OAuth uygulamalarının workflow
+dosyası yazmasını bu yetki olmadan reddediyor). Çözüm: `gh auth refresh -h github.com -s workflow`
+ile yetki verilmesi ya da dosyaların elle eklenmesi. Diğer tüm CI yardımcıları (sır tarayıcı,
+dependabot, CodeQL yapılandırması, PR şablonu) gönderildi.
 
 ## Aşama 5 — Faz 5 kapsamı
 

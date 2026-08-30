@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { clearToken, getStoredUser, getToken, type StoredUser } from "@/lib/api";
 import { countPendingProposals } from "@/lib/faz2";
+// Modül 26 — üst çubuktaki kredi göstergesi ve %80 uyarı şeridi.
+import { CreditErrorAlert, CreditMeter, CreditWarningBanner, useWallet } from "@/components/credits";
 
 interface NavItem {
   href: string;
@@ -57,6 +59,30 @@ const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
         <path d="M10 1.5a.75.75 0 0 1 .75.75v.62l5.06 1.35a.75.75 0 0 1-.14 1.48l-.36-.02 2.16 4.9a.75.75 0 0 1-.2.88 3.6 3.6 0 0 1-4.62 0 .75.75 0 0 1-.2-.88l2.14-4.86-3.84-1.02V15.5h2.5a.75.75 0 0 1 0 1.5h-6.5a.75.75 0 0 1 0-1.5h2.5V4.7L5.37 5.72l2.14 4.86a.75.75 0 0 1-.2.88 3.6 3.6 0 0 1-4.62 0 .75.75 0 0 1-.2-.88l2.16-4.9-.36.02a.75.75 0 0 1-.14-1.48l5.1-1.36v-.61A.75.75 0 0 1 10 1.5Z" />
+      </svg>
+    ),
+  },
+  {
+    // Risk Motoru (Modül 17) — partnerin "bugün hangi dosyalar yanıyor" görünümü.
+    href: "/app/riskli-dosyalar",
+    label: "Riskli Dosyalar",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path
+          fillRule="evenodd"
+          d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495ZM10 5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"
+          clipRule="evenodd"
+        />
+      </svg>
+    ),
+  },
+  {
+    // Conflict Check (Modül 11) — iş kabulünden ÖNCE bakılan ekran.
+    href: "/app/cakisma",
+    label: "Çakışma Kontrolü",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path d="M7 4a3 3 0 1 1 6 0 3 3 0 0 1-6 0ZM5.5 9.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM14.5 9.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM2.5 17a3.5 3.5 0 0 1 6.9-.8.75.75 0 0 0 1.2 0A3.5 3.5 0 0 1 17.5 17a.75.75 0 0 1-.75.75H3.25A.75.75 0 0 1 2.5 17Z" />
       </svg>
     ),
   },
@@ -182,6 +208,16 @@ const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
     title: "Ayarlar",
     items: [
   {
+    // Modül 26 — dönemsel kredi tüketimi, paketler, otomatik yükleme.
+    href: "/app/ayarlar/ai-kullanim",
+    label: "AI Kullanımı",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path d="M15.98 1.804a1 1 0 0 0-1.196.15l-9.5 9.5A1 1 0 0 0 6 13.25h3.19l-1.16 4.63a1 1 0 0 0 1.68.97l9.5-9.5A1 1 0 0 0 18.5 7.75h-3.19l1.16-4.63a1 1 0 0 0-.49-1.316Z" />
+      </svg>
+    ),
+  },
+  {
     href: "/app/ayarlar/ai-saglayici",
     label: "AI Sağlayıcı",
     icon: (
@@ -204,6 +240,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [user, setUser] = useState<StoredUser | null>(null);
   const [pendingProposals, setPendingProposals] = useState(0);
+  /**
+   * Kredi göstergesi. Uç yoksa `wallet` null kalır ve gösterge tamamen gizlenir
+   * — kredi hattının eksikliği panelde hata göstermez.
+   */
+  const { wallet } = useWallet();
 
   useEffect(() => {
     if (!getToken()) {
@@ -308,14 +349,25 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             </div>
           ))}
         </nav>
-        <p className="border-t border-slate-800 px-5 py-3 text-[11px] text-slate-500">
-          NomosOS · AI-Native Legal OS
-        </p>
+        <div className="border-t border-slate-800 px-5 py-3 text-[11px] text-slate-500">
+          <p>NomosOS · AI-Native Legal OS</p>
+          <p className="mt-1">
+            <a
+              href="https://mindaeon.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-slate-500 transition-colors hover:text-amber-400 hover:underline"
+            >
+              Developed by MindAeon AI
+            </a>
+          </p>
+        </div>
       </aside>
 
       {/* İçerik */}
       <div className="ml-60 flex min-h-screen flex-1 flex-col">
         <header className="sticky top-0 z-20 flex items-center justify-end gap-4 border-b border-slate-200 bg-white px-6 py-3">
+          <CreditMeter wallet={wallet} />
           <div className="text-right">
             <p className="text-sm font-medium text-slate-900">{user?.fullName ?? user?.email ?? "Kullanıcı"}</p>
             {user?.role && <p className="text-xs text-slate-500">{user.role}</p>}
@@ -331,7 +383,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             Çıkış
           </button>
         </header>
-        <main className="flex-1 p-6">{children}</main>
+        <main className="flex-1 space-y-4 p-6">
+          <CreditWarningBanner wallet={wallet} />
+          <CreditErrorAlert />
+          {children}
+        </main>
       </div>
     </div>
   );

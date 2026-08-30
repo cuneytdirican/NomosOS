@@ -41,6 +41,7 @@ import type { TypeOf, ZodTypeAny } from "zod";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { assertAiPolicyAllows } from "../common/ai-policy";
+import { creditRunContext } from "../credits/credit-context";
 import { providerUnreachable } from "../common/errors";
 import type { AuthUser } from "../common/types";
 
@@ -63,9 +64,34 @@ export interface AiRunInput<TSchema extends ZodTypeAny> {
    * bu alan verilmemelidir — verildiğinde metinlerin taranmış olduğu VARSAYILIR.
    */
   preScanned?: { piiMasked: boolean };
+  /**
+   * DIŞ HEDEFE GİDİŞTE KOŞULSUZ ONAY İSTE — kalıp aramadan.
+   *
+   * `scanPii` yalnız TCKN/IBAN/telefon/e-posta gibi BİÇİMİ TANINABİLİR verileri
+   * yakalar. Ad, unvan ve şirket adı hiçbir kalıba girmez; bu yüzden gövdesi
+   * baştan sona addan ibaret olan bir çağrı (ör. çatışma taraması) kapıdan
+   * "kişisel veri bulunamadı" diye geçerdi. Bu bayrak, böyle bir çağrıda dış
+   * sağlayıcıya çıkış için avukatın AÇIK onayını (`piiApproved`) zorunlu kılar.
+   *
+   * Büro-içi/yerel hedefte hiçbir şey yapmaz: veri zaten dışarı çıkmıyordur.
+   */
+  requireExternalConsent?: {
+    /** Onay ekranında gösterilecek, NE gönderileceğini anlatan Türkçe cümle. */
+    reason: string;
+    /** Onay penceresinde gösterilecek metin (ham metin yerine özet verilebilir). */
+    preview?: string;
+  };
   schema: TSchema;
   /** output-guard'ın kaynaksız bulgu eleyeceği dizi yolları. */
   findingPaths?: readonly string[];
+  /**
+   * Bir bulgunun "kaynaklı" sayılması için dolu olması gereken alanlar.
+   * Verilmezse guard'ın sabit listesi (`DEFAULT_SOURCE_FIELDS`) kullanılır.
+   * Şemasında farklı adlı bir kaynak alanı olan çağıranlar (ör. strateji
+   * düğümlerindeki `sourceRef`) bunu genişletmek ZORUNDADIR; aksi hâlde
+   * kaynağını gösteren bulgular "kaynaksız" sayılıp elenir.
+   */
+  sourceFields?: readonly string[];
   maxTokens?: number;
   /** Denetim kaydı için etkilenen varlık. */
   entity?: string;
@@ -149,6 +175,35 @@ export class AiRunnerService {
   }
 
   /**
+   * KALIPSIZ KVKK KAPISI — "bu metinde kişisel veri VAR, kalıbı olmasa da".
+   *
+   * `applyPiiGate` biçim tanır: TCKN, IBAN, telefon, e-posta. Ad-soyad ve şirket
+   * unvanı hiçbir biçime uymaz (docs/04 §Faz 2'de söz verilen ad-soyad NER'i
+   * henüz yok). Payload'ı baştan sona addan ibaret olan bir modül için "kalıp
+   * bulunamadı → serbestçe gönder" yanlış cevaptır: KVKK m.3 anlamında ad da
+   * kişisel veridir ve avukatın onayı alınmadan dışarı çıkamaz.
+   *
+   * Yerel/büro-içi hedefte veri dışarı çıkmadığı için kapı çalışmaz.
+   */
+  assertExternalConsent(
+    providerType: string,
+    baseUrl: string | null | undefined,
+    piiApproved: boolean | undefined,
+    consent: { reason: string; preview?: string },
+  ): void {
+    if (!isExternalDestination(providerType, baseUrl)) return;
+    if (piiApproved) return;
+    throw new ConflictException({
+      requiresPiiApproval: true,
+      /** Kalıp taraması değil, İÇERİK TÜRÜ kararı — arayüz ayrımı görebilsin. */
+      reasonCode: "DIS_SAGLAYICI_KISISEL_VERI",
+      findings: [],
+      maskedText: consent.preview ?? null,
+      message: consent.reason,
+    });
+  }
+
+  /**
    * Görev tipi için rota; yoksa tenant'ın ilk aktif sağlayıcısı + defaultModel.
    *
    * TENANT POLİTİKASI: `aiPolicy = SADECE_YEREL` ise dış adresli hiçbir rota
@@ -185,6 +240,18 @@ export class AiRunnerService {
   ): Promise<AiRunResult<TypeOf<TSchema>>> {
     const { config, model } = await this.resolveRoute(input.user.tenantId, input.taskType);
 
+    // KOŞULSUZ ONAY KAPISI — kalıp tabanlı taramadan ÖNCE çalışır.
+    // Gövdesi tamamen ad/unvan olan çağrılar `scanPii` süzgecinden temiz geçer;
+    // bu kapı olmasa müvekkil adları dış sağlayıcıya onaysız çıkardı.
+    if (input.requireExternalConsent && !input.preScanned) {
+      this.assertExternalConsent(
+        config.type,
+        config.baseUrl,
+        input.piiApproved,
+        input.requireExternalConsent,
+      );
+    }
+
     const gate = input.preScanned
       ? { texts: [...input.outboundTexts], piiMasked: input.preScanned.piiMasked, findings: [] }
       : this.applyPiiGate(config.type, input.outboundTexts, input.piiApproved, config.baseUrl);
@@ -202,7 +269,7 @@ export class AiRunnerService {
     }
     const durationMs = Date.now() - startedAt;
 
-    await this.prisma.client.aiUsageLog.create({
+    const usageLog = await this.prisma.client.aiUsageLog.create({
       data: {
         tenantId: input.user.tenantId,
         userId: input.user.userId,
@@ -215,6 +282,7 @@ export class AiRunnerService {
         piiMasked: gate.piiMasked,
       },
     });
+
     await this.audit.log({
       tenantId: input.user.tenantId,
       userId: input.user.userId,
@@ -226,16 +294,36 @@ export class AiRunnerService {
 
     const guarded = guardOutput(input.schema, result.content, {
       findingPaths: input.findingPaths ?? [],
+      // Kaynak sayılan alanlar çağıranın şemasına göre genişletilebilir; guard'ın
+      // sabit listesi bilinmeyen bir kaynak alanını "kaynaksız" sayıp bulguyu
+      // eler (bkz. AiRunInput.sourceFields).
+      ...(input.sourceFields ? { sourceFields: input.sourceFields } : {}),
     });
 
     if (!guarded.ok || guarded.data === undefined) {
       const detail = guarded.issues
         .map((i) => (i.path ? `${i.path}: ${i.message}` : i.message))
         .join(" · ");
+      // KREDİ YAZILMADAN fırlar: `record()` aşağıdadır. Çıktısı kullanılmayan
+      // çağrıdan kredi alınmaz (iş kuralı 4); `AiUsageLog` satırı ise yukarıda
+      // yazılmıştır — çağrı gerçekten yapıldı, iç maliyet muhasebesi görmeli.
       throw new BadGatewayException(
         `AI çıktısı beklenen biçimde değil, sonuç kullanılmadı. Ayrıntı: ${detail || "bilinmiyor"}`,
       );
     }
+
+    // MODÜL 26 KANCASI — gerçek token'ı kredi kapısına bildirir.
+    // Bağlam yoksa (ücretsiz görev, BYO-LLM tenant'ı, pipeline) hiçbir şey
+    // yapmaz. ÇIKTI DOĞRULAMASINDAN SONRA çağrılır: sağlayıcıya gidilmiş
+    // olması ücretlendirme için yetmez, sonucun KULLANILABİLİR olması gerekir.
+    creditRunContext.record({
+      aiUsageLogId: usageLog.id,
+      taskType: input.taskType,
+      model,
+      providerType: config.type,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+    });
 
     return {
       data: guarded.data,

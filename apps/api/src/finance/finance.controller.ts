@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestj
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe";
 import { AiThrottle } from "../common/guards/ai-rate-limit.guard";
+import { AiCredits } from "../credits/ai-credits.decorator";
 import type { AuthUser } from "../common/types";
 import { FinanceService } from "./finance.service";
 import { FinanceSummaryService } from "./finance-summary.service";
@@ -55,6 +56,7 @@ export class FinanceController {
   /** POST /finance/ask — CLIENT_FINANCIAL_SUMMARY (tutarlar API'den, AI'dan değil). */
   @Post("ask")
   @AiThrottle()
+  @AiCredits("CLIENT_FINANCIAL_SUMMARY")
   ask(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(financeAskSchema)) body: FinanceAskInput) {
     return this.ai.ask(user, body);
   }
