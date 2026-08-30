@@ -1,4 +1,5 @@
 import "reflect-metadata";
+import { RequestMethod } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 // SADECE TİP: `express` doğrudan bağımlılık değildir (platform-express üzerinden
@@ -7,6 +8,52 @@ import type { NestExpressApplication } from "@nestjs/platform-express";
 import type { NextFunction, Request, Response } from "express";
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
+import { ADMIN_ROUTE_PREFIX, assertTwoFactorPolicy } from "./platform/platform.constants";
+
+/** Kiracı (büro) API'sinin genel öneki. */
+const TENANT_ROUTE_PREFIX = "api/v1";
+
+/**
+ * Global önekten HARİÇ tutulacak yollar (platform yönetim paneli).
+ *
+ * `path-to-regexp` 3.x deseni; `(.*)` eğik çizgi dâhil her şeyi yakalar.
+ * `ADMIN_ROUTE_PREFIX` ile birebir aynı kökten türetilir ki iki sabit ayrışmasın.
+ */
+const ADMIN_PREFIX_EXCLUDE_PATTERN = `${ADMIN_ROUTE_PREFIX}/(.*)`;
+
+/**
+ * İKİ ÖNEK, TEK UYGULAMA — neden `exclude` ile çözüldü?
+ *
+ * NomosOS'ta iki ayrı API yan yana yaşar:
+ *   - kiracı (büro) uygulaması → `/api/v1/**`
+ *   - platform yönetim paneli  → `/api/admin/v1/**`
+ *
+ * Nest'in global öneki tüm controller'lara uygulanır. Platform controller'ları
+ * yolu TAM olarak (`api/admin/v1/...`) yazar ve bu desen global önekten hariç
+ * tutulur; böylece:
+ *   - mevcut kiracı controller'larının HİÇBİRİNE dokunulmaz (`clients` →
+ *     `/api/v1/clients` olarak kalır),
+ *   - platform uçları `/api/v1/admin/...` gibi ikinci bir adresten
+ *     ERİŞİLEMEZ (tek adres, tek güvenlik zinciri),
+ *   - URL yeniden yazan (`req.url = ...`) kırılgan bir ara katmana gerek
+ *     kalmaz — yol tablosu gerçeği söyler.
+ *
+ * Sabitlerin ayrışmasına karşı açılışta doğrulama yapılır.
+ */
+function assertPrefixConfig(): void {
+  if (!ADMIN_ROUTE_PREFIX.startsWith("api/")) {
+    throw new Error(
+      `ADMIN_ROUTE_PREFIX ("${ADMIN_ROUTE_PREFIX}") "api/" ile başlamalıdır; aksi hâlde ` +
+        "platform uçları ters vekil (reverse proxy) kurallarının dışında kalır."
+    );
+  }
+  if (ADMIN_ROUTE_PREFIX.startsWith(`${TENANT_ROUTE_PREFIX}/`)) {
+    throw new Error(
+      `ADMIN_ROUTE_PREFIX ("${ADMIN_ROUTE_PREFIX}") kiracı öneki "${TENANT_ROUTE_PREFIX}" ` +
+        "altında olamaz: platform uçları kiracı API'sinin adres uzayına karışır."
+    );
+  }
+}
 
 /**
  * İzin verilen tarayıcı kaynakları (CORS beyaz listesi).
@@ -50,9 +97,33 @@ function securityHeaders() {
   };
 }
 
+/**
+ * GÜVENİLEN VEKİL (reverse proxy) SAYISI.
+ *
+ * Express, `X-Forwarded-For` başlığını YALNIZCA `trust proxy` ayarlandığında
+ * çözer. Ayar yokken başlık istemci tarafından uydurulabilir ve `request.ip`
+ * ile başlık birbirinden ayrışır: hız sınırlayıcı bir IP, denetim kaydı başka
+ * bir IP görür (denetim bulgusu 4).
+ *
+ * VARSAYILAN 0 = "önümde vekil yok, başlığa hiç bakma" (en güvenli varsayım).
+ * Nginx/ALB arkasında dağıtıyorsanız kaç hop olduğunu AÇIKÇA yazın:
+ *   TRUSTED_PROXY_HOPS=1
+ */
+function trustedProxyHops(): number {
+  const raw = Number(process.env.TRUSTED_PROXY_HOPS ?? 0);
+  return Number.isInteger(raw) && raw >= 0 && raw <= 10 ? raw : 0;
+}
+
 async function bootstrap(): Promise<void> {
+  assertPrefixConfig();
+  // 2FA politikası uygulama AÇILMADAN önce doğrulanır: üretimde 2FA'sız bir
+  // panel, çalışır durumdayken fark edilecek bir eksiklik değildir.
+  assertTwoFactorPolicy();
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
-  app.setGlobalPrefix("api/v1");
+  app.set("trust proxy", trustedProxyHops());
+  app.setGlobalPrefix(TENANT_ROUTE_PREFIX, {
+    exclude: [{ path: ADMIN_PREFIX_EXCLUDE_PATTERN, method: RequestMethod.ALL }],
+  });
 
   app.use(securityHeaders());
 
@@ -75,7 +146,9 @@ async function bootstrap(): Promise<void> {
   const port = Number(process.env.API_PORT ?? 3001);
   await app.listen(port);
   // eslint-disable-next-line no-console
-  console.log(`NomosOS API hazır: http://localhost:${port}/api/v1`);
+  console.log(`NomosOS API hazır: http://localhost:${port}/${TENANT_ROUTE_PREFIX}`);
+  // eslint-disable-next-line no-console
+  console.log(`Platform yönetim paneli API'si: http://localhost:${port}/${ADMIN_ROUTE_PREFIX}`);
   // eslint-disable-next-line no-console
   console.log(`CORS izinli kaynaklar: ${origins.join(", ")}`);
 }

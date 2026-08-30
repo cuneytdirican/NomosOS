@@ -15,7 +15,7 @@
  * yoksa bir dil modeli, portföy önceliklendirmesini tek başına yeniden yazardı.
  */
 
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma, type ScoreBand } from "@nomosos/db";
 import { PrismaService } from "../prisma/prisma.service";
 import { EnforcementBalanceService } from "./balance.service";
@@ -75,7 +75,7 @@ export class CollectionScoreService {
    * (skor kaydı yalnızca copilot komutu sonunda, AI yorumuyla birlikte açılır).
    */
   async computeBase(tenantId: string, enforcementFileId: string): Promise<BaseScoreResult> {
-    const file = await this.prisma.client.enforcementFile.findFirstOrThrow({
+    const file = await this.prisma.client.enforcementFile.findFirst({
       where: { id: enforcementFileId, tenantId },
       select: {
         id: true,
@@ -85,6 +85,7 @@ export class CollectionScoreService {
         currency: true,
       },
     });
+    if (!file) throw new NotFoundException("İcra dosyası bulunamadı.");
 
     const [assets, actions, collections, balance] = await Promise.all([
       this.prisma.client.assetRecord.findMany({
@@ -344,6 +345,22 @@ export class CollectionScoreService {
       ...record,
       signals: parseSignals(record.ruleSignalsJson),
       bandLabel: SCORE_BAND_LABELS[record.band],
+      /**
+       * BANDIN DAYANAĞI AÇIKÇA DÖNER (denetim bulgusu 16).
+       *
+       * Kayıtta `score` AI etkisini taşır, `band` ise TABAN skordan türer;
+       * ikisi görünürde çelişebilir (taban 39/DUSUK + AI +15 → skor 54, bant
+       * DUSUK). Çelişki değil, KORUMANIN KENDİSİDİR: AI bandı değiştiremez.
+       * Bunu okunur kılmak için üç değer birlikte döndürülür — aksi hâlde
+       * bandı skordan yeniden türeten bir tüketici korumayı sessizce kaybeder.
+       */
+      bandExplanation:
+        record.baseScore === null
+          ? "Bant, kural tabanlı skordan türetilmiştir (bu kayıt taban skor ayrımından önce üretildi)."
+          : `Kural skoru: ${record.baseScore} · AI düzeltmesi: ` +
+            `${(record.aiAdjustment ?? 0) >= 0 ? "+" : ""}${record.aiAdjustment ?? 0} · ` +
+            `nihai skor: ${record.score} · bant: ${SCORE_BAND_LABELS[record.band]} ` +
+            "(bant DAİMA kural skorundan türer; AI düzeltmesi bandı değiştiremez).",
       advisory:
         "Bu skor bir ÖNERİDİR, hukuki veya mali garanti değildir. Taban skor dosyadaki " +
         "kayıtlı verilerden deterministik olarak hesaplanmıştır; AI yalnızca yorum yazar.",

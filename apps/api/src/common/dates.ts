@@ -71,6 +71,38 @@ export function endOfWeek(date: Date): Date {
   return endOfDay(addDays(startOfWeek(date), 6));
 }
 
+/**
+ * TÜRKİYE YEREL TAKVİM GÜNÜ (UTC+3, sabit ofset).
+ *
+ * ╔══════════════════════════════════════════════════════════════════════════╗
+ * ║ Sistem baştan sona UTC'dir ve KENDİ İÇİNDE tutarlıdır. Ancak belge       ║
+ * ║ tarihinin referansı VUK/e-Fatura tarafında MÜKELLEFİN YEREL TAKVİMİDİR.  ║
+ * ╚══════════════════════════════════════════════════════════════════════════╝
+ *
+ * Somut sorun (denetim bulgusu 17): fatura numarasının yılı
+ * `issueDate.getUTCFullYear()` ile alınıyordu. 01.01.2027 saat 01:00
+ * (İstanbul) = 2026-12-31T22:00Z → numara `NOM2026…` serisine düşüyordu.
+ * Aynı kayma her gün sınırında da yaşanır: 00:00–03:00 arası kesilen fatura
+ * bir önceki güne yazılır.
+ *
+ * Türkiye 2016'dan beri yaz saati uygulamamaktadır; ofset SABİT +03:00'tür,
+ * bu yüzden IANA veritabanına gerek yoktur ve çevrim tam olarak
+ * belirlenebilir. Dönen `Date`, TR takvim gününün Y/A/G bileşenlerini UTC
+ * alanlarında taşır — yani `getUTCFullYear()` doğrudan TR yılını verir.
+ *
+ * PARA HESABINI ETKİLEMEZ; yalnız BELGE TARİHİNİ etkiler.
+ */
+const TR_UTC_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+export function trCalendarDate(date: Date): Date {
+  return new Date(date.getTime() + TR_UTC_OFFSET_MS);
+}
+
+/** Türkiye yerel takvimine göre yıl — fatura serisi bu yılı kullanır. */
+export function trCalendarYear(date: Date): number {
+  return trCalendarDate(date).getUTCFullYear();
+}
+
 /** 30.08.2026 biçimi — hesap izi metinlerinde kullanılır. */
 export function formatTrDate(date: Date): string {
   const d = String(date.getUTCDate()).padStart(2, "0");

@@ -1,16 +1,30 @@
 "use client";
 
 /**
- * Tenant detayı — sekmeler: Genel · Kullanıcılar · Abonelik · Kullanım · Destek Erişimi · Denetim İzi.
- * KVKK: bu ekranların hiçbirinde müvekkil/dosya/belge içeriği yoktur; yalnız sayaç ve metadata.
- * Tenant ham verisine tek kapı süreli SupportAccessGrant'tir (dört-göz + tenant ADMIN onayı).
+ * Tenant detayı — sekmeler: Genel · Kullanım · Destek Erişimi · Denetim İzi.
+ *
+ * KVKK: bu ekranların hiçbirinde müvekkil, dosya veya belge İÇERİĞİ yoktur; yalnız sayaç
+ * ve üstveri gösterilir. Tenant ham verisine tek kapı süreli SupportAccessGrant'tir
+ * (gerekçe zorunlu, azami 24 saat, PII maskeli, salt-okur). Impersonation YOKTUR.
+ *
+ * Uçlar:
+ *   GET    /tenants/:id
+ *   POST   /tenants/:id/suspend | /activate     (dört-göz → onay talebi)
+ *   GET    /metrics/usage?tenantId=&from=&to=
+ *   GET    /metrics/ai?tenantId=&groupBy=taskType
+ *   GET    /support-access?tenantId=
+ *   POST   /tenants/:id/support-access
+ *   DELETE /support-access/:id
+ *   GET    /audit?tenantId=
  */
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useResource } from "@/lib/useResource";
+import { useListResource, useResource } from "@/lib/useResource";
+import { useMutation } from "@/lib/useMutation";
 import { useAdminSession } from "@/lib/session";
+import { EP } from "@/lib/endpoints";
 import { can, isMasked } from "@/lib/rbac";
 import { PageGate, RoleGate, NoAccessInline } from "@/components/RoleGate";
 import { ApprovalBadge, ApprovalNotice } from "@/components/ApprovalBadge";
@@ -18,57 +32,54 @@ import {
   AI_PROVIDER_TYPE_LABELS,
   AI_PROVIDER_TYPE_TONES,
   AUDIT_ACTION_LABELS,
+  GRANT_DEFAULT_HOURS,
   GRANT_DURATIONS,
+  GRANT_MAX_HOURS,
   GRANT_SCOPES,
   GRANT_SCOPE_LABELS,
   GRANT_SCOPE_SHORT,
   GRANT_SCOPE_TONES,
-  PLAN_CODES,
   PLAN_LABELS,
   PLAN_TONES,
   SUBSCRIPTION_STATUS_LABELS,
   SUBSCRIPTION_STATUS_TONES,
-  fmtBytesMb,
+  daysAgo,
+  fmtBytes,
   fmtCompact,
   fmtDate,
   fmtDateTime,
   fmtMoney,
   fmtNumber,
   fmtPercent,
+  isExpired,
   labelOf,
-  maskEmail,
   remainingLabel,
+  toDateInput,
   toneOf,
 } from "@/lib/labels";
-import {
-  MOCK_AUDIT_LOGS,
-  MOCK_SUPPORT_GRANTS,
-  MOCK_TENANTS,
-  MOCK_TENANT_USERS,
-  MOCK_USAGE,
-  findMockTenant,
-  mockTenantSeries,
-  type AdminSupportGrant,
-  type AdminTenant,
-  type AdminTenantUser,
-} from "@/lib/mock";
+import type {
+  AdminAiMetricRow,
+  AdminAuditEntry,
+  AdminSupportGrant,
+  AdminTenantDetail,
+  AdminUsagePoint,
+} from "@/lib/types";
 import {
   Badge,
-  BarList,
   Button,
   Card,
   ColumnChart,
   DataRow,
-  EmptyState,
+  EndpointMissingNotice,
+  ErrorBox,
   Field,
-  Input,
   InfoBox,
-  MockBadge,
   Modal,
   PageHeader,
-  PendingEndpointNotice,
+  ResourceView,
   Select,
   StatCard,
+  SuccessBox,
   Table,
   Tabs,
   Textarea,
@@ -76,13 +87,13 @@ import {
   type Column,
 } from "@/components/ui";
 
-type TabKey = "genel" | "kullanicilar" | "abonelik" | "kullanim" | "destek" | "denetim";
+type TabKey = "genel" | "kullanim" | "destek" | "denetim";
 
 export default function TenantDetayPage() {
   return (
     <PageGate
       action="tenant.view"
-      hint="Analist rolünde tenant detayı kapalıdır; yalnız plan/segment agregatı görüntülenebilir."
+      hint="Analist rolünde tenant detayı kapalıdır; yalnız plan/durum agregatı görüntülenebilir."
     >
       <TenantDetail />
     </PageGate>
@@ -97,8 +108,7 @@ function TenantDetail() {
   const { role } = useAdminSession();
   const [tab, setTab] = useState<TabKey>("genel");
 
-  const fallback = findMockTenant(id) ?? MOCK_TENANTS[0];
-  const res = useResource<AdminTenant>(`/tenants/${id}`, fallback);
+  const res = useResource<AdminTenantDetail>(id ? EP.tenants.detail(id) : null);
   const t = res.data;
 
   // Analist bu sayfaya erişemez; yine de savunmacı kontrol.
@@ -106,7 +116,8 @@ function TenantDetail() {
     return (
       <Card>
         <InfoBox title="Maskeli rol">
-          Bu rolde tenant detayı görüntülenemez. Yalnız plan/segment agregatı açıktır.
+          Bu rolde tenant detayı görüntülenemez. Müvekkil, dosya ve belge verisi bu role kapalıdır;
+          yalnız plan/segment agregatı açıktır.
         </InfoBox>
       </Card>
     );
@@ -114,8 +125,6 @@ function TenantDetail() {
 
   const tabs: Array<{ key: TabKey; label: string }> = [
     { key: "genel", label: "Genel" },
-    { key: "kullanicilar", label: "Kullanıcılar" },
-    { key: "abonelik", label: "Abonelik" },
     { key: "kullanim", label: "Kullanım" },
     { key: "destek", label: "Destek Erişimi" },
     { key: "denetim", label: "Denetim İzi" },
@@ -124,15 +133,22 @@ function TenantDetail() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={t.name}
-        description={`${t.city} · ${t.barAssociation} · Tenant #${t.code} · Kayıt: ${fmtDate(t.createdAt)}`}
+        title={t?.name ?? "Tenant"}
+        description={
+          t
+            ? `Tenant ${t.id}${t.createdAt ? ` · Kayıt: ${fmtDate(t.createdAt)}` : ""}`
+            : `Tenant ${id}`
+        }
         action={
           <div className="flex flex-wrap items-center gap-2">
-            {res.pending && <MockBadge />}
-            <Badge tone={toneOf(PLAN_TONES, t.plan)}>{labelOf(PLAN_LABELS, t.plan)}</Badge>
-            <Badge tone={toneOf(SUBSCRIPTION_STATUS_TONES, t.status)}>
-              {labelOf(SUBSCRIPTION_STATUS_LABELS, t.status)}
-            </Badge>
+            {t?.planKey && (
+              <Badge tone={toneOf(PLAN_TONES, t.planKey)}>{labelOf(PLAN_LABELS, t.planKey)}</Badge>
+            )}
+            {t?.status && (
+              <Badge tone={toneOf(SUBSCRIPTION_STATUS_TONES, t.status)}>
+                {labelOf(SUBSCRIPTION_STATUS_LABELS, t.status)}
+              </Badge>
+            )}
             <Link href="/tenantlar" className="text-xs text-accent-300 hover:text-accent-200">
               ← Listeye dön
             </Link>
@@ -140,150 +156,207 @@ function TenantDetail() {
         }
       />
 
-      {res.pending && <PendingEndpointNotice endpoint={`/tenants/${id}`} phase="Faz 1" />}
+      <InfoBox title="Bu ekranda ne YOKTUR?">
+        Müvekkil, dosya ve belge <strong>içeriği</strong> panelde hiçbir rolde görüntülenemez;
+        sunucu bu alanları döndürmez. Tenant verisine tek kapı, aşağıdaki{" "}
+        <strong>süreli ve PII maskeli destek erişimi</strong> penceresidir. &quot;Tenant kullanıcısı
+        gibi giriş yap&quot; (impersonation) bilinçli olarak kapsam dışıdır.
+      </InfoBox>
 
-      {t.alert && <WarningBox title="Anomali / uyarı">{t.alert}</WarningBox>}
-
-      <Tabs tabs={tabs} active={tab} onChange={setTab} ariaLabel="Tenant sekmeleri" />
-
-      {tab === "genel" && <GenelTab tenant={t} />}
-      {tab === "kullanicilar" && <KullanicilarTab tenantId={t.id} />}
-      {tab === "abonelik" && <AbonelikTab tenant={t} />}
-      {tab === "kullanim" && <KullanimTab tenant={t} />}
-      {tab === "destek" && <DestekTab tenant={t} />}
-      {tab === "denetim" && <DenetimTab tenant={t} />}
+      <ResourceView
+        loading={res.loading}
+        missing={res.missing}
+        forbidden={res.forbidden}
+        error={res.error}
+        empty={res.loaded && !t}
+        endpoint={EP.tenants.detail(id)}
+        what="Tenant detayı"
+        emptyMessage="Tenant bulunamadı."
+      >
+        {t && (
+          <>
+            <Tabs tabs={tabs} active={tab} onChange={setTab} ariaLabel="Tenant sekmeleri" />
+            {tab === "genel" && <GenelTab tenant={t} onChanged={res.reload} />}
+            {tab === "kullanim" && <KullanimTab tenantId={t.id} />}
+            {tab === "destek" && <DestekTab tenant={t} />}
+            {tab === "denetim" && <DenetimTab tenantId={t.id} />}
+          </>
+        )}
+      </ResourceView>
     </div>
   );
 }
 
 // ---------------------------------------------------------------- Genel
 
-function GenelTab({ tenant }: { tenant: AdminTenant }) {
+function GenelTab({
+  tenant,
+  onChanged,
+}: {
+  tenant: AdminTenantDetail;
+  onChanged: () => void;
+}) {
   const { role } = useAdminSession();
-  const [suspendOpen, setSuspendOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
+  const mutation = useMutation();
+
+  const suspended = tenant.status === "SUSPENDED";
+  const actionKey = suspended ? "tenant.reactivate" : "tenant.suspend";
+  const path = suspended ? EP.tenants.activate(tenant.id) : EP.tenants.suspend(tenant.id);
+
+  async function submit() {
+    const ok = await mutation.run(
+      path,
+      { method: "POST", body: { reason: reason.trim() } },
+      {
+        successMessage: suspended
+          ? "Tenant aktifleştirme işlemi uygulandı."
+          : "Tenant askıya alma işlemi uygulandı.",
+        onSuccess: () => onChanged(),
+      },
+    );
+    if (ok) setReason("");
+  }
 
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Kullanıcı" value={fmtNumber(tenant.users)} hint="koltuk" />
-        <StatCard label="Dosya" value={fmtNumber(tenant.cases)} hint={`${fmtNumber(tenant.documents)} belge`} />
-        <StatCard label="Depolama" value={fmtBytesMb(tenant.storageMb)} />
+        <StatCard label="Kullanıcı" value={fmtNumber(tenant.userCount)} hint={`${fmtNumber(tenant.seats)} koltuk`} />
         <StatCard
-          label="Sağlık skoru"
-          value={`${tenant.healthScore}/100`}
-          tone={tenant.healthScore < 50 ? "red" : tenant.healthScore < 75 ? "yellow" : "green"}
-          hint="churn riski sıralaması"
+          label="Dosya"
+          value={fmtNumber(tenant.caseCount)}
+          hint={`${fmtNumber(tenant.documentCount)} belge`}
         />
+        <StatCard label="Depolama" value={fmtBytes(tenant.storageBytes)} />
+        <StatCard label="AI çağrısı" value={fmtCompact(tenant.aiCallCount)} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="Kimlik ve iletişim">
-          <DataRow label="Tenant kodu">#{tenant.code}</DataRow>
-          <DataRow label="Faturalama e-postası">{tenant.billingEmail}</DataRow>
-          <DataRow label="İl / Baro">
-            {tenant.city} · {tenant.barAssociation}
+        <Card title="Kimlik ve abonelik">
+          <DataRow label="Tenant kimliği">
+            <span className="font-mono text-xs">{tenant.id}</span>
           </DataRow>
-          <DataRow label="Kayıt / onboarding">
-            {fmtDate(tenant.createdAt)} → {fmtDate(tenant.onboardedAt)}
+          <DataRow label="Büro adı">{tenant.name}</DataRow>
+          <DataRow label="Plan">
+            {tenant.planKey ? labelOf(PLAN_LABELS, tenant.planKey) : "—"}
           </DataRow>
-          <DataRow label="Son aktivite">{fmtDateTime(tenant.lastActivityAt)}</DataRow>
-          <DataRow label="Deneme bitişi">
-            {tenant.trialEndsAt ? fmtDate(tenant.trialEndsAt) : "—"}
+          <DataRow label="Durum">
+            {tenant.status ? labelOf(SUBSCRIPTION_STATUS_LABELS, tenant.status) : "—"}
           </DataRow>
+          <DataRow label="Dönem">
+            {tenant.currentPeriodStart || tenant.currentPeriodEnd
+              ? `${fmtDate(tenant.currentPeriodStart)} → ${fmtDate(tenant.currentPeriodEnd)}`
+              : "—"}
+          </DataRow>
+          <DataRow label="Deneme bitişi">{fmtDate(tenant.trialEndsAt)}</DataRow>
+          <DataRow label="MRR katkısı">{fmtMoney(tenant.mrr)}</DataRow>
+          <DataRow label="Kayıt tarihi">{fmtDate(tenant.createdAt)}</DataRow>
         </Card>
 
         <Card
           title="AI yapılandırması"
-          subtitle="Yalnız metadata — API anahtarı hiçbir role, maskeli dahi gösterilmez."
+          subtitle="Yalnız üstveri — API anahtarı hiçbir role, maskeli dahi gösterilmez."
         >
           {!can(role, "ai.provider_config") ? (
             <NoAccessInline action="ai.provider_config" />
           ) : (
             <>
-              <DataRow label="Sağlayıcı tipi">
-                <Badge tone={toneOf(AI_PROVIDER_TYPE_TONES, tenant.providerType)}>
-                  {labelOf(AI_PROVIDER_TYPE_LABELS, tenant.providerType)}
-                </Badge>
+              <DataRow label="AI politikası">{tenant.aiPolicy ?? "—"}</DataRow>
+              <DataRow label="Otomatik maskeleme rızası">
+                {tenant.autoMaskConsent === null || tenant.autoMaskConsent === undefined
+                  ? "—"
+                  : tenant.autoMaskConsent
+                    ? "Verildi"
+                    : "Verilmedi"}
               </DataRow>
-              <DataRow label="Model">
-                <span className="font-mono text-xs">{tenant.model}</span>
-              </DataRow>
-              <DataRow label="Anahtar durumu">
-                {tenant.hasApiKey ? (
-                  <Badge tone="green">hasApiKey: true</Badge>
-                ) : (
-                  <Badge tone="red">hasApiKey: false</Badge>
-                )}
-              </DataRow>
-              <DataRow label="AI çağrısı (30g)">{fmtCompact(tenant.aiCalls30d)}</DataRow>
+              {(tenant.aiProviders ?? []).length === 0 ? (
+                <p className="mt-3 text-xs text-steel-500">
+                  Sağlayıcı yapılandırması dönmedi ya da tanımlı değil.
+                </p>
+              ) : (
+                <ul className="mt-3 space-y-2">
+                  {(tenant.aiProviders ?? []).map((p) => (
+                    <li
+                      key={p.id}
+                      className="rounded-lg border border-steel-800 bg-steel-950/60 px-3 py-2"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge tone={toneOf(AI_PROVIDER_TYPE_TONES, p.providerType)}>
+                          {labelOf(AI_PROVIDER_TYPE_LABELS, p.providerType)}
+                        </Badge>
+                        {p.hasApiKey ? (
+                          <Badge tone="green">hasApiKey: true</Badge>
+                        ) : (
+                          <Badge tone="red">hasApiKey: false</Badge>
+                        )}
+                        {p.isActive === false && <Badge tone="gray">pasif</Badge>}
+                      </div>
+                      <p className="mt-1 font-mono text-xs text-steel-400">{p.model ?? "—"}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
               <p className="mt-3 text-xs text-steel-500">
                 <code className="font-mono">encryptedApiKey</code> hiçbir{" "}
-                <code className="font-mono">/api/v1/admin</code> yanıtında yer almaz;{" "}
-                <code className="font-mono">MASTER_ENCRYPTION_KEY</code> panel servisinin ortamında
-                bulunmaz.
+                <code className="font-mono">/api/admin/v1</code> yanıtında yer almaz;{" "}
+                <code className="font-mono">MASTER_ENCRYPTION_KEY</code> panel bağlamında
+                çözülmez.
               </p>
             </>
           )}
         </Card>
       </div>
 
-      <Card title="İşlemler" subtitle="Her mutasyon gerekçe alanıyla PlatformAuditLog'a yazılır.">
+      <Card
+        title="Yaşam döngüsü işlemleri"
+        subtitle="Her mutasyon gerekçe alanıyla PlatformAuditLog'a yazılır."
+      >
         <div className="flex flex-wrap items-center gap-3">
-          <RoleGate action="tenant.suspend" mutation mode="notice">
+          <RoleGate action={actionKey} mutation mode="notice">
             <span className="inline-flex items-center gap-2">
               <Button
-                variant={tenant.status === "SUSPENDED" ? "secondary" : "danger"}
-                onClick={() => setSuspendOpen(true)}
+                variant={suspended ? "secondary" : "danger"}
+                onClick={() => {
+                  mutation.reset();
+                  setOpen(true);
+                }}
               >
-                {tenant.status === "SUSPENDED" ? "Askıdan çıkar" : "Askıya al"}
+                {suspended ? "Askıdan çıkar" : "Askıya al"}
               </Button>
-              <ApprovalBadge action="tenant.suspend" />
-            </span>
-          </RoleGate>
-
-          <RoleGate action="tenant.plan_change" mutation>
-            <Button variant="secondary">Plan değiştir</Button>
-          </RoleGate>
-
-          <RoleGate action="tenant.create" mutation>
-            <Button variant="secondary">Deneme süresini uzat</Button>
-          </RoleGate>
-
-          <RoleGate action="tenant.delete" mutation>
-            <span className="inline-flex items-center gap-2">
-              <Button variant="danger" onClick={() => setDeleteOpen(true)}>
-                Kalıcı sil / veri imhası
-              </Button>
-              <ApprovalBadge action="tenant.delete" />
+              <ApprovalBadge action={actionKey} />
             </span>
           </RoleGate>
         </div>
+        {mutation.success && (
+          <div className="mt-4">
+            <SuccessBox message={mutation.success} />
+          </div>
+        )}
         <p className="mt-4 text-xs text-steel-500">
-          &quot;Tenant kullanıcısı gibi giriş yap&quot; (impersonation) bilinçli olarak kapsam
-          dışıdır ve yazılmayacaktır.
+          Plan değişikliği ve iptal <Link href="/abonelikler" className="text-accent-300 underline">Abonelikler</Link>{" "}
+          ekranından yapılır; iade akışı{" "}
+          <Link href="/odemeler" className="text-accent-300 underline">Ödemeler</Link> ekranındadır.
         </p>
       </Card>
 
       <Modal
-        open={suspendOpen}
-        onClose={() => setSuspendOpen(false)}
-        title={tenant.status === "SUSPENDED" ? "Askıdan çıkar" : "Tenant askıya al"}
-        subtitle={`POST /tenants/${tenant.id}/${tenant.status === "SUSPENDED" ? "reactivate" : "suspend"}`}
+        open={open}
+        onClose={() => setOpen(false)}
+        title={suspended ? "Tenant aktifleştir" : "Tenant askıya al"}
+        subtitle={`POST /api/admin/v1${path}`}
       >
         <div className="space-y-4">
-          <ApprovalNotice action="tenant.suspend" />
-          <PendingEndpointNotice
-            endpoint={`/tenants/${tenant.id}/suspend`}
-            phase="Faz 1"
-            method="POST"
-          />
+          <ApprovalNotice action={actionKey} />
           <WarningBox>
             Askıya alma dunning zincirinin son adımıdır. Askıdaki tenant kullanıcıları girişte
-            Türkçe açıklamalı 403 alır; <strong>veri silinmez</strong>, işlem geri alınabilir.
+            Türkçe açıklamalı hata alır; <strong>veri silinmez</strong> ve işlem geri alınabilir.
           </WarningBox>
-          <Field label="Gerekçe" required hint="Zorunlu — PlatformAuditLog'a ve onay talebine yazılır.">
+          <Field
+            label="Gerekçe"
+            required
+            hint="Zorunlu — hem onay talebine hem PlatformAuditLog'a yazılır."
+          >
             <Textarea
               rows={3}
               value={reason}
@@ -291,171 +364,21 @@ function GenelTab({ tenant }: { tenant: AdminTenant }) {
               placeholder="Örn. ödeme temerrüdü — 3 başarısız deneme, dunning 2. adım tamamlandı."
             />
           </Field>
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setSuspendOpen(false)}>
-              Vazgeç
-            </Button>
-            <Button variant="danger" disabled title="Uç henüz uygulanmadı">
-              Onaya gönder
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        open={deleteOpen}
-        onClose={() => setDeleteOpen(false)}
-        title="Kalıcı silme / veri imhası"
-        subtitle={`DELETE /tenants/${tenant.id} — iki SUPER_ADMIN onayı`}
-      >
-        <div className="space-y-4">
-          <ApprovalNotice
-            action="tenant.delete"
-            extra="Bu işlem iki ayrı SUPER_ADMIN onayı gerektirir."
-          />
-          <PendingEndpointNotice endpoint={`/tenants/${tenant.id}`} phase="Faz 1" method="DELETE" />
-          <WarningBox>
-            Silme soft-delete + anonimleştirme kuyruğudur. Veri ihracı bağlantısı sürelidir; kalıcı
-            silme tarihi yasal saklama süresi sonunda planlanır ve tenant kaydında görünür.
-          </WarningBox>
-          <Field label="Gerekçe" required>
-            <Textarea rows={3} placeholder="Kapatma talebi referansı, saklama süresi bitiş tarihi…" />
-          </Field>
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setDeleteOpen(false)}>
-              Vazgeç
-            </Button>
-            <Button variant="danger" disabled title="Uç henüz uygulanmadı">
-              Onaya gönder
-            </Button>
-          </div>
-        </div>
-      </Modal>
-    </div>
-  );
-}
-
-// -------------------------------------------------------- Kullanıcılar
-
-function KullanicilarTab({ tenantId }: { tenantId: string }) {
-  const res = useResource<AdminTenantUser[]>(`/tenants/${tenantId}/users`, [...MOCK_TENANT_USERS]);
-
-  const columns: Array<Column<AdminTenantUser>> = [
-    { key: "name", header: "Ad Soyad", render: (u) => <span className="text-steel-100">{u.fullName}</span> },
-    {
-      key: "email",
-      header: "E-posta",
-      render: (u) => <span className="font-mono text-xs text-steel-400">{maskEmail(u.email)}</span>,
-    },
-    { key: "role", header: "Rol", render: (u) => <Badge tone="steel">{u.role}</Badge> },
-    { key: "status", header: "Durum", render: (u) => <Badge tone={u.status === "AKTIF" ? "green" : "gray"}>{u.status}</Badge> },
-    { key: "last", header: "Son giriş", render: (u) => fmtDateTime(u.lastLoginAt) },
-  ];
-
-  return (
-    <div className="space-y-4">
-      {res.pending && <PendingEndpointNotice endpoint={`/tenants/${tenantId}/users`} phase="Faz 1" />}
-      <InfoBox>
-        Yalnız kullanıcı <strong>metadata&apos;sı</strong> gösterilir (rol, durum, son giriş).
-        E-posta adresleri maskelidir; kullanıcı içeriği, notları ve dosyaları görünmez.
-      </InfoBox>
-      <Card title={`${res.data.length} kullanıcı`} action={res.pending ? <MockBadge /> : undefined}>
-        <Table columns={columns} rows={res.data} rowKey={(u) => u.id} dense />
-      </Card>
-    </div>
-  );
-}
-
-// ------------------------------------------------------------ Abonelik
-
-function AbonelikTab({ tenant }: { tenant: AdminTenant }) {
-  const { role } = useAdminSession();
-  const [planOpen, setPlanOpen] = useState(false);
-
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="Abonelik">
-          <DataRow label="Plan">
-            <Badge tone={toneOf(PLAN_TONES, tenant.plan)}>{labelOf(PLAN_LABELS, tenant.plan)}</Badge>
-          </DataRow>
-          <DataRow label="Durum">
-            <Badge tone={toneOf(SUBSCRIPTION_STATUS_TONES, tenant.status)}>
-              {labelOf(SUBSCRIPTION_STATUS_LABELS, tenant.status)}
-            </Badge>
-          </DataRow>
-          <DataRow label="MRR katkısı">{fmtMoney(tenant.mrr)}</DataRow>
-          <DataRow label="Açık bakiye">
-            {tenant.openBalance > 0 ? (
-              <span className="text-red-300">{fmtMoney(tenant.openBalance)}</span>
-            ) : (
-              "—"
-            )}
-          </DataRow>
-          <DataRow label="Deneme bitişi">
-            {tenant.trialEndsAt ? fmtDate(tenant.trialEndsAt) : "—"}
-          </DataRow>
-        </Card>
-
-        <Card title="Finans işlemleri">
-          {can(role, "payment.view") ? (
-            <div className="space-y-3">
-              <p className="text-sm text-steel-300">
-                Ödeme kayıtları ve faturalar Ödemeler ekranında filtrelenebilir.
-              </p>
-              <Link href="/odemeler" className="text-sm text-accent-300 hover:text-accent-200">
-                Ödemeler ekranına git →
-              </Link>
-            </div>
-          ) : (
-            <NoAccessInline action="payment.view" />
+          {mutation.missing && (
+            <EndpointMissingNotice endpoint={path} method="POST" what="Tenant durum değişikliği" />
           )}
-          <div className="mt-4 flex flex-wrap gap-2">
-            <RoleGate action="tenant.plan_change" mutation mode="notice">
-              <Button variant="secondary" onClick={() => setPlanOpen(true)}>
-                Plan değiştir
-              </Button>
-            </RoleGate>
-            <RoleGate action="tenant.custom_price" mutation>
-              <span className="inline-flex items-center gap-2">
-                <Button variant="secondary">Özel fiyat tanımla</Button>
-                <ApprovalBadge action="tenant.custom_price" />
-              </span>
-            </RoleGate>
-          </div>
-        </Card>
-      </div>
-
-      <Modal
-        open={planOpen}
-        onClose={() => setPlanOpen(false)}
-        title="Plan değişikliği"
-        subtitle="POST /subscriptions/:id/change-plan"
-      >
-        <div className="space-y-4">
-          <PendingEndpointNotice endpoint="/subscriptions/:id/change-plan" phase="Faz 3" method="POST" />
-          <Field label="Yeni plan" required>
-            <Select defaultValue={tenant.plan}>
-              {PLAN_CODES.map((p) => (
-                <option key={p} value={p}>
-                  {PLAN_LABELS[p]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Gerekçe" required>
-            <Textarea rows={3} placeholder="Yükseltme talebi, sözleşme referansı…" />
-          </Field>
-          <InfoBox>
-            Plan fiyat değişikliği mevcut aboneleri cari dönem sonuna kadar etkilemez; proration
-            önizlemesi işlem detayına yazılır.
-          </InfoBox>
+          {mutation.error && <ErrorBox message={mutation.error} />}
+          {mutation.success && <SuccessBox message={mutation.success} />}
           <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setPlanOpen(false)}>
-              Vazgeç
+            <Button variant="secondary" onClick={() => setOpen(false)}>
+              Kapat
             </Button>
-            <Button disabled title="Uç henüz uygulanmadı">
-              Uygula
+            <Button
+              variant={suspended ? "primary" : "danger"}
+              disabled={reason.trim().length === 0 || mutation.loading}
+              onClick={() => void submit()}
+            >
+              {mutation.loading ? "Gönderiliyor…" : "Onaya gönder"}
             </Button>
           </div>
         </div>
@@ -464,15 +387,30 @@ function AbonelikTab({ tenant }: { tenant: AdminTenant }) {
   );
 }
 
-// ------------------------------------------------------------ Kullanım
+// ------------------------------------------------------------- Kullanım
 
-function KullanimTab({ tenant }: { tenant: AdminTenant }) {
+function KullanimTab({ tenantId }: { tenantId: string }) {
   const { role } = useAdminSession();
-  const res = useResource(`/tenants/${tenant.id}/usage`, mockTenantSeries(tenant.code.length));
+  const from = toDateInput(daysAgo(29));
+  const to = toDateInput(new Date());
 
-  const rows = useMemo(
-    () => MOCK_USAGE.filter((u) => u.tenantId === tenant.id),
-    [tenant.id],
+  const usage = useListResource<AdminUsagePoint>(EP.metrics.usage, {
+    query: { tenantId, from, to },
+  });
+  const ai = useListResource<AdminAiMetricRow>(EP.metrics.ai, {
+    query: { tenantId, groupBy: "taskType" },
+  });
+
+  const series = useMemo(
+    () =>
+      usage.data
+        .slice()
+        .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+        .map((p) => ({
+          label: new Date(p.date).toLocaleDateString("tr-TR", { day: "2-digit", month: "short" }),
+          value: Number(p.aiCallCount ?? 0),
+        })),
+    [usage.data],
   );
 
   if (!can(role, "ai.analytics.tenant")) {
@@ -483,22 +421,47 @@ function KullanimTab({ tenant }: { tenant: AdminTenant }) {
     );
   }
 
-  const columns: Array<Column<(typeof MOCK_USAGE)[number]>> = [
-    { key: "task", header: "Görev tipi", render: (r) => <span className="font-mono text-xs">{r.taskType}</span> },
-    { key: "provider", header: "Sağlayıcı", render: (r) => labelOf(AI_PROVIDER_TYPE_LABELS, r.providerType) },
-    { key: "model", header: "Model", render: (r) => <span className="font-mono text-xs">{r.model}</span> },
+  const columns: Array<Column<AdminAiMetricRow>> = [
+    {
+      key: "task",
+      header: "Görev tipi",
+      render: (r) => (
+        <span className="font-mono text-xs">{r.taskType ?? r.key ?? r.label ?? "—"}</span>
+      ),
+    },
+    {
+      key: "provider",
+      header: "Sağlayıcı",
+      render: (r) => (r.providerType ? labelOf(AI_PROVIDER_TYPE_LABELS, r.providerType) : "—"),
+    },
+    {
+      key: "model",
+      header: "Model",
+      render: (r) => <span className="font-mono text-xs">{r.model ?? "—"}</span>,
+    },
     { key: "calls", header: "Çağrı", align: "right", render: (r) => fmtNumber(r.calls) },
     {
       key: "tokens",
       header: "Token (girdi/çıktı)",
       align: "right",
       render: (r) =>
-        r.noTokenInfoCalls > 0 && r.inputTokens === 0 ? (
+        r.inputTokens === null || r.inputTokens === undefined ? (
           <span className="text-steel-500">token bilgisi yok</span>
         ) : (
           <span className="font-mono text-xs">
             {fmtCompact(r.inputTokens)} / {fmtCompact(r.outputTokens)}
           </span>
+        ),
+    },
+    {
+      key: "unknown",
+      header: "Token bilgisi yok",
+      align: "right",
+      render: (r) =>
+        r.unknownTokenCalls ? (
+          <Badge tone="yellow">{fmtNumber(r.unknownTokenCalls)}</Badge>
+        ) : (
+          <span className="text-steel-600">—</span>
         ),
     },
     { key: "err", header: "Hata", align: "right", render: (r) => fmtPercent(r.errorRatePct) },
@@ -507,25 +470,45 @@ function KullanimTab({ tenant }: { tenant: AdminTenant }) {
 
   return (
     <div className="space-y-4">
-      {res.pending && <PendingEndpointNotice endpoint={`/tenants/${tenant.id}/usage`} phase="Faz 2" />}
-      <Card title="Günlük AI çağrısı (14 gün)" subtitle="Kaynak: UsageSnapshot (gece toplu işi) + Redis 'bugün' sayaçları">
-        <ColumnChart points={res.data} ariaLabel="Tenant günlük AI çağrı sayısı" />
-      </Card>
       <Card
-        title="Görev tipi × sağlayıcı × model"
-        subtitle="Panel token sayar, fiyatlamaz — 'AI maliyeti (TL)' kolonu yoktur (BYO-LLM)."
-        action={res.pending ? <MockBadge /> : undefined}
+        title="Günlük AI çağrısı (30 gün)"
+        subtitle="Kaynak: GET /metrics/usage — UsageSnapshot"
       >
-        {rows.length === 0 ? (
-          <EmptyState message="Bu tenant için kayıtlı AI kullanımı bulunmuyor." />
-        ) : (
+        <ResourceView
+          loading={usage.loading}
+          missing={usage.missing}
+          forbidden={usage.forbidden}
+          error={usage.error}
+          empty={usage.loaded && series.length === 0}
+          endpoint={EP.metrics.usage}
+          what="Tenant kullanım serisi"
+          emptyMessage="Bu aralıkta kullanım kaydı yok."
+        >
+          <ColumnChart points={series} ariaLabel="Tenant günlük AI çağrı sayısı" />
+        </ResourceView>
+      </Card>
+
+      <Card
+        title="Görev tipine göre kırılım"
+        subtitle="Panel token sayar, fiyatlamaz — 'AI maliyeti (TL)' kolonu YOKTUR (BYO-LLM)."
+      >
+        <ResourceView
+          loading={ai.loading}
+          missing={ai.missing}
+          forbidden={ai.forbidden}
+          error={ai.error}
+          empty={ai.empty}
+          endpoint={EP.metrics.ai}
+          what="AI kırılımı"
+          emptyMessage="Bu tenant için kayıtlı AI kullanımı bulunmuyor."
+        >
           <Table
             columns={columns}
-            rows={rows}
-            rowKey={(r) => `${r.taskType}-${r.model}`}
+            rows={ai.data}
+            rowKey={(r, i) => `${r.taskType ?? r.key ?? i}-${r.model ?? ""}-${i}`}
             dense
           />
-        )}
+        </ResourceView>
       </Card>
     </div>
   );
@@ -533,41 +516,79 @@ function KullanimTab({ tenant }: { tenant: AdminTenant }) {
 
 // -------------------------------------------------------- Destek erişimi
 
-function DestekTab({ tenant }: { tenant: AdminTenant }) {
+function DestekTab({ tenant }: { tenant: AdminTenantDetail }) {
   const { role } = useAdminSession();
   const [open, setOpen] = useState(false);
-  const [scope, setScope] = useState<string>("METADATA");
-  const [hours, setHours] = useState<number>(4);
+  const [scope, setScope] = useState<string>(GRANT_SCOPES[0]);
+  const [hours, setHours] = useState<number>(GRANT_DEFAULT_HOURS);
   const [reason, setReason] = useState("");
 
-  const res = useResource<AdminSupportGrant[]>("/support-grants", [...MOCK_SUPPORT_GRANTS], {
+  const res = useListResource<AdminSupportGrant>(EP.supportAccess.list, {
     query: { tenantId: tenant.id },
   });
+  const create = useMutation();
+  const revoke = useMutation();
 
-  const grants = res.data.filter((g) => g.tenantCode === tenant.code || res.pending);
+  const grants = useMemo(
+    () =>
+      res.data
+        .slice()
+        .sort((a, b) => String(b.grantedAt).localeCompare(String(a.grantedAt))),
+    [res.data],
+  );
+
+  async function submit() {
+    const ok = await create.run(
+      EP.tenants.supportAccess(tenant.id),
+      { method: "POST", body: { reason: reason.trim(), scope, hours } },
+      {
+        successMessage: "Destek erişim penceresi açıldı.",
+        onSuccess: () => res.reload(),
+      },
+    );
+    if (ok) {
+      setReason("");
+      res.reload();
+    }
+  }
+
+  async function doRevoke(id: string) {
+    await revoke.run(
+      EP.supportAccess.revoke(id),
+      { method: "DELETE" },
+      { successMessage: "Erişim penceresi iptal edildi.", onSuccess: () => res.reload() },
+    );
+    res.reload();
+  }
 
   const columns: Array<Column<AdminSupportGrant>> = [
-    { key: "user", header: "Personel", render: (g) => <span className="font-mono text-xs">{g.platformUserEmail}</span> },
+    {
+      key: "user",
+      header: "Personel",
+      render: (g) => (
+        <span className="font-mono text-xs">{g.platformUserEmail ?? g.platformUserId}</span>
+      ),
+    },
     {
       key: "scope",
       header: "Kapsam",
       render: (g) => (
-        <Badge tone={toneOf(GRANT_SCOPE_TONES, g.scope)}>{labelOf(GRANT_SCOPE_SHORT, g.scope)}</Badge>
+        <Badge tone={toneOf(GRANT_SCOPE_TONES, g.scope)}>
+          {labelOf(GRANT_SCOPE_SHORT, g.scope)}
+        </Badge>
       ),
     },
-    { key: "reason", header: "Gerekçe", render: (g) => <span className="text-xs text-steel-300">{g.reason}</span> },
     {
-      key: "tenantApproved",
-      header: "Tenant onayı",
-      render: (g) =>
-        g.tenantApproved ? <Badge tone="green">Onaylı</Badge> : <Badge tone="yellow">Bekliyor</Badge>,
+      key: "reason",
+      header: "Gerekçe",
+      render: (g) => <span className="text-xs text-steel-300">{g.reason}</span>,
     },
     {
       key: "window",
       header: "Pencere",
       render: (g) => (
         <div className="text-xs">
-          <p className="text-steel-200">{fmtDateTime(g.startsAt)}</p>
+          <p className="text-steel-200">{fmtDateTime(g.grantedAt)}</p>
           <p className="text-steel-500">
             {g.revokedAt
               ? `Erken iptal: ${fmtDateTime(g.revokedAt)}`
@@ -576,45 +597,96 @@ function DestekTab({ tenant }: { tenant: AdminTenant }) {
         </div>
       ),
     },
-    { key: "views", header: "Görüntüleme", align: "right", render: (g) => fmtNumber(g.viewCount) },
+    {
+      key: "state",
+      header: "Durum",
+      render: (g) =>
+        g.revokedAt ? (
+          <Badge tone="gray">İptal edildi</Badge>
+        ) : isExpired(g.expiresAt) ? (
+          <Badge tone="steel">Süresi doldu</Badge>
+        ) : (
+          <Badge tone="green">Aktif</Badge>
+        ),
+    },
+    {
+      key: "actions",
+      header: "",
+      align: "right",
+      render: (g) => {
+        const active = !g.revokedAt && !isExpired(g.expiresAt);
+        if (!active) return null;
+        return (
+          <RoleGate action="support_grant.revoke" mutation>
+            <Button
+              size="sm"
+              variant="danger"
+              disabled={revoke.loading}
+              onClick={() => void doRevoke(g.id)}
+            >
+              İptal et
+            </Button>
+          </RoleGate>
+        );
+      },
+    },
   ];
 
   return (
     <div className="space-y-4">
-      {res.pending && <PendingEndpointNotice endpoint="/support-grants" phase="Faz 2" />}
-
       <InfoBox title="Destek erişimi nasıl çalışır?">
-        Impersonation yoktur. Tenant verisine tek kapı süreli erişim penceresidir: tenant ADMIN
-        onayı (veya yasal zorunluluk istisnası) + dört-göz onayı → varsayılan 4 saat, azami 24 saat
-        → kapsam sınırlı → <strong>salt-okur</strong> (hiçbir mutasyon ucu çalışmaz) → PII her
-        kapsamda maskeli (TCKN, telefon, IBAN) → belge indirme kapalı. Her sayfa görüntüleme hem
-        PlatformAuditLog&apos;a hem tenant&apos;ın kendi AuditLog&apos;una{" "}
-        <code className="font-mono text-xs">PLATFORM_DESTEK_ERISIMI</code> olarak yazılır.
+        <strong>Impersonation yoktur.</strong> Tenant verisine tek kapı süreli, kapsamı sınırlı ve{" "}
+        <strong>PII maskeli salt-okur</strong> erişim penceresidir: gerekçe zorunlu → varsayılan{" "}
+        {GRANT_DEFAULT_HOURS} saat, azami {GRANT_MAX_HOURS} saat → süre dolunca erişim
+        kendiliğinden kapanır → hiçbir mutasyon ucu çalışmaz. Pencere hem{" "}
+        <code className="font-mono text-xs">PlatformAuditLog</code>&apos;a hem tenant&apos;ın kendi{" "}
+        <code className="font-mono text-xs">AuditLog</code>&apos;una yazılır.
       </InfoBox>
+
+      {revoke.missing && (
+        <EndpointMissingNotice
+          endpoint="/support-access/:id"
+          method="DELETE"
+          what="Erişim iptali"
+        />
+      )}
+      {revoke.error && <ErrorBox message={revoke.error} />}
+      {revoke.success && <SuccessBox message={revoke.success} />}
 
       <Card
         title="Erişim kayıtları"
         subtitle="Aktif ve geçmiş SupportAccessGrant kayıtları"
         action={
-          <div className="flex items-center gap-2">
-            {res.pending && <MockBadge />}
-            <RoleGate action="support_grant.request" mutation mode="notice">
-              <span className="inline-flex items-center gap-2">
-                <Button onClick={() => setOpen(true)}>Erişim talebi aç</Button>
-                <ApprovalBadge action="support_grant.request" />
-              </span>
-            </RoleGate>
-          </div>
+          <RoleGate action="support_grant.request" mutation mode="notice">
+            <span className="inline-flex items-center gap-2">
+              <Button
+                onClick={() => {
+                  create.reset();
+                  setOpen(true);
+                }}
+              >
+                Erişim talebi aç
+              </Button>
+              <ApprovalBadge action="support_grant.request" />
+            </span>
+          </RoleGate>
         }
       >
-        {grants.length === 0 ? (
-          <EmptyState message="Bu tenant için destek erişim kaydı yok." />
-        ) : (
+        <ResourceView
+          loading={res.loading}
+          missing={res.missing}
+          forbidden={res.forbidden}
+          error={res.error}
+          empty={res.empty}
+          endpoint={EP.supportAccess.list}
+          what="Destek erişim kayıtları"
+          emptyMessage="Bu tenant için destek erişim kaydı yok."
+        >
           <Table columns={columns} rows={grants} rowKey={(g) => g.id} dense />
-        )}
-        {can(role, "support_grant.revoke") && grants.some((g) => !g.revokedAt) && (
+        </ResourceView>
+        {!can(role, "support_grant.revoke") && grants.length > 0 && (
           <p className="mt-3 text-xs text-steel-500">
-            Aktif pencereler erken iptal edilebilir (PATCH /support-grants/:id/revoke).
+            Erken iptal yetkisi rolünüzde yok; iptal düğmesi gösterilmez.
           </p>
         )}
       </Card>
@@ -623,17 +695,20 @@ function DestekTab({ tenant }: { tenant: AdminTenant }) {
         open={open}
         onClose={() => setOpen(false)}
         title="Destek erişim penceresi aç"
-        subtitle={`POST /support-grants — ${tenant.name}`}
+        subtitle={`POST /api/admin/v1${EP.tenants.supportAccess(tenant.id)}`}
         wide
       >
         <div className="space-y-4">
           <ApprovalNotice
             action="support_grant.request"
-            extra="Ayrıca tenant ADMIN'inin uygulama içi onayı gerekir; yasal zorunluluk istisnası ayrıca loglanır."
+            extra="Pencere açıldığında tenant'ın kendi denetim izine de kayıt düşer."
           />
-          <PendingEndpointNotice endpoint="/support-grants" phase="Faz 2" method="POST" />
 
-          <Field label="Kapsam" required hint="Varsayılan METADATA; TAM_OKUMA yalnız tenant onayıyla.">
+          <Field
+            label="Kapsam"
+            required
+            hint="Varsayılan SADECE_ÜSTVERİ. İçerik kapsamında dahi PII maskesi kaldırılamaz."
+          >
             <Select value={scope} onChange={(e) => setScope(e.target.value)}>
               {GRANT_SCOPES.map((s) => (
                 <option key={s} value={s}>
@@ -643,7 +718,11 @@ function DestekTab({ tenant }: { tenant: AdminTenant }) {
             </Select>
           </Field>
 
-          <Field label="Süre" required hint="Varsayılan 4 saat, azami 24 saat. Süre dolunca erişim kendiliğinden kapanır.">
+          <Field
+            label="Süre"
+            required
+            hint={`Varsayılan ${GRANT_DEFAULT_HOURS} saat, azami ${GRANT_MAX_HOURS} saat. Süre dolunca erişim kendiliğinden kapanır.`}
+          >
             <Select value={String(hours)} onChange={(e) => setHours(Number(e.target.value))}>
               {GRANT_DURATIONS.map((d) => (
                 <option key={d.hours} value={d.hours}>
@@ -671,16 +750,31 @@ function DestekTab({ tenant }: { tenant: AdminTenant }) {
           )}
 
           <WarningBox>
-            Bu pencere salt-okurdur. PII (TCKN, telefon, IBAN) her kapsamda maskelidir ve maskeleme
-            kaldırılamaz; belge indirme kapalıdır.
+            Bu pencere <strong>salt-okurdur</strong>. PII (TCKN, telefon, IBAN) her kapsamda
+            maskelidir ve maskeleme kaldırılamaz; belge indirme kapalıdır. Impersonation yoktur.
           </WarningBox>
+
+          {create.missing && (
+            <EndpointMissingNotice
+              endpoint={EP.tenants.supportAccess(tenant.id)}
+              method="POST"
+              what="Destek erişim talebi"
+            />
+          )}
+          {create.error && <ErrorBox message={create.error} />}
+          {create.success && <SuccessBox message={create.success} />}
 
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setOpen(false)}>
-              Vazgeç
+              Kapat
             </Button>
-            <Button disabled={reason.trim().length === 0} title="Uç henüz uygulanmadı">
-              Onaya gönder ({hours} saat · {labelOf(GRANT_SCOPE_SHORT, scope)})
+            <Button
+              disabled={reason.trim().length === 0 || hours > GRANT_MAX_HOURS || create.loading}
+              onClick={() => void submit()}
+            >
+              {create.loading
+                ? "Gönderiliyor…"
+                : `Onaya gönder (${hours} saat · ${labelOf(GRANT_SCOPE_SHORT, scope)})`}
             </Button>
           </div>
         </div>
@@ -691,13 +785,11 @@ function DestekTab({ tenant }: { tenant: AdminTenant }) {
 
 // ------------------------------------------------------------- Denetim
 
-function DenetimTab({ tenant }: { tenant: AdminTenant }) {
+function DenetimTab({ tenantId }: { tenantId: string }) {
   const { role } = useAdminSession();
-
-  const rows = useMemo(
-    () => MOCK_AUDIT_LOGS.filter((l) => l.targetTenantCode === tenant.code),
-    [tenant.code],
-  );
+  const res = useListResource<AdminAuditEntry>(can(role, "audit.view") ? EP.audit : null, {
+    query: { tenantId, limit: 100 },
+  });
 
   if (!can(role, "audit.view")) {
     return (
@@ -707,45 +799,47 @@ function DenetimTab({ tenant }: { tenant: AdminTenant }) {
     );
   }
 
-  const columns: Array<Column<(typeof MOCK_AUDIT_LOGS)[number]>> = [
+  const columns: Array<Column<AdminAuditEntry>> = [
     { key: "at", header: "Tarih", render: (l) => fmtDateTime(l.createdAt) },
-    { key: "user", header: "Personel", render: (l) => <span className="font-mono text-xs">{l.platformUserEmail}</span> },
-    { key: "role", header: "Rol", render: (l) => <Badge tone="steel">{l.role}</Badge> },
+    {
+      key: "user",
+      header: "Personel",
+      render: (l) => (
+        <span className="font-mono text-xs">{l.platformUserEmail ?? l.platformUserId ?? "—"}</span>
+      ),
+    },
+    {
+      key: "role",
+      header: "Rol",
+      render: (l) => (l.platformUserRole ? <Badge tone="steel">{l.platformUserRole}</Badge> : "—"),
+    },
     { key: "action", header: "Aksiyon", render: (l) => labelOf(AUDIT_ACTION_LABELS, l.action) },
-    { key: "detail", header: "Detay", render: (l) => <span className="text-xs text-steel-400">{l.detail}</span> },
+    {
+      key: "detail",
+      header: "Detay",
+      render: (l) => <span className="text-xs text-steel-400">{l.detail ?? "—"}</span>,
+    },
   ];
 
   return (
     <div className="space-y-4">
       <InfoBox>
-        Bu tenant&apos;a yapılan platform işlemleri. PlatformAuditLog append-only&apos;dir;
-        uygulama DB rolünde UPDATE/DELETE yetkisi yoktur ve kayıtlar en az 10 yıl saklanır.
+        Bu tenant&apos;a yapılan platform işlemleri. PlatformAuditLog append-only&apos;dir; kiracı
+        silinse dahi iz kalır (tenantId alanında FK yoktur).
       </InfoBox>
-      <Card title={`${rows.length} kayıt`}>
-        {rows.length === 0 ? (
-          <EmptyState message="Bu tenant için platform işlemi kaydı yok." />
-        ) : (
-          <Table columns={columns} rows={rows} rowKey={(l) => l.id} dense />
-        )}
-      </Card>
-      <Card title="İç notlar (TenantNote)">
-        <BarList
-          items={[
-            { label: "Satış", value: 3, hint: "3 not" },
-            { label: "Risk", value: 1, hint: "1 not", tone: "red" },
-            { label: "Destek", value: 5, hint: "5 not", tone: "green" },
-          ]}
-        />
-        <div className="mt-4 space-y-3">
-          <Field label="Yeni not">
-            <Input placeholder="Notu yazın…" />
-          </Field>
-          <RoleGate action="tenant.notes" mutation mode="notice">
-            <Button variant="secondary" disabled title="Uç henüz uygulanmadı">
-              Not ekle
-            </Button>
-          </RoleGate>
-        </div>
+      <Card title="Platform işlemleri">
+        <ResourceView
+          loading={res.loading}
+          missing={res.missing}
+          forbidden={res.forbidden}
+          error={res.error}
+          empty={res.empty}
+          endpoint={EP.audit}
+          what="Denetim izi"
+          emptyMessage="Bu tenant için platform işlemi kaydı yok."
+        >
+          <Table columns={columns} rows={res.data} rowKey={(l) => l.id} dense />
+        </ResourceView>
       </Card>
     </div>
   );

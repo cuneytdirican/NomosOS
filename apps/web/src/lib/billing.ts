@@ -1,18 +1,24 @@
 /**
  * Faturalama API istemcisi — `/api/v1/billing/**` (Modül 09).
  *
- * SÖZLEŞME (docs/moduller/09-faturalama.md § API Uçları):
+ * UÇ ADLARI `@nomosos/shared` İÇİNDEKİ TEK TABLODAN GELİR (`BILLING_ROUTES`).
+ * Elle yazıldıkları sürece istemci ile sunucu ayrışıyordu: denetimde bu
+ * dosyadaki `/approve`, `/send`, `/invoices/:id/payments` ve `/pdf` uçlarının
+ * API'de HİÇ BULUNMADIĞI, dolayısıyla "Kesinleştir" ve "Ödeme kaydet"
+ * düğmelerinin 404 aldığı tespit edildi (denetim bulgusu 12).
+ *
+ * GERÇEK SÖZLEŞME (billing.controller.ts):
  *   GET/POST  /billing/fee-agreements          — ücret sözleşmeleri
  *   PATCH     /billing/fee-agreements/:id
  *   GET/POST  /billing/time-entries            — zaman kayıtları
  *   DELETE    /billing/time-entries/:id
  *   GET/POST  /billing/invoices                — fatura listesi / taslak oluşturma
+ *   POST      /billing/invoices/from-time-entries
  *   GET       /billing/invoices/:id
- *   POST      /billing/invoices/:id/approve    — kesinleştir (numara SUNUCUDA atanır)
- *   POST      /billing/invoices/:id/send       — e-Fatura gönder
+ *   POST      /billing/invoices/:id/finalize   — kesinleştir (numara SUNUCUDA atanır)
  *   POST      /billing/invoices/:id/cancel
- *   POST      /billing/invoices/:id/payments   — ödeme kaydet
- *   GET       /billing/invoices/:id/pdf
+ *   POST      /billing/invoices/:id/e-invoice/send
+ *   POST      /billing/payments                — tahsilat (gövdede clientId + invoiceId)
  *
  * PARA İLKESİ: `subtotal`, `vatAmount`, `total` ve `lineTotal` alanlarının
  * TEK KAYNAĞI SUNUCUDUR. İstemci fatura oluştururken yalnızca satır girdilerini
@@ -23,6 +29,7 @@
  * değeridir; kayıtlı sözleşmenin `vatRate` alanı varsa o kullanılır.
  */
 
+import { BILLING_ROUTES } from "@nomosos/shared";
 import { api, asList } from "@/lib/api";
 import type {
   AgreementStatus,
@@ -51,7 +58,7 @@ export interface FeeAgreementQuery {
 }
 
 export function listFeeAgreements(query: FeeAgreementQuery = {}): Promise<FeeAgreement[]> {
-  return api<unknown>("/billing/fee-agreements", { query: { ...query } }).then((p) =>
+  return api<unknown>(BILLING_ROUTES.feeAgreements, { query: { ...query } }).then((p) =>
     asList<FeeAgreement>(p),
   );
 }
@@ -73,14 +80,14 @@ export interface CreateFeeAgreementBody {
 }
 
 export function createFeeAgreement(body: CreateFeeAgreementBody): Promise<FeeAgreement> {
-  return api<FeeAgreement>("/billing/fee-agreements", { method: "POST", body: clean(body) });
+  return api<FeeAgreement>(BILLING_ROUTES.feeAgreements, { method: "POST", body: clean(body) });
 }
 
 export function updateFeeAgreement(
   id: string,
   patch: Partial<CreateFeeAgreementBody>,
 ): Promise<FeeAgreement> {
-  return api<FeeAgreement>(`/billing/fee-agreements/${id}`, {
+  return api<FeeAgreement>(BILLING_ROUTES.feeAgreement(id), {
     method: "PATCH",
     body: clean(patch),
   });
@@ -101,7 +108,7 @@ export interface TimeEntryQuery {
 }
 
 export function listTimeEntries(query: TimeEntryQuery = {}): Promise<TimeEntry[]> {
-  return api<unknown>("/billing/time-entries", { query: { ...query } }).then((p) =>
+  return api<unknown>(BILLING_ROUTES.timeEntries, { query: { ...query } }).then((p) =>
     asList<TimeEntry>(p),
   );
 }
@@ -130,11 +137,11 @@ export interface CreateTimeEntryBody {
 }
 
 export function createTimeEntry(body: CreateTimeEntryBody): Promise<TimeEntry> {
-  return api<TimeEntry>("/billing/time-entries", { method: "POST", body: clean(body) });
+  return api<TimeEntry>(BILLING_ROUTES.timeEntries, { method: "POST", body: clean(body) });
 }
 
 export function deleteTimeEntry(id: string): Promise<unknown> {
-  return api<unknown>(`/billing/time-entries/${id}`, { method: "DELETE" });
+  return api<unknown>(BILLING_ROUTES.timeEntry(id), { method: "DELETE" });
 }
 
 // --------------------------------------------------------------- faturalar
@@ -148,11 +155,11 @@ export interface InvoiceQuery {
 }
 
 export function listInvoices(query: InvoiceQuery = {}): Promise<Invoice[]> {
-  return api<unknown>("/billing/invoices", { query: { ...query } }).then((p) => asList<Invoice>(p));
+  return api<unknown>(BILLING_ROUTES.invoices, { query: { ...query } }).then((p) => asList<Invoice>(p));
 }
 
 export function getInvoice(id: string): Promise<Invoice> {
-  return api<Invoice>(`/billing/invoices/${id}`);
+  return api<Invoice>(BILLING_ROUTES.invoice(id));
 }
 
 /** Fatura satırı GİRDİSİ — `lineTotal` YOKTUR, sunucu hesaplar. */
@@ -179,16 +186,16 @@ export interface CreateInvoiceBody {
 }
 
 export function createInvoice(body: CreateInvoiceBody): Promise<Invoice> {
-  return api<Invoice>("/billing/invoices", { method: "POST", body: clean(body) });
+  return api<Invoice>(BILLING_ROUTES.invoices, { method: "POST", body: clean(body) });
 }
 
 /** Kesinleştirme — fatura numarası SUNUCUDA atanır (taslaklar numara tüketmez). */
 export function approveInvoice(id: string): Promise<Invoice> {
-  return api<Invoice>(`/billing/invoices/${id}/approve`, { method: "POST", body: {} });
+  return api<Invoice>(BILLING_ROUTES.invoiceFinalize(id), { method: "POST", body: {} });
 }
 
 export function cancelInvoice(id: string, reason: string): Promise<Invoice> {
-  return api<Invoice>(`/billing/invoices/${id}/cancel`, {
+  return api<Invoice>(BILLING_ROUTES.invoiceCancel(id), {
     method: "POST",
     body: clean({ reason }),
   });
@@ -202,7 +209,10 @@ export function cancelInvoice(id: string, reason: string): Promise<Invoice> {
  * biçimde gösterir, "gönderildi" gibi DAVRANMAZ.
  */
 export function sendInvoice(id: string): Promise<EInvoiceSendResult> {
-  return api<EInvoiceSendResult>(`/billing/invoices/${id}/send`, { method: "POST", body: {} });
+  return api<EInvoiceSendResult>(BILLING_ROUTES.invoiceSendEInvoice(id), {
+    method: "POST",
+    body: {},
+  });
 }
 
 export interface CreatePaymentBody {
@@ -211,30 +221,35 @@ export interface CreatePaymentBody {
   method: PaymentMethod;
   reference?: string;
   note?: string;
+  /**
+   * Kalan bakiyeyi aşan tahsilatı bilerek kabul et.
+   *
+   * Sunucu, tutar kalan bakiyeyi aşarsa 400 + `remaining` /
+   * `overpaymentAmount` döndürür; arayüz bunu kullanıcıya GÖSTERİP onay
+   * aldıktan sonra bu bayrakla ikinci turu yapar. Fazlalık müvekkil carisinde
+   * avans olarak kalır.
+   */
+  allowOverpayment?: boolean;
 }
 
+/**
+ * Fatura tahsilatı.
+ *
+ * UÇ FATURA ALTINDA DEĞİLDİR: sunucu sözleşmesi `POST /billing/payments` ve
+ * gövde `clientId` + `invoiceId` ister (tahsilat faturasız da kaydedilebilir).
+ * İstemci `POST /billing/invoices/:id/payments` çağırdığı için tahsilat
+ * arayüzden HİÇ yazılamıyordu (denetim bulgusu 12) — muhasebe açısından
+ * modülün en riskli kopukluğuydu.
+ */
 export function createInvoicePayment(
   id: string,
+  clientId: string,
   body: CreatePaymentBody,
 ): Promise<InvoicePayment> {
-  return api<InvoicePayment>(`/billing/invoices/${id}/payments`, {
+  return api<InvoicePayment>(BILLING_ROUTES.payments, {
     method: "POST",
-    body: clean(body),
+    body: clean({ ...body, clientId, invoiceId: id }),
   });
-}
-
-/** PDF — sunucu ön-imzalı URL döndürür (Bearer gerektiren adrese yönlendirmeyiz). */
-export async function invoicePdfUrl(id: string): Promise<string | null> {
-  const res = await api<unknown>(`/billing/invoices/${id}/pdf`);
-  if (typeof res === "string" && res.startsWith("http")) return res;
-  if (res && typeof res === "object") {
-    const obj = res as Record<string, unknown>;
-    for (const key of ["url", "downloadUrl", "signedUrl", "href"]) {
-      const v = obj[key];
-      if (typeof v === "string" && v.length > 0) return v;
-    }
-  }
-  return null;
 }
 
 /** Fatura satırlarını tek biçimde okur. */

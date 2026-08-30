@@ -1,41 +1,45 @@
 "use client";
 
 /**
- * Denetim İzi — PlatformAuditLog görüntüleyici.
- * Append-only: uygulama DB rolünde UPDATE/DELETE yetkisi yoktur; min. 10 yıl saklanır.
- * Rol kapsamı: SUPER_ADMIN tümünü, diğer roller yalnız kendi alanlarını görür (API'de filtrelenir).
- * CSV dışa aktarımı dört-göz onayı gerektirir.
+ * Denetim İzi — GET /audit
+ *
+ * PlatformAuditLog append-only'dir; kiracı silinse dahi iz kalır (tenantId'de FK yoktur).
+ * Rol kapsamı SUNUCUDA filtrelenir: SUPER_ADMIN tümünü, diğer roller kendi alanlarını görür.
+ * CSV dışa aktarımı `audit.export` yetkisine bağlıdır ve dört-göz listesindedir.
  */
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useResource } from "@/lib/useResource";
+import { useListResource } from "@/lib/useResource";
+import { useDebounced } from "@/lib/useDebounced";
 import { useAdminSession } from "@/lib/session";
+import { EP } from "@/lib/endpoints";
 import { levelOf } from "@/lib/rbac";
 import { PageGate, RoleGate } from "@/components/RoleGate";
-import { ApprovalBadge, ApprovalNotice } from "@/components/ApprovalBadge";
+import { ApprovalBadge } from "@/components/ApprovalBadge";
 import {
   AUDIT_ACTION_LABELS,
   CRITICAL_AUDIT_ACTIONS,
-  ROLE_LABELS,
+  daysAgo,
   fmtDateTime,
   labelOf,
+  roleLabel,
+  toDateInput,
 } from "@/lib/labels";
-import { MOCK_AUDIT_LOGS, type AdminAuditLog } from "@/lib/mock";
+import { exportCsv } from "@/lib/csv";
+import type { AdminAuditEntry } from "@/lib/types";
 import {
   Badge,
   Button,
   Card,
   Field,
-  Input,
   InfoBox,
-  MockBadge,
-  Modal,
+  Input,
   PageHeader,
-  PendingEndpointNotice,
+  ResourceView,
   Select,
   Table,
-  Textarea,
+  WarningBox,
   type Column,
 } from "@/components/ui";
 
@@ -52,44 +56,36 @@ function AuditLogViewer() {
   const scoped = levelOf(role, "audit.view") === "read"; // yalnız kendi alanı
 
   const [action, setAction] = useState("");
-  const [search, setSearch] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [from, setFrom] = useState(toDateInput(daysAgo(29)));
+  const [to, setTo] = useState(toDateInput(new Date()));
   const [onlyCritical, setOnlyCritical] = useState(false);
-  const [exportOpen, setExportOpen] = useState(false);
+  const search = useDebounced(searchInput);
 
-  const res = useResource<AdminAuditLog[]>("/audit-logs", [...MOCK_AUDIT_LOGS], {
+  const res = useListResource<AdminAuditEntry>(EP.audit, {
     query: {
       action: action || undefined,
-      search: search || undefined,
+      q: search || undefined,
       from: from || undefined,
       to: to || undefined,
+      limit: 200,
     },
   });
 
-  const rows = useMemo(() => {
-    const q = search.trim().toLocaleLowerCase("tr");
-    return res.data.filter((l) => {
-      if (action && l.action !== action) return false;
-      if (onlyCritical && !CRITICAL_AUDIT_ACTIONS.includes(l.action)) return false;
-      if (from && l.createdAt < from) return false;
-      if (to && l.createdAt > `${to}T23:59:59`) return false;
-      if (!q) return true;
-      return (
-        l.platformUserEmail.toLocaleLowerCase("tr").includes(q) ||
-        (l.targetTenantName ?? "").toLocaleLowerCase("tr").includes(q) ||
-        l.detail.toLocaleLowerCase("tr").includes(q) ||
-        l.action.toLocaleLowerCase("tr").includes(q)
-      );
-    });
-  }, [res.data, action, search, from, to, onlyCritical]);
+  const rows = useMemo(
+    () =>
+      onlyCritical
+        ? res.data.filter((l) => CRITICAL_AUDIT_ACTIONS.includes(l.action))
+        : res.data,
+    [res.data, onlyCritical],
+  );
 
   const actionOptions = useMemo(
     () => [...new Set(res.data.map((l) => l.action))].sort(),
     [res.data],
   );
 
-  const columns: Array<Column<AdminAuditLog>> = [
+  const columns: Array<Column<AdminAuditEntry>> = [
     {
       key: "at",
       header: "Tarih",
@@ -100,10 +96,12 @@ function AuditLogViewer() {
       header: "Personel",
       render: (l) => (
         <div>
-          <p className="font-mono text-xs text-steel-200">{l.platformUserEmail}</p>
-          <p className="text-[11px] text-steel-500">
-            {ROLE_LABELS[l.role as keyof typeof ROLE_LABELS] ?? l.role}
+          <p className="font-mono text-xs text-steel-200">
+            {l.platformUserEmail ?? l.platformUserName ?? l.platformUserId ?? "—"}
           </p>
+          {l.platformUserRole && (
+            <p className="text-[11px] text-steel-500">{roleLabel(l.platformUserRole)}</p>
+          )}
         </div>
       ),
     },
@@ -128,35 +126,35 @@ function AuditLogViewer() {
       key: "tenant",
       header: "Hedef tenant",
       render: (l) =>
-        l.targetTenantName ? (
-          <Link
-            href={`/tenantlar/${l.targetTenantCode ?? ""}`}
-            className="text-steel-200 hover:text-accent-300"
-          >
-            {l.targetTenantName}
+        l.tenantId ? (
+          <Link href={`/tenantlar/${l.tenantId}`} className="text-steel-200 hover:text-accent-300">
+            {l.tenantName ?? l.tenantId}
           </Link>
         ) : (
           <span className="text-steel-600">platform</span>
         ),
     },
-    { key: "entity", header: "Varlık", render: (l) => <span className="text-xs">{l.entity ?? "—"}</span> },
+    {
+      key: "entity",
+      header: "Varlık",
+      render: (l) => (
+        <span className="text-xs">
+          {l.entity ?? "—"}
+          {l.entityId && (
+            <span className="block font-mono text-[11px] text-steel-600">{l.entityId}</span>
+          )}
+        </span>
+      ),
+    },
     {
       key: "detail",
-      header: "Detay (eski → yeni, PII maskeli)",
-      render: (l) => <span className="text-xs text-steel-400">{l.detail}</span>,
+      header: "Detay (PII maskeli)",
+      render: (l) => <span className="text-xs text-steel-400">{l.detail ?? "—"}</span>,
     },
-    { key: "ip", header: "IP", render: (l) => <span className="font-mono text-xs text-steel-500">{l.ip}</span> },
     {
-      key: "approval",
-      header: "Onay",
-      render: (l) =>
-        l.approvalRequestId ? (
-          <Link href="/onaylar" className="font-mono text-xs text-accent-300">
-            {l.approvalRequestId}
-          </Link>
-        ) : (
-          <span className="text-steel-700">—</span>
-        ),
+      key: "ip",
+      header: "IP",
+      render: (l) => <span className="font-mono text-xs text-steel-500">{l.ipAddress ?? "—"}</span>,
     },
   ];
 
@@ -164,28 +162,50 @@ function AuditLogViewer() {
     <div className="space-y-6">
       <PageHeader
         title="Denetim İzi"
-        description="PlatformAuditLog — her mutasyon ve her hassas okuma (destek görüntüleme, ödeme detayı, dışa aktarım) kaydedilir."
+        description="PlatformAuditLog — her mutasyon ve her hassas okuma (destek erişimi, ödeme detayı, dışa aktarım) kaydedilir."
         action={
-          <div className="flex items-center gap-2">
-            {res.pending && <MockBadge />}
-            <RoleGate action="audit.export" mutation>
-              <span className="inline-flex items-center gap-2">
-                <Button variant="secondary" onClick={() => setExportOpen(true)}>
-                  CSV dışa aktar
-                </Button>
-                <ApprovalBadge action="audit.export" />
-              </span>
-            </RoleGate>
-          </div>
+          <RoleGate action="audit.export" mutation>
+            <span className="inline-flex items-center gap-2">
+              <ApprovalBadge action="audit.export" />
+              <Button
+                variant="secondary"
+                disabled={rows.length === 0}
+                onClick={() =>
+                  exportCsv("denetim-izi", rows, [
+                    { key: "createdAt", header: "Tarih", value: (l) => l.createdAt },
+                    {
+                      key: "user",
+                      header: "Personel",
+                      value: (l) => l.platformUserEmail ?? l.platformUserId ?? "",
+                    },
+                    { key: "role", header: "Rol", value: (l) => l.platformUserRole ?? "" },
+                    { key: "action", header: "Aksiyon", value: (l) => l.action },
+                    { key: "tenantId", header: "Tenant ID", value: (l) => l.tenantId ?? "" },
+                    { key: "tenant", header: "Tenant", value: (l) => l.tenantName ?? "" },
+                    { key: "entity", header: "Varlık", value: (l) => l.entity ?? "" },
+                    { key: "entityId", header: "Varlık ID", value: (l) => l.entityId ?? "" },
+                    { key: "detail", header: "Detay", value: (l) => l.detail ?? "" },
+                    { key: "ip", header: "IP", value: (l) => l.ipAddress ?? "" },
+                  ])
+                }
+              >
+                CSV dışa aktar
+              </Button>
+            </span>
+          </RoleGate>
         }
       />
 
-      {res.pending && <PendingEndpointNotice endpoint="/audit-logs" phase="Faz 1" />}
+      <WarningBox title="Dışa aktarım hakkında">
+        Buradaki CSV, <strong>ekranda listelenen ve sunucunun rol filtresinden geçmiş</strong>{" "}
+        kayıtları istemcide dosyaya yazar. Kapsamlı, dört-göz onaylı ve filigranlı sunucu tarafı
+        dışa aktarımı ayrı bir uçtur; hazır olduğunda bu düğme o uca bağlanacaktır.
+      </WarningBox>
 
       {scoped && (
         <InfoBox title="Kapsamlı görünüm (👁)">
-          Rolünüz yalnız kendi alanınızdaki kayıtları görür (OPS: operasyon, BILLING: finans,
-          SUPPORT: kendi işlemleri). Filtreleme sunucu tarafında rol filtresinden geçer.
+          Rolünüz yalnız kendi alanınızdaki kayıtları görür (operasyon / finans / destek).
+          Filtreleme sunucu tarafında rol filtresinden geçer; istemci ek kayıt açamaz.
         </InfoBox>
       )}
 
@@ -193,8 +213,8 @@ function AuditLogViewer() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <Field label="Arama">
             <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Personel, tenant, detay"
             />
           </Field>
@@ -228,10 +248,10 @@ function AuditLogViewer() {
               variant="secondary"
               size="sm"
               onClick={() => {
-                setSearch("");
+                setSearchInput("");
                 setAction("");
-                setFrom("");
-                setTo("");
+                setFrom(toDateInput(daysAgo(29)));
+                setTo(toDateInput(new Date()));
                 setOnlyCritical(false);
               }}
             >
@@ -241,44 +261,23 @@ function AuditLogViewer() {
         </div>
       </Card>
 
-      <Card title={`${rows.length} kayıt`} subtitle="Append-only · min. 10 yıl saklama · zincirlenmiş hash / WORM kopya">
-        <Table columns={columns} rows={rows} rowKey={(l) => l.id} dense />
-      </Card>
-
-      <Modal
-        open={exportOpen}
-        onClose={() => setExportOpen(false)}
-        title="Denetim izi dışa aktarımı"
-        subtitle="GET /audit-logs?format=csv — dört-göz onayı"
+      <Card
+        title={res.loaded ? `${rows.length} kayıt` : "Denetim izi"}
+        subtitle="Append-only · uzun süreli saklama · kiracı silinse dahi iz kalır"
       >
-        <div className="space-y-4">
-          <ApprovalNotice action="audit.export" />
-          <PendingEndpointNotice endpoint="/audit-logs" phase="Faz 1" />
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Başlangıç" required>
-              <Input type="date" />
-            </Field>
-            <Field label="Bitiş" required>
-              <Input type="date" />
-            </Field>
-          </div>
-          <Field label="Gerekçe" required hint="Dışa aktarımın kendisi de PlatformAuditLog'a yazılır.">
-            <Textarea rows={3} placeholder="Denetim talebi referansı, VERBİS başvurusu…" />
-          </Field>
-          <InfoBox>
-            Dışa aktarım sunucu tarafında rol filtresinden geçer. Üretilen CSV dosyaları MinIO
-            lifecycle ile 7 gün sonra silinir.
-          </InfoBox>
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setExportOpen(false)}>
-              Vazgeç
-            </Button>
-            <Button disabled title="Uç henüz uygulanmadı">
-              Onaya gönder
-            </Button>
-          </div>
-        </div>
-      </Modal>
+        <ResourceView
+          loading={res.loading}
+          missing={res.missing}
+          forbidden={res.forbidden}
+          error={res.error}
+          empty={res.loaded && rows.length === 0}
+          endpoint={EP.audit}
+          what="Denetim izi"
+          emptyMessage="Filtrelere uyan denetim kaydı yok."
+        >
+          <Table columns={columns} rows={rows} rowKey={(l) => l.id} dense />
+        </ResourceView>
+      </Card>
     </div>
   );
 }

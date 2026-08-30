@@ -1,51 +1,50 @@
 "use client";
 
 /**
- * Ödemeler — PaymentRecord listesi, başarısız ödeme/dunning kuyruğu, iade akışı, platform faturaları.
- * NOT: Buradaki faturalar platformun TENANT'a kestiği InvoiceRecord'lardır;
- * tenant'ın müvekkiline kestiği Invoice/Payment (Modül 09) ile karıştırılmamalıdır.
+ * Ödemeler — PLATFORM tahsilatı (PaymentRecord).
+ * Tenant'ın müvekkiline kestiği fatura/ödeme (Modül 09) ile karıştırılmamalıdır.
+ *
+ * Uçlar: GET /payments?status= · GET /payments/failed · POST /payments/:id/refund
+ * İade dört-göz kapsamındadır: sunucu doğrudan uygulamaz, onay talebi döndürür.
  */
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useResource } from "@/lib/useResource";
+import { useListResource } from "@/lib/useResource";
+import { useMutation } from "@/lib/useMutation";
 import { useAdminSession } from "@/lib/session";
+import { EP } from "@/lib/endpoints";
 import { isMasked } from "@/lib/rbac";
 import { PageGate, RoleGate } from "@/components/RoleGate";
 import { ApprovalNotice } from "@/components/ApprovalBadge";
 import {
-  DUNNING_STEP_LABELS,
-  INVOICE_STATUS_LABELS,
-  INVOICE_STATUS_TONES,
-  PAYMENT_METHOD_LABELS,
   PAYMENT_STATUS_LABELS,
   PAYMENT_STATUS_TONES,
+  PLATFORM_PAYMENT_STATUSES,
   fmtDateTime,
   fmtMoney,
   fmtNumber,
   labelOf,
   toneOf,
 } from "@/lib/labels";
-import {
-  MOCK_INVOICES,
-  MOCK_OVERVIEW,
-  MOCK_PAYMENTS,
-  type AdminInvoice,
-  type AdminPayment,
-} from "@/lib/mock";
+import { exportCsv } from "@/lib/csv";
+import type { AdminPaymentRecord } from "@/lib/types";
 import {
   Badge,
   Button,
   Card,
   DataRow,
+  EndpointMissingNotice,
+  ErrorBox,
   Field,
   InfoBox,
-  MockBadge,
+  Input,
   Modal,
   PageHeader,
-  PendingEndpointNotice,
+  ResourceView,
   Select,
   StatCard,
+  SuccessBox,
   Table,
   Tabs,
   Textarea,
@@ -53,7 +52,7 @@ import {
   type Column,
 } from "@/components/ui";
 
-type TabKey = "odemeler" | "basarisiz" | "faturalar";
+type TabKey = "odemeler" | "basarisiz";
 
 export default function OdemelerPage() {
   return (
@@ -67,36 +66,30 @@ function Payments() {
   const { role } = useAdminSession();
   const [tab, setTab] = useState<TabKey>("odemeler");
   const [statusFilter, setStatusFilter] = useState("");
-  const [refundFor, setRefundFor] = useState<AdminPayment | null>(null);
+  const [refundFor, setRefundFor] = useState<AdminPaymentRecord | null>(null);
 
-  const payments = useResource<AdminPayment[]>("/payments", [...MOCK_PAYMENTS], {
+  const payments = useListResource<AdminPaymentRecord>(EP.payments.list, {
     query: { status: statusFilter || undefined },
   });
-  const invoices = useResource<AdminInvoice[]>("/invoices", [...MOCK_INVOICES]);
+  const failed = useListResource<AdminPaymentRecord>(EP.payments.failed);
 
   /** SUPPORT_AGENT yalnız "ödendi/ödenmedi" görür — tutar ve sağlayıcı referansı gizlenir. */
   const limited = role === "SUPPORT_AGENT";
 
-  const failed = useMemo(
-    () => payments.data.filter((p) => p.status === "FAILED"),
+  const succeededTotalKnown = useMemo(
+    () => payments.data.filter((p) => p.status === "BASARILI").length,
     [payments.data],
-  );
-
-  const rows = useMemo(
-    () =>
-      payments.data.filter((p) => (statusFilter ? p.status === statusFilter : true)),
-    [payments.data, statusFilter],
   );
 
   if (isMasked(role, "payment.view")) return <MaskedPaymentsView />;
 
-  const paymentColumns: Array<Column<AdminPayment>> = [
+  const paymentColumns: Array<Column<AdminPaymentRecord>> = [
     {
       key: "tenant",
       header: "Tenant",
       render: (p) => (
         <Link href={`/tenantlar/${p.tenantId}`} className="text-steel-50 hover:text-accent-300">
-          {p.tenantName}
+          {p.tenantName ?? p.tenantId}
         </Link>
       ),
     },
@@ -108,7 +101,7 @@ function Payments() {
         limited ? (
           <span className="text-steel-500">gizli</span>
         ) : (
-          <span className="font-mono">{fmtMoney(p.amount, p.currency)}</span>
+          <span className="font-mono">{fmtMoney(p.amount, p.currency ?? "TRY")}</span>
         ),
     },
     {
@@ -120,28 +113,25 @@ function Payments() {
         </Badge>
       ),
     },
-    { key: "method", header: "Yöntem", render: (p) => labelOf(PAYMENT_METHOD_LABELS, p.method) },
+    { key: "method", header: "Yöntem", render: (p) => p.method ?? "—" },
     {
       key: "provider",
-      header: "Sağlayıcı",
+      header: "Sağlayıcı referansı",
       render: (p) =>
         limited ? (
           <span className="text-steel-500">—</span>
         ) : (
-          <span className="text-xs">
-            {p.provider}
-            <span className="ml-1 font-mono text-steel-500">{p.providerRef}</span>
-          </span>
+          <span className="font-mono text-xs text-steel-400">{p.providerRef ?? "—"}</span>
         ),
     },
     { key: "created", header: "Oluşturma", render: (p) => fmtDateTime(p.createdAt) },
-    { key: "paid", header: "Ödeme", render: (p) => (p.paidAt ? fmtDateTime(p.paidAt) : "—") },
+    { key: "paid", header: "Ödeme", render: (p) => fmtDateTime(p.paidAt) },
     {
       key: "actions",
       header: "",
       align: "right",
       render: (p) =>
-        p.status === "SUCCEEDED" ? (
+        p.status === "BASARILI" ? (
           <RoleGate action="payment.refund" mutation>
             <Button size="sm" variant="secondary" onClick={() => setRefundFor(p)}>
               İade talebi
@@ -151,13 +141,13 @@ function Payments() {
     },
   ];
 
-  const failedColumns: Array<Column<AdminPayment>> = [
+  const failedColumns: Array<Column<AdminPaymentRecord>> = [
     {
       key: "tenant",
       header: "Tenant",
       render: (p) => (
         <Link href={`/tenantlar/${p.tenantId}`} className="text-steel-50 hover:text-accent-300">
-          {p.tenantName}
+          {p.tenantName ?? p.tenantId}
         </Link>
       ),
     },
@@ -165,108 +155,79 @@ function Payments() {
       key: "amount",
       header: "Tutar",
       align: "right",
-      render: (p) => (limited ? "—" : <span className="font-mono">{fmtMoney(p.amount, p.currency)}</span>),
+      render: (p) =>
+        limited ? "—" : <span className="font-mono">{fmtMoney(p.amount, p.currency ?? "TRY")}</span>,
     },
     {
       key: "reason",
       header: "Hata",
-      render: (p) => (
-        <div>
-          <p className="text-steel-200">{p.failureReason}</p>
-          <p className="font-mono text-xs text-steel-500">{p.failureCode}</p>
-        </div>
-      ),
+      render: (p) => <span className="text-steel-200">{p.failureReason ?? "—"}</span>,
     },
-    { key: "attempt", header: "Deneme", align: "right", render: (p) => fmtNumber(p.attempt ?? 0) },
-    {
-      key: "step",
-      header: "Dunning adımı",
-      render: (p) => (
-        <Badge tone={p.dunningStep === "ASKIYA_ALMA" ? "danger" : "yellow"}>
-          {labelOf(DUNNING_STEP_LABELS, p.dunningStep)}
-        </Badge>
-      ),
-    },
+    { key: "attempt", header: "Deneme", align: "right", render: (p) => fmtNumber(p.attempt) },
     { key: "created", header: "Son deneme", render: (p) => fmtDateTime(p.createdAt) },
   ];
 
-  const invoiceColumns: Array<Column<AdminInvoice>> = [
-    { key: "no", header: "Fatura no", render: (i) => <span className="font-mono text-xs">{i.number}</span> },
-    { key: "tenant", header: "Tenant", render: (i) => i.tenantName },
-    {
-      key: "period",
-      header: "Dönem",
-      render: (i) => (
-        <span className="text-xs text-steel-400">
-          {i.periodStart} → {i.periodEnd}
-        </span>
-      ),
-    },
-    { key: "subtotal", header: "Ara toplam", align: "right", render: (i) => fmtMoney(i.subtotal) },
-    { key: "vat", header: "KDV", align: "right", render: (i) => fmtMoney(i.vat) },
-    { key: "total", header: "Toplam", align: "right", render: (i) => <strong>{fmtMoney(i.total)}</strong> },
-    {
-      key: "status",
-      header: "Durum",
-      render: (i) => (
-        <Badge tone={toneOf(INVOICE_STATUS_TONES, i.status)}>
-          {labelOf(INVOICE_STATUS_LABELS, i.status)}
-        </Badge>
-      ),
-    },
-    {
-      key: "actions",
-      header: "",
-      align: "right",
-      render: (i) =>
-        i.status === "DRAFT" ? (
-          <RoleGate action="invoice.issue" mutation>
-            <Button size="sm" variant="secondary" disabled title="Uç henüz uygulanmadı">
-              Kes (ISSUED)
-            </Button>
-          </RoleGate>
-        ) : null,
-    },
-  ];
+  const activeList = tab === "odemeler" ? payments : failed;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Ödemeler"
-        description="Platform tahsilatı: abonelik ödemeleri, dunning kuyruğu, iade akışı ve platform faturaları."
-        action={payments.pending ? <MockBadge /> : undefined}
+        description="Platform tahsilatı: abonelik ödemeleri, başarısız ödeme kuyruğu ve iade akışı."
+        action={
+          !limited ? (
+            <Button
+              variant="secondary"
+              disabled={activeList.data.length === 0}
+              onClick={() =>
+                exportCsv("odemeler", activeList.data, [
+                  { key: "id", header: "Ödeme ID", value: (p) => p.id },
+                  { key: "tenantId", header: "Tenant ID", value: (p) => p.tenantId },
+                  { key: "tenant", header: "Tenant", value: (p) => p.tenantName ?? "" },
+                  { key: "amount", header: "Tutar", value: (p) => String(p.amount ?? "") },
+                  { key: "currency", header: "Para birimi", value: (p) => p.currency ?? "TRY" },
+                  { key: "status", header: "Durum", value: (p) => p.status },
+                  { key: "method", header: "Yöntem", value: (p) => p.method ?? "" },
+                  { key: "ref", header: "Sağlayıcı referansı", value: (p) => p.providerRef ?? "" },
+                  { key: "createdAt", header: "Oluşturma", value: (p) => p.createdAt },
+                  { key: "paidAt", header: "Ödeme", value: (p) => p.paidAt ?? "" },
+                ])
+              }
+            >
+              CSV dışa aktar
+            </Button>
+          ) : undefined
+        }
       />
 
       {limited && (
         <InfoBox title="Salt-okur destek görünümü (👁)">
-          Destek rolünde yalnız <strong>ödendi/ödenmedi</strong> bilgisi görünür; tutar, sağlayıcı
-          referansı ve fatura detayı gizlenir. Her ödeme detayı görüntülemesi PlatformAuditLog&apos;a
-          yazılır.
+          Destek rolünde yalnız <strong>ödendi/ödenmedi</strong> bilgisi görünür; tutar ve sağlayıcı
+          referansı gizlenir. Her ödeme detayı görüntülemesi PlatformAuditLog&apos;a yazılır.
         </InfoBox>
       )}
 
-      {payments.pending && <PendingEndpointNotice endpoint="/payments" phase="Faz 3" />}
-
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard
           label="Başarısız ödeme"
-          value={fmtNumber(failed.length)}
-          tone={failed.length > 0 ? "red" : "steel"}
-          hint="dunning kuyruğunda"
+          value={failed.loaded ? fmtNumber(failed.data.length) : "—"}
+          tone={failed.data.length > 0 ? "red" : "steel"}
+          hint="tahsilat kuyruğunda"
         />
         <StatCard
-          label="Bekleyen tahsilat"
-          value={limited ? "—" : fmtMoney(failed.reduce((a, p) => a + p.amount, 0))}
+          label="Başarılı ödeme (listede)"
+          value={payments.loaded ? fmtNumber(succeededTotalKnown) : "—"}
         />
-        <StatCard label="Açık fatura" value={fmtNumber(invoices.data.filter((i) => i.status !== "PAID").length)} />
-        <StatCard label="MRR" value={limited ? "—" : fmtMoney(MOCK_OVERVIEW.mrr)} tone="accent" />
+        <StatCard
+          label="Toplam kayıt"
+          value={payments.loaded ? fmtNumber(payments.data.length) : "—"}
+        />
       </div>
 
       <Tabs
         tabs={[
-          { key: "odemeler", label: "Ödeme kayıtları", count: rows.length },
-          { key: "basarisiz", label: "Başarısız / Dunning", count: failed.length },
-          { key: "faturalar", label: "Faturalar", count: invoices.data.length },
+          { key: "odemeler", label: "Ödeme kayıtları", count: payments.data.length },
+          { key: "basarisiz", label: "Başarısız", count: failed.data.length },
         ]}
         active={tab}
         onChange={setTab}
@@ -279,7 +240,7 @@ function Payments() {
               <Field label="Durum">
                 <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                   <option value="">Tümü</option>
-                  {Object.keys(PAYMENT_STATUS_LABELS).map((s) => (
+                  {PLATFORM_PAYMENT_STATUSES.map((s) => (
                     <option key={s} value={s}>
                       {PAYMENT_STATUS_LABELS[s]}
                     </option>
@@ -293,102 +254,189 @@ function Payments() {
               </div>
             </div>
           </Card>
-          <Card title={`${rows.length} ödeme kaydı`}>
-            <Table columns={paymentColumns} rows={rows} rowKey={(p) => p.id} dense />
+          <Card title={payments.loaded ? `${payments.data.length} ödeme kaydı` : "Ödeme kayıtları"}>
+            <ResourceView
+              loading={payments.loading}
+              missing={payments.missing}
+              forbidden={payments.forbidden}
+              error={payments.error}
+              empty={payments.empty}
+              endpoint={EP.payments.list}
+              what="Ödeme kayıtları"
+              emptyMessage="Filtrelere uyan ödeme kaydı yok."
+            >
+              <Table columns={paymentColumns} rows={payments.data} rowKey={(p) => p.id} dense />
+            </ResourceView>
           </Card>
         </>
       )}
 
       {tab === "basarisiz" && (
         <>
-          <WarningBox title="Dunning zinciri">
+          <WarningBox title="Tahsilat zinciri">
             e-posta → uyarı → askıya alma. Askıya alma zincirin <strong>son</strong> adımıdır ve
-            dört-göz onayı gerektirir; <code className="font-mono">PAST_DUE → SUSPENDED</code> geçişi{" "}
-            <code className="font-mono">past_due_grace_days</code> ayarına bağlı cron ile yapılır.
+            dört-göz onayı gerektirir; <code className="font-mono">PAST_DUE → SUSPENDED</code>{" "}
+            geçişi sunucudaki tolerans süresi ayarına bağlıdır.
           </WarningBox>
-          <Card title={`${failed.length} başarısız ödeme`}>
-            <Table columns={failedColumns} rows={failed} rowKey={(p) => p.id} dense />
+          <Card title={failed.loaded ? `${failed.data.length} başarısız ödeme` : "Başarısız ödemeler"}>
+            <ResourceView
+              loading={failed.loading}
+              missing={failed.missing}
+              forbidden={failed.forbidden}
+              error={failed.error}
+              empty={failed.empty}
+              endpoint={EP.payments.failed}
+              what="Başarısız ödeme kuyruğu"
+              emptyMessage="Başarısız ödeme yok."
+            >
+              <Table columns={failedColumns} rows={failed.data} rowKey={(p) => p.id} dense />
+            </ResourceView>
           </Card>
         </>
       )}
 
-      {tab === "faturalar" && (
-        <>
-          {invoices.pending && <PendingEndpointNotice endpoint="/invoices" phase="Faz 3" />}
-          <Card
-            title={`${invoices.data.length} platform faturası`}
-            subtitle="InvoiceRecord — platformun tenant'a kestiği faturalar (müvekkil faturaları DEĞİL)."
-          >
-            <Table columns={invoiceColumns} rows={invoices.data} rowKey={(i) => i.id} dense />
-          </Card>
-        </>
+      {refundFor && (
+        <RefundModal
+          payment={refundFor}
+          onClose={() => setRefundFor(null)}
+          onSaved={() => {
+            payments.reload();
+            failed.reload();
+          }}
+        />
       )}
-
-      <Modal
-        open={refundFor !== null}
-        onClose={() => setRefundFor(null)}
-        title="İade talebi"
-        subtitle={refundFor ? `POST /payments/${refundFor.id}/refund` : undefined}
-      >
-        {refundFor && (
-          <div className="space-y-4">
-            <ApprovalNotice
-              action="payment.refund"
-              extra="Eşik üstü (varsayılan > ₺5.000) ve toplu iadelerde onay SUPER_ADMIN'den alınır."
-            />
-            <PendingEndpointNotice
-              endpoint={`/payments/${refundFor.id}/refund`}
-              phase="Faz 3"
-              method="POST"
-            />
-            <Card bodyClassName="p-4">
-              <DataRow label="Tenant">{refundFor.tenantName}</DataRow>
-              <DataRow label="Tutar">{fmtMoney(refundFor.amount, refundFor.currency)}</DataRow>
-              <DataRow label="Sağlayıcı">
-                {refundFor.provider} · <span className="font-mono text-xs">{refundFor.providerRef}</span>
-              </DataRow>
-            </Card>
-            <Field label="İade tipi" required>
-              <Select defaultValue="tam">
-                <option value="tam">Tam iade</option>
-                <option value="kismi">Kısmi iade</option>
-              </Select>
-            </Field>
-            <Field label="Gerekçe" required hint="Zorunlu — talep BEKLIYOR durumunda kuyruğa düşer.">
-              <Textarea rows={3} placeholder="Örn. yıllık ücret yanlış tahsil edildi; sözleşme aylık faturalamayı öngörüyor." />
-            </Field>
-            <div className="flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => setRefundFor(null)}>
-                Vazgeç
-              </Button>
-              <Button disabled title="Uç henüz uygulanmadı">
-                Onaya gönder
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
     </div>
   );
 }
 
-/** 🔒 ANALYST_READONLY — yalnız MRR/churn özetleri; tekil ödeme detayı asla. */
+function RefundModal({
+  payment,
+  onClose,
+  onSaved,
+}: {
+  payment: AdminPaymentRecord;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [partial, setPartial] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [reason, setReason] = useState("");
+  const mutation = useMutation();
+
+  async function submit() {
+    const body: Record<string, unknown> = { reason: reason.trim() };
+    // Kısmi iadede tutar STRING olarak gönderilir; istemcide float aritmetiği yapılmaz.
+    if (partial && amount.trim()) body.amount = amount.trim();
+
+    const ok = await mutation.run(
+      EP.payments.refund(payment.id),
+      { method: "POST", body },
+      { successMessage: "İade işlemi uygulandı.", onSuccess: onSaved },
+    );
+    if (ok) onSaved();
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="İade talebi"
+      subtitle={`POST /api/admin/v1${EP.payments.refund(payment.id)}`}
+    >
+      <div className="space-y-4">
+        <ApprovalNotice
+          action="payment.refund"
+          extra="İade dört-göz listesindedir; talep BEKLIYOR durumunda kuyruğa düşer ve farklı bir yetkili onaylar."
+        />
+
+        <Card bodyClassName="p-4">
+          <DataRow label="Tenant">{payment.tenantName ?? payment.tenantId}</DataRow>
+          <DataRow label="Tutar">{fmtMoney(payment.amount, payment.currency ?? "TRY")}</DataRow>
+          <DataRow label="Sağlayıcı referansı">
+            <span className="font-mono text-xs">{payment.providerRef ?? "—"}</span>
+          </DataRow>
+        </Card>
+
+        <Field label="İade tipi" required>
+          <Select
+            value={partial ? "kismi" : "tam"}
+            onChange={(e) => setPartial(e.target.value === "kismi")}
+          >
+            <option value="tam">Tam iade</option>
+            <option value="kismi">Kısmi iade</option>
+          </Select>
+        </Field>
+
+        {partial && (
+          <Field
+            label="İade tutarı"
+            required
+            hint="Kuruş ayracı nokta ile yazılır (ör. 1250.00). Tutar sunucuda Decimal olarak işlenir."
+          >
+            <Input
+              inputMode="decimal"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))}
+              placeholder="1250.00"
+            />
+          </Field>
+        )}
+
+        <Field label="Gerekçe" required>
+          <Textarea
+            rows={3}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Örn. yıllık ücret yanlış tahsil edildi; sözleşme aylık faturalamayı öngörüyor."
+          />
+        </Field>
+
+        {mutation.missing && (
+          <EndpointMissingNotice
+            endpoint={EP.payments.refund(payment.id)}
+            method="POST"
+            what="İade talebi"
+          />
+        )}
+        {mutation.error && <ErrorBox message={mutation.error} />}
+        {mutation.success && <SuccessBox message={mutation.success} />}
+
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>
+            Kapat
+          </Button>
+          <Button
+            disabled={
+              reason.trim().length === 0 ||
+              (partial && amount.trim().length === 0) ||
+              mutation.loading
+            }
+            onClick={() => void submit()}
+          >
+            {mutation.loading ? "Gönderiliyor…" : "Onaya gönder"}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/** 🔒 ANALYST_READONLY — tekil ödeme kaydı ve tenant kimliği asla gösterilmez. */
 function MaskedPaymentsView() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Tahsilat Özeti"
+        title="Tahsilat"
         description="Analist rolünde tekil ödeme kaydı, tenant adı ve sağlayıcı referansı gösterilmez."
       />
       <InfoBox title="Maskeli görünüm (🔒)">
-        Bu rolde yalnız toplulaştırılmış MRR/churn özetleri görünür. Ödeme detayı, fatura ve iade
-        akışı kapalıdır; ilgili mutasyon uçları API katmanında 403 döner.
+        Bu rolde ödeme detayı, fatura ve iade akışı kapalıdır; sunucu tekil kayıt döndürmez ve
+        mutasyon uçları 403 verir. Toplulaştırılmış MRR/churn göstergeleri{" "}
+        <Link href="/" className="text-accent-300 underline">
+          Yatırımcı Görünümü
+        </Link>{" "}
+        ekranındadır.
       </InfoBox>
-      <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="MRR" value={fmtMoney(MOCK_OVERVIEW.mrr)} tone="accent" />
-        <StatCard label="ARR" value={fmtMoney(MOCK_OVERVIEW.arr)} />
-        <StatCard label="Aylık churn" value={`%${MOCK_OVERVIEW.churnPct}`} />
-      </div>
     </div>
   );
 }

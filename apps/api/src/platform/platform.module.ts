@@ -1,0 +1,101 @@
+import { Module } from "@nestjs/common";
+import { LoginThrottleGuard } from "../auth/login-throttle.guard";
+import { PlatformJwtGuard } from "./guards/platform-jwt.guard";
+import { PlatformPermissionGuard } from "./guards/platform-permission.guard";
+import { PlatformAuditService } from "./platform-audit.service";
+import { PlatformAuthController } from "./auth/platform-auth.controller";
+import { PlatformAuthService } from "./auth/platform-auth.service";
+import { PlatformApprovalExecutorService } from "./approvals/platform-approval-executor.service";
+import { PlatformApprovalsController } from "./approvals/platform-approvals.controller";
+import { PlatformApprovalsService } from "./approvals/platform-approvals.service";
+import { PlatformTenantsController } from "./tenants/platform-tenants.controller";
+import { PlatformTenantsService } from "./tenants/platform-tenants.service";
+import {
+  PlatformPlansController,
+  PlatformSubscriptionsController,
+} from "./subscriptions/platform-subscriptions.controller";
+import { PlatformSubscriptionsService } from "./subscriptions/platform-subscriptions.service";
+import {
+  PlatformInvoicesController,
+  PlatformPaymentsController,
+} from "./payments/platform-payments.controller";
+import { PlatformPaymentsService } from "./payments/platform-payments.service";
+import {
+  PlatformAnnouncementsController,
+  PlatformFlagsController,
+  PlatformHealthController,
+  PlatformSettingsController,
+} from "./system/platform-system.controller";
+import { PlatformHealthService } from "./system/platform-health.service";
+import { PlatformSystemService } from "./system/platform-system.service";
+import { PlatformMetricsController } from "./metrics/platform-metrics.controller";
+import { PlatformMetricsService } from "./metrics/platform-metrics.service";
+import { UsageSnapshotService } from "./metrics/usage-snapshot.service";
+import { PlatformSupportController } from "./support/platform-support.controller";
+import { PlatformSupportService } from "./support/platform-support.service";
+import { PlatformAuditController } from "./audit/platform-audit.controller";
+import { PlatformAuditQueryService } from "./audit/platform-audit-query.service";
+import { PlatformUsersController } from "./users/platform-users.controller";
+import { PlatformUsersService } from "./users/platform-users.service";
+
+/**
+ * PLATFORM (SİSTEM YÖNETİM PANELİ) MODÜLÜ — docs/moduller/25.
+ *
+ * NomosOS'u İŞLETEN ŞİRKETİN API'sidir; kiracı uygulamasının değil.
+ * Tüm uçlar `@PlatformController` ile kurulur ve şu zinciri kullanır:
+ *
+ *     (global) JwtAuthGuard  → @Public() ile ATLANIR (tenant zinciri)
+ *     PlatformJwtGuard       → ayrı imza anahtarı + aud:"platform" + PlatformUser
+ *     PlatformPermissionGuard→ yetki matrisi (apps/admin/src/lib/rbac.ts ikizi)
+ *
+ * BAĞIMLILIKLAR: PrismaModule, AuditModule ve StorageModule @Global'dir;
+ * JwtModule `app.module.ts`'te `global: true` ile kayıtlıdır. Bu yüzden burada
+ * hiçbir modül import edilmez ve `app.module.ts`'e dokunulmaz — kayıt işini
+ * Entegrasyon ajanı yapar (`imports: [..., PlatformModule]`).
+ *
+ * NOT: `LoginThrottleGuard` tenant AuthModule'ünden SINIF olarak alınır ama
+ * BURADA AYRI BİR ÖRNEK olarak sağlanır; sayaç tablosu panel girişlerine
+ * özeldir, tenant girişleriyle karışmaz.
+ */
+@Module({
+  controllers: [
+    PlatformAuthController,
+    PlatformTenantsController,
+    PlatformSubscriptionsController,
+    PlatformPlansController,
+    PlatformPaymentsController,
+    PlatformInvoicesController,
+    PlatformApprovalsController,
+    PlatformSettingsController,
+    PlatformFlagsController,
+    PlatformAnnouncementsController,
+    PlatformHealthController,
+    PlatformMetricsController,
+    PlatformSupportController,
+    PlatformAuditController,
+    PlatformUsersController,
+  ],
+  providers: [
+    PlatformJwtGuard,
+    PlatformPermissionGuard,
+    LoginThrottleGuard,
+    PlatformAuditService,
+    PlatformAuthService,
+    PlatformApprovalsService,
+    PlatformApprovalExecutorService,
+    PlatformTenantsService,
+    PlatformSubscriptionsService,
+    PlatformPaymentsService,
+    PlatformSystemService,
+    PlatformHealthService,
+    PlatformMetricsService,
+    UsageSnapshotService,
+    PlatformSupportService,
+    PlatformAuditQueryService,
+    PlatformUsersService,
+  ],
+  // UsageSnapshotService dışa açılır: Faz 6'da BullMQ repeatable job bu
+  // servisi çağıracaktır (kod hazır, zamanlayıcı bağlanacak).
+  exports: [UsageSnapshotService],
+})
+export class PlatformModule {}

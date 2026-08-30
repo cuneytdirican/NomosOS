@@ -1,24 +1,30 @@
 /**
  * İcra modülü API istemcisi — `/api/v1/enforcement/**` (Modül 05).
  *
- * SÖZLEŞME (docs/moduller/05-icra-modulu.md § API Uçları + Faz 3 şeması):
- *   GET/POST   /enforcement                     — liste / yeni takip
- *   GET/PATCH  /enforcement/:id                 — detay / künye güncelleme
- *   POST       /enforcement/:id/stage           — aşama geçişi (kural denetimli)
- *   GET/POST   /enforcement/:id/actions         — işlem günlüğü
- *   GET/POST   /enforcement/:id/assets          — malvarlığı
- *   PATCH      /enforcement/:id/assets/:assetId — malvarlığı durum güncelleme
- *   GET/POST   /enforcement/:id/collections     — tahsilatlar
- *   GET        /enforcement/:id/balance         — bakiye + hesap dökümü (SUNUCU hesabı)
- *   GET        /enforcement/:id/score           — güncel tahsilat skoru
- *   POST       /enforcement/:id/score/refresh   — skoru yeniden hesapla
- *   POST       /enforcement/:id/copilot         — ENF_* komutu
+ * UÇ ADLARI `@nomosos/shared` İÇİNDEKİ TEK TABLODAN GELİR (`ENFORCEMENT_ROUTES`).
+ *
+ * GERÇEK SÖZLEŞME (enforcement.controller.ts):
+ *   GET/POST   /enforcement                 — liste / yeni takip
+ *   GET/PATCH  /enforcement/:id             — detay / künye güncelleme
+ *   PATCH      /enforcement/:id/stage       — aşama geçişi (kural denetimli)
+ *   GET/POST   /enforcement/:id/actions     — işlem günlüğü
+ *   GET/POST   /enforcement/:id/assets      — malvarlığı
+ *   PATCH      /assets/:assetId             — malvarlığı güncelleme (DOSYADAN BAĞIMSIZ)
+ *   GET/POST   /enforcement/:id/collections — tahsilatlar
+ *   GET        /enforcement/:id/balance     — bakiye + hesap dökümü (SUNUCU hesabı)
+ *   GET        /enforcement/:id/score       — son tahsilat skoru
+ *   POST       /enforcement/:id/copilot     — ENF_* komutu (skoru da BU üretir)
+ *
+ * Önceki sürüm `/enforcement/:id/assets/:assetId` ve `/enforcement/:id/score/refresh`
+ * çağırıyordu; ikisi de API'de YOK (denetim bulgusu 12). Skorun ayrı bir
+ * "yenile" ucu hiç olmadı — skor `TAHSILAT_IHTIMALI` komutuyla üretilir.
  *
  * PARA: hiçbir tutar burada hesaplanmaz. Bakiye, takip çıkışı ve kalan daima
  * `/balance` ucundan okunur; liste satırındaki toplamlar da sunucudan gelir.
  * Listede toplam gelmezse arayüz "—" gösterir, kendi toplamını UYDURMAZ.
  */
 
+import { ENFORCEMENT_ROUTES } from "@nomosos/shared";
 import { api, asList } from "@/lib/api";
 import type {
   AssetRecord,
@@ -49,7 +55,7 @@ export interface EnforcementQuery {
 }
 
 export function listEnforcementFiles(query: EnforcementQuery = {}): Promise<EnforcementFile[]> {
-  return api<unknown>("/enforcement", { query: { ...query } }).then((p) =>
+  return api<unknown>(ENFORCEMENT_ROUTES.list, { query: { ...query } }).then((p) =>
     asList<EnforcementFile>(p),
   );
 }
@@ -69,18 +75,18 @@ export interface CreateEnforcementBody {
 }
 
 export function createEnforcementFile(body: CreateEnforcementBody): Promise<EnforcementFile> {
-  return api<EnforcementFile>("/enforcement", { method: "POST", body: clean(body) });
+  return api<EnforcementFile>(ENFORCEMENT_ROUTES.list, { method: "POST", body: clean(body) });
 }
 
 export function getEnforcementFile(id: string): Promise<EnforcementFile> {
-  return api<EnforcementFile>(`/enforcement/${id}`);
+  return api<EnforcementFile>(ENFORCEMENT_ROUTES.detail(id));
 }
 
 export function updateEnforcementFile(
   id: string,
   patch: Partial<CreateEnforcementBody>,
 ): Promise<EnforcementFile> {
-  return api<EnforcementFile>(`/enforcement/${id}`, { method: "PATCH", body: clean(patch) });
+  return api<EnforcementFile>(ENFORCEMENT_ROUTES.detail(id), { method: "PATCH", body: clean(patch) });
 }
 
 /**
@@ -93,7 +99,7 @@ export function changeStage(
   stage: EnforcementStage,
   note?: string,
 ): Promise<EnforcementFile> {
-  return api<EnforcementFile>(`/enforcement/${id}/stage`, {
+  return api<EnforcementFile>(ENFORCEMENT_ROUTES.stage(id), {
     method: "POST",
     body: clean({ stage, note }),
   });
@@ -102,7 +108,7 @@ export function changeStage(
 // ------------------------------------------------------------------- bakiye
 
 export function getBalance(id: string, asOf?: string): Promise<EnforcementBalance> {
-  return api<EnforcementBalance>(`/enforcement/${id}/balance`, {
+  return api<EnforcementBalance>(ENFORCEMENT_ROUTES.balance(id), {
     query: { asOf: asOf || undefined },
   });
 }
@@ -116,7 +122,7 @@ export function balanceSteps(b: EnforcementBalance | null): NonNullable<Enforcem
 // ------------------------------------------------------------------ işlemler
 
 export function listActions(id: string): Promise<EnforcementAction[]> {
-  return api<unknown>(`/enforcement/${id}/actions`).then((p) => asList<EnforcementAction>(p));
+  return api<unknown>(ENFORCEMENT_ROUTES.actions(id)).then((p) => asList<EnforcementAction>(p));
 }
 
 export interface CreateActionBody {
@@ -128,7 +134,7 @@ export interface CreateActionBody {
 }
 
 export function createAction(id: string, body: CreateActionBody): Promise<EnforcementAction> {
-  return api<EnforcementAction>(`/enforcement/${id}/actions`, {
+  return api<EnforcementAction>(ENFORCEMENT_ROUTES.actions(id), {
     method: "POST",
     body: clean(body),
   });
@@ -137,7 +143,7 @@ export function createAction(id: string, body: CreateActionBody): Promise<Enforc
 // --------------------------------------------------------------- malvarlığı
 
 export function listAssets(id: string): Promise<AssetRecord[]> {
-  return api<unknown>(`/enforcement/${id}/assets`).then((p) => asList<AssetRecord>(p));
+  return api<unknown>(ENFORCEMENT_ROUTES.assets(id)).then((p) => asList<AssetRecord>(p));
 }
 
 export interface CreateAssetBody {
@@ -150,16 +156,25 @@ export interface CreateAssetBody {
 }
 
 export function createAsset(id: string, body: CreateAssetBody): Promise<AssetRecord> {
-  return api<AssetRecord>(`/enforcement/${id}/assets`, { method: "POST", body: clean(body) });
+  return api<AssetRecord>(ENFORCEMENT_ROUTES.assets(id), { method: "POST", body: clean(body) });
 }
 
+/**
+ * Malvarlığı durum güncelleme.
+ *
+ * UÇ DOSYADAN BAĞIMSIZDIR: `PATCH /assets/:assetId`. Kiracı doğrulaması
+ * sunucuda `requireAsset` ile kayıt üzerinden yapılır; dosya kimliği yola
+ * girmez. `id` parametresi imzada KORUNUR (çağıranlar dosya bağlamında
+ * çalışıyor) ama yol kurmakta kullanılmaz.
+ */
 export function updateAssetStatus(
   id: string,
   assetId: string,
   status: AssetStatus,
   note?: string,
 ): Promise<AssetRecord> {
-  return api<AssetRecord>(`/enforcement/${id}/assets/${assetId}`, {
+  void id;
+  return api<AssetRecord>(ENFORCEMENT_ROUTES.asset(assetId), {
     method: "PATCH",
     body: clean({ status, note }),
   });
@@ -168,7 +183,7 @@ export function updateAssetStatus(
 // --------------------------------------------------------------- tahsilatlar
 
 export function listCollections(id: string): Promise<CollectionRecord[]> {
-  return api<unknown>(`/enforcement/${id}/collections`).then((p) => asList<CollectionRecord>(p));
+  return api<unknown>(ENFORCEMENT_ROUTES.collections(id)).then((p) => asList<CollectionRecord>(p));
 }
 
 export interface CreateCollectionBody {
@@ -187,7 +202,7 @@ export function createCollection(
   id: string,
   body: CreateCollectionBody,
 ): Promise<CollectionRecord> {
-  return api<CollectionRecord>(`/enforcement/${id}/collections`, {
+  return api<CollectionRecord>(ENFORCEMENT_ROUTES.collections(id), {
     method: "POST",
     body: clean(body),
   });
@@ -196,11 +211,25 @@ export function createCollection(
 // -------------------------------------------------------------- skor/copilot
 
 export function getScore(id: string): Promise<CollectionScore | null> {
-  return api<CollectionScore | null>(`/enforcement/${id}/score`);
+  return api<CollectionScore | null>(ENFORCEMENT_ROUTES.score(id));
 }
 
-export function refreshScore(id: string): Promise<CollectionScore> {
-  return api<CollectionScore>(`/enforcement/${id}/score/refresh`, { method: "POST", body: {} });
+/**
+ * Skoru YENİDEN HESAPLAR.
+ *
+ * Ayrı bir "refresh" ucu YOKTUR ve olmamalıdır: skor, copilot'un
+ * `TAHSILAT_IHTIMALI` komutunun ürünüdür — kural motoru taban skoru üretir, AI
+ * yalnızca ±15 puanlık bir düzeltme ÖNERİR ve BANDI DEĞİŞTİREMEZ. Hesabı
+ * komuttan ayırmak, skorun nasıl doğduğunu görünmez kılardı.
+ *
+ * Komut dış sağlayıcıya gidebileceği için KVKK 409 (`requiresPiiApproval`)
+ * akışına tabidir; çağıran taraf `piiApproved` ile ikinci turu yapar.
+ */
+export function refreshScore(id: string, piiApproved = false): Promise<CopilotResult> {
+  return api<CopilotResult>(ENFORCEMENT_ROUTES.copilot(id), {
+    method: "POST",
+    body: { command: "TAHSILAT_IHTIMALI", piiApproved },
+  });
 }
 
 export interface CopilotInput {
@@ -217,7 +246,7 @@ export interface CopilotInput {
  * 409 `requiresPiiApproval` dönerse çağıran `piiApproved: true` ile tekrarlar.
  */
 export function runCopilot(id: string, input: CopilotInput): Promise<CopilotResult> {
-  return api<CopilotResult>(`/enforcement/${id}/copilot`, {
+  return api<CopilotResult>(ENFORCEMENT_ROUTES.copilot(id), {
     method: "POST",
     body: clean({
       command: input.command,

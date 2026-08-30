@@ -38,6 +38,16 @@ export type PermissionLevel = "full" | "read" | "masked" | "four_eyes" | "none";
 
 export type AdminAction =
   | "tenant.view"
+  /**
+   * Büro PERSONEL listesi — `tenant.view`'dan ayrıdır.
+   *
+   * Eskiden bu uç `tenant.view` taşıyordu ve o aksiyon BILLING_ADMIN için de
+   * "full"du: faturalama rolü, işine hiç yaramayan personel listesini (ad,
+   * soyad, rol, aktiflik, son giriş) her büro için görebiliyordu. PII ihlali
+   * değildi ama ALAN AYRIMI (segregation of duties) ilkesiyle çelişiyordu
+   * (denetim bulgusu 18).
+   */
+  | "tenant.users.view"
   | "tenant.create"
   | "tenant.suspend"
   | "tenant.reactivate"
@@ -90,6 +100,14 @@ export const PERMISSION_MATRIX: Matrix = {
     BILLING_ADMIN: "full",
     SUPPORT_AGENT: "full",
     ANALYST_READONLY: "masked",
+  },
+  "tenant.users.view": {
+    SUPER_ADMIN: "full",
+    OPS_ADMIN: "full",
+    // Faturalama rolünün büro personel listesine ihtiyacı yoktur.
+    BILLING_ADMIN: N,
+    SUPPORT_AGENT: "full",
+    ANALYST_READONLY: N,
   },
   "tenant.create": {
     SUPER_ADMIN: "full",
@@ -375,6 +393,7 @@ export const PERMISSION_MATRIX: Matrix = {
 
 export const ACTION_LABELS: Record<AdminAction, string> = {
   "tenant.view": "Tenant listesi/detayı görüntüleme",
+  "tenant.users.view": "Tenant personel listesi",
   "tenant.create": "Tenant oluşturma",
   "tenant.suspend": "Tenant askıya alma",
   "tenant.reactivate": "Tenant aktifleştirme",
@@ -467,6 +486,16 @@ export const FOUR_EYES_ACTIONS: readonly AdminAction[] = [
   "system.flag_global_write",
   "platform_user.assign_super_admin",
   "audit.export",
+  /**
+   * Denetim bulgularıyla eklenenler:
+   *   - panel personeli açmak ve başkasının kimlik bilgisini sıfırlamak,
+   *     dört-göz için gereken "ikinci insanı" tek kişinin üretmesini engeller
+   *     (bulgu 1);
+   *   - katalog fiyatı tüm kiracıları etkiler, tek büroya indirimden daha
+   *     geniştir (bulgu 9).
+   */
+  "platform_user.manage",
+  "plan.catalog.write",
 ];
 
 export function isFourEyesAction(action: AdminAction): boolean {

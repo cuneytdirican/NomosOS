@@ -27,6 +27,11 @@ import type { AdminRole } from "../platform-permissions";
  * ROL TOKEN'DAN DEĞİL VERİTABANINDAN OKUNUR: pasifleştirilen ya da rolü
  * düşürülen bir yöneticinin elindeki token 8 saat boyunca eski yetkisiyle
  * geçerli kalmasın (tenant tarafındaki JwtAuthGuard ile aynı disiplin).
+ *
+ * DÖRDÜNCÜ KAPI — OTURUM SÜRÜMÜ (`tv`): parola değişimi, 2FA sıfırlama ve rol
+ * düşürme `PlatformUser.tokenVersion` sayacını artırır; sürümü eşleşmeyen token
+ * anında reddedilir. Bu olmadan ele geçirilmiş bir oturumu iptal etmenin tek
+ * yolu hesabı tamamen kapatmaktı (meşru sahibine de kapanırdı).
  */
 @Injectable()
 export class PlatformJwtGuard implements CanActivate {
@@ -81,12 +86,23 @@ export class PlatformJwtGuard implements CanActivate {
         role: true,
         isActive: true,
         twoFactorSecret: true,
+        tokenVersion: true,
       },
     });
 
     if (!record || !record.isActive) {
       throw new UnauthorizedException(
         "Panel hesabınız pasif durumda veya bulunamadı. Bir SUPER_ADMIN ile görüşün."
+      );
+    }
+
+    // KAPI 4 — oturum sürümü. Sürümsüz (eski) token da buraya düşer ve
+    // REDDEDİLİR: "sürüm taşımıyorsa geçerli say" demek, iptal mekanizmasını
+    // taşımayan her token'a kalıcı muafiyet vermek olurdu.
+    if (payload.tv !== record.tokenVersion) {
+      throw new UnauthorizedException(
+        "Panel oturumunuz sonlandırıldı (parola, iki adımlı doğrulama ya da rol değişikliği). " +
+          "Lütfen tekrar giriş yapın."
       );
     }
 
@@ -102,11 +118,19 @@ export class PlatformJwtGuard implements CanActivate {
   }
 }
 
-/** İstek IP'si — PlatformAuditLog'a yazılır (spec §Güvenlik 8). */
+/**
+ * İstek IP'si — PlatformAuditLog'a yazılır (spec §Güvenlik 8).
+ *
+ * `X-Forwarded-For` BAŞLIĞI DOĞRUDAN OKUNMAZ. Başlığı istemci kendisi
+ * gönderebilir; güvenilmeyen bir zincirde okunursa 10 yıl saklanan denetim
+ * izindeki en önemli tekil alan İSTEMCİ TARAFINDAN UYDURULABİLİR hâle gelir
+ * (denetim bulgusu 4).
+ *
+ * Doğrusu: `main.ts` içinde `trust proxy` yapılandırılır (TRUSTED_PROXY_HOPS)
+ * ve Express başlığı YALNIZCA güvenilen vekil sayısı kadar çözer. Burada
+ * yalnız Express'in çözdüğü `request.ip` okunur — böylece hız sınırlayıcı
+ * (`LoginThrottleGuard`) ile denetim kaydı AYNI kaynağı görür.
+ */
 export function clientIp(request: Request): string {
-  const forwarded = request.headers["x-forwarded-for"];
-  if (typeof forwarded === "string" && forwarded.length > 0) {
-    return forwarded.split(",")[0]!.trim().slice(0, 64);
-  }
   return (request.ip ?? request.socket?.remoteAddress ?? "bilinmeyen").slice(0, 64);
 }

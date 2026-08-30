@@ -1,20 +1,25 @@
 /**
  * Finans modülü API istemcisi — `/api/v1/finance/**` (Modül 08).
  *
- * SÖZLEŞME:
- *   GET/POST /finance/entries                  — hareket listesi / oluşturma
+ * UÇ ADLARI `@nomosos/shared` İÇİNDEKİ TEK TABLODAN GELİR (`FINANCE_ROUTES`).
+ *
+ * GERÇEK SÖZLEŞME (finance.controller.ts):
+ *   GET/POST /finance/entries                   — hareket listesi / oluşturma
  *   GET      /finance/clients/:clientId/summary — müvekkil finans özeti
  *   GET      /finance/cases/:caseId/summary     — dosya finans özeti
- *   GET      /finance/reports/office            — büro geneli rapor (dönem parametreli)
- *   GET      /finance/reports/aging             — yaşlandırma (0-30/31-60/61-90/90+)
+ *   GET      /finance/summary                   — büro geneli özet (dönem parametreli)
+ *
+ * `/finance/reports/office` ve `/finance/reports/aging` uçları API'de HİÇ
+ * BULUNMUYOR (denetim bulgusu 12); büro raporu `/finance/summary`'dir ve
+ * yaşlandırma onun `receivables.aging` alanında gelir — ayrı çağrı yoktur.
  *
  * PARA İLKESİ: bu dosya HİÇBİR toplam hesaplamaz. Tahakkuk, tahsilat, bekleyen
  * bakiye, yaşlandırma kovaları ve avans bakiyesi SUNUCUDAN gelir. Sunucu bir
  * alanı göndermiyorsa arayüz "—" gösterir; eksik veriyi sıfır sanıp toplamaz.
  */
 
+import { FINANCE_ROUTES } from "@nomosos/shared";
 import { api, asList } from "@/lib/api";
-import { isMissingEndpoint } from "@/lib/faz2";
 import type {
   AgingBucket,
   ClientFinanceSummary,
@@ -36,7 +41,7 @@ export interface FinanceEntryQuery {
 }
 
 export function listFinanceEntries(query: FinanceEntryQuery = {}): Promise<FinanceEntry[]> {
-  return api<unknown>("/finance/entries", { query: { ...query } }).then((p) =>
+  return api<unknown>(FINANCE_ROUTES.entries, { query: { ...query } }).then((p) =>
     asList<FinanceEntry>(p),
   );
 }
@@ -55,26 +60,27 @@ export interface CreateFinanceEntryBody {
 }
 
 export function createFinanceEntry(body: CreateFinanceEntryBody): Promise<FinanceEntry> {
-  return api<FinanceEntry>("/finance/entries", { method: "POST", body: clean(body) });
+  return api<FinanceEntry>(FINANCE_ROUTES.entries, { method: "POST", body: clean(body) });
 }
 
 // --------------------------------------------------------------------- özetler
 
 export function getClientFinanceSummary(clientId: string): Promise<ClientFinanceSummary> {
-  return api<ClientFinanceSummary>(`/finance/clients/${clientId}/summary`);
+  return api<ClientFinanceSummary>(FINANCE_ROUTES.clientSummary(clientId));
 }
 
 export function getCaseFinanceSummary(caseId: string): Promise<ClientFinanceSummary> {
-  return api<ClientFinanceSummary>(`/finance/cases/${caseId}/summary`);
+  return api<ClientFinanceSummary>(FINANCE_ROUTES.caseSummary(caseId));
 }
 
 /**
- * Büro geneli rapor.
+ * Büro geneli rapor — TEK ÇAĞRI.
  *
- * Yaşlandırma ve en borçlu müvekkiller rapor gövdesinde gelirse ayrı çağrı
- * yapılmaz; gelmezse `/finance/reports/aging` DENENİR. Bu ikinci deneme yalnızca
- * "uç yok" (gövdesiz 404 / ağ yok) durumunda sessizce geçilir — Türkçe iş mesajı
- * taşıyan gerçek hatalar yutulmaz (bkz. lib/faz2 → isMissingEndpoint).
+ * Yaşlandırma AYRI BİR UÇ DEĞİLDİR: `/finance/summary` yanıtı onu
+ * `receivables.aging` alanında taşır. Önceki sürüm önce olmayan bir
+ * `/finance/reports/office` ucunu çağırıyor, sonra yine olmayan bir
+ * `/finance/reports/aging` ucuna düşüyordu; ikisi de 404 üretiyordu
+ * (denetim bulgusu 12).
  */
 export interface OfficeReportQuery {
   dateFrom?: string;
@@ -85,24 +91,21 @@ export interface OfficeReportQuery {
 export async function getOfficeReport(
   query: OfficeReportQuery = {},
 ): Promise<OfficeFinanceReport> {
-  const report = await api<OfficeFinanceReport>("/finance/reports/office", {
-    query: { ...query },
-  });
+  const report = await api<OfficeFinanceReport & { receivables?: unknown }>(
+    FINANCE_ROUTES.summary,
+    { query: { ...query } },
+  );
 
   const hasAging = Array.isArray(report.aging) && report.aging.length > 0;
   if (hasAging) return report;
 
-  try {
-    const aging = await api<unknown>("/finance/reports/aging", { query: { ...query } });
-    return {
-      ...report,
-      aging: readAging(aging),
-      topDebtors: report.topDebtors ?? readTopDebtors(aging),
-    };
-  } catch (err) {
-    if (isMissingEndpoint(err)) return report;
-    throw err;
-  }
+  // Sunucu yaşlandırmayı `receivables.aging` altında döndürür; iki biçimi de
+  // okuyabilmek için tek yardımcıdan geçirilir.
+  return {
+    ...report,
+    aging: readAging(report.receivables ?? report),
+    topDebtors: report.topDebtors ?? readTopDebtors(report),
+  };
 }
 
 /** Yaşlandırma yanıtı dizi ya da `{ buckets: [...] }` olabilir. */

@@ -116,7 +116,7 @@ export class FinanceSummaryService {
       this.openInvoiceBalances(user.tenantId, clientId),
     ]);
 
-    const buckets = this.foldBuckets(rows);
+    const buckets = this.ensureCurrencies(this.foldBuckets(rows), balances);
     const currencies = this.renderBuckets(buckets);
     const primary = currencies.find((c) => c.currency === "TRY") ?? currencies[0] ?? null;
 
@@ -196,7 +196,7 @@ export class FinanceSummaryService {
       }),
     ]);
 
-    const currencies = this.renderBuckets(this.foldBuckets(rows));
+    const currencies = this.renderBuckets(this.ensureCurrencies(this.foldBuckets(rows), []));
     const totalMinutes = timeAgg._sum.minutes ?? 0;
 
     return {
@@ -270,8 +270,8 @@ export class FinanceSummaryService {
 
     return {
       period: { from: periodStart, to: periodEnd },
-      periodTotals: this.renderBuckets(this.foldBuckets(periodRows)),
-      allTimeTotals: this.renderBuckets(this.foldBuckets(allTimeRows)),
+      periodTotals: this.renderBuckets(this.ensureCurrencies(this.foldBuckets(periodRows), balances)),
+      allTimeTotals: this.renderBuckets(this.ensureCurrencies(this.foldBuckets(allTimeRows), balances)),
       receivables: this.buildAging(balances),
       invoices: invoiceStatusRows.map((r) => ({
         status: r.status,
@@ -335,6 +335,24 @@ export class FinanceSummaryService {
           break;
       }
       map.set(row.currency, bucket);
+    }
+    return map;
+  }
+
+  /**
+   * TABAN PARA BİRİMLERİNİ GARANTİLER.
+   *
+   * Hiç `FinancialEntry` kaydı olmayan bir müvekkilde kova haritası boş kalır ve
+   * `primary` null dönerdi; ekran "veri yok" gösterir, oysa açık faturası
+   * olabilir. Bu yüzden TRY her zaman, açık faturalarda geçen para birimleri de
+   * ayrıca sıfır kovayla eklenir — tutarlar değişmez, yalnızca satır görünür.
+   */
+  private ensureCurrencies(
+    map: Map<string, CurrencyBucket>,
+    balances: OpenInvoiceBalance[],
+  ): Map<string, CurrencyBucket> {
+    for (const currency of ["TRY", ...balances.map((b) => b.currency)]) {
+      if (!map.has(currency)) map.set(currency, emptyBucket());
     }
     return map;
   }

@@ -21,7 +21,12 @@ import { DocumentsModule } from "./documents/documents.module";
 import { CaselawModule } from "./caselaw/caselaw.module";
 import { PetitionsModule } from "./petitions/petitions.module";
 import { AssistantModule } from "./assistant/assistant.module";
+import { EnforcementModule } from "./enforcement/enforcement.module";
+import { FinanceModule } from "./finance/finance.module";
+import { BillingModule } from "./billing/billing.module";
+import { PlatformModule } from "./platform/platform.module";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
+import { TenantStatusGuard } from "./common/guards/tenant-status.guard";
 
 /** JWT imza anahtarı için asgari uzunluk (bayt). */
 const JWT_SECRET_MIN_LENGTH = 32;
@@ -94,7 +99,32 @@ function requireJwtSecret(config: ConfigService): string {
     CaselawModule,
     PetitionsModule,
     AssistantModule,
+    // --- Faz 3 modülleri ---
+    // İcra (Modül 05). CaselawModule'den SONRA: ortak BYO-LLM koşu
+    // yürütücüsünü (AiRunnerService) oradan alır.
+    EnforcementModule,
+    // Finans (Modül 08) → AssistantModule (LLM rota çözümü + KVKK kapısı).
+    FinanceModule,
+    // Faturalama (Modül 09) → FinanceModule. Sıra bu yüzden bağlayıcıdır.
+    BillingModule,
+    // Platform yönetim paneli (Modül 25).
+    // AYRI DÜNYA: kendi kimlik tablosu (PlatformUser), kendi imza anahtarı,
+    // kendi audience'ı (`aud: "platform"`) ve kendi yol öneki (/api/admin/v1).
+    // Kiracı JwtAuthGuard'ı bu uçlarda @Public() ile atlanır; yerine
+    // PlatformJwtGuard + PlatformPermissionGuard devreye girer.
+    PlatformModule,
   ],
-  providers: [{ provide: APP_GUARD, useClass: JwtAuthGuard }],
+  /**
+   * GUARD SIRASI ÖNEMLİDİR — dizideki sıra çalışma sırasıdır.
+   *
+   * 1. `JwtAuthGuard`   → kimliği doğrular ve `request.user`'ı KURAR.
+   * 2. `TenantStatusGuard` → o kimliğin bürosunun aboneliği askıda/iptal mi,
+   *    bakım tam kilidi açık mı diye bakar. `request.user`'a ihtiyaç duyduğu
+   *    için kimlik guard'ından SONRA gelmek zorundadır.
+   */
+  providers: [
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: TenantStatusGuard },
+  ],
 })
 export class AppModule {}

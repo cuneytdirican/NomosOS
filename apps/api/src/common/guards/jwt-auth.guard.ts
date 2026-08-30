@@ -5,6 +5,7 @@ import type { Request } from "express";
 import { IS_PUBLIC_KEY } from "../decorators/public.decorator";
 import { PrismaService } from "../../prisma/prisma.service";
 import type { AuthUser, JwtPayload } from "../types";
+import { TENANT_JWT_AUDIENCE } from "../jwt-audience";
 
 /**
  * Kullanıcı doğrulama önbelleği ömrü (ms).
@@ -47,9 +48,20 @@ export class JwtAuthGuard implements CanActivate {
 
     let payload: JwtPayload;
     try {
-      payload = await this.jwtService.verifyAsync<JwtPayload>(token);
+      // GÜVENLİK: audience ZORUNLU doğrulanır. Platform paneli token'ı
+      // (`aud: "platform"`) buraya asla giremez — imza anahtarı da zaten
+      // farklıdır, bu ikinci kapıdır (bkz. common/jwt-audience.ts).
+      payload = await this.jwtService.verifyAsync<JwtPayload>(token, {
+        audience: TENANT_JWT_AUDIENCE,
+      });
     } catch {
       throw new UnauthorizedException("Oturum geçersiz veya süresi dolmuş. Lütfen tekrar giriş yapın.");
+    }
+
+    // Kütüphane audience'ı doğrulasa da açık kontrol bırakılır: doğrulama
+    // seçeneği ileride yapılandırmadan düşerse kapı yine kapalı kalsın.
+    if (payload.aud !== TENANT_JWT_AUDIENCE) {
+      throw new UnauthorizedException("Bu oturum büro uygulaması için geçerli değil.");
     }
 
     // GÜVENLİK: rol ve tenant TOKEN'DAN DEĞİL veritabanından okunur.

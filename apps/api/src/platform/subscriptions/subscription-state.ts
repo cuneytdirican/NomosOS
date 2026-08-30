@@ -66,7 +66,20 @@ export function assertTransition(from: SubscriptionStatus, to: SubscriptionStatu
  * Askıya alma ve iptal yıkıcıdır (kullanıcı erişimi kesilir); tek kişiyle
  * yapılamaz. Diğer geçişler (ödeme alındı, temerrüde düştü) operasyonun
  * olağan akışıdır.
+ *
+ * KARAR HEDEF DURUMA DEĞİL, GEÇİŞİN ANLAMINA BAĞLIDIR. `SUSPENDED → ACTIVE`
+ * hedefine bakıldığında sıradan bir "aktifleştirme"dir; anlamına bakıldığında
+ * İKİ KİŞİNİN KAPATTIĞI BİR BÜROYU YENİDEN AÇMAKTIR ve adanmış ucu
+ * (`POST /tenants/:id/activate`) zaten `tenant.reactivate` → four_eyes ister.
+ * Yalnız hedefe bakan eski sürüm, bu kapıyı `POST /subscriptions/:id/transition`
+ * üzerinden tek imzayla atlatılabilir bırakıyordu (denetim bulgusu 3):
+ * yıkıcı bir işlemin GERİ ALINMASI da en az onun kadar korunmalıdır.
  */
-export function transitionNeedsApproval(to: SubscriptionStatus): boolean {
-  return to === "SUSPENDED" || to === "CANCELED";
+export function transitionNeedsApproval(
+  from: SubscriptionStatus,
+  to: SubscriptionStatus
+): boolean {
+  if (to === "SUSPENDED" || to === "CANCELED") return true;
+  if (from === "SUSPENDED" && to === "ACTIVE") return true;
+  return false;
 }

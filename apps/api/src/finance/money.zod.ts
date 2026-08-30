@@ -84,6 +84,31 @@ export const nullablePercentRate = (label: string) =>
       .optional(),
   );
 
+/**
+ * FAİZ ORANI — Decimal(5,2), 0 ile 999,99 arası.
+ *
+ * `percentRate` KULLANILMAZ: o, KDV/başarı primi gibi tanımı gereği %100'ü
+ * aşamayan oranlar içindir. Gecikme/temerrüt faizi Türkiye'de %100'ün üstüne
+ * çıkabilir (şema da Decimal(5,2) ile buna yer ayırmıştır); oranı 100'de
+ * kesmek meşru bir takibi reddetmek olurdu. Basamak disiplini aynıdır: iki
+ * ondalıktan fazlası yuvarlanmaz, REDDEDİLİR.
+ */
+const INTEREST_RATE_PATTERN = /^\d{1,3}(?:[.,]\d{1,2})?$/;
+
+export const nullableInterestRate = (label: string) =>
+  z.preprocess(
+    (v) => (v === null ? null : toRawString(v)),
+    z
+      .string()
+      .regex(
+        INTEREST_RATE_PATTERN,
+        `${label} 0 ile 999,99 arasında, en fazla iki ondalık basamaklı olmalıdır.`,
+      )
+      .transform(normalizeDecimalSeparator)
+      .nullable()
+      .optional(),
+  );
+
 /** Miktar alanı (fatura satırı adet/saat) — Decimal(12,2). */
 export const quantityValue = (label: string) =>
   z.preprocess(

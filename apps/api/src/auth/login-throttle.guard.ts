@@ -60,11 +60,30 @@ export class LoginThrottleGuard implements CanActivate {
     this.buckets.delete(this.buildKey(request));
   }
 
+  /**
+   * Sayaç anahtarı: IP + KİMLİK.
+   *
+   * Kimlik önce `email` gövde alanından okunur. `POST /auth/2fa/verify`
+   * gövdesinde e-posta YOKTUR (yalnız `challengeToken` + `code`); anahtar bu
+   * durumda `ip|-`'ye çöker ve ikinci faktör denemeleri hesap ayrımı olmadan
+   * tek kovaya düşerdi (denetim bulgusu 10.1). Bu yüzden e-posta yoksa
+   * challenge token'ının `sub` alanı kimlik olarak kullanılır.
+   *
+   * DİKKAT: token burada DOĞRULANMAZ ve doğrulanmamalıdır — bu bir yetki
+   * kararı değil, yalnızca sayaç anahtarıdır. Sahte bir `sub` saldırganı ancak
+   * KENDİ kovasından ayırır; gerçek yaptırım hesap düzeyindeki kilittir
+   * (PlatformUser.failedAttempts / lockedUntil).
+   */
   private buildKey(request: Request): string {
     const ip = request.ip ?? request.socket?.remoteAddress ?? "bilinmeyen";
-    const body = request.body as { email?: unknown } | undefined;
-    const email = typeof body?.email === "string" ? body.email.toLowerCase().slice(0, 200) : "-";
-    return `${ip}|${email}`;
+    const body = request.body as { email?: unknown; challengeToken?: unknown } | undefined;
+    if (typeof body?.email === "string") {
+      return `${ip}|${body.email.toLowerCase().slice(0, 200)}`;
+    }
+    if (typeof body?.challengeToken === "string") {
+      return `${ip}|challenge:${subjectOf(body.challengeToken)}`;
+    }
+    return `${ip}|-`;
   }
 
   private prune(now: number): void {
@@ -72,5 +91,21 @@ export class LoginThrottleGuard implements CanActivate {
     for (const [key, bucket] of this.buckets) {
       if (bucket.resetAt <= now) this.buckets.delete(key);
     }
+  }
+}
+
+/**
+ * JWT gövdesindeki `sub` alanını İMZA DOĞRULAMADAN okur (yalnız sayaç anahtarı).
+ * Okunamayan token'lar ortak bir kovada toplanır — bu, en sıkı davranıştır.
+ */
+function subjectOf(token: string): string {
+  const part = token.split(".")[1];
+  if (!part) return "gecersiz";
+  try {
+    const json = Buffer.from(part.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+    const sub = (JSON.parse(json) as { sub?: unknown }).sub;
+    return typeof sub === "string" ? sub.slice(0, 64) : "gecersiz";
+  } catch {
+    return "gecersiz";
   }
 }

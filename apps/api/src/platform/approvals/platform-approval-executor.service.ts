@@ -1,8 +1,9 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import type { PlatformApprovalRequest, SupportScope } from "@nomosos/db";
+import { Prisma, type PlatformApprovalRequest, type PlatformRole, type SupportScope } from "@nomosos/db";
 import { PrismaService } from "../../prisma/prisma.service";
 import { PlatformAuditService } from "../platform-audit.service";
-import { MAINTENANCE_SETTING_KEY } from "../platform.constants";
+import { MAINTENANCE_SETTING_KEY, SUPPORT_GRANT_MAX_HOURS } from "../platform.constants";
+import { ADMIN_ROLES } from "../platform-permissions";
 import { assertTransition } from "../subscriptions/subscription-state";
 import type { PlatformAuthUser } from "../platform.types";
 import {
@@ -10,12 +11,22 @@ import {
   type FeatureFlagGlobalPayload,
   type MaintenanceLockPayload,
   type PaymentRefundPayload,
+  type PlanPriceChangePayload,
+  type PlatformUserCreatePayload,
+  type PlatformUserCredentialResetPayload,
   type SubscriptionCancelPayload,
   type SubscriptionPlanChangePayload,
   type SuperAdminPayload,
   type SupportAccessPayload,
   type TenantStatusPayload,
 } from "./approval-actions";
+
+/** `SupportScope` enum'unun çalışma zamanı beyaz listesi (kontrolsüz cast yok). */
+const SUPPORT_SCOPES: readonly SupportScope[] = [
+  "SADECE_USTVERI",
+  "YAPILANDIRMA",
+  "ICERIK_MASKELI",
+];
 
 /**
  * ONAYLANAN DÖRT-GÖZ TALEBİNİ GERÇEKTEN UYGULAYAN KATMAN.
@@ -60,6 +71,12 @@ export class PlatformApprovalExecutorService {
         return this.setGlobalFlag(payload as FeatureFlagGlobalPayload, approver);
       case APPROVAL_ACTIONS.PLATFORM_USER_SUPER_ADMIN:
         return this.assignSuperAdmin(payload as SuperAdminPayload, approver);
+      case APPROVAL_ACTIONS.PLATFORM_USER_CREATE:
+        return this.createPlatformUser(payload as PlatformUserCreatePayload, approver);
+      case APPROVAL_ACTIONS.PLATFORM_USER_CREDENTIAL_RESET:
+        return this.resetCredentials(payload as PlatformUserCredentialResetPayload, approver);
+      case APPROVAL_ACTIONS.PLAN_PRICE_CHANGE:
+        return this.changePlanPrice(payload as PlanPriceChangePayload, approver);
       default:
         throw new BadRequestException(
           `Bu onay talebinin işlemi (${request.action}) uygulanabilir değil. ` +
@@ -267,8 +284,28 @@ export class PlatformApprovalExecutorService {
       );
     }
 
+    /**
+     * PAYLOAD YENİDEN DOĞRULANIR.
+     *
+     * Talep bugün yalnızca `supportAccessSchema`'dan geçen tek bir uçtan
+     * doğuyor; ama üst sınırın TEK savunma hattı o şema olmamalıdır. Payload
+     * onay anında yeniden kısıtlanır: pencere 24 saati aşamaz, kapsam enum
+     * beyaz listesinden geçmeden yazılmaz (kontrolsüz `as SupportScope` cast'i
+     * kaldırıldı — denetim bulgusu 12).
+     */
+    const hours = Math.min(
+      Math.max(1, Math.floor(Number(payload.hours) || 0)),
+      SUPPORT_GRANT_MAX_HOURS
+    );
+    if (!SUPPORT_SCOPES.includes(payload.scope as SupportScope)) {
+      throw new BadRequestException(
+        `Geçersiz destek erişim kapsamı: "${payload.scope}". Kabul edilenler: ` +
+          `${SUPPORT_SCOPES.join(", ")}. Pencere açılmadı.`
+      );
+    }
+
     const grantedAt = new Date();
-    const expiresAt = new Date(grantedAt.getTime() + payload.hours * 60 * 60 * 1000);
+    const expiresAt = new Date(grantedAt.getTime() + hours * 60 * 60 * 1000);
     const grant = await this.prisma.client.supportAccessGrant.create({
       data: {
         tenantId: payload.tenantId,
@@ -289,7 +326,7 @@ export class PlatformApprovalExecutorService {
       tenantId: payload.tenantId,
       detail:
         `Destek erişimi açıldı: ${grantee.fullName} (${grantee.email}), kapsam ${payload.scope}, ` +
-        `${payload.hours} saat, bitiş ${expiresAt.toISOString()}. Gerekçe: ${payload.reason}. ` +
+        `${hours} saat, bitiş ${expiresAt.toISOString()}. Gerekçe: ${payload.reason}. ` +
         "Erişim SALT-OKUR ve PII maskelidir; kullanıcı kimliğine bürünme (impersonation) yoktur.",
     });
 
@@ -405,5 +442,147 @@ export class PlatformApprovalExecutorService {
       detail: `Yeni SUPER_ADMIN oluşturuldu: ${created.email}. Gerekçe: ${payload.reason}`,
     });
     return `${created.email} SUPER_ADMIN olarak oluşturuldu.`;
+  }
+
+  /**
+   * PANEL PERSONELİ AÇMA (SUPER_ADMIN dışı roller).
+   *
+   * Parola talep anında HASH'lenmiştir; `payloadJson` düz parola taşımaz.
+   * Rol, çalışma zamanında beyaz listeye karşı doğrulanır — payload'a güven
+   * duyulmaz (talep şemadan geçse bile executor kendi kapısını kurar).
+   */
+  private async createPlatformUser(
+    payload: PlatformUserCreatePayload,
+    approver: PlatformAuthUser
+  ): Promise<string> {
+    if (!payload.newUser?.email || !payload.newUser.passwordHash) {
+      throw new BadRequestException("Onay talebinde kullanıcı bilgisi eksik.");
+    }
+    if (!(ADMIN_ROLES as readonly string[]).includes(payload.newUser.role)) {
+      throw new BadRequestException(`Geçersiz panel rolü: "${payload.newUser.role}".`);
+    }
+    if (payload.newUser.role === "SUPER_ADMIN") {
+      // SUPER_ADMIN'in kendi aksiyonu vardır; bu daldan sızmamalı.
+      throw new BadRequestException(
+        "SUPER_ADMIN ataması bu talep türüyle yapılamaz; PLATFORM_USER_SUPER_ADMIN kullanılır."
+      );
+    }
+
+    const existing = await this.prisma.client.platformUser.findUnique({
+      where: { email: payload.newUser.email },
+    });
+    if (existing) {
+      throw new BadRequestException("Bu e-posta ile bir panel kullanıcısı zaten var.");
+    }
+
+    const created = await this.prisma.client.platformUser.create({
+      data: {
+        email: payload.newUser.email,
+        fullName: payload.newUser.fullName,
+        passwordHash: payload.newUser.passwordHash,
+        role: payload.newUser.role as PlatformRole,
+      },
+      select: { id: true, email: true, role: true },
+    });
+
+    await this.audit.log({
+      actor: approver,
+      action: "PLATFORM_USER_CREATE",
+      entity: "PlatformUser",
+      entityId: created.id,
+      detail:
+        `${created.email} (${created.role}) DÖRT-GÖZ onayıyla oluşturuldu. ` +
+        `Gerekçe: ${payload.reason}`,
+    });
+    return `${created.email} (${created.role}) oluşturuldu.`;
+  }
+
+  /**
+   * BAŞKASININ PAROLASINI / 2FA KAYDINI SIFIRLAMA.
+   *
+   * `tokenVersion` ARTIRILIR: hedef kullanıcının açık tüm panel oturumları
+   * anında düşer. Sıfırlama, ele geçirilmiş bir oturumu kapatmak için
+   * yapıldığında bu şarttır — aksi hâlde saldırganın token'ı 8 saat daha
+   * geçerli kalırdı (denetim bulgusu 5).
+   */
+  private async resetCredentials(
+    payload: PlatformUserCredentialResetPayload,
+    approver: PlatformAuthUser
+  ): Promise<string> {
+    const target = await this.prisma.client.platformUser.findUnique({
+      where: { id: payload.targetUserId },
+    });
+    if (!target) throw new NotFoundException("Panel kullanıcısı bulunamadı.");
+    if (target.id === approver.id) {
+      throw new BadRequestException(
+        "Kendi kimlik bilgilerinizi bu yoldan sıfırlayamazsınız; /auth/change-password kullanın."
+      );
+    }
+
+    const data: Prisma.PlatformUserUpdateInput = { tokenVersion: { increment: 1 } };
+    const done: string[] = [];
+    if (payload.passwordHash) {
+      data.passwordHash = payload.passwordHash;
+      // Sıfırlama aynı zamanda kilidi kaldırır: kilit, unutulan parolanın
+      // sonucu olabilir ve yeni parola verilmişken kilit tutmanın anlamı yok.
+      data.failedAttempts = 0;
+      data.lockedUntil = null;
+      done.push("parola değiştirildi");
+    }
+    if (payload.resetTwoFactor) {
+      data.twoFactorSecret = null;
+      done.push("2FA kaydı sıfırlandı");
+    }
+    if (done.length === 0) {
+      throw new BadRequestException("Onay talebinde sıfırlanacak bir kimlik bilgisi yok.");
+    }
+
+    await this.prisma.client.platformUser.update({ where: { id: target.id }, data });
+
+    await this.audit.log({
+      actor: approver,
+      action: "PLATFORM_USER_CREDENTIAL_RESET",
+      entity: "PlatformUser",
+      entityId: target.id,
+      detail:
+        `${target.email}: ${done.join(", ")} (DÖRT-GÖZ onayıyla). Kullanıcının tüm panel ` +
+        `oturumları sonlandırıldı. Gerekçe: ${payload.reason}`,
+    });
+    return `${target.email} için ${done.join(" ve ")}; açık oturumları sonlandırıldı.`;
+  }
+
+  /** PLAN KATALOĞU FİYAT DEĞİŞİKLİĞİ — tüm kiracıları etkiler, iki imza ister. */
+  private async changePlanPrice(
+    payload: PlanPriceChangePayload,
+    approver: PlatformAuthUser
+  ): Promise<string> {
+    const plan = await this.prisma.client.planTier.findUnique({ where: { id: payload.planId } });
+    if (!plan) throw new NotFoundException("Plan bulunamadı.");
+
+    const next =
+      payload.monthlyPricePerUser === null ? null : new Prisma.Decimal(payload.monthlyPricePerUser);
+    const updated = await this.prisma.client.planTier.update({
+      where: { id: plan.id },
+      data: { monthlyPricePerUser: next },
+    });
+
+    const affected = await this.prisma.client.subscription.count({
+      where: { planKey: plan.key, status: { in: ["TRIAL", "ACTIVE", "PAST_DUE"] } },
+    });
+
+    await this.audit.log({
+      actor: approver,
+      action: "PLAN_PRICE_CHANGE",
+      entity: "PlanTier",
+      entityId: plan.id,
+      detail:
+        `${plan.key} planı fiyatı ${plan.monthlyPricePerUser?.toFixed(2) ?? "-"} → ` +
+        `${updated.monthlyPricePerUser?.toFixed(2) ?? "-"}. Etkilenen aktif abonelik: ${affected}. ` +
+        `Gerekçe: ${payload.reason}. Mevcut aboneler cari dönem sonuna kadar eski fiyattan devam eder.`,
+    });
+    return (
+      `${plan.key} planı fiyatı güncellendi (${updated.monthlyPricePerUser?.toFixed(2) ?? "-"}). ` +
+      `${affected} aktif abonelik cari dönem sonunda etkilenecek.`
+    );
   }
 }

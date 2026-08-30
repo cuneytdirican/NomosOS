@@ -24,6 +24,8 @@ import {
 export interface ResourceState<T> {
   data: T | null;
   loading: boolean;
+  /** İstek başarıyla tamamlandı (veri geldi, boş olabilir). */
+  loaded: boolean;
   /** Uç henüz hazır değil (yazılmadı ya da servis kapalı). */
   missing: boolean;
   forbidden: boolean;
@@ -37,14 +39,13 @@ export interface ListResourceState<T> extends Omit<ResourceState<T[]>, "data"> {
   data: T[];
   /** Yanıt geldi ama liste boş. */
   empty: boolean;
-  loaded: boolean;
 }
 
 function useRequest<T>(
   path: string | null,
   options: ApiOptions | undefined,
   transform: (payload: unknown) => T,
-): ResourceState<T> & { loaded: boolean } {
+): ResourceState<T> {
   const optionsKey = JSON.stringify(options ?? {});
 
   const [data, setData] = useState<T | null>(null);

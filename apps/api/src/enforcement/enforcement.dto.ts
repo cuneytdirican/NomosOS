@@ -9,6 +9,7 @@
 
 import { z } from "zod";
 import { nullableDate, nullableText } from "../common/zod";
+import { nullableInterestRate, nullableMoney, positiveMoney } from "../finance/money.zod";
 import { ENFORCEMENT_STAGES } from "./enforcement-stage";
 
 export const ENFORCEMENT_TYPES = [
@@ -75,50 +76,33 @@ export const COPILOT_COMMANDS = [
 export type CopilotCommand = (typeof COPILOT_COMMANDS)[number];
 
 /* ------------------------------------------------------------------ *
- * Para alanları
+ * Para alanları — TEK KAYNAK: finance/money.zod.ts
  * ------------------------------------------------------------------ */
 
-/** En çok 16 tam + 2 ondalık basamak — Decimal(18,2) ile birebir. */
-const MONEY_PATTERN = /^-?\d{1,16}(\.\d{1,2})?$/;
-
 /**
- * Parasal alan. Sayı da kabul edilir (istemci kolaylığı) ama HEMEN string'e
- * çevrilir; bu noktadan sonra değer hiçbir yerde `number` olarak dolaşmaz.
+ * PARA DOĞRULAMASI FİNANS MODÜLÜYLE ORTAKTIR.
+ *
+ * Buradaki yerel `money` yardımcısı sayı girdisinde
+ * `Number.isFinite(v) ? v.toFixed(2) : ...` yapıyordu ve iki kusuru vardı
+ * (denetim bulgusu 9):
+ *
+ *   (a) `12500.999` REDDEDİLMİYOR, sessizce `"12501.00"` oluyordu — kullanıcı
+ *       1 kuruş değil 1 TL fark yediğini görmüyordu;
+ *   (b) `Number.prototype.toFixed` ikili gösterime bağlıdır:
+ *       `(1.005).toFixed(2) === "1.00"` — yani modülün `money.ts:30`'da
+ *       tavizsiz uyguladığı ROUND_HALF_UP kuralına AYKIRI yuvarlıyordu.
+ *
+ * `finance/money.zod.ts` doğru davranıyor: değeri metne çevirip iki ondalıktan
+ * fazlasını REDDEDİYOR. İki modülün para sınırı aynı sözleşmeye uymalıdır;
+ * fazla basamak yuvarlanmaz, reddedilir. Bu yüzden yerel yardımcılar silindi
+ * ve tek kapı bırakıldı.
  */
-const money = (label: string, opts: { allowNegative?: boolean } = {}) =>
-  z.preprocess(
-    (v) => {
-      if (typeof v === "number") return Number.isFinite(v) ? v.toFixed(2) : String(v);
-      if (typeof v === "string") return v.trim().replace(",", ".");
-      return v;
-    },
-    z
-      .string({ required_error: `${label} zorunludur.`, invalid_type_error: `${label} sayısal olmalıdır.` })
-      .regex(MONEY_PATTERN, `${label} en fazla iki ondalık basamaklı bir tutar olmalıdır (örn. 12500.00).`)
-      .refine((v) => opts.allowNegative || !v.startsWith("-"), `${label} negatif olamaz.`),
-  );
+const money = (label: string) => positiveMoney(label);
 
-const optionalMoney = (label: string) =>
-  z.preprocess(
-    (v) => (v === "" || v === null ? null : v),
-    money(label).nullable().optional(),
-  );
+const optionalMoney = (label: string) => nullableMoney(label);
 
-/** Yüzde alanı (faiz oranı) — Decimal(5,2), 0-999.99. */
-const percent = (label: string) =>
-  z.preprocess(
-    (v) => {
-      if (v === "" || v === null) return null;
-      if (typeof v === "number") return Number.isFinite(v) ? String(v) : v;
-      if (typeof v === "string") return v.trim().replace(",", ".");
-      return v;
-    },
-    z
-      .string()
-      .regex(/^\d{1,3}(\.\d{1,2})?$/, `${label} 0 ile 999,99 arasında, en fazla iki ondalıklı olmalıdır.`)
-      .nullable()
-      .optional(),
-  );
+/** Faiz oranı — Decimal(5,2), 0-999,99 (gecikme faizi %100'ü aşabilir). */
+const percent = (label: string) => nullableInterestRate(label);
 
 /* ------------------------------------------------------------------ *
  * İcra dosyası
@@ -140,6 +124,8 @@ export const createEnforcementSchema = z.object({
   interestRate: percent("Faiz oranı"),
   currency: z.string().length(3, "Para birimi 3 harfli olmalıdır (örn. TRY).").optional().default("TRY"),
   requestDate: z.coerce.date({ invalid_type_error: "Takip talebi tarihi geçerli olmalıdır." }),
+  /** Faiz başlangıcı (temerrüt/vade/ihtar). Boşsa takip talebi tarihi kullanılır. */
+  interestStartDate: nullableDate("Faiz başlangıç tarihi"),
   paymentOrderServedAt: nullableDate("Ödeme emri tebliğ tarihi"),
   debtorInfo: nullableText(4000, "Borçlu bilgisi"),
 });
@@ -155,10 +141,21 @@ export const updateEnforcementSchema = z
     interestRate: percent("Faiz oranı"),
     currency: z.string().length(3).optional(),
     requestDate: z.coerce.date().optional(),
+    /**
+     * Faiz başlangıcı (temerrüt/vade/ihtar; ilamlı takipte ilam tarihi).
+     * Boşsa hesap takip talebi tarihinden işletilir ve bakiye UYARI döndürür.
+     */
+    interestStartDate: nullableDate("Faiz başlangıç tarihi"),
     paymentOrderServedAt: nullableDate("Ödeme emri tebliğ tarihi"),
     objectionDate: nullableDate("İtiraz tarihi"),
     finalizedAt: nullableDate("Kesinleşme tarihi"),
     debtorInfo: nullableText(4000, "Borçlu bilgisi"),
+    /**
+     * Tahsilat kaydı bulunan dosyada parasal çapaları (asıl alacak, faiz
+     * oranı/başlangıcı, takip tarihi, para birimi) değiştirmek için ZORUNLU.
+     * Bakiye türetilmiş bir değerdir; çapa değişimi geçmiş hesabı da değiştirir.
+     */
+    changeReason: z.string().max(2000, "Gerekçe en fazla 2000 karakter olabilir.").optional(),
   })
   .refine((d) => Object.keys(d).length > 0, "Güncellenecek en az bir alan gönderilmelidir.");
 export type UpdateEnforcementInput = z.infer<typeof updateEnforcementSchema>;
@@ -172,6 +169,24 @@ export const changeStageSchema = z.object({
    * "aciz vesikası var" ya da "takipten vazgeçildi" gibi avukat gerekçesi.
    */
   closureReason: z.string().max(2000, "Kapanış gerekçesi en fazla 2000 karakter olabilir.").optional(),
+  /**
+   * ÖDEME EMRİ TEBLİĞ TARİHİ — ODEME_EMRI_TEBLIG aşamasına geçişte zorunludur.
+   *
+   * Aşamanın hukuki anlamı bu tarihe bağlıdır: İİK m.62 (kambiyoda m.168/5)
+   * itiraz süresi YALNIZCA `paymentOrderServedAt` doluyken tetiklenir. Tarih
+   * çapalanmadığında süre hiç hesaplanmıyor, hiç önerilmiyor ve "eksik süre"
+   * listesinde bile görünmüyordu — sessiz hak kaybı (denetim bulgusu 7).
+   * `ITIRAZ`/`KAPANDI` için zaten uygulanan desenin aynısı.
+   */
+  servedAt: nullableDate("Ödeme emri tebliğ tarihi"),
+  /**
+   * KESİNLEŞME ÖN KOŞULUNU BİLEREK AŞMA GEREKÇESİ.
+   *
+   * İtiraz süresi dolmadan takip kesinleştirilemez (İİK m.62). Avukat yine de
+   * kesinleştirmek istiyorsa (ör. borçlu itirazdan feragat etti) gerekçe
+   * ZORUNLUDUR ve AuditLog'a yazılır — `closureReason` deseninin aynısı.
+   */
+  overrideReason: z.string().max(2000, "Gerekçe en fazla 2000 karakter olabilir.").optional(),
 });
 export type ChangeStageInput = z.infer<typeof changeStageSchema>;
 

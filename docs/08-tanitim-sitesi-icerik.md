@@ -395,6 +395,19 @@ Protokolü, Çerez Politikası) · **İletişim**.
 Alt satır: *NomosOS bir hukuk bürosu değildir ve hukuki danışmanlık vermez. Sistem
 tarafından üretilen çıktılar avukat denetimine tabidir.*
 
+**Geliştirici künyesi** (alt bilginin en altında, telif satırının yanında):
+
+```html
+Developed by <a href="https://mindaeon.com" target="_blank" rel="noopener noreferrer">MindAeon AI</a>
+```
+
+- Konum: `© 2026 NomosOS` telif satırıyla aynı hizada, sağda (mobilde alt alta).
+- Biçim: küçük punto (13px), soluk metin rengi (`--ink-soft` üzerinde %70 opaklık);
+  bağlantı üzerine gelindiğinde altın renge (`--gold`) döner ve altı çizilir.
+- Metin **İngilizce kalır** ("Developed by MindAeon AI") — marka adı çevrilmez.
+- `target="_blank"` ile birlikte `rel="noopener noreferrer"` **zorunludur** (güvenlik).
+- Aynı künye, uygulama içi (`/app`) alt bilgide ve admin panelinde de yer alır.
+
 ---
 
 ## 4. Uygulama Notları
@@ -430,4 +443,6 @@ tarafından üretilen çıktılar avukat denetimine tabidir.*
 9. Güvenlik sayfasında altı başlığın tamamı yer alır; "impersonation yoktur" ifadesi geçer.
 10. SSS'de 10 soru vardır ve tamamı bu dokümandaki yanıtlarla eşleşir.
 11. Demo formu KVKK onay kutusu olmadan gönderilemez.
-12. `pnpm --filter @nomosos/web build` hatasız geçer; mobilde yatay taşma olmaz.
+12. Alt bilgide "Developed by MindAeon AI" künyesi bulunur ve `https://mindaeon.com`
+    adresine `rel="noopener noreferrer"` ile açılır.
+13. `pnpm --filter @nomosos/web build` hatasız geçer; mobilde yatay taşma olmaz.

@@ -1146,6 +1146,11 @@ model EnforcementFile {
   interestRate         Decimal?         @db.Decimal(5, 2)
   currency             String           @default("TRY")
   requestDate          DateTime // Takip talebi tarihi
+  /// FAİZ BAŞLANGICI — temerrüt/vade/ihtar tarihi. Takip talebinde faiz
+  /// genellikle takip tarihinden ÖNCE bir tarihten istenir; boş bırakılırsa
+  /// hesap `requestDate`'ten işletilir ve bakiye yanıtında UYARI döner.
+  /// Varsayılan bir tarih UYDURULMAZ; tarih avukatın beyanıdır.
+  interestStartDate    DateTime?
   paymentOrderServedAt DateTime? // Ödeme emri tebliğ tarihi — süre motorunun çapası
   objectionDate        DateTime? // Borçlu itiraz tarihi
   finalizedAt          DateTime? // Takibin kesinleştiği tarih
@@ -1281,9 +1286,18 @@ model CollectionScore {
   tenantId          String
   enforcementFileId String
   enforcementFile   EnforcementFile @relation(fields: [enforcementFileId], references: [id], onDelete: Cascade)
-  /// 0-100 — deterministik sinyallerden hesaplanır
+  /// 0-100 — KURAL TABANI + AI düzeltmesi (±15) uygulanmış NİHAİ skor.
   score             Int
+  /// Bant DAİMA `baseScore`'dan türer; AI düzeltmesi bandı DEĞİŞTİREMEZ.
+  /// Skor ile bant çeliştiğinde (ör. 54 / DUSUK) doğru olan banttır; ayrımın
+  /// kaynağı `baseScore` + `aiAdjustment` alanlarında saklıdır.
   band              ScoreBand
+  /// AI etkisi UYGULANMADAN ÖNCEKİ kural skoru — bandın gerçek dayanağı.
+  baseScore         Int?
+  /// AI'ın skora katkısı (-15..+15). Bandı etkilemez.
+  aiAdjustment      Int?
+  /// Bandın nereden geldiği: "TABAN_SKOR" (tek geçerli değer; kayıt için).
+  bandSource        String?
   /// Deterministik sinyaller (JSON): [{ key, label, weight, value, contribution }]
   ruleSignalsJson   String
   /// AI yorumu — öneri niteliğindedir, skoru DEĞİŞTİRMEZ
@@ -1515,6 +1529,14 @@ model PlatformUser {
   /// ASLA düz metin dönülmez; yalnız kurulum anında QR üretiminde kullanılır.
   twoFactorSecret String?
   lastLoginAt     DateTime?
+  /// OTURUM SÜRÜMÜ. Panel token'ı `tv` alanında bu değeri taşır; guard
+  /// eşleşmeyeni reddeder. Parola değişimi, 2FA sıfırlama ve rol düşürme bu
+  /// sayacı artırır → ele geçirilmiş oturum ANINDA düşer (spec §Güvenlik 3).
+  tokenVersion    Int          @default(0)
+  /// Ardışık başarısız giriş/2FA denemesi. 5'te hesap kilitlenir.
+  failedAttempts  Int          @default(0)
+  /// Kilit bitiş anı. Kilidi başka bir SUPER_ADMIN erkenden açabilir.
+  lockedUntil     DateTime?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 

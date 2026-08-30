@@ -12,15 +12,22 @@ import { createHmac } from "node:crypto";
  */
 
 /**
- * Controller yolu öneki.
+ * Controller yolu öneki — TAM YOL (global önek uygulanmaz).
  *
  * TEK KAYNAK: tüm platform controller'ları `@PlatformController(`${ADMIN_ROUTE_PREFIX}/...`)`
- * yazar. Entegrasyon ajanı `main.ts`'te önek stratejisini değiştirmek isterse
- * DEĞİŞTİRİLECEK TEK YER burasıdır (bkz. platform/README notu ve teslim raporu).
+ * yazar; yayınlanan adres `/api/admin/v1/...` olur.
  *
- * Hedef genel adres: `/api/admin/v1/...`
+ * NASIL ÇALIŞIR: `main.ts` global öneki `api/v1` olarak kurar ANCAK bu öneki
+ * `api/admin/v1/(.*)` desenine uyan yollardan HARİÇ tutar
+ * (`setGlobalPrefix(..., { exclude })`). Bu yüzden buradaki değer, önekin
+ * eklenmediği TAM yoldur — kiracı controller'larına hiç dokunulmaz ve URL
+ * yeniden yazan (rewrite) bir ara katman gerekmez.
+ *
+ * DEĞİŞTİRİRSENİZ: `main.ts` içindeki `ADMIN_PREFIX_EXCLUDE_PATTERN` de
+ * güncellenmelidir; ikisi birbirine bağlıdır ve `main.ts` açılışta tutarlılığı
+ * doğrular (uyuşmazsa uygulama AÇILMAZ).
  */
-export const ADMIN_ROUTE_PREFIX = "admin/v1";
+export const ADMIN_ROUTE_PREFIX = "api/admin/v1";
 
 /** Platform JWT audience — tenant token'ı bu değeri ASLA taşımaz. */
 export const PLATFORM_JWT_AUDIENCE = "platform";
@@ -45,6 +52,24 @@ export const SUPPORT_GRANT_MAX_HOURS = 24;
 
 /** Sistemde her an bulunması gereken asgari aktif SUPER_ADMIN sayısı. */
 export const MIN_ACTIVE_SUPER_ADMINS = 2;
+
+/**
+ * HESAP KİLİDİ — spec §Güvenlik 3: "5 başarısız denemede hesap kilitlenir".
+ *
+ * Hız sınırlayıcı IP başınadır ve `/auth/2fa/verify` gövdesinde e-posta
+ * bulunmadığı için tek başına yetmez: farklı IP'lerden yapılan denemeler ayrı
+ * kovalara düşer. Bu yüzden sayaç HESAP DÜZEYİNDE tutulur.
+ */
+export const PLATFORM_MAX_FAILED_ATTEMPTS = 5;
+
+/** Kilit süresi (dakika). Erken açma yetkisi başka bir SUPER_ADMIN'dedir. */
+export const PLATFORM_LOCKOUT_MINUTES = 30;
+
+/**
+ * Tek bir 2FA challenge token'ı ile yapılabilecek AZAMİ kod denemesi.
+ * Aşılınca token iptal edilir; kullanıcı baştan giriş yapar.
+ */
+export const PLATFORM_MAX_CHALLENGE_ATTEMPTS = 3;
 
 /** Bakım modu ayarının SystemSetting anahtarı. */
 export const MAINTENANCE_SETTING_KEY = "maintenance_mode";
@@ -98,4 +123,56 @@ export function platformJwtSecret(): string {
  */
 export function requireTwoFactor(): boolean {
   return (process.env.PLATFORM_REQUIRE_2FA ?? "").toLowerCase() === "true";
+}
+
+/**
+ * ÜRETİMDE 2FA'SIZ PANEL AÇILMAZ.
+ *
+ * Yorumda "üretimde true olmalı" yazmak bir yaptırım değildir; unutulduğunda
+ * panel sessizce tek faktörle açılır ve bunu kimse fark etmez. `JWT_SECRET`
+ * kontrolüyle aynı desen: eksikse uygulama HİÇ AÇILMAZ.
+ */
+export function assertTwoFactorPolicy(): void {
+  if (process.env.NODE_ENV === "production" && !requireTwoFactor()) {
+    throw new Error(
+      "PLATFORM_REQUIRE_2FA=true olmadan üretim ortamında panel açılamaz. Platform paneli " +
+        "tüm büroların üstverisine ve faturalama kayıtlarına bakar; tek faktörle korunamaz. " +
+        "Ortam değişkenini ayarlayın ve en az iki panel hesabına TOTP kurun."
+    );
+  }
+}
+
+/**
+ * PANEL 2FA GİZLİ ANAHTARI İÇİN AYRI ŞİFRELEME ANAHTARI.
+ *
+ * Spec §Güvenlik 7: `MASTER_ENCRYPTION_KEY` panel servisinin ortamında
+ * BULUNMAZ. Panel bu fazda kiracı API'siyle aynı süreçte çalıştığı için tam
+ * yalıtım (ayrı process/ayrı env) sağlanamıyor; sağlanabilecek olan, panelin
+ * KİRACILARIN LLM ANAHTARLARINI ÇÖZEN anahtarı kendi yolunda kullanmamasıdır.
+ *
+ * `PLATFORM_2FA_ENCRYPTION_KEY` tanımlıysa o kullanılır. Değilse anahtar
+ * master anahtardan HMAC-SHA256 ile TÜRETİLİR: türetilmiş anahtarla şifrelenen
+ * TOTP kayıtları master anahtarla ÇÖZÜLEMEZ (tek yönlü), yani panel süreci
+ * ele geçirilse bile `AiProviderConfig.encryptedApiKey` değerleri bu yoldan
+ * açılmaz. Tam süreç ayrımı `apps/admin-api` göçüne bırakılmıştır.
+ */
+export function platform2faEncryptionKey(): string {
+  const explicit = process.env.PLATFORM_2FA_ENCRYPTION_KEY?.trim();
+  if (explicit) {
+    if (!/^[0-9a-fA-F]{64}$/.test(explicit)) {
+      throw new Error(
+        "PLATFORM_2FA_ENCRYPTION_KEY 64 haneli hex (32 bayt) olmalıdır. " +
+          'Üretmek için: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
+      );
+    }
+    return explicit.toLowerCase();
+  }
+  const base = process.env.MASTER_ENCRYPTION_KEY?.trim();
+  if (!base) {
+    throw new Error(
+      "Panel 2FA anahtarı üretilemedi: PLATFORM_2FA_ENCRYPTION_KEY tanımlı değil ve " +
+        "MASTER_ENCRYPTION_KEY yok."
+    );
+  }
+  return createHmac("sha256", base).update("nomosos-platform-2fa-v1").digest("hex");
 }

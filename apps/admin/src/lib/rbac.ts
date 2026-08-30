@@ -51,6 +51,8 @@ export const PERMISSION_LEVEL_SYMBOLS: Record<PermissionLevel, string> = {
 export type AdminAction =
   // --- Yetki matrisi satırları (spec tablosu) ---
   | "tenant.view"
+  /** Büro PERSONEL listesi — `tenant.view`'dan ayrıdır (alan ayrımı). */
+  | "tenant.users.view"
   | "tenant.create"
   | "tenant.suspend"
   | "tenant.reactivate"
@@ -109,6 +111,14 @@ export const PERMISSION_MATRIX: Matrix = {
     BILLING_ADMIN: "full",
     SUPPORT_AGENT: "full",
     ANALYST_READONLY: "masked",
+  },
+  // Büro personel listesi — faturalama rolüne KAPALI (denetim bulgusu 18).
+  "tenant.users.view": {
+    SUPER_ADMIN: "full",
+    OPS_ADMIN: "full",
+    BILLING_ADMIN: N,
+    SUPPORT_AGENT: "full",
+    ANALYST_READONLY: N,
   },
   // | Tenant oluştur (manuel onboarding) | ✅ | ✅ | ❌ | ❌ | ❌ |
   "tenant.create": {
@@ -434,6 +444,7 @@ export const PERMISSION_MATRIX: Matrix = {
 /** İşlem etiketleri — onay kuyruğu ve yetki matrisi ekranında Türkçe gösterim. */
 export const ACTION_LABELS: Record<AdminAction, string> = {
   "tenant.view": "Tenant listesi/detayı görüntüle",
+  "tenant.users.view": "Tenant personel listesi",
   "tenant.create": "Tenant oluştur (manuel onboarding)",
   "tenant.suspend": "Tenant askıya al",
   "tenant.reactivate": "Tenant aktifleştir",
@@ -535,6 +546,10 @@ export const FOUR_EYES_ACTIONS: readonly AdminAction[] = [
   "system.flag_global_write",
   "platform_user.assign_super_admin",
   "audit.export",
+  // Denetim bulguları 1 ve 9: panel personeli açma / kimlik bilgisi sıfırlama
+  // ve katalog fiyatı değişikliği de iki imza ister.
+  "platform_user.manage",
+  "plan.catalog.write",
 ];
 
 export function isFourEyesAction(action: AdminAction): boolean {

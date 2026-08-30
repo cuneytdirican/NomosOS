@@ -604,10 +604,20 @@ async function seedPlanTiers(): Promise<number> {
 /**
  * Platform yöneticileri — tenant User tablosundan TAMAMEN ayrıdır.
  * Bu hesaplar yalnız /api/admin/v1 uçlarında geçerlidir.
+ *
+ * İKİ SUPER_ADMIN ZORUNLUDUR (MIN_ACTIVE_SUPER_ADMINS = 2).
+ *
+ * Tek SUPER_ADMIN'li bir kurulumda DÖRT-GÖZ İLKESİ FİİLEN ÇALIŞMAZ: talep eden
+ * kendi talebini onaylayamadığı için askıya alma, iade, bakım kilidi, panel
+ * personeli açma gibi işlemlerin HİÇBİRİ tamamlanamaz — ve bu, çalışır
+ * sanılan bir kurulumda ilk gerçek olayda fark edilir. İkinci hesap tohumun
+ * kendisinde açılır ki kural hem uygulanabilir hem de sınanabilir olsun.
  */
 async function seedPlatformUsers(passwordHash: string): Promise<number> {
   const users: Array<{ email: string; fullName: string; role: "SUPER_ADMIN" | "ANALYST_READONLY" }> = [
     { email: "superadmin@nomosos.local", fullName: "Platform Süper Yönetici", role: "SUPER_ADMIN" },
+    // Dört-göz onaylarının İKİNCİ İMZASI. Ayrı bir insanı temsil eder.
+    { email: "superadmin2@nomosos.local", fullName: "Platform Süper Yönetici (2)", role: "SUPER_ADMIN" },
     { email: "analist@nomosos.local", fullName: "Platform Analisti", role: "ANALYST_READONLY" },
   ];
   let created = 0;
@@ -883,10 +893,105 @@ async function seedFinance(clientId: string, caseId: string, userId: string) {
   }
 
   // Faturalanan zaman kayıtlarını işaretle (invoiceId SKALER alandır).
+  // YALNIZCA yukarıdaki üç kayıt faturalanır; aşağıda açılan faturalanmamış
+  // kayıtlar açıkta bırakılır.
   await prisma.timeEntry.updateMany({
-    where: { tenantId: TENANT_ID, caseId, billable: true, invoiceId: null },
+    where: {
+      tenantId: TENANT_ID,
+      caseId,
+      billable: true,
+      invoiceId: null,
+      date: { in: entries.map((e) => e.date) },
+    },
     data: { invoiceId: invoice.id },
   });
+
+  /**
+   * FATURALANMAMIŞ ZAMAN KAYITLARI — tohumun eksiğiydi.
+   *
+   * Faz 3 tohumunda TÜM zaman kayıtları önceden faturalıydı; bu yüzden
+   * "zaman kayıtlarından fatura üret" akışı tohumla açıldığında HİÇ
+   * çalışmıyor, ekran boş görünüyordu ve çift-faturalama koruması ancak elle
+   * kayıt açılarak sınanabiliyordu. Aşağıdaki iki kayıt açıkta bırakılır:
+   *   120 dk = 2,00 sa × 4.500,00 =  9.000,00
+   *    45 dk = 0,75 sa × 4.500,00 =  3.375,00
+   *   ara toplam 12.375,00 · KDV %20 = 2.475,00 · genel toplam 14.850,00
+   */
+  const unbilled: Array<{ date: Date; minutes: number; description: string }> = [
+    { date: utc(2026, 8, 26), minutes: 120, description: "İtiraz dilekçesi sonrası duruşma hazırlığı" },
+    { date: utc(2026, 8, 28), minutes: 45, description: "Karşı taraf vekiliyle sulh görüşmesi" },
+  ];
+  for (const e of unbilled) {
+    const existing = await prisma.timeEntry.findFirst({
+      where: { tenantId: TENANT_ID, caseId, date: e.date, description: e.description },
+    });
+    if (existing) continue;
+    await prisma.timeEntry.create({
+      data: {
+        tenantId: TENANT_ID,
+        userId,
+        caseId,
+        clientId,
+        date: e.date,
+        minutes: e.minutes,
+        description: e.description,
+        billable: true,
+        hourlyRate: "4500.00",
+        // invoiceId YOK — faturalanmayı bekliyor.
+      },
+    });
+    entryCount += 1;
+  }
+
+  /**
+   * FİNANS HAREKETLERİ — `FinancialEntry` tablosu tohumla tamamen boştu,
+   * dolayısıyla müvekkil cari ekranı ve büro özeti sıfır görünüyordu.
+   * Yansıtılabilir (isBillable) bir masraf ve bir harç açılır; ikisi de
+   * faturasızdır, yani "masraf yansıtma" akışı tohumla denenebilir.
+   */
+  const financeMoves: Array<{
+    type: "MASRAF" | "HARC";
+    amount: string;
+    date: Date;
+    description: string;
+    isBillable: boolean;
+  }> = [
+    {
+      type: "HARC",
+      amount: "2750.00",
+      date: utc(2026, 8, 6),
+      description: "Bilirkişi ücreti avansı (dosya harcı)",
+      isBillable: true,
+    },
+    {
+      type: "MASRAF",
+      amount: "1480.00",
+      date: utc(2026, 8, 13),
+      description: "Tebligat ve posta masrafları",
+      isBillable: true,
+    },
+  ];
+  let financeEntryCount = 0;
+  for (const m of financeMoves) {
+    const existing = await prisma.financialEntry.findFirst({
+      where: { tenantId: TENANT_ID, caseId, description: m.description },
+    });
+    if (existing) continue;
+    await prisma.financialEntry.create({
+      data: {
+        tenantId: TENANT_ID,
+        clientId,
+        caseId,
+        type: m.type,
+        amount: m.amount,
+        currency: "TRY",
+        date: m.date,
+        description: m.description,
+        isBillable: m.isBillable,
+      },
+    });
+    financeEntryCount += 1;
+  }
 
   let paymentCount = 0;
   const paymentExists = await prisma.payment.findFirst({
@@ -909,7 +1014,7 @@ async function seedFinance(clientId: string, caseId: string, userId: string) {
     paymentCount = 1;
   }
 
-  return { agreement, entryCount, invoiceCreated, paymentCount };
+  return { agreement, entryCount, invoiceCreated, paymentCount, financeEntryCount };
 }
 
 // ---------------------------------------------------------------------------
@@ -948,6 +1053,41 @@ async function main() {
       fullName: "Av. Demo Avukat",
       role: "AVUKAT",
       barNumber: "34/67890",
+    },
+  });
+
+  /**
+   * SEKRETER ve STAJYER — ROL MATRİSİNİN SINANABİLİR OLMASI İÇİN.
+   *
+   * Tohumda yalnız PARTNER ve AVUKAT vardı; oysa finans/faturalama/icra rol
+   * matrisinin ASIL kısıtları bu iki role bakar:
+   *   SEKRETER → okur, zaman kaydı ve tahsilat girer; fatura KESEMEZ,
+   *              finans hareketi (cari) AÇAMAZ.
+   *   STAJYER  → finans/faturalama/icra verisinin HİÇBİRİNİ göremez.
+   * İki hesap olmadan bu kapılar ne elle ne de duman testiyle sınanabiliyordu;
+   * "beyaz liste" olduğu iddia edilen matris fiilen doğrulanmamış kalıyordu.
+   */
+  await prisma.user.upsert({
+    where: { email: "sekreter@demo.nomosos.local" },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      email: "sekreter@demo.nomosos.local",
+      passwordHash,
+      fullName: "Demo Sekreter",
+      role: "SEKRETER",
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: "stajyer@demo.nomosos.local" },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      email: "stajyer@demo.nomosos.local",
+      passwordHash,
+      fullName: "Demo Stajyer",
+      role: "STAJYER",
     },
   });
 
@@ -1379,6 +1519,8 @@ async function main() {
     collectionTotal,
     feeAgreementTotal,
     timeEntryTotal,
+    unbilledTimeEntryTotal,
+    financialEntryTotal,
     invoiceTotal,
     invoiceLineTotal,
     paymentTotal,
@@ -1393,6 +1535,8 @@ async function main() {
     prisma.collectionRecord.count({ where: { tenantId: TENANT_ID } }),
     prisma.feeAgreement.count({ where: { tenantId: TENANT_ID } }),
     prisma.timeEntry.count({ where: { tenantId: TENANT_ID } }),
+    prisma.timeEntry.count({ where: { tenantId: TENANT_ID, invoiceId: null, billable: true } }),
+    prisma.financialEntry.count({ where: { tenantId: TENANT_ID } }),
     prisma.invoice.count({ where: { tenantId: TENANT_ID } }),
     prisma.invoiceLine.count(),
     prisma.payment.count({ where: { tenantId: TENANT_ID } }),
@@ -1407,15 +1551,23 @@ async function main() {
       `Malvarlığı: ${assetTotal} (eklenen ${enforcement.assetCount}) | Tahsilat: ${collectionTotal} (eklenen ${enforcement.collectionCount})`,
   );
   console.log(
-    `Ücret sözleşmesi: ${feeAgreementTotal} | Zaman kaydı: ${timeEntryTotal} (eklenen ${finance.entryCount}) | ` +
-      `Fatura: ${invoiceTotal} (satır ${invoiceLineTotal}, yeni: ${finance.invoiceCreated}) | Ödeme: ${paymentTotal} (eklenen ${finance.paymentCount})`,
+    `Ücret sözleşmesi: ${feeAgreementTotal} | Zaman kaydı: ${timeEntryTotal} (eklenen ${finance.entryCount}, ` +
+      `FATURALANMAMIŞ ${unbilledTimeEntryTotal}) | Finans hareketi: ${financialEntryTotal} ` +
+      `(eklenen ${finance.financeEntryCount}) | Fatura: ${invoiceTotal} (satır ${invoiceLineTotal}, ` +
+      `yeni: ${finance.invoiceCreated}) | Ödeme: ${paymentTotal} (eklenen ${finance.paymentCount})`,
   );
   console.log(
     `Plan: ${planTotal} (eklenen ${planCount}) | Platform kullanıcısı: ${platformUserTotal} (eklenen ${platformUserCount}) | ` +
       `Abonelik: ${subscriptionTotal} (yeni: ${subscriptionCreated}) | Kullanım fotoğrafı: ${usageTotal} (eklenen ${usageCount})`,
   );
-  console.log("Giriş: partner@demo.nomosos.local / Demo1234!  (veya avukat@demo.nomosos.local)");
-  console.log("Platform girişi: superadmin@nomosos.local / Demo1234!  (veya analist@nomosos.local — ANALYST_READONLY)");
+  console.log(
+    "Giriş: partner@demo.nomosos.local / Demo1234!  " +
+      "(rol matrisi denemesi için: avukat@ · sekreter@ · stajyer@demo.nomosos.local)",
+  );
+  console.log(
+    "Platform girişi: superadmin@nomosos.local / Demo1234!  " +
+      "(dört-göz ikinci imzası: superadmin2@nomosos.local · yatırımcı: analist@nomosos.local)",
+  );
 }
 
 main()

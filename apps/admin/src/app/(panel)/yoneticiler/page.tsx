@@ -1,14 +1,21 @@
 "use client";
 
 /**
- * Yöneticiler — platform personeli ve rolleri. Yalnız SUPER_ADMIN görebilir ve yazabilir.
- * Kurallar: davet-temelli oluşturma (self-signup ucu hiç yazılmaz), 2FA zorunlu,
- * her an en az iki aktif SUPER_ADMIN, kendi rolünü kimse düşüremez, hard delete yok.
+ * Yöneticiler — platform personeli (PlatformUser) ve rolleri. Yalnız SUPER_ADMIN görür ve yazar.
+ *
+ * Uçlar: GET /platform-users · POST /platform-users · PATCH /platform-users/:id ·
+ *        DELETE /platform-users/:id  (hard delete DEĞİL — pasifleştirme)
+ *
+ * Kurallar (sunucuda da zorlanır): kullanıcı başına tek rol · kendi rolünü kimse değiştiremez ·
+ * her an en az iki aktif SUPER_ADMIN · SUPER_ADMIN atama/düşürme dört-göz kapsamındadır ·
+ * twoFactorSecret hiçbir yanıtta dönmez.
  */
 
 import { useMemo, useState } from "react";
-import { useResource } from "@/lib/useResource";
+import { useListResource } from "@/lib/useResource";
+import { useMutation } from "@/lib/useMutation";
 import { useAdminSession } from "@/lib/session";
+import { EP } from "@/lib/endpoints";
 import { PageGate, RoleGate } from "@/components/RoleGate";
 import { ApprovalBadge, ApprovalNotice } from "@/components/ApprovalBadge";
 import {
@@ -19,29 +26,22 @@ import {
   PERMISSION_MATRIX,
   type AdminAction,
 } from "@/lib/rbac";
-import {
-  PLATFORM_USER_STATUS_LABELS,
-  PLATFORM_USER_STATUS_TONES,
-  ROLE_DESCRIPTIONS,
-  ROLE_LABELS,
-  ROLE_TONES,
-  fmtDateTime,
-  labelOf,
-  toneOf,
-} from "@/lib/labels";
-import { MOCK_PLATFORM_USERS, type AdminPlatformUser } from "@/lib/mock";
+import { ROLE_DESCRIPTIONS, ROLE_LABELS, fmtDateTime, roleLabel, roleTone } from "@/lib/labels";
+import type { AdminPlatformUser } from "@/lib/types";
 import {
   Badge,
   Button,
   Card,
+  EndpointMissingNotice,
+  ErrorBox,
   Field,
-  Input,
   InfoBox,
-  MockBadge,
+  Input,
   Modal,
   PageHeader,
-  PendingEndpointNotice,
+  ResourceView,
   Select,
+  SuccessBox,
   Table,
   WarningBox,
   type Column,
@@ -60,15 +60,24 @@ export default function YoneticilerPage() {
 
 function PlatformUsers() {
   const { user } = useAdminSession();
-  const res = useResource<AdminPlatformUser[]>("/platform-users", [...MOCK_PLATFORM_USERS]);
+  const res = useListResource<AdminPlatformUser>(EP.platformUsers.list);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editing, setEditing] = useState<AdminPlatformUser | null>(null);
-  const [newRole, setNewRole] = useState<string>("");
+  const disable = useMutation();
 
   const activeSuperAdmins = useMemo(
-    () => res.data.filter((u) => u.role === "SUPER_ADMIN" && u.status === "AKTIF").length,
+    () => res.data.filter((u) => u.role === "SUPER_ADMIN" && u.isActive).length,
     [res.data],
   );
+
+  async function doDisable(u: AdminPlatformUser) {
+    await disable.run(
+      EP.platformUsers.remove(u.id),
+      { method: "DELETE" },
+      { successMessage: `${u.email} pasifleştirildi.`, onSuccess: () => res.reload() },
+    );
+    res.reload();
+  }
 
   const columns: Array<Column<AdminPlatformUser>> = [
     {
@@ -84,61 +93,34 @@ function PlatformUsers() {
     {
       key: "role",
       header: "Rol",
-      render: (u) => (
-        <Badge tone={ROLE_TONES[u.role as keyof typeof ROLE_TONES] ?? "gray"}>
-          {ROLE_LABELS[u.role as keyof typeof ROLE_LABELS] ?? u.role}
-        </Badge>
-      ),
+      render: (u) => <Badge tone={roleTone(u.role)}>{roleLabel(u.role)}</Badge>,
     },
     {
       key: "status",
       header: "Durum",
-      render: (u) => (
-        <Badge tone={toneOf(PLATFORM_USER_STATUS_TONES, u.status)}>
-          {labelOf(PLATFORM_USER_STATUS_LABELS, u.status)}
-        </Badge>
-      ),
+      render: (u) =>
+        u.isActive ? <Badge tone="green">Aktif</Badge> : <Badge tone="gray">Pasif</Badge>,
     },
     {
       key: "totp",
       header: "2FA",
       render: (u) =>
-        u.totpReady ? (
+        u.twoFactorEnabled === undefined ? (
+          <span className="text-xs text-steel-600">—</span>
+        ) : u.twoFactorEnabled ? (
           <Badge tone="green">Kurulu</Badge>
         ) : (
-          <Badge tone="red" title="2FA kurulmadan hiçbir panel sayfasına erişemez.">
-            Kurulmadı
-          </Badge>
+          <Badge tone="yellow">Kurulmadı</Badge>
         ),
     },
-    {
-      key: "login",
-      header: "Son giriş",
-      render: (u) => (
-        <div className="text-xs text-steel-400">
-          <p>{u.lastLoginAt ? fmtDateTime(u.lastLoginAt) : "—"}</p>
-          <p className="font-mono text-steel-600">{u.lastLoginIp ?? "—"}</p>
-        </div>
-      ),
-    },
-    {
-      key: "ip",
-      header: "IP allowlist",
-      render: (u) =>
-        u.ipAllowlist.length > 0 ? (
-          <span className="font-mono text-xs text-steel-300">{u.ipAllowlist.join(", ")}</span>
-        ) : (
-          <span className="text-xs text-steel-500">global politika</span>
-        ),
-    },
+    { key: "login", header: "Son giriş", render: (u) => fmtDateTime(u.lastLoginAt) },
     {
       key: "actions",
       header: "",
       align: "right",
       render: (u) => {
-        const isSelf = u.email === user?.email;
-        const lastSuperAdmin =
-          u.role === "SUPER_ADMIN" && u.status === "AKTIF" && activeSuperAdmins <= 2;
+        const isSelf = u.id === user?.id || u.email === user?.email;
+        const lastSuperAdmins = u.role === "SUPER_ADMIN" && u.isActive && activeSuperAdmins <= 2;
         return (
           <RoleGate action="platform_user.manage" mutation>
             <div className="flex justify-end gap-2">
@@ -147,27 +129,27 @@ function PlatformUsers() {
                 variant="secondary"
                 disabled={isSelf}
                 title={isSelf ? "Kendi rolünüzü değiştiremezsiniz." : undefined}
-                onClick={() => {
-                  setEditing(u);
-                  setNewRole(u.role);
-                }}
+                onClick={() => setEditing(u)}
               >
-                Rol değiştir
+                Düzenle
               </Button>
-              <Button
-                size="sm"
-                variant="danger"
-                disabled={isSelf || lastSuperAdmin}
-                title={
-                  lastSuperAdmin
-                    ? "Sistemde her an en az iki aktif SUPER_ADMIN bulunmalıdır."
-                    : isSelf
-                      ? "Kendinizi pasifleştiremezsiniz."
-                      : undefined
-                }
-              >
-                Pasifleştir
-              </Button>
+              {u.isActive && (
+                <Button
+                  size="sm"
+                  variant="danger"
+                  disabled={isSelf || lastSuperAdmins || disable.loading}
+                  title={
+                    lastSuperAdmins
+                      ? "Sistemde her an en az iki aktif SUPER_ADMIN bulunmalıdır."
+                      : isSelf
+                        ? "Kendinizi pasifleştiremezsiniz."
+                        : undefined
+                  }
+                  onClick={() => void doDisable(u)}
+                >
+                  Pasifleştir
+                </Button>
+              )}
             </div>
           </RoleGate>
         );
@@ -179,137 +161,231 @@ function PlatformUsers() {
     <div className="space-y-6">
       <PageHeader
         title="Yöneticiler"
-        description="Platform personeli (PlatformUser) — tenant kullanıcılarından tamamen ayrı kimlik uzayı; aralarında FK yoktur."
+        description="Platform personeli (PlatformUser) — tenant kullanıcılarından tamamen ayrı kimlik uzayı; aralarında FK yoktur ve e-posta uzayları ayrıdır."
         action={
-          <div className="flex items-center gap-2">
-            {res.pending && <MockBadge />}
-            <RoleGate action="platform_user.manage" mutation>
-              <Button onClick={() => setInviteOpen(true)}>Personel davet et</Button>
-            </RoleGate>
-          </div>
+          <RoleGate action="platform_user.manage" mutation>
+            <Button onClick={() => setInviteOpen(true)}>Personel ekle</Button>
+          </RoleGate>
         }
       />
 
-      {res.pending && <PendingEndpointNotice endpoint="/platform-users" phase="Faz 1" />}
-
-      {activeSuperAdmins < 2 && (
+      {res.loaded && activeSuperAdmins < 2 && (
         <WarningBox title="Kritik: tek SUPER_ADMIN">
-          Sistemde her an en az iki aktif SUPER_ADMIN bulunmalıdır; tek kalınırsa dört-göz işlemleri
-          kilitlenir.
+          Sistemde her an en az iki aktif SUPER_ADMIN bulunmalıdır; tek kalınırsa dört-göz
+          işlemleri kilitlenir.
         </WarningBox>
       )}
 
       <InfoBox>
-        Personel <strong>davet-temelli</strong> oluşturulur; self-signup ucu hiç yazılmaz. 2FA
-        (TOTP) istisnasız zorunludur ve kurulum tamamlanmadan hesap aktifleşmez.{" "}
-        <code className="font-mono text-xs">DEVRE_DISI</code> statüsü{" "}
-        <code className="font-mono text-xs">token_version</code> artırarak tüm aktif oturumları
-        anında düşürür. Hard delete yoktur.
+        Personel <strong>yönetici eliyle</strong> oluşturulur; self-signup ucu yoktur. 2FA (TOTP)
+        sırrı <code className="font-mono text-xs">MASTER_ENCRYPTION_KEY</code> ile şifreli saklanır
+        ve <strong>hiçbir yanıtta düz metin dönmez</strong>. Pasifleştirme kalıcı silme değildir;
+        denetim izi korunur.
       </InfoBox>
 
-      <Card title={`${res.data.length} platform kullanıcısı`}>
-        <Table columns={columns} rows={res.data} rowKey={(u) => u.id} dense />
+      {disable.missing && (
+        <EndpointMissingNotice
+          endpoint="/platform-users/:id"
+          method="DELETE"
+          what="Personel pasifleştirme"
+        />
+      )}
+      {disable.error && <ErrorBox message={disable.error} />}
+      {disable.success && <SuccessBox message={disable.success} />}
+
+      <Card title={res.loaded ? `${res.data.length} platform kullanıcısı` : "Platform kullanıcıları"}>
+        <ResourceView
+          loading={res.loading}
+          missing={res.missing}
+          forbidden={res.forbidden}
+          error={res.error}
+          empty={res.empty}
+          endpoint={EP.platformUsers.list}
+          what="Platform kullanıcıları"
+          emptyMessage="Kayıtlı platform kullanıcısı yok."
+        >
+          <Table columns={columns} rows={res.data} rowKey={(u) => u.id} dense />
+        </ResourceView>
       </Card>
 
       <RoleMatrixCard />
 
-      {/* Davet */}
-      <Modal
-        open={inviteOpen}
-        onClose={() => setInviteOpen(false)}
-        title="Personel davet et"
-        subtitle="POST /platform-users"
-      >
-        <div className="space-y-4">
-          <PendingEndpointNotice endpoint="/platform-users" phase="Faz 1" method="POST" />
-          <Field label="Kurumsal e-posta" required hint="Kurumsal domain zorunludur.">
-            <Input type="email" placeholder="ad.soyad@nomosos.com" />
-          </Field>
-          <Field label="Ad Soyad" required>
-            <Input placeholder="Ad Soyad" />
-          </Field>
-          <Field label="Rol" required hint="Kullanıcı başına tek rol atanır.">
-            <Select defaultValue="SUPPORT_AGENT">
-              {ADMIN_ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {ROLE_LABELS[r]} ({r})
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="IP allowlist (CIDR)" hint="SUPER_ADMIN ve OPS_ADMIN için şiddetle önerilir.">
-            <Input placeholder="10.20.4.0/24" />
-          </Field>
-          <InfoBox>
-            Davet edilen kullanıcı ilk girişte 2FA kurulumunu tamamlamadan hiçbir sayfaya erişemez.
-          </InfoBox>
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setInviteOpen(false)}>
-              Vazgeç
-            </Button>
-            <Button disabled title="Uç henüz uygulanmadı">
-              Davet gönder
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Rol değişikliği */}
-      <Modal
-        open={editing !== null}
-        onClose={() => setEditing(null)}
-        title="Rol değiştir"
-        subtitle={editing ? `PATCH /platform-users/${editing.id}` : undefined}
-      >
-        {editing && (
-          <div className="space-y-4">
-            <PendingEndpointNotice
-              endpoint={`/platform-users/${editing.id}`}
-              phase="Faz 1"
-              method="PATCH"
-            />
-            <p className="text-sm text-steel-300">
-              {editing.fullName} ·{" "}
-              <span className="font-mono text-xs text-steel-500">{editing.email}</span>
-            </p>
-            <Field label="Yeni rol" required hint={ROLE_DESCRIPTIONS[newRole as keyof typeof ROLE_DESCRIPTIONS]}>
-              <Select value={newRole} onChange={(e) => setNewRole(e.target.value)}>
-                {ADMIN_ROLES.map((r) => (
-                  <option key={r} value={r}>
-                    {ROLE_LABELS[r]} ({r})
-                  </option>
-                ))}
-              </Select>
-            </Field>
-
-            {(newRole === "SUPER_ADMIN" || editing.role === "SUPER_ADMIN") && (
-              <>
-                <ApprovalNotice
-                  action="platform_user.assign_super_admin"
-                  extra="Yeni SUPER_ADMIN atama ve mevcut SUPER_ADMIN'i düşürme iki SUPER_ADMIN onayı gerektirir."
-                />
-                <div>
-                  <ApprovalBadge action="platform_user.assign_super_admin" force />
-                </div>
-              </>
-            )}
-
-            <Field label="Gerekçe" required>
-              <Input placeholder="Görev değişikliği, devir teslim…" />
-            </Field>
-
-            <div className="flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => setEditing(null)}>
-                Vazgeç
-              </Button>
-              <Button disabled title="Uç henüz uygulanmadı">
-                {newRole === "SUPER_ADMIN" ? "Onaya gönder" : "Kaydet"}
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
+      {inviteOpen && (
+        <UserModal
+          platformUser={null}
+          onClose={() => setInviteOpen(false)}
+          onSaved={() => res.reload()}
+        />
+      )}
+      {editing && (
+        <UserModal
+          platformUser={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => res.reload()}
+        />
+      )}
     </div>
+  );
+}
+
+function UserModal({
+  platformUser,
+  onClose,
+  onSaved,
+}: {
+  platformUser: AdminPlatformUser | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isNew = platformUser === null;
+  const [email, setEmail] = useState(platformUser?.email ?? "");
+  const [fullName, setFullName] = useState(platformUser?.fullName ?? "");
+  const [role, setRole] = useState(platformUser?.role ?? "SUPPORT_AGENT");
+  const [password, setPassword] = useState("");
+  const [isActive, setIsActive] = useState(platformUser?.isActive ?? true);
+  const [reason, setReason] = useState("");
+  const mutation = useMutation();
+
+  const superAdminInvolved = role === "SUPER_ADMIN" || platformUser?.role === "SUPER_ADMIN";
+  const roleChanged = !isNew && role !== platformUser?.role;
+  const needsApproval = superAdminInvolved && (isNew || roleChanged);
+
+  const path = isNew ? EP.platformUsers.create : EP.platformUsers.update(platformUser!.id);
+
+  async function submit() {
+    const body: Record<string, unknown> = {
+      fullName: fullName.trim(),
+      role,
+      reason: reason.trim(),
+    };
+    if (isNew) {
+      body.email = email.trim();
+      if (password) body.password = password;
+    } else {
+      body.isActive = isActive;
+    }
+
+    const ok = await mutation.run(
+      path,
+      { method: isNew ? "POST" : "PATCH", body },
+      {
+        successMessage: isNew ? "Platform kullanıcısı oluşturuldu." : "Kullanıcı güncellendi.",
+        onSuccess: onSaved,
+      },
+    );
+    if (ok) onSaved();
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={isNew ? "Personel ekle" : `Düzenle: ${platformUser?.fullName}`}
+      subtitle={`${isNew ? "POST" : "PATCH"} /api/admin/v1${path}`}
+    >
+      <div className="space-y-4">
+        {isNew ? (
+          <>
+            <Field label="Kurumsal e-posta" required hint="Tenant e-posta uzayından tamamen ayrıdır.">
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="ad.soyad@nomosos.local"
+              />
+            </Field>
+            <Field
+              label="Geçici şifre"
+              hint="Boş bırakılırsa sunucu kendi davet/şifre akışını uygular."
+            >
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••••••"
+              />
+            </Field>
+          </>
+        ) : (
+          <p className="text-sm text-steel-300">
+            <span className="font-mono text-xs text-steel-500">{platformUser?.email}</span>
+          </p>
+        )}
+
+        <Field label="Ad Soyad" required>
+          <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Ad Soyad" />
+        </Field>
+
+        <Field label="Rol" required hint={ROLE_DESCRIPTIONS[role as keyof typeof ROLE_DESCRIPTIONS]}>
+          <Select value={role} onChange={(e) => setRole(e.target.value)}>
+            {ADMIN_ROLES.map((r) => (
+              <option key={r} value={r}>
+                {ROLE_LABELS[r]} ({r})
+              </option>
+            ))}
+          </Select>
+        </Field>
+
+        {!isNew && (
+          <label className="flex items-center gap-2 text-sm text-steel-200">
+            <input
+              type="checkbox"
+              checked={isActive}
+              onChange={(e) => setIsActive(e.target.checked)}
+              className="h-4 w-4 rounded border-steel-600 bg-steel-950 accent-accent-500"
+            />
+            Hesap aktif
+          </label>
+        )}
+
+        {needsApproval && (
+          <>
+            <ApprovalNotice
+              action="platform_user.assign_super_admin"
+              extra="SUPER_ADMIN atama ve mevcut SUPER_ADMIN'i düşürme dört-göz kapsamındadır."
+            />
+            <div>
+              <ApprovalBadge action="platform_user.assign_super_admin" force />
+            </div>
+          </>
+        )}
+
+        <Field label="Gerekçe" required>
+          <Input
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Görev değişikliği, devir teslim…"
+          />
+        </Field>
+
+        {mutation.missing && (
+          <EndpointMissingNotice
+            endpoint={path}
+            method={isNew ? "POST" : "PATCH"}
+            what="Platform kullanıcısı"
+          />
+        )}
+        {mutation.error && <ErrorBox message={mutation.error} />}
+        {mutation.success && <SuccessBox message={mutation.success} />}
+
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>
+            Kapat
+          </Button>
+          <Button
+            disabled={
+              mutation.loading ||
+              reason.trim().length === 0 ||
+              fullName.trim().length === 0 ||
+              (isNew && email.trim().length === 0)
+            }
+            onClick={() => void submit()}
+          >
+            {mutation.loading ? "Kaydediliyor…" : needsApproval ? "Onaya gönder" : "Kaydet"}
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -320,7 +396,7 @@ function RoleMatrixCard() {
   return (
     <Card
       title="Yetki matrisi"
-      subtitle="src/lib/rbac.ts içindeki tek kaynaktan üretilir; API tarafı aynı tanımı kullanmalıdır (platform-permissions.ts)."
+      subtitle="src/lib/rbac.ts içindeki tek kaynaktan üretilir; API tarafı aynı tanımı birebir uygular."
     >
       <div className="mb-3 flex flex-wrap gap-3 text-xs text-steel-400">
         {(Object.keys(PERMISSION_LEVEL_LABELS) as Array<keyof typeof PERMISSION_LEVEL_LABELS>).map(

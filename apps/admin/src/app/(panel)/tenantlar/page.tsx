@@ -1,27 +1,28 @@
 "use client";
 
 /**
- * Tenant listesi — arama, plan/durum filtresi, sayaç kolonları.
- * ANALYST_READONLY için (🔒) yalnız plan/segment agregatı gösterilir; büro adı görünmez.
+ * Tenant listesi — GET /api/admin/v1/tenants?q=&status=&plan=
+ * Filtreleme SUNUCUDA yapılır; panel yalnız sorgu parametresi geçirir.
+ *
+ * ANALYST_READONLY (🔒) için tenant listesi maskelidir: büro adı, e-posta ve tekil
+ * sayaçlar gösterilmez; yalnız plan/durum agregatı görünür.
  */
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useResource } from "@/lib/useResource";
+import { useListResource } from "@/lib/useResource";
+import { useDebounced } from "@/lib/useDebounced";
 import { useAdminSession } from "@/lib/session";
+import { EP } from "@/lib/endpoints";
 import { isMasked } from "@/lib/rbac";
-import { PageGate, RoleGate } from "@/components/RoleGate";
-import { ApprovalBadge } from "@/components/ApprovalBadge";
+import { PageGate } from "@/components/RoleGate";
 import {
-  AI_PROVIDER_TYPE_LABELS,
-  AI_PROVIDER_TYPE_TONES,
   PLAN_LABELS,
   PLAN_TONES,
   SUBSCRIPTION_STATUSES,
   SUBSCRIPTION_STATUS_LABELS,
   SUBSCRIPTION_STATUS_TONES,
-  PLAN_CODES,
-  fmtBytesMb,
+  fmtBytes,
   fmtCompact,
   fmtDateTime,
   fmtMoney,
@@ -29,24 +30,24 @@ import {
   labelOf,
   toneOf,
 } from "@/lib/labels";
-import { MOCK_TENANTS, type AdminTenant } from "@/lib/mock";
+import { exportCsv } from "@/lib/csv";
+import type { AdminTenantRow } from "@/lib/types";
 import {
   Badge,
   BarList,
   Button,
   Card,
   Field,
-  Input,
   InfoBox,
-  MockBadge,
-  Modal,
+  Input,
   PageHeader,
-  PendingEndpointNotice,
+  ResourceView,
   Select,
   Table,
-  Textarea,
   type Column,
 } from "@/components/ui";
+
+const KNOWN_PLANS = ["SOLO", "BURO", "ENTERPRISE"];
 
 export default function TenantlarPage() {
   return (
@@ -63,39 +64,31 @@ function TenantList() {
   const [search, setSearch] = useState("");
   const [plan, setPlan] = useState("");
   const [status, setStatus] = useState("");
-  const [createOpen, setCreateOpen] = useState(false);
+  const q = useDebounced(search);
 
-  const res = useResource<AdminTenant[]>("/tenants", [...MOCK_TENANTS], {
-    query: { search: search || undefined, plan: plan || undefined, status: status || undefined },
+  const res = useListResource<AdminTenantRow>(EP.tenants.list, {
+    query: { q: q || undefined, plan: plan || undefined, status: status || undefined },
   });
 
-  const rows = useMemo(() => {
-    const q = search.trim().toLocaleLowerCase("tr");
-    return res.data.filter((t) => {
-      if (plan && t.plan !== plan) return false;
-      if (status && t.status !== status) return false;
-      if (!q) return true;
-      return (
-        t.name.toLocaleLowerCase("tr").includes(q) ||
-        t.city.toLocaleLowerCase("tr").includes(q) ||
-        t.billingEmail.toLocaleLowerCase("tr").includes(q) ||
-        t.code.toLocaleLowerCase("tr").includes(q)
-      );
-    });
-  }, [res.data, search, plan, status]);
+  const planOptions = useMemo(() => {
+    const set = new Set<string>(KNOWN_PLANS);
+    for (const t of res.data) if (t.planKey) set.add(t.planKey);
+    return [...set];
+  }, [res.data]);
 
-  const columns: Array<Column<AdminTenant>> = [
+  const columns: Array<Column<AdminTenantRow>> = [
     {
       key: "name",
       header: "Büro",
       render: (t) => (
         <div>
-          <Link href={`/tenantlar/${t.id}`} className="font-medium text-steel-50 hover:text-accent-300">
+          <Link
+            href={`/tenantlar/${t.id}`}
+            className="font-medium text-steel-50 hover:text-accent-300"
+          >
             {t.name}
           </Link>
-          <p className="text-xs text-steel-500">
-            {t.city} · {t.barAssociation} · #{t.code}
-          </p>
+          <p className="font-mono text-[11px] text-steel-600">{t.id}</p>
         </div>
       ),
     },
@@ -104,91 +97,90 @@ function TenantList() {
       header: "Plan / Durum",
       render: (t) => (
         <div className="flex flex-wrap gap-1.5">
-          <Badge tone={toneOf(PLAN_TONES, t.plan)}>{labelOf(PLAN_LABELS, t.plan)}</Badge>
-          <Badge tone={toneOf(SUBSCRIPTION_STATUS_TONES, t.status)}>
-            {labelOf(SUBSCRIPTION_STATUS_LABELS, t.status)}
-          </Badge>
+          {t.planKey ? (
+            <Badge tone={toneOf(PLAN_TONES, t.planKey)}>{labelOf(PLAN_LABELS, t.planKey)}</Badge>
+          ) : (
+            <span className="text-xs text-steel-600">abonelik yok</span>
+          )}
+          {t.status && (
+            <Badge tone={toneOf(SUBSCRIPTION_STATUS_TONES, t.status)}>
+              {labelOf(SUBSCRIPTION_STATUS_LABELS, t.status)}
+            </Badge>
+          )}
         </div>
       ),
     },
-    { key: "users", header: "Kullanıcı", align: "right", render: (t) => fmtNumber(t.users) },
-    { key: "cases", header: "Dosya", align: "right", render: (t) => fmtNumber(t.cases) },
-    { key: "storage", header: "Depo", align: "right", render: (t) => fmtBytesMb(t.storageMb) },
+    { key: "seats", header: "Koltuk", align: "right", render: (t) => fmtNumber(t.seats) },
+    { key: "users", header: "Kullanıcı", align: "right", render: (t) => fmtNumber(t.userCount) },
+    { key: "cases", header: "Dosya", align: "right", render: (t) => fmtNumber(t.caseCount) },
+    { key: "storage", header: "Depo", align: "right", render: (t) => fmtBytes(t.storageBytes) },
     {
       key: "ai",
-      header: "AI (30g)",
+      header: "AI çağrısı",
       align: "right",
-      render: (t) => (
-        <span className="font-mono text-steel-200">{fmtCompact(t.aiCalls30d)}</span>
-      ),
-    },
-    {
-      key: "provider",
-      header: "Sağlayıcı",
-      render: (t) => (
-        <Badge tone={toneOf(AI_PROVIDER_TYPE_TONES, t.providerType)}>
-          {labelOf(AI_PROVIDER_TYPE_LABELS, t.providerType)}
-        </Badge>
-      ),
+      render: (t) => <span className="font-mono text-steel-200">{fmtCompact(t.aiCallCount)}</span>,
     },
     { key: "mrr", header: "MRR", align: "right", render: (t) => fmtMoney(t.mrr) },
     {
-      key: "balance",
-      header: "Açık bakiye",
-      align: "right",
-      render: (t) =>
-        t.openBalance > 0 ? (
-          <span className="text-red-300">{fmtMoney(t.openBalance)}</span>
-        ) : (
-          <span className="text-steel-500">—</span>
-        ),
-    },
-    {
       key: "last",
       header: "Son aktivite",
-      render: (t) => <span className="text-xs text-steel-400">{fmtDateTime(t.lastActivityAt)}</span>,
+      render: (t) => (
+        <span className="text-xs text-steel-400">{fmtDateTime(t.lastActivityAt)}</span>
+      ),
     },
   ];
 
-  if (masked) return <MaskedTenantView rows={res.data} pending={res.pending} />;
+  if (masked) return <MaskedTenantView state={res} />;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Tenantlar"
-        description="Hukuk bürolarının platform kaydı. Panel yalnız sayaç ve metadata görür; müvekkil/dosya içeriğine erişim yoktur."
+        description="Hukuk bürolarının platform kaydı. Panel yalnız sayaç ve üstveri görür; müvekkil, dosya ve belge içeriğine erişimi yoktur."
         action={
-          <div className="flex items-center gap-2">
-            {res.pending && <MockBadge />}
-            <RoleGate action="tenant.create" mutation>
-              <Button onClick={() => setCreateOpen(true)}>Yeni tenant</Button>
-            </RoleGate>
-          </div>
+          <Button
+            variant="secondary"
+            disabled={res.data.length === 0}
+            onClick={() =>
+              exportCsv("tenantlar", res.data, [
+                { key: "id", header: "Tenant ID", value: (t) => t.id },
+                { key: "name", header: "Büro", value: (t) => t.name },
+                { key: "plan", header: "Plan", value: (t) => t.planKey ?? "" },
+                { key: "status", header: "Durum", value: (t) => t.status ?? "" },
+                { key: "seats", header: "Koltuk", value: (t) => t.seats ?? "" },
+                { key: "users", header: "Kullanıcı", value: (t) => t.userCount ?? "" },
+                { key: "cases", header: "Dosya", value: (t) => t.caseCount ?? "" },
+                { key: "storage", header: "Depolama (bayt)", value: (t) => String(t.storageBytes ?? "") },
+                { key: "ai", header: "AI çağrısı", value: (t) => t.aiCallCount ?? "" },
+                { key: "mrr", header: "MRR", value: (t) => String(t.mrr ?? "") },
+              ])
+            }
+          >
+            CSV dışa aktar
+          </Button>
         }
       />
 
-      {res.pending && <PendingEndpointNotice endpoint="/tenants" phase="Faz 1" />}
-
       <Card bodyClassName="p-4">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Arama">
+          <Field label="Arama" hint="Sunucuya ?q= olarak gönderilir.">
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Büro adı, il, e-posta, kod"
+              placeholder="Büro adı veya tenant kimliği"
             />
           </Field>
           <Field label="Plan">
             <Select value={plan} onChange={(e) => setPlan(e.target.value)}>
               <option value="">Tümü</option>
-              {PLAN_CODES.map((p) => (
+              {planOptions.map((p) => (
                 <option key={p} value={p}>
-                  {PLAN_LABELS[p]}
+                  {labelOf(PLAN_LABELS, p)}
                 </option>
               ))}
             </Select>
           </Field>
-          <Field label="Durum">
+          <Field label="Abonelik durumu">
             <Select value={status} onChange={(e) => setStatus(e.target.value)}>
               <option value="">Tümü</option>
               {SUBSCRIPTION_STATUSES.map((s) => (
@@ -214,113 +206,87 @@ function TenantList() {
       </Card>
 
       <Card
-        title={`${rows.length} tenant`}
-        subtitle="Satıra tıklayarak detay sekmelerine geçebilirsiniz."
+        title={res.loaded ? `${res.data.length} tenant` : "Tenantlar"}
+        subtitle="Büro adına tıklayarak detay sekmelerine geçebilirsiniz."
       >
-        <Table columns={columns} rows={rows} rowKey={(t) => t.id} dense />
+        <ResourceView
+          loading={res.loading}
+          missing={res.missing}
+          forbidden={res.forbidden}
+          error={res.error}
+          empty={res.empty}
+          endpoint={EP.tenants.list}
+          what="Tenant listesi"
+          emptyMessage="Filtrelere uyan tenant bulunamadı."
+        >
+          <Table columns={columns} rows={res.data} rowKey={(t) => t.id} dense />
+        </ResourceView>
       </Card>
-
-      <Modal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        title="Manuel tenant açılışı"
-        subtitle="POST /tenants — SUPER_ADMIN ve OPS_ADMIN"
-      >
-        <div className="space-y-4">
-          <PendingEndpointNotice endpoint="/tenants" phase="Faz 1" method="POST" />
-          <Field label="Büro adı" required>
-            <Input placeholder="Örn. Yıldırım & Ortakları Hukuk Bürosu" />
-          </Field>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="İl" required>
-              <Input placeholder="İstanbul" />
-            </Field>
-            <Field label="Baro">
-              <Input placeholder="İstanbul Barosu" />
-            </Field>
-          </div>
-          <Field label="Faturalama e-postası" required>
-            <Input type="email" placeholder="finans@buro.example" />
-          </Field>
-          <Field label="Plan" required>
-            <Select defaultValue="TRIAL">
-              {PLAN_CODES.map((p) => (
-                <option key={p} value={p}>
-                  {PLAN_LABELS[p]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Gerekçe / not" hint="PlatformAuditLog'a yazılır." required>
-            <Textarea rows={3} placeholder="Satış ekibinden gelen manuel onboarding talebi…" />
-          </Field>
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setCreateOpen(false)}>
-              Vazgeç
-            </Button>
-            <Button disabled title="Uç henüz uygulanmadı">
-              Oluştur
-            </Button>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }
 
 /** 🔒 ANALYST_READONLY görünümü — büro adı, e-posta ve tekil sayaç yoktur. */
-function MaskedTenantView({ rows, pending }: { rows: readonly AdminTenant[]; pending: boolean }) {
+function MaskedTenantView({
+  state,
+}: {
+  state: ReturnType<typeof useListResource<AdminTenantRow>>;
+}) {
   const byPlan = useMemo(() => {
     const map = new Map<string, number>();
-    for (const t of rows) map.set(t.plan, (map.get(t.plan) ?? 0) + 1);
+    for (const t of state.data) map.set(t.planKey ?? "—", (map.get(t.planKey ?? "—") ?? 0) + 1);
     return [...map.entries()].map(([plan, count]) => ({ plan, count }));
-  }, [rows]);
+  }, [state.data]);
 
   const byStatus = useMemo(() => {
     const map = new Map<string, number>();
-    for (const t of rows) map.set(t.status, (map.get(t.status) ?? 0) + 1);
+    for (const t of state.data) map.set(t.status ?? "—", (map.get(t.status ?? "—") ?? 0) + 1);
     return [...map.entries()].map(([status, count]) => ({ status, count }));
-  }, [rows]);
+  }, [state.data]);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Tenant Dağılımı"
-        description="Analist rolünde tenant listesi maskelidir: yalnız plan ve segment agregatı gösterilir."
-        action={pending ? <MockBadge /> : undefined}
+        description="Analist rolünde tenant listesi maskelidir: yalnız plan ve durum agregatı gösterilir."
       />
       <InfoBox title="Maskeli görünüm (🔒)">
-        Büro adı, e-posta, il/baro, müvekkil ve dosya verisi bu rolde <strong>hiçbir koşulda</strong>{" "}
-        gösterilmez. Tenant kimliği gerektiğinde takma ad kullanılır.
+        Büro adı, e-posta, müvekkil ve dosya verisi bu rolde <strong>hiçbir koşulda</strong>{" "}
+        gösterilmez; sunucu da bu alanları döndürmez. Bu rolde hiçbir yazma düğmesi render edilmez
+        ve mutasyon uçları 403 verir.
       </InfoBox>
-      {pending && <PendingEndpointNotice endpoint="/tenants" phase="Faz 1" />}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="Plan dağılımı">
-          <BarList
-            items={byPlan.map((p) => ({
-              label: labelOf(PLAN_LABELS, p.plan),
-              value: p.count,
-              hint: `${p.count} tenant`,
-            }))}
-          />
-        </Card>
-        <Card title="Abonelik durumu dağılımı">
-          <BarList
-            items={byStatus.map((s) => ({
-              label: labelOf(SUBSCRIPTION_STATUS_LABELS, s.status),
-              value: s.count,
-              hint: `${s.count} tenant`,
-              tone: "green" as const,
-            }))}
-          />
-        </Card>
-      </div>
-      <div className="text-xs text-steel-500">
-        <ApprovalBadge action="tenant.suspend" force />{" "}
-        <span className="ml-2">
-          Yazma işlemleri bu rolde hiç render edilmez ve API katmanında 403 döner.
-        </span>
-      </div>
+      <ResourceView
+        loading={state.loading}
+        missing={state.missing}
+        forbidden={state.forbidden}
+        error={state.error}
+        empty={state.empty}
+        endpoint={EP.tenants.list}
+        what="Tenant dağılımı"
+        emptyMessage="Gösterilecek tenant kaydı yok."
+      >
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card title="Plan dağılımı">
+            <BarList
+              items={byPlan.map((p) => ({
+                label: labelOf(PLAN_LABELS, p.plan),
+                value: p.count,
+                hint: `${p.count} tenant`,
+              }))}
+            />
+          </Card>
+          <Card title="Abonelik durumu dağılımı">
+            <BarList
+              items={byStatus.map((s) => ({
+                label: labelOf(SUBSCRIPTION_STATUS_LABELS, s.status),
+                value: s.count,
+                hint: `${s.count} tenant`,
+                tone: "green" as const,
+              }))}
+            />
+          </Card>
+        </div>
+      </ResourceView>
     </div>
   );
 }

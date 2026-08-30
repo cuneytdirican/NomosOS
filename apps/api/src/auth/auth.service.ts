@@ -5,6 +5,7 @@ import type { LoginInput } from "@nomosos/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import type { AuthUser, JwtPayload } from "../common/types";
+import { TENANT_JWT_AUDIENCE } from "../common/jwt-audience";
 
 @Injectable()
 export class AuthService {
@@ -32,7 +33,13 @@ export class AuthService {
     }
 
     const payload: JwtPayload = { sub: user.id, tenantId: user.tenantId, role: user.role };
-    const accessToken = await this.jwtService.signAsync(payload);
+    // GÜVENLİK: token'a audience damgası basılır (`aud: "tenant"`).
+    // Platform paneli token'ı `aud: "platform"` taşır; iki taraf birbirinin
+    // token'ını audience aşamasında da reddeder (ayrı imza anahtarının üstüne
+    // konan ikinci kapı — bkz. common/jwt-audience.ts).
+    const accessToken = await this.jwtService.signAsync(payload, {
+      audience: TENANT_JWT_AUDIENCE,
+    });
 
     await this.audit.log({
       tenantId: user.tenantId,

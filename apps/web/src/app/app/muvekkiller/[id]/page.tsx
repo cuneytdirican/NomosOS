@@ -9,13 +9,19 @@
  * PATCH  /clients/:id/contacts/:contactId   — ilgili kişi güncelle
  * DELETE /clients/:id/contacts/:contactId   — ilgili kişi sil
  * GET    /cases?clientId=                   — Dosyalar sekmesi (gömülü gelmezse)
- * GET    /clients/:id/summary               — Finans özeti (varsa; yoksa yerel toplam)
+ *
+ * Faz 3 sekmeleri:
+ * Finans             → /finance/clients/:id/summary + /finance/entries (ClientFinanceTab)
+ * Ücret Sözleşmeleri → /billing/fee-agreements (FeeAgreementsTab)
+ *
+ * PARA: müvekkil bakiyesi bu sayfada HESAPLANMAZ; deterministik sunucu özeti
+ * Finans sekmesinde gösterilir.
  */
 
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ApiError, api, asList } from "@/lib/api";
-import type { CaseSummary, Client, ClientContact, ClientSummary, FinancialEntry } from "@/lib/types";
+import type { CaseSummary, Client, ClientContact } from "@/lib/types";
 import {
   Badge,
   Button,
@@ -40,9 +46,11 @@ import {
   CLIENT_CATEGORIES,
   CLIENT_TYPE_LABELS,
   fmtDate,
-  fmtMoney,
   labelOf,
 } from "@/lib/labels";
+import { ClientFinanceTab } from "@/components/client-finance-tab";
+import { FeeAgreementsTab } from "@/components/fee-agreements-tab";
+import { ToastStack, useToasts } from "@/components/ai-ui";
 import { CLIENT_TYPES, type ClientType } from "@nomosos/shared";
 
 const TABS = [
@@ -50,6 +58,7 @@ const TABS = [
   { key: "dosyalar", label: "Dosyalar" },
   { key: "kisiler", label: "İlgili Kişiler" },
   { key: "finans", label: "Finans" },
+  { key: "sozlesmeler", label: "Ücret Sözleşmeleri" },
   { key: "iletisim", label: "İletişim Geçmişi" },
 ] as const;
 
@@ -94,7 +103,6 @@ export default function MuvekkilDetayPage({ params }: { params: Promise<{ id: st
 
   const [client, setClient] = useState<Client | null>(null);
   const [cases, setCases] = useState<CaseSummary[]>([]);
-  const [summary, setSummary] = useState<ClientSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>("genel");
@@ -107,6 +115,7 @@ export default function MuvekkilDetayPage({ params }: { params: Promise<{ id: st
   const [revealedTckn, setRevealedTckn] = useState<string | null>(null);
   const [tcknLoading, setTcknLoading] = useState(false);
   const [tcknError, setTcknError] = useState<string | null>(null);
+  const { toasts, push, dismiss } = useToasts();
 
   const revealTckn = useCallback(async () => {
     if (revealedTckn) {
@@ -146,13 +155,6 @@ export default function MuvekkilDetayPage({ params }: { params: Promise<{ id: st
           setCases([]);
         }
       }
-
-      try {
-        const s = await api<ClientSummary>(`/clients/${id}/summary`);
-        setSummary(s);
-      } catch {
-        setSummary(null);
-      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Müvekkil yüklenemedi.");
     } finally {
@@ -179,8 +181,6 @@ export default function MuvekkilDetayPage({ params }: { params: Promise<{ id: st
     () => cases.filter((c) => c.status !== "KAPANDI" && c.status !== "ARSIV").length,
     [cases],
   );
-
-  const finance = useMemo(() => computeFinance(summary, client?.financialEntries), [summary, client]);
 
   if (loading) return <Spinner label="Müvekkil kartı yükleniyor…" />;
   if (error) return <ErrorBox message={error} />;
@@ -250,11 +250,15 @@ export default function MuvekkilDetayPage({ params }: { params: Promise<{ id: st
         <StatCard label="Toplam Dosya" value={cases.length} tone="navy" />
         <StatCard label="Açık Dosya" value={openCases} tone="slate" />
         <StatCard label="İlgili Kişi" value={contacts.length} tone="slate" />
+        {/* Bekleyen bakiye artık BURADA HESAPLANMAZ. Tutar, avans mahsubunu da
+            içeren deterministik sunucu hesabıyla Finans sekmesinde gösterilir;
+            iki farklı yerde iki farklı yöntemle hesaplanan bakiye, tutarsız
+            rakam üretme riskidir. */}
         <StatCard
           label="Bekleyen Bakiye"
-          value={finance ? fmtMoney(finance.balance, finance.currency) : "—"}
+          value="Finans sekmesi"
           tone="gold"
-          hint={finance ? "Tahakkuk − Tahsilat" : "Finans verisi Faz 3'te bağlanır"}
+          hint="Bakiye sunucuda deterministik hesaplanır"
         />
       </div>
 
@@ -331,40 +335,12 @@ export default function MuvekkilDetayPage({ params }: { params: Promise<{ id: st
 
       {tab === "kisiler" && <ContactsTab clientId={id} contacts={contacts} onChanged={load} />}
 
-      {tab === "finans" && (
-        <Card title="Finans Özeti">
-          {finance ? (
-            <>
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <StatCard
-                  label="Tahakkuk"
-                  value={fmtMoney(finance.accrued, finance.currency)}
-                  tone="slate"
-                />
-                <StatCard
-                  label="Tahsilat"
-                  value={fmtMoney(finance.collected, finance.currency)}
-                  tone="green"
-                />
-                <StatCard
-                  label="Bekleyen"
-                  value={fmtMoney(finance.balance, finance.currency)}
-                  tone="gold"
-                />
-                <StatCard
-                  label="Masraf"
-                  value={fmtMoney(finance.expenses, finance.currency)}
-                  tone="slate"
-                />
-              </div>
-              <p className="mt-4 text-xs text-slate-400">
-                Detaylı finans hareketleri, fatura ve masraf yönetimi Faz 3&apos;te açılır.
-              </p>
-            </>
-          ) : (
-            <EmptyState message="Bu müvekkil için finansal hareket kaydı yok. Detaylı finans modülü Faz 3'te açılır." />
-          )}
-        </Card>
+      {/* Faz 3: özet artık /finance/clients/:id/summary ucundan (SUNUCU hesabı) gelir;
+          istemci tarafında toplama yapılmaz. */}
+      {tab === "finans" && <ClientFinanceTab clientId={id} />}
+
+      {tab === "sozlesmeler" && (
+        <FeeAgreementsTab clientId={id} onNotify={(t) => push(t)} />
       )}
 
       {tab === "iletisim" && (
@@ -378,6 +354,8 @@ export default function MuvekkilDetayPage({ params }: { params: Promise<{ id: st
           </div>
         </Card>
       )}
+
+      <ToastStack toasts={toasts} onDismiss={dismiss} />
     </div>
   );
 }
@@ -778,55 +756,4 @@ function ContactsTab({
       </Modal>
     </Card>
   );
-}
-
-// ---------- Finans yardımcıları ----------
-
-interface FinanceTotals {
-  accrued: number;
-  collected: number;
-  balance: number;
-  expenses: number;
-  currency: string;
-}
-
-function computeFinance(
-  summary: ClientSummary | null,
-  entries: FinancialEntry[] | undefined,
-): FinanceTotals | null {
-  if (summary?.finance) {
-    const f = summary.finance;
-    const accrued = f.accrued ?? 0;
-    const collected = f.collected ?? 0;
-    return {
-      accrued,
-      collected,
-      balance: f.balance ?? accrued - collected,
-      expenses: f.expenses ?? 0,
-      currency: f.currency ?? "TRY",
-    };
-  }
-  if (!entries || entries.length === 0) return null;
-
-  let accrued = 0;
-  let collected = 0;
-  let expenses = 0;
-  for (const e of entries) {
-    const amount = typeof e.amount === "number" ? e.amount : Number(e.amount);
-    if (Number.isNaN(amount)) continue;
-    if (e.type === "TAHAKKUK" || e.type === "VEKALET_UCRETI" || e.type === "DANISMANLIK") {
-      accrued += amount;
-    } else if (e.type === "TAHSILAT" || e.type === "AVANS") {
-      collected += amount;
-    } else if (e.type === "MASRAF" || e.type === "HARC") {
-      expenses += amount;
-    }
-  }
-  return {
-    accrued,
-    collected,
-    balance: accrued - collected,
-    expenses,
-    currency: entries[0]?.currency ?? "TRY",
-  };
 }

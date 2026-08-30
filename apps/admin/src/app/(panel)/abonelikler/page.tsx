@@ -1,18 +1,20 @@
 "use client";
 
 /**
- * Abonelikler — durum makinesi rozetleri, yaklaşan yenilemeler, biten denemeler,
- * plan değişikliği (dört-göz uyarısıyla) ve durum geçişi.
+ * Abonelikler — GET /subscriptions · PATCH /subscriptions/:id · POST /subscriptions/:id/cancel
+ *
+ * Durum geçişleri durum makinesine uyar (CANCELED terminaldir). Plan değişikliği ve
+ * askıya alma dört-göz kapsamındadır: sunucu doğrudan uygulamaz, onay talebi döndürür.
  */
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useResource } from "@/lib/useResource";
+import { useListResource } from "@/lib/useResource";
+import { useMutation } from "@/lib/useMutation";
+import { EP } from "@/lib/endpoints";
 import { PageGate, RoleGate } from "@/components/RoleGate";
 import { ApprovalBadge, ApprovalNotice } from "@/components/ApprovalBadge";
 import {
-  BILLING_CYCLE_LABELS,
-  PLAN_CODES,
   PLAN_LABELS,
   PLAN_TONES,
   SUBSCRIPTION_STATUSES,
@@ -21,27 +23,34 @@ import {
   SUBSCRIPTION_TRANSITIONS,
   fmtDate,
   fmtMoney,
+  fmtNumber,
   labelOf,
   toneOf,
   type SubscriptionStatus,
 } from "@/lib/labels";
-import { MOCK_SUBSCRIPTIONS, type AdminSubscription } from "@/lib/mock";
+import { exportCsv } from "@/lib/csv";
+import type { AdminSubscription } from "@/lib/types";
 import {
   Badge,
   Button,
   Card,
+  EndpointMissingNotice,
+  ErrorBox,
   Field,
   InfoBox,
-  MockBadge,
+  Input,
   Modal,
   PageHeader,
-  PendingEndpointNotice,
+  ResourceView,
   Select,
   StatCard,
+  SuccessBox,
   Table,
   Textarea,
   type Column,
 } from "@/components/ui";
+
+const KNOWN_PLANS = ["SOLO", "BURO", "ENTERPRISE"];
 
 export default function AboneliklerPage() {
   return (
@@ -54,31 +63,29 @@ export default function AboneliklerPage() {
 function Subscriptions() {
   const [status, setStatus] = useState("");
   const [plan, setPlan] = useState("");
-  const [transitionFor, setTransitionFor] = useState<AdminSubscription | null>(null);
-  const [planChangeFor, setPlanChangeFor] = useState<AdminSubscription | null>(null);
-  const [targetStatus, setTargetStatus] = useState<string>("");
+  const [editing, setEditing] = useState<AdminSubscription | null>(null);
+  const [canceling, setCanceling] = useState<AdminSubscription | null>(null);
 
-  const res = useResource<AdminSubscription[]>("/subscriptions", [...MOCK_SUBSCRIPTIONS], {
+  const res = useListResource<AdminSubscription>(EP.subscriptions.list, {
     query: { status: status || undefined, plan: plan || undefined },
   });
 
-  const rows = useMemo(
-    () =>
-      res.data.filter((s) => {
-        if (status && s.status !== status) return false;
-        if (plan && s.plan !== plan) return false;
-        return true;
-      }),
-    [res.data, status, plan],
-  );
+  const planOptions = useMemo(() => {
+    const set = new Set<string>(KNOWN_PLANS);
+    for (const s of res.data) if (s.planKey) set.add(s.planKey);
+    return [...set];
+  }, [res.data]);
 
   const counters = useMemo(() => {
-    const total = res.data.length;
-    const pastDue = res.data.filter((s) => s.status === "PAST_DUE").length;
-    const trials = res.data.filter((s) => s.status === "TRIAL").length;
-    const suspended = res.data.filter((s) => s.status === "SUSPENDED").length;
-    const mrr = res.data.reduce((a, s) => a + s.mrr, 0);
-    return { total, pastDue, trials, suspended, mrr };
+    const rows = res.data;
+    const count = (st: string) => rows.filter((s) => s.status === st).length;
+    return {
+      total: rows.length,
+      trial: count("TRIAL"),
+      pastDue: count("PAST_DUE"),
+      suspended: count("SUSPENDED"),
+      seats: rows.reduce((a, s) => a + (s.seats ?? 0), 0),
+    };
   }, [res.data]);
 
   const columns: Array<Column<AdminSubscription>> = [
@@ -87,10 +94,13 @@ function Subscriptions() {
       header: "Tenant",
       render: (s) => (
         <div>
-          <Link href={`/tenantlar/${s.tenantId}`} className="font-medium text-steel-50 hover:text-accent-300">
-            {s.tenantName}
+          <Link
+            href={`/tenantlar/${s.tenantId}`}
+            className="font-medium text-steel-50 hover:text-accent-300"
+          >
+            {s.tenantName ?? s.tenantId}
           </Link>
-          <p className="text-xs text-steel-500">#{s.tenantCode}</p>
+          <p className="font-mono text-[11px] text-steel-600">{s.tenantId}</p>
         </div>
       ),
     },
@@ -98,14 +108,7 @@ function Subscriptions() {
       key: "plan",
       header: "Plan",
       render: (s) => (
-        <span className="inline-flex flex-wrap items-center gap-1.5">
-          <Badge tone={toneOf(PLAN_TONES, s.plan)}>{labelOf(PLAN_LABELS, s.plan)}</Badge>
-          {s.customPrice && (
-            <Badge tone="accent" title="Özel fiyat — dört-göz onayıyla tanımlandı.">
-              özel
-            </Badge>
-          )}
-        </span>
+        <Badge tone={toneOf(PLAN_TONES, s.planKey)}>{labelOf(PLAN_LABELS, s.planKey)}</Badge>
       ),
     },
     {
@@ -117,7 +120,7 @@ function Subscriptions() {
         </Badge>
       ),
     },
-    { key: "cycle", header: "Döngü", render: (s) => labelOf(BILLING_CYCLE_LABELS, s.billingCycle) },
+    { key: "seats", header: "Koltuk", align: "right", render: (s) => fmtNumber(s.seats) },
     {
       key: "period",
       header: "Dönem",
@@ -127,11 +130,7 @@ function Subscriptions() {
         </span>
       ),
     },
-    {
-      key: "trial",
-      header: "Deneme bitişi",
-      render: (s) => (s.trialEndsAt ? fmtDate(s.trialEndsAt) : "—"),
-    },
+    { key: "trial", header: "Deneme bitişi", render: (s) => fmtDate(s.trialEndsAt) },
     { key: "mrr", header: "MRR", align: "right", render: (s) => fmtMoney(s.mrr) },
     {
       key: "actions",
@@ -140,71 +139,76 @@ function Subscriptions() {
       render: (s) => (
         <div className="flex justify-end gap-2">
           <RoleGate action="subscription.transition" mutation>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => {
-                setTransitionFor(s);
-                setTargetStatus("");
-              }}
-            >
-              Durum geçişi
+            <Button size="sm" variant="secondary" onClick={() => setEditing(s)}>
+              Düzenle
             </Button>
           </RoleGate>
-          <RoleGate action="tenant.plan_change" mutation>
-            <Button size="sm" variant="secondary" onClick={() => setPlanChangeFor(s)}>
-              Plan
-            </Button>
-          </RoleGate>
+          {s.status !== "CANCELED" && (
+            <RoleGate action="subscription.transition" mutation>
+              <Button size="sm" variant="danger" onClick={() => setCanceling(s)}>
+                İptal et
+              </Button>
+            </RoleGate>
+          )}
         </div>
       ),
     },
   ];
 
-  const allowedTargets: SubscriptionStatus[] = transitionFor
-    ? (SUBSCRIPTION_TRANSITIONS[transitionFor.status as SubscriptionStatus] ?? [])
-    : [];
-
   return (
     <div className="space-y-6">
       <PageHeader
         title="Abonelikler"
-        description="Tenant başına tek aktif kayıt. Durum geçişleri yalnız durum makinesi kurallarına uyar; her geçiş PlatformAuditLog'a yazılır."
-        action={res.pending ? <MockBadge /> : undefined}
+        description="Tenant başına tek kayıt (Subscription.tenantId benzersizdir). Durum geçişleri durum makinesine uyar; her geçiş PlatformAuditLog'a yazılır."
+        action={
+          <Button
+            variant="secondary"
+            disabled={res.data.length === 0}
+            onClick={() =>
+              exportCsv("abonelikler", res.data, [
+                { key: "tenantId", header: "Tenant ID", value: (s) => s.tenantId },
+                { key: "tenant", header: "Tenant", value: (s) => s.tenantName ?? "" },
+                { key: "plan", header: "Plan", value: (s) => s.planKey },
+                { key: "status", header: "Durum", value: (s) => s.status },
+                { key: "seats", header: "Koltuk", value: (s) => s.seats ?? "" },
+                { key: "start", header: "Dönem başı", value: (s) => s.currentPeriodStart ?? "" },
+                { key: "end", header: "Dönem sonu", value: (s) => s.currentPeriodEnd ?? "" },
+                { key: "mrr", header: "MRR", value: (s) => String(s.mrr ?? "") },
+              ])
+            }
+          >
+            CSV dışa aktar
+          </Button>
+        }
       />
 
-      {res.pending && <PendingEndpointNotice endpoint="/subscriptions" phase="Faz 1" />}
-
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <StatCard label="Abonelik" value={counters.total} />
-        <StatCard label="Toplam MRR" value={fmtMoney(counters.mrr)} tone="accent" />
-        <StatCard label="Deneme" value={counters.trials} tone="yellow" />
+        <StatCard label="Abonelik" value={res.loaded ? fmtNumber(counters.total) : "—"} />
+        <StatCard label="Toplam koltuk" value={res.loaded ? fmtNumber(counters.seats) : "—"} tone="accent" />
+        <StatCard label="Deneme" value={res.loaded ? fmtNumber(counters.trial) : "—"} tone="yellow" />
         <StatCard
           label="Ödeme gecikti"
-          value={counters.pastDue}
+          value={res.loaded ? fmtNumber(counters.pastDue) : "—"}
           tone={counters.pastDue > 0 ? "red" : "steel"}
-          hint="dunning kuyruğu"
         />
-        <StatCard label="Askıda" value={counters.suspended} tone={counters.suspended > 0 ? "red" : "steel"} />
+        <StatCard
+          label="Askıda"
+          value={res.loaded ? fmtNumber(counters.suspended) : "—"}
+          tone={counters.suspended > 0 ? "red" : "steel"}
+        />
       </div>
 
-      <Card title="Durum makinesi" subtitle="Geçersiz geçiş API'de 422 döner; CANCELED terminaldir.">
+      <Card title="Durum makinesi" subtitle="Geçersiz geçişi sunucu reddeder; CANCELED terminaldir.">
         <div className="overflow-x-auto">
           <ul className="flex min-w-max flex-wrap gap-x-6 gap-y-2 font-mono text-xs text-steel-300">
             <li>TRIAL ──ödeme──▶ ACTIVE</li>
-            <li>TRIAL ──süre doldu──▶ SUSPENDED</li>
             <li>ACTIVE ──ödeme başarısız──▶ PAST_DUE</li>
             <li>PAST_DUE ──grace gün──▶ SUSPENDED</li>
             <li>PAST_DUE ──ödeme──▶ ACTIVE</li>
             <li>SUSPENDED ──ödeme/manuel──▶ ACTIVE</li>
-            <li>ACTIVE|PAST_DUE|SUSPENDED ──iptal──▶ CANCELED</li>
+            <li>* ──iptal──▶ CANCELED</li>
           </ul>
         </div>
-        <p className="mt-3 text-xs text-steel-500">
-          <code className="font-mono">PAST_DUE → SUSPENDED</code> geçişi{" "}
-          <code className="font-mono">past_due_grace_days</code> ayarına bağlı otomatik cron&apos;dur;
-          askıya alma dunning zincirinin son adımıdır.
-        </p>
       </Card>
 
       <Card bodyClassName="p-4">
@@ -222,9 +226,9 @@ function Subscriptions() {
           <Field label="Plan">
             <Select value={plan} onChange={(e) => setPlan(e.target.value)}>
               <option value="">Tümü</option>
-              {PLAN_CODES.map((p) => (
+              {planOptions.map((p) => (
                 <option key={p} value={p}>
-                  {PLAN_LABELS[p]}
+                  {labelOf(PLAN_LABELS, p)}
                 </option>
               ))}
             </Select>
@@ -243,134 +247,242 @@ function Subscriptions() {
         </div>
       </Card>
 
-      <Card title={`${rows.length} abonelik`}>
-        <Table columns={columns} rows={rows} rowKey={(s) => s.id} dense />
+      <Card title={res.loaded ? `${res.data.length} abonelik` : "Abonelikler"}>
+        <ResourceView
+          loading={res.loading}
+          missing={res.missing}
+          forbidden={res.forbidden}
+          error={res.error}
+          empty={res.empty}
+          endpoint={EP.subscriptions.list}
+          what="Abonelik listesi"
+          emptyMessage="Filtrelere uyan abonelik bulunamadı."
+        >
+          <Table columns={columns} rows={res.data} rowKey={(s) => s.id} dense />
+        </ResourceView>
       </Card>
 
-      {/* Durum geçişi */}
-      <Modal
-        open={transitionFor !== null}
-        onClose={() => setTransitionFor(null)}
-        title="Abonelik durum geçişi"
-        subtitle={
-          transitionFor
-            ? `POST /subscriptions/${transitionFor.id}/transition — ${transitionFor.tenantName}`
-            : undefined
-        }
-      >
-        {transitionFor && (
-          <div className="space-y-4">
-            <PendingEndpointNotice
-              endpoint={`/subscriptions/${transitionFor.id}/transition`}
-              phase="Faz 1"
-              method="POST"
-            />
-            <div className="flex items-center gap-2 text-sm text-steel-300">
-              Mevcut durum:
-              <Badge tone={toneOf(SUBSCRIPTION_STATUS_TONES, transitionFor.status)}>
-                {labelOf(SUBSCRIPTION_STATUS_LABELS, transitionFor.status)}
-              </Badge>
-            </div>
+      {editing && (
+        <EditSubscriptionModal
+          subscription={editing}
+          planOptions={planOptions}
+          onClose={() => setEditing(null)}
+          onSaved={() => res.reload()}
+        />
+      )}
 
-            {allowedTargets.length === 0 ? (
-              <InfoBox>
-                Bu durum terminaldir; geçerli bir geçiş yoktur (CANCELED&apos;dan çıkış olmaz).
-              </InfoBox>
-            ) : (
-              <Field label="Hedef durum" required hint="Yalnız durum makinesinin izin verdiği geçişler listelenir.">
-                <Select value={targetStatus} onChange={(e) => setTargetStatus(e.target.value)}>
-                  <option value="">Seçiniz…</option>
-                  {allowedTargets.map((s) => (
-                    <option key={s} value={s}>
-                      {SUBSCRIPTION_STATUS_LABELS[s]}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-            )}
-
-            {targetStatus === "SUSPENDED" && (
-              <>
-                <ApprovalNotice action="tenant.suspend" />
-                <p className="text-xs text-steel-500">
-                  BILLING_ADMIN yalnız ödeme temerrüdü gerekçesiyle askıya alma talep edebilir.
-                </p>
-              </>
-            )}
-
-            <Field label="Gerekçe" required hint="Zorunlu — PlatformAuditLog('SUBSCRIPTION_TRANSITION') kaydına yazılır.">
-              <Textarea rows={3} placeholder="Geçiş gerekçesi…" />
-            </Field>
-
-            <div className="flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => setTransitionFor(null)}>
-                Vazgeç
-              </Button>
-              <Button disabled title="Uç henüz uygulanmadı">
-                {targetStatus === "SUSPENDED" ? "Onaya gönder" : "Uygula"}
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
-
-      {/* Plan değişikliği */}
-      <Modal
-        open={planChangeFor !== null}
-        onClose={() => setPlanChangeFor(null)}
-        title="Plan değişikliği"
-        subtitle={
-          planChangeFor
-            ? `POST /subscriptions/${planChangeFor.id}/change-plan — ${planChangeFor.tenantName}`
-            : undefined
-        }
-      >
-        {planChangeFor && (
-          <div className="space-y-4">
-            <PendingEndpointNotice
-              endpoint={`/subscriptions/${planChangeFor.id}/change-plan`}
-              phase="Faz 3"
-              method="POST"
-            />
-            <Field label="Yeni plan" required>
-              <Select defaultValue={planChangeFor.plan}>
-                {PLAN_CODES.map((p) => (
-                  <option key={p} value={p}>
-                    {PLAN_LABELS[p]}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Özel fiyat (opsiyonel)" hint="Doldurulursa dört-göz onayı gerekir.">
-              <Select defaultValue="hayir">
-                <option value="hayir">Standart plan fiyatı</option>
-                <option value="evet">Özel fiyat / manuel indirim</option>
-              </Select>
-            </Field>
-            <div className="flex items-center gap-2">
-              <ApprovalBadge action="tenant.custom_price" force />
-              <span className="text-xs text-steel-400">
-                Özel fiyat ve manuel indirim dört-göz listesindedir.
-              </span>
-            </div>
-            <Field label="Gerekçe" required>
-              <Textarea rows={3} placeholder="Sözleşme referansı, indirim gerekçesi…" />
-            </Field>
-            <InfoBox>
-              Plan fiyat değişikliği mevcut aboneleri cari dönem sonuna kadar etkilemez. Satıştan
-              kaldırılan plan pasife çekilir; mevcut aboneler korunur.
-            </InfoBox>
-            <div className="flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => setPlanChangeFor(null)}>
-                Vazgeç
-              </Button>
-              <Button disabled title="Uç henüz uygulanmadı">
-                Uygula
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
+      {canceling && (
+        <CancelSubscriptionModal
+          subscription={canceling}
+          onClose={() => setCanceling(null)}
+          onSaved={() => res.reload()}
+        />
+      )}
     </div>
+  );
+}
+
+function EditSubscriptionModal({
+  subscription,
+  planOptions,
+  onClose,
+  onSaved,
+}: {
+  subscription: AdminSubscription;
+  planOptions: string[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [planKey, setPlanKey] = useState(subscription.planKey);
+  const [status, setStatus] = useState(subscription.status);
+  const [seats, setSeats] = useState(String(subscription.seats ?? 1));
+  const [reason, setReason] = useState("");
+  const mutation = useMutation();
+
+  const allowedTargets: SubscriptionStatus[] =
+    SUBSCRIPTION_TRANSITIONS[subscription.status as SubscriptionStatus] ?? [];
+
+  const planChanged = planKey !== subscription.planKey;
+  const statusChanged = status !== subscription.status;
+  const needsApproval = planChanged || status === "SUSPENDED";
+
+  async function submit() {
+    const body: Record<string, unknown> = { reason: reason.trim() };
+    if (planChanged) body.planKey = planKey;
+    if (statusChanged) body.status = status;
+    if (Number(seats) !== subscription.seats) body.seats = Number(seats);
+
+    const ok = await mutation.run(
+      EP.subscriptions.update(subscription.id),
+      { method: "PATCH", body },
+      { successMessage: "Abonelik güncellendi.", onSuccess: onSaved },
+    );
+    if (ok) onSaved();
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Abonelik düzenle"
+      subtitle={`PATCH /api/admin/v1${EP.subscriptions.update(subscription.id)} — ${
+        subscription.tenantName ?? subscription.tenantId
+      }`}
+    >
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 text-sm text-steel-300">
+          Mevcut durum:
+          <Badge tone={toneOf(SUBSCRIPTION_STATUS_TONES, subscription.status)}>
+            {labelOf(SUBSCRIPTION_STATUS_LABELS, subscription.status)}
+          </Badge>
+        </div>
+
+        <Field label="Plan" hint="Plan değişikliği dört-göz onayı gerektirir.">
+          <Select value={planKey} onChange={(e) => setPlanKey(e.target.value)}>
+            {[...new Set([subscription.planKey, ...planOptions])].map((p) => (
+              <option key={p} value={p}>
+                {labelOf(PLAN_LABELS, p)}
+              </option>
+            ))}
+          </Select>
+        </Field>
+
+        <Field
+          label="Durum"
+          hint="Yalnız durum makinesinin izin verdiği hedefler listelenir; askıya alma dört-göz kapsamındadır."
+        >
+          <Select value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value={subscription.status}>
+              {labelOf(SUBSCRIPTION_STATUS_LABELS, subscription.status)} (değişiklik yok)
+            </option>
+            {allowedTargets.map((s) => (
+              <option key={s} value={s}>
+                {SUBSCRIPTION_STATUS_LABELS[s]}
+              </option>
+            ))}
+          </Select>
+        </Field>
+
+        <Field label="Koltuk sayısı">
+          <Input
+            type="number"
+            min={1}
+            value={seats}
+            onChange={(e) => setSeats(e.target.value)}
+          />
+        </Field>
+
+        {needsApproval && <ApprovalNotice action={planChanged ? "tenant.plan_change" : "tenant.suspend"} />}
+        {needsApproval && (
+          <div>
+            <ApprovalBadge action={planChanged ? "tenant.custom_price" : "tenant.suspend"} force />
+          </div>
+        )}
+
+        <Field label="Gerekçe" required hint="Zorunlu — PlatformAuditLog kaydına yazılır.">
+          <Textarea
+            rows={3}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Yükseltme talebi, sözleşme referansı, temerrüt gerekçesi…"
+          />
+        </Field>
+
+        {mutation.missing && (
+          <EndpointMissingNotice
+            endpoint={EP.subscriptions.update(subscription.id)}
+            method="PATCH"
+            what="Abonelik güncelleme"
+          />
+        )}
+        {mutation.error && <ErrorBox message={mutation.error} />}
+        {mutation.success && <SuccessBox message={mutation.success} />}
+
+        <InfoBox>
+          Plan fiyatı yalnız kayıttan okunur; panel KDV oranı ya da fiyat hesabı yapmaz. Parasal
+          hesaplar sunucu tarafında deterministiktir.
+        </InfoBox>
+
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>
+            Kapat
+          </Button>
+          <Button
+            disabled={reason.trim().length === 0 || mutation.loading}
+            onClick={() => void submit()}
+          >
+            {mutation.loading ? "Gönderiliyor…" : needsApproval ? "Onaya gönder" : "Kaydet"}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function CancelSubscriptionModal({
+  subscription,
+  onClose,
+  onSaved,
+}: {
+  subscription: AdminSubscription;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const mutation = useMutation();
+
+  async function submit() {
+    const ok = await mutation.run(
+      EP.subscriptions.cancel(subscription.id),
+      { method: "POST", body: { reason: reason.trim() } },
+      { successMessage: "Abonelik iptal edildi.", onSuccess: onSaved },
+    );
+    if (ok) onSaved();
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Aboneliği iptal et"
+      subtitle={`POST /api/admin/v1${EP.subscriptions.cancel(subscription.id)}`}
+    >
+      <div className="space-y-4">
+        <ApprovalNotice action="tenant.suspend" />
+        <InfoBox>
+          İptal <strong>terminal</strong> bir geçiştir: CANCELED durumundan çıkış yoktur. Veri
+          silinmez; saklama süresi ve imha ayrı bir dört-göz işlemidir.
+        </InfoBox>
+        <Field label="Gerekçe" required>
+          <Textarea
+            rows={3}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Müşteri kapatma talebi, sözleşme feshi…"
+          />
+        </Field>
+        {mutation.missing && (
+          <EndpointMissingNotice
+            endpoint={EP.subscriptions.cancel(subscription.id)}
+            method="POST"
+            what="Abonelik iptali"
+          />
+        )}
+        {mutation.error && <ErrorBox message={mutation.error} />}
+        {mutation.success && <SuccessBox message={mutation.success} />}
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>
+            Kapat
+          </Button>
+          <Button
+            variant="danger"
+            disabled={reason.trim().length === 0 || mutation.loading}
+            onClick={() => void submit()}
+          >
+            {mutation.loading ? "Gönderiliyor…" : "İptal talebini gönder"}
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }

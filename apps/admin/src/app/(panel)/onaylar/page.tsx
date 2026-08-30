@@ -2,35 +2,46 @@
 
 /**
  * Onay kuyruğu — dört-göz (two-person rule) talepleri.
- * Kurallar: talep eden ≠ onaylayan; onaylanmayan talep 72 saatte ZAMAN_ASIMI olur;
- * onay ekranı öncesi step-up doğrulama (2FA yeniden istenir).
+ *
+ * Uçlar: GET /approvals?status= · POST /approvals/:id/approve · POST /approvals/:id/reject
+ *
+ * KURAL: talep eden ≠ onaylayan. Sunucu kendi talebini onaylamaya çalışanı 403 ile reddeder;
+ * panel bunu ÖNCEDEN gösterir (düğme pasif + açıklama) ve 403 dönerse anlaşılır biçimde
+ * yeniden söyler. Onaylanmayan talep 72 saatte SURESI_DOLDU durumuna geçer.
  */
 
 import { useMemo, useState } from "react";
-import { useResource } from "@/lib/useResource";
+import { useListResource } from "@/lib/useResource";
+import { useMutation } from "@/lib/useMutation";
 import { useAdminSession } from "@/lib/session";
-import { ACTION_LABELS, canApproveRequest, can } from "@/lib/rbac";
+import { EP } from "@/lib/endpoints";
+import { can, canApproveRequest } from "@/lib/rbac";
 import { PageGate } from "@/components/RoleGate";
 import { ApprovalBadge, ApprovalStatusBadge } from "@/components/ApprovalBadge";
 import {
+  APPROVAL_ACTION_LABELS,
+  APPROVAL_STATUSES,
   APPROVAL_TIMEOUT_HOURS,
-  ROLE_LABELS,
   fmtDateTime,
+  labelOf,
+  payloadRows,
   remainingLabel,
+  roleLabel,
 } from "@/lib/labels";
-import { MOCK_APPROVALS, type AdminApproval } from "@/lib/mock";
+import type { AdminApprovalRequest } from "@/lib/types";
 import {
   Badge,
   Button,
   Card,
-  EmptyState,
+  EndpointMissingNotice,
+  ErrorBox,
   Field,
   InfoBox,
-  Input,
-  MockBadge,
   Modal,
   PageHeader,
-  PendingEndpointNotice,
+  ResourceView,
+  Select,
+  SuccessBox,
   Tabs,
   Textarea,
   WarningBox,
@@ -49,57 +60,105 @@ export default function OnaylarPage() {
 function ApprovalQueue() {
   const { role, user } = useAdminSession();
   const [tab, setTab] = useState<TabKey>("bekleyen");
-  const [decision, setDecision] = useState<{ item: AdminApproval; type: "onay" | "red" } | null>(
-    null,
-  );
-  const [totp, setTotp] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [decision, setDecision] = useState<{
+    item: AdminApprovalRequest;
+    type: "onay" | "red";
+  } | null>(null);
 
-  const res = useResource<AdminApproval[]>("/approvals", [...MOCK_APPROVALS]);
+  const res = useListResource<AdminApprovalRequest>(EP.approvals.list, {
+    query: {
+      status: tab === "bekleyen" ? "BEKLIYOR" : statusFilter || undefined,
+    },
+  });
 
-  const pending = useMemo(() => res.data.filter((a) => a.status === "BEKLIYOR"), [res.data]);
-  const history = useMemo(() => res.data.filter((a) => a.status !== "BEKLIYOR"), [res.data]);
+  const rows = useMemo(() => {
+    if (tab === "bekleyen") return res.data.filter((a) => a.status === "BEKLIYOR");
+    return res.data.filter((a) => a.status !== "BEKLIYOR");
+  }, [res.data, tab]);
 
-  const list = tab === "bekleyen" ? pending : history;
+  const canDecide = can(role, "approval.decide");
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Onay Kuyruğu"
-        description="Tek kişiyle tamamlanamayan işlemler burada bekler. Her iki kimlik (talep eden ve onaylayan) PlatformAuditLog'a yazılır."
-        action={res.pending ? <MockBadge /> : undefined}
+        description="Tek kişiyle tamamlanamayan işlemler burada bekler. Talep eden ve onaylayan kimlikleri PlatformAuditLog'a yazılır."
       />
 
-      {res.pending && <PendingEndpointNotice endpoint="/approvals" phase="Faz 1" />}
-
-      <InfoBox title="Dört-göz kapsamındaki işlemler">
-        <ol className="mt-1 list-inside list-decimal space-y-0.5 text-sm">
-          <li>Tenant kalıcı silme / veri imhası (iki SUPER_ADMIN)</li>
-          <li>Tenant askıya alma (talep: OPS/BILLING → onay: SUPER veya farklı OPS_ADMIN)</li>
-          <li>İade — eşik üstü (varsayılan &gt; ₺5.000) ve her toplu iade</li>
-          <li>Özel fiyat / manuel indirim</li>
-          <li>Destek erişim penceresi açma (+ tenant ADMIN onayı)</li>
-          <li>Bakım modu tam kilidi ve platform geneli flag / rate-limit değişikliği</li>
-          <li>Yeni SUPER_ADMIN atama / mevcut SUPER_ADMIN&apos;i düşürme</li>
-          <li>PlatformAuditLog dışa aktarımı</li>
-        </ol>
+      <InfoBox title="Dört-göz kuralı">
+        <ul className="mt-1 list-inside list-disc space-y-0.5 text-sm">
+          <li>
+            <strong>Talep eden kendi talebini onaylayamaz.</strong> Bu satırlarda düğmeler
+            pasiftir; zorlanırsa sunucu 403 döner.
+          </li>
+          <li>
+            Onaylanmayan talep <strong>{APPROVAL_TIMEOUT_HOURS} saat</strong> sonunda
+            kendiliğinden <code className="font-mono text-xs">SURESI_DOLDU</code> olur ve işlem
+            uygulanmaz.
+          </li>
+          <li>
+            Kapsam: tenant askıya alma/silme, plan ve özel fiyat değişikliği, iade, destek erişim
+            penceresi, bakım kilidi, platform geneli flag, SUPER_ADMIN atama, denetim izi dışa
+            aktarımı.
+          </li>
+        </ul>
       </InfoBox>
+
+      {!canDecide && (
+        <WarningBox title="Salt-görüntüleme">
+          Rolünüz onay kuyruğunu görüntüleyebilir ancak karar veremez; onayla/reddet düğmeleri
+          gösterilmez.
+        </WarningBox>
+      )}
 
       <Tabs
         tabs={[
-          { key: "bekleyen", label: "Bekleyen", count: pending.length },
-          { key: "gecmis", label: "Karara bağlananlar", count: history.length },
+          { key: "bekleyen", label: "Bekleyen", count: rows.length },
+          { key: "gecmis", label: "Karara bağlananlar" },
         ]}
         active={tab}
-        onChange={setTab}
+        onChange={(k) => {
+          setTab(k);
+          setStatusFilter("");
+        }}
       />
 
-      {list.length === 0 ? (
-        <EmptyState message={tab === "bekleyen" ? "Bekleyen onay yok." : "Kayıt yok."} />
-      ) : (
+      {tab === "gecmis" && (
+        <Card bodyClassName="p-4">
+          <div className="max-w-xs">
+            <Field label="Durum">
+              <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                <option value="">Tümü (bekleyen hariç)</option>
+                {APPROVAL_STATUSES.filter((s) => s !== "BEKLIYOR").map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+        </Card>
+      )}
+
+      <ResourceView
+        loading={res.loading}
+        missing={res.missing}
+        forbidden={res.forbidden}
+        error={res.error}
+        empty={res.loaded && rows.length === 0}
+        endpoint={EP.approvals.list}
+        what="Onay kuyruğu"
+        emptyMessage={tab === "bekleyen" ? "Bekleyen onay yok." : "Karara bağlanmış talep yok."}
+      >
         <ul className="space-y-4">
-          {list.map((a) => {
-            const isOwnRequest = a.requestedByEmail === user?.email;
-            const allowed = canApproveRequest(role, user?.id, a.requestedById) && !isOwnRequest;
+          {rows.map((a) => {
+            const isOwnRequest =
+              (!!user?.id && a.requestedBy === user.id) ||
+              (!!user?.email && !!a.requestedByEmail && a.requestedByEmail === user.email);
+            const allowed = canApproveRequest(role, user?.id, a.requestedBy) && !isOwnRequest;
+            const payload = payloadRows(a.payload ?? a.payloadJson);
+
             return (
               <li key={a.id}>
                 <Card>
@@ -107,33 +166,54 @@ function ApprovalQueue() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge tone="steel" title="PlatformApprovalRequest.action">
-                          {ACTION_LABELS[a.actionKey] ?? a.action}
+                          {labelOf(APPROVAL_ACTION_LABELS, a.action)}
                         </Badge>
-                        <ApprovalBadge action={a.actionKey} force />
+                        <ApprovalBadge action="tenant.suspend" force />
                         <ApprovalStatusBadge status={a.status} expiresAt={a.expiresAt} />
+                        {isOwnRequest && (
+                          <Badge tone="yellow" title="Talep eden ≠ onaylayan kuralı">
+                            Sizin talebiniz
+                          </Badge>
+                        )}
                       </div>
-                      <p className="mt-2 text-base font-medium text-steel-50">{a.summary}</p>
-                      <p className="mt-1 text-sm text-steel-300">
-                        <span className="text-steel-500">Gerekçe: </span>
-                        {a.reason}
-                      </p>
+
+                      <p className="mt-2 font-mono text-xs text-steel-500">{a.action}</p>
+
+                      {a.tenantName || a.tenantId ? (
+                        <p className="mt-1 text-sm text-steel-200">
+                          Hedef: <span className="text-steel-50">{a.tenantName ?? a.tenantId}</span>
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-sm text-steel-400">Hedef: platform</p>
+                      )}
+
+                      {payload.length > 0 && (
+                        <div className="mt-3 rounded-lg border border-steel-800 bg-steel-950/60 p-3">
+                          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-steel-500">
+                            Talep içeriği
+                          </p>
+                          <dl className="grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
+                            {payload.map((p) => (
+                              <div key={p.key} className="flex gap-2">
+                                <dt className="shrink-0 font-mono text-steel-500">{p.key}:</dt>
+                                <dd className="break-words text-steel-200">{p.value}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        </div>
+                      )}
+
                       <dl className="mt-3 grid gap-x-6 gap-y-1 text-xs text-steel-500 sm:grid-cols-2">
                         <div>
                           <dt className="inline">Talep eden: </dt>
                           <dd className="inline text-steel-300">
-                            {a.requestedByEmail} (
-                            {ROLE_LABELS[a.requestedByRole as keyof typeof ROLE_LABELS] ??
-                              a.requestedByRole}
-                            )
+                            {a.requestedByEmail ?? a.requestedByName ?? a.requestedBy}
+                            {a.requestedByRole ? ` (${roleLabel(a.requestedByRole)})` : ""}
                           </dd>
                         </div>
                         <div>
                           <dt className="inline">Talep tarihi: </dt>
-                          <dd className="inline text-steel-300">{fmtDateTime(a.requestedAt)}</dd>
-                        </div>
-                        <div>
-                          <dt className="inline">Hedef: </dt>
-                          <dd className="inline text-steel-300">{a.targetTenantName ?? "platform"}</dd>
+                          <dd className="inline text-steel-300">{fmtDateTime(a.createdAt)}</dd>
                         </div>
                         <div>
                           <dt className="inline">
@@ -142,40 +222,40 @@ function ApprovalQueue() {
                           <dd className="inline text-steel-300">
                             {a.status === "BEKLIYOR"
                               ? `${fmtDateTime(a.expiresAt)} · ${remainingLabel(a.expiresAt)}`
-                              : `${a.approvedByEmail ?? "—"} · ${fmtDateTime(a.decidedAt)}`}
+                              : `${a.decidedByEmail ?? a.decidedBy ?? "—"} · ${fmtDateTime(a.decidedAt)}`}
                           </dd>
                         </div>
+                        {a.decisionNote && (
+                          <div>
+                            <dt className="inline">Karar notu: </dt>
+                            <dd className="inline text-steel-300">{a.decisionNote}</dd>
+                          </div>
+                        )}
                       </dl>
                     </div>
 
-                    {a.status === "BEKLIYOR" && (
+                    {a.status === "BEKLIYOR" && canDecide && (
                       <div className="flex shrink-0 flex-col items-end gap-2">
-                        {!can(role, "approval.decide") ? (
-                          <p className="max-w-[16rem] text-right text-xs text-steel-500">
-                            Onay verme yetkiniz yok; bu kuyruğu yalnız görüntüleyebilirsiniz.
+                        {isOwnRequest && (
+                          <p className="max-w-[18rem] text-right text-xs text-amber-300">
+                            Kendi talebinizi onaylayamazsınız (dört-göz kuralı). Farklı bir
+                            yetkilinin karar vermesi gerekir; sunucu aksi denemeyi 403 ile
+                            reddeder.
                           </p>
-                        ) : isOwnRequest ? (
-                          <p className="max-w-[16rem] text-right text-xs text-amber-300">
-                            Kendi talebinizi onaylayamazsınız (talep eden ≠ onaylayan).
-                          </p>
-                        ) : null}
+                        )}
                         <div className="flex gap-2">
                           <Button
                             variant="secondary"
                             disabled={!allowed}
-                            onClick={() => {
-                              setDecision({ item: a, type: "red" });
-                              setTotp("");
-                            }}
+                            title={isOwnRequest ? "Kendi talebinizi reddedemezsiniz." : undefined}
+                            onClick={() => setDecision({ item: a, type: "red" })}
                           >
                             Reddet
                           </Button>
                           <Button
                             disabled={!allowed}
-                            onClick={() => {
-                              setDecision({ item: a, type: "onay" });
-                              setTotp("");
-                            }}
+                            title={isOwnRequest ? "Kendi talebinizi onaylayamazsınız." : undefined}
+                            onClick={() => setDecision({ item: a, type: "onay" })}
                           >
                             Onayla
                           </Button>
@@ -188,75 +268,105 @@ function ApprovalQueue() {
             );
           })}
         </ul>
+      </ResourceView>
+
+      {decision && (
+        <DecisionModal
+          item={decision.item}
+          type={decision.type}
+          onClose={() => setDecision(null)}
+          onDone={() => res.reload()}
+        />
       )}
-
-      <p className="text-xs text-steel-500">
-        Onaylanmayan talepler {APPROVAL_TIMEOUT_HOURS} saat sonunda kendiliğinden ZAMAN_ASIMI
-        durumuna geçer ve işlem uygulanmaz.
-      </p>
-
-      <Modal
-        open={decision !== null}
-        onClose={() => setDecision(null)}
-        title={decision?.type === "onay" ? "Talebi onayla" : "Talebi reddet"}
-        subtitle={decision ? `PATCH /approvals/${decision.item.id}` : undefined}
-      >
-        {decision && (
-          <div className="space-y-4">
-            <PendingEndpointNotice
-              endpoint={`/approvals/${decision.item.id}`}
-              phase="Faz 1"
-              method="PATCH"
-            />
-            <Card bodyClassName="p-4">
-              <p className="text-sm text-steel-100">{decision.item.summary}</p>
-              <p className="mt-1 text-xs text-steel-500">
-                Talep eden: {decision.item.requestedByEmail}
-              </p>
-            </Card>
-
-            {decision.type === "onay" && (
-              <WarningBox title="Step-up doğrulama">
-                Dört-göz onayı öncesi 2FA yeniden istenir. Onayınız işlemi{" "}
-                <strong>uygulanabilir</strong> hâle getirir ve her iki kimlik denetim izine yazılır.
-              </WarningBox>
-            )}
-
-            {decision.type === "onay" && (
-              <Field label="TOTP kodu" required>
-                <Input
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={totp}
-                  onChange={(e) => setTotp(e.target.value.replace(/\D/g, ""))}
-                  placeholder="000000"
-                  className="text-center font-mono text-lg tracking-[0.4em]"
-                />
-              </Field>
-            )}
-
-            <Field
-              label={decision.type === "onay" ? "Onay notu" : "Red gerekçesi"}
-              required={decision.type === "red"}
-            >
-              <Textarea rows={3} placeholder="Karar gerekçesi…" />
-            </Field>
-
-            <div className="flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => setDecision(null)}>
-                Vazgeç
-              </Button>
-              <Button
-                variant={decision.type === "onay" ? "primary" : "danger"}
-                disabled={decision.type === "onay" && totp.length !== 6}
-                title="Uç henüz uygulanmadı"
-              >
-                {decision.type === "onay" ? "Onayla" : "Reddet"}
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
     </div>
+  );
+}
+
+function DecisionModal({
+  item,
+  type,
+  onClose,
+  onDone,
+}: {
+  item: AdminApprovalRequest;
+  type: "onay" | "red";
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [note, setNote] = useState("");
+  const mutation = useMutation();
+  const path = type === "onay" ? EP.approvals.approve(item.id) : EP.approvals.reject(item.id);
+
+  async function submit() {
+    const ok = await mutation.run(
+      path,
+      { method: "POST", body: { note: note.trim() } },
+      {
+        successMessage:
+          type === "onay"
+            ? "Talep onaylandı; işlem uygulandı ve denetim izine yazıldı."
+            : "Talep reddedildi.",
+        onSuccess: onDone,
+      },
+    );
+    if (ok) onDone();
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={type === "onay" ? "Talebi onayla" : "Talebi reddet"}
+      subtitle={`POST /api/admin/v1${path}`}
+    >
+      <div className="space-y-4">
+        <Card bodyClassName="p-4">
+          <p className="text-sm text-steel-100">{labelOf(APPROVAL_ACTION_LABELS, item.action)}</p>
+          <p className="mt-1 text-xs text-steel-500">
+            Talep eden: {item.requestedByEmail ?? item.requestedBy} ·{" "}
+            {item.tenantName ?? item.tenantId ?? "platform"}
+          </p>
+        </Card>
+
+        {type === "onay" && (
+          <WarningBox title="Onay işlemi geri alınamaz">
+            Onayınız işlemi <strong>uygulanabilir</strong> hâle getirir; hem talep eden hem
+            onaylayan kimliği denetim izine yazılır.
+          </WarningBox>
+        )}
+
+        <Field
+          label={type === "onay" ? "Onay notu" : "Red gerekçesi"}
+          required={type === "red"}
+          hint="PlatformApprovalRequest.decisionNote alanına yazılır."
+        >
+          <Textarea
+            rows={3}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Karar gerekçesi…"
+          />
+        </Field>
+
+        {mutation.missing && (
+          <EndpointMissingNotice endpoint={path} method="POST" what="Onay kararı" />
+        )}
+        {mutation.error && <ErrorBox message={mutation.error} />}
+        {mutation.success && <SuccessBox message={mutation.success} />}
+
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>
+            Kapat
+          </Button>
+          <Button
+            variant={type === "onay" ? "primary" : "danger"}
+            disabled={mutation.loading || (type === "red" && note.trim().length === 0)}
+            onClick={() => void submit()}
+          >
+            {mutation.loading ? "Gönderiliyor…" : type === "onay" ? "Onayla" : "Reddet"}
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
