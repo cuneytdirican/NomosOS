@@ -26,6 +26,9 @@ import { Badge, Card, EmptyState, ErrorBox, Spinner, StatCard } from "@/componen
 import { TaskProgress } from "@/components/task-progress";
 import { riskOffice } from "./_lib/faz4";
 import type { RiskCaseRow } from "./_lib/faz4-types";
+// Faz 5 — onay bekleyen mesajlar + vekaletname/sözleşme uyarıları.
+import { listApprovalQueue, listContractRenewals, listPoaWarnings } from "./_lib/faz5";
+import type { CommEntry, ContractRenewalItem, PoaAlert } from "./_lib/faz5-types";
 import {
   RISK_BANDS,
   RISK_BAND_BARS,
@@ -34,6 +37,9 @@ import {
   RISK_BAND_TONES,
   RISK_DIMENSION_LABELS,
   riskBandOf,
+  COMM_CHANNEL_LABELS,
+  OUTBOUND_STATUS_LABELS,
+  OUTBOUND_STATUS_TONES,
   DEADLINE_SOURCE_LABELS,
   DEADLINE_SOURCE_TONES,
   HEARING_TYPE_LABELS,
@@ -87,6 +93,10 @@ export default function PanelPage() {
   const [proposals, setProposals] = useState<ActionProposal[]>([]);
   /** Riskli dosyalar — uç yoksa kart gizlenir, panel etkilenmez. */
   const [riskRows, setRiskRows] = useState<RiskCaseRow[]>([]);
+  /** Faz 5 — onay bekleyen giden mesajlar ve vekaletname/sözleşme uyarıları. */
+  const [pendingMessages, setPendingMessages] = useState<CommEntry[]>([]);
+  const [poaAlerts, setPoaAlerts] = useState<PoaAlert[]>([]);
+  const [renewals, setRenewals] = useState<ContractRenewalItem[]>([]);
 
   useEffect(() => {
     let alive = true;
@@ -112,6 +122,27 @@ export default function PanelPage() {
       .catch(() => {
         if (alive) setProposals([]);
       });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  /**
+   * Faz 5 kartları. Üç uç da bağımsız olarak "yoksa boş" davranır: iletişim
+   * modülü yayına alınmamış bir kurulumda panel eskisi gibi çalışır.
+   */
+  useEffect(() => {
+    let alive = true;
+    void Promise.allSettled([
+      listApprovalQueue(),
+      listPoaWarnings(),
+      listContractRenewals(90),
+    ]).then(([m, p, c]) => {
+      if (!alive) return;
+      setPendingMessages(m.status === "fulfilled" ? m.value : []);
+      setPoaAlerts(p.status === "fulfilled" ? p.value : []);
+      setRenewals(c.status === "fulfilled" ? c.value : []);
+    });
     return () => {
       alive = false;
     };
@@ -314,6 +345,14 @@ export default function PanelPage() {
             </Card>
           )}
 
+          {/* Onay bekleyen giden mesajlar — İletişim Merkezi (Modül 19) */}
+          {pendingMessages.length > 0 && <PendingMessagesCard entries={pendingMessages} />}
+
+          {/* Vekaletname ve sözleşme uyarıları — Modül 12 + 20 */}
+          {(poaAlerts.length > 0 || renewals.length > 0) && (
+            <PoaContractAlertsCard alerts={poaAlerts} renewals={renewals} />
+          )}
+
           {/* Riskli dosyalar — Risk Motoru (Modül 17) beslemesi */}
           {riskRows.length > 0 && <RiskyCasesCard rows={riskRows} />}
 
@@ -514,6 +553,145 @@ export default function PanelPage() {
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * Onay bekleyen mesajlar kartı (Modül 19).
+ *
+ * Panelde durmasının nedeni: onaylanmamış bir taslak, MÜVEKKİLE ULAŞMAMIŞ bir
+ * bilgilendirmedir. Kuyrukta unutulan mesaj, avukatın "bilgi verdim" sandığı
+ * ama verilmemiş bir iştir — kritik süreler kadar görünür olmalıdır.
+ */
+function PendingMessagesCard({ entries }: { entries: CommEntry[] }) {
+  return (
+    <Card
+      title={`Onay Bekleyen Mesajlar (${entries.length})`}
+      action={
+        <Link
+          href="/app/iletisim"
+          className="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-amber-400"
+        >
+          İletişim Merkezi&apos;ne git →
+        </Link>
+      }
+    >
+      <p className="text-xs text-slate-500">
+        Bu mesajlar HENÜZ GÖNDERİLMEDİ. Onaylayan kullanıcı, gönderilen metnin sorumlusudur.
+      </p>
+      <ul className="mt-3 space-y-2">
+        {entries.slice(0, 5).map((e) => (
+          <li
+            key={e.id}
+            className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50/60 px-3 py-2"
+          >
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-slate-900">
+                {e.subject ?? `${labelOf(COMM_CHANNEL_LABELS, e.channel)} mesajı`}
+              </p>
+              <p className="mt-0.5 truncate text-xs text-slate-500">
+                {e.client?.name ?? "Müvekkil"}
+                {e.case?.title ? ` · ${e.case.title}` : ""}
+              </p>
+            </div>
+            <Badge tone={OUTBOUND_STATUS_TONES[e.status ?? ""] ?? "gray"}>
+              {labelOf(OUTBOUND_STATUS_LABELS, e.status)}
+            </Badge>
+          </li>
+        ))}
+      </ul>
+      {entries.length > 5 && (
+        <p className="mt-2 text-xs text-slate-400">ve {entries.length - 5} mesaj daha…</p>
+      )}
+    </Card>
+  );
+}
+
+/**
+ * Vekaletname ve sözleşme uyarıları (Modül 12 + 20).
+ *
+ * İki kaynak TEK kartta toplanır çünkü ikisi de aynı soruyu sorar: "bu işi
+ * yapmaya hâlâ yetkili miyiz / bu ilişki hâlâ yürürlükte mi?". Süresi dolan
+ * vekaletname ile yapılan usul işlemi ve kaçırılan fesih ihbarı, avukata aynı
+ * anda görünmesi gereken iki risktir.
+ */
+function PoaContractAlertsCard({
+  alerts,
+  renewals,
+}: {
+  alerts: PoaAlert[];
+  renewals: ContractRenewalItem[];
+}) {
+  return (
+    <Card title={`Vekaletname ve Sözleşme Uyarıları (${alerts.length + renewals.length})`}>
+      {alerts.length > 0 && (
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            Vekaletname
+          </p>
+          <ul className="mt-2 space-y-2">
+            {alerts.slice(0, 5).map((a) => (
+              <li
+                key={a.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm text-slate-900">{a.message}</p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {a.client?.id ? (
+                      <Link
+                        href={`/app/muvekkiller/${a.client.id}`}
+                        className="hover:text-amber-600"
+                      >
+                        {a.client.name ?? "Müvekkil"}
+                      </Link>
+                    ) : (
+                      "Müvekkil"
+                    )}
+                    {a.expiresAt ? ` · bitiş: ${fmtDate(a.expiresAt)}` : ""}
+                  </p>
+                </div>
+                {a.daysLeft !== null && (
+                  <Badge tone={urgencyTone(a.daysLeft)}>{remainingLabel(a.daysLeft)}</Badge>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {renewals.length > 0 && (
+        <div className={alerts.length > 0 ? "mt-4" : ""}>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            Sözleşme yenileme / fesih ihbarı
+          </p>
+          <ul className="mt-2 space-y-2">
+            {renewals.slice(0, 5).map((r) => (
+              <li
+                key={r.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm text-slate-900">{r.title}</p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {r.client?.name ?? "Müvekkil"}
+                    {r.noticeDeadline ? ` · ihbar son gün: ${fmtDate(r.noticeDeadline)}` : ""}
+                    {r.autoRenew ? " · kendiliğinden yenilenir" : ""}
+                  </p>
+                </div>
+                {r.daysLeft !== null && (
+                  <Badge tone={urgencyTone(r.daysLeft)}>{remainingLabel(r.daysLeft)}</Badge>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <p className="mt-3 text-[11px] leading-5 text-slate-400">
+        Süre hesapları sunucudaki deterministik süre motorundan gelir; bu kart yalnızca gösterir.
+      </p>
+    </Card>
   );
 }
 

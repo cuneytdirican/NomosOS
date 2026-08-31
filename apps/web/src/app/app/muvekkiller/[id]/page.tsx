@@ -52,6 +52,11 @@ import { ClientFinanceTab } from "@/components/client-finance-tab";
 import { FeeAgreementsTab } from "@/components/fee-agreements-tab";
 import { ToastStack, useToasts } from "@/components/ai-ui";
 import { CLIENT_TYPES, type ClientType } from "@nomosos/shared";
+// ---- Faz 5: portal, vekaletname, sözleşme, iletişim ----
+import { CommScopeTab } from "../../_components/comm-scope-tab";
+import { ContractsTab } from "../../_components/contracts-tab";
+import { PoaTab } from "../../_components/poa-tab";
+import { PortalTab } from "../../_components/portal-tab";
 
 const TABS = [
   { key: "genel", label: "Genel" },
@@ -60,6 +65,10 @@ const TABS = [
   { key: "finans", label: "Finans" },
   { key: "sozlesmeler", label: "Ücret Sözleşmeleri" },
   { key: "iletisim", label: "İletişim Geçmişi" },
+  // ---- Faz 5 ----
+  { key: "portal", label: "Portal" },
+  { key: "vekaletname", label: "Vekaletnameler" },
+  { key: "sozlesmeler5", label: "Sözleşmeler" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -343,16 +352,30 @@ export default function MuvekkilDetayPage({ params }: { params: Promise<{ id: st
         <FeeAgreementsTab clientId={id} onNotify={(t) => push(t)} />
       )}
 
+      {/* ---------- Faz 5 ---------- */}
+
       {tab === "iletisim" && (
-        <Card title="İletişim Geçmişi">
-          <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center">
-            <p className="text-sm font-medium text-slate-700">Bu bölüm Faz 5&apos;te açılacak</p>
-            <p className="mx-auto mt-2 max-w-md text-xs leading-5 text-slate-500">
-              Telefon, e-posta, toplantı ve WhatsApp kayıtları müvekkil kartına işlenecek; her kayıt
-              ilgili dosyanın safahat akışında da görünecek.
-            </p>
-          </div>
-        </Card>
+        <CommScopeTab
+          clientId={id}
+          clients={[{ id, name: client.name }]}
+          cases={cases.map((c) => ({
+            id: c.id,
+            title: c.title,
+            fileNumber: c.fileNumber ?? null,
+            status: c.status ?? null,
+          }))}
+          onNotify={push}
+        />
+      )}
+
+      {tab === "portal" && (
+        <PortalTab clientId={id} clientName={client.name} onNotify={push} />
+      )}
+
+      {tab === "vekaletname" && <PoaTab clientId={id} cases={cases} onNotify={push} />}
+
+      {tab === "sozlesmeler5" && (
+        <ContractsTab clientId={id} cases={cases} onNotify={push} />
       )}
 
       <ToastStack toasts={toasts} onDismiss={dismiss} />

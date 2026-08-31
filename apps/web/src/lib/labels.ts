@@ -1461,6 +1461,370 @@ export function similarityPercent(value: number | string | null | undefined): nu
   return Math.max(0, Math.min(100, Math.round(pct)));
 }
 
+// =====================================================================
+// Faz 5 — Müvekkil Portalı, İletişim Merkezi, Vekaletname, Sözleşme
+//
+// EKLEME ONLY: bu bölümün üstündeki hiçbir sabit değiştirilmedi.
+// Enum değerleri packages/db/prisma/schema.prisma ile BİREBİRDİR.
+// =====================================================================
+
+// ---------- İletişim Merkezi (Modül 19) ----------
+
+export const COMM_CHANNELS = [
+  "EPOSTA",
+  "SMS",
+  "WHATSAPP",
+  "TELEFON",
+  "PORTAL",
+  "YUZ_YUZE",
+  "DIGER",
+] as const;
+
+export const COMM_CHANNEL_LABELS: Record<string, string> = {
+  EPOSTA: "E-posta",
+  SMS: "SMS",
+  WHATSAPP: "WhatsApp",
+  TELEFON: "Telefon",
+  PORTAL: "Müvekkil Portalı",
+  YUZ_YUZE: "Yüz yüze görüşme",
+  DIGER: "Diğer",
+};
+
+export const COMM_CHANNEL_ICONS: Record<string, string> = {
+  EPOSTA: "✉️",
+  SMS: "💬",
+  WHATSAPP: "🟢",
+  TELEFON: "📞",
+  PORTAL: "🔐",
+  YUZ_YUZE: "🤝",
+  DIGER: "📎",
+};
+
+/**
+ * GİDEN mesajın gerçekten SİSTEM TARAFINDAN gönderilebildiği kanallar.
+ *
+ * Telefon ve yüz yüze görüşme kayıt altına ALINIR ama gönderilemez; bu ayrım
+ * arayüzde "Gönder" düğmesinin hiç çıkmaması gerektiği anlamına gelir.
+ */
+export const SENDABLE_COMM_CHANNELS = ["EPOSTA", "SMS", "WHATSAPP", "PORTAL"] as const;
+
+export const COMM_DIRECTION_LABELS: Record<string, string> = {
+  GELEN: "Gelen",
+  GIDEN: "Giden",
+};
+
+export const COMM_DIRECTION_TONES: Record<string, BadgeTone> = {
+  GELEN: "blue",
+  GIDEN: "navy",
+};
+
+export const OUTBOUND_STATUSES = [
+  "TASLAK",
+  "ONAY_BEKLIYOR",
+  "ONAYLANDI",
+  "GONDERILDI",
+  "BASARISIZ",
+  "IPTAL",
+] as const;
+
+export const OUTBOUND_STATUS_LABELS: Record<string, string> = {
+  TASLAK: "Taslak",
+  ONAY_BEKLIYOR: "Onay Bekliyor",
+  ONAYLANDI: "Onaylandı — gönderilmedi",
+  GONDERILDI: "Gönderildi",
+  BASARISIZ: "Gönderilemedi",
+  IPTAL: "İptal",
+};
+
+export const OUTBOUND_STATUS_TONES: Record<string, BadgeTone> = {
+  TASLAK: "gray",
+  ONAY_BEKLIYOR: "gold",
+  ONAYLANDI: "blue",
+  GONDERILDI: "green",
+  BASARISIZ: "danger",
+  IPTAL: "gray",
+};
+
+/**
+ * GÖNDERİME İZİN VEREN TEK DURUM.
+ *
+ * Ürün ilkesi (ortak karar 3): `approvedBy` dolmadan gönderim yapılamaz.
+ * Sunucu bunu ayrıca zorlar; arayüz aynı kuralı GÖRÜNÜR kılar.
+ */
+export function canSendOutbound(status: string | null | undefined): boolean {
+  return status === "ONAYLANDI";
+}
+
+/** "Gönder" düğmesi neden pasif? — kullanıcıya yazıyla söylenir. */
+export function outboundBlockReason(status: string | null | undefined): string | null {
+  switch (status) {
+    case "ONAYLANDI":
+      return null;
+    case "TASLAK":
+      return "Taslak henüz onaylanmadı. Metni okuyup “Onayla” demeden gönderilemez.";
+    case "ONAY_BEKLIYOR":
+      return "Mesaj onay kuyruğunda. Onaylayan kullanıcı, gönderilen metnin sorumlusudur.";
+    case "GONDERILDI":
+      return "Bu mesaj zaten gönderildi.";
+    case "BASARISIZ":
+      return "Gönderim başarısız oldu. Hata giderilmeden yeniden denenemez.";
+    case "IPTAL":
+      return "Mesaj iptal edildi.";
+    default:
+      return "Mesajın durumu okunamadı; gönderim açılmadı.";
+  }
+}
+
+export const MATCH_STATUS_LABELS: Record<string, string> = {
+  BEKLIYOR: "Eşleştirme bekliyor",
+  ESLESTI: "AI eşleştirdi",
+  ELLE_ESLESTI: "Elle eşleştirildi",
+  ESLESMEDI: "Eşleşmedi",
+};
+
+export const MATCH_STATUS_TONES: Record<string, BadgeTone> = {
+  BEKLIYOR: "yellow",
+  ESLESTI: "blue",
+  ELLE_ESLESTI: "green",
+  ESLESMEDI: "red",
+};
+
+/**
+ * Gelen mesaj eşleştirme önerisi GÖSTERİLİR Mİ?
+ *
+ * Modül 19 iş kuralı 5: confidence eşiğin altındaysa öneri HİÇ gösterilmez
+ * (zayıf tahmin, insana yanlış yönlendirme olarak döner); üst eşikte öneri
+ * ön-seçili gelir — ama her iki hâlde de kaydı insan onaylar.
+ *
+ * ═══ EŞİK BURADA TANIMLANMAZ, `@nomosos/shared`TAN GELİR ═══
+ *
+ * Denetim bulgusu 12: burada 0,85 yazıyordu, sunucuda 0,80. Aradaki dilimde
+ * sunucu "ön seçili gelsin" diyor, ekran seçmiyordu — aynı sayı iki dosyada
+ * yaşadığı için ayrışmıştı. Sayıyı tek yerde tutmak, ayrışmayı imkânsız kılar.
+ */
+export {
+  AI_MATCH_MIN_THRESHOLD as MATCH_SUGGESTION_FLOOR,
+  AI_MATCH_PRESELECT_THRESHOLD as MATCH_PRESELECT_FLOOR,
+} from "@nomosos/shared";
+
+// ---------- Müvekkil Portalı (Modül 10) ----------
+
+export const PORTAL_RESOURCE_TYPES = [
+  "DOSYA",
+  "BELGE",
+  "DURUSMA",
+  "SAFAHAT_KAYDI",
+  "FATURA",
+  "MESAJ",
+  "ODEME",
+] as const;
+
+export const PORTAL_RESOURCE_TYPE_LABELS: Record<string, string> = {
+  DOSYA: "Dosya",
+  BELGE: "Belge",
+  DURUSMA: "Duruşma",
+  SAFAHAT_KAYDI: "Safahat kaydı",
+  FATURA: "Fatura",
+  MESAJ: "Mesaj",
+  ODEME: "Ödeme",
+};
+
+export const PORTAL_RESOURCE_TYPE_TONES: Record<string, BadgeTone> = {
+  DOSYA: "navy",
+  BELGE: "blue",
+  DURUSMA: "gold",
+  SAFAHAT_KAYDI: "gray",
+  FATURA: "yellow",
+  MESAJ: "green",
+  ODEME: "green",
+};
+
+// ---------- Vekaletname (Modül 12) ----------
+
+export const POA_TYPES = [
+  "GENEL",
+  "OZEL",
+  "BOSANMA",
+  "CEZA",
+  "ICRA",
+  "SIRKET",
+  "DIGER",
+] as const;
+
+export const POA_TYPE_LABELS: Record<string, string> = {
+  GENEL: "Genel Vekaletname",
+  OZEL: "Özel Vekaletname",
+  BOSANMA: "Boşanma Vekaletnamesi",
+  CEZA: "Ceza Vekaletnamesi",
+  ICRA: "İcra Vekaletnamesi",
+  SIRKET: "Şirket Temsil Vekaletnamesi",
+  DIGER: "Diğer",
+};
+
+/**
+ * ÖZEL YETKİ KODU → OKUNUR ETİKET (yalnızca YEDEK).
+ *
+ * KATALOG SUNUCUDADIR: `GET /power-of-attorney/scope-catalog` otuzdan fazla
+ * yetkiyi hukuki dayanağıyla döndürür ve onay kutuları ONDAN üretilir.
+ * Burada ikinci bir katalog TUTULMAZ — iki liste ayrıştığı anda ekran,
+ * sunucunun tanımadığı bir `code` gönderip kaydı doğrulamadan düşürürdü.
+ *
+ * Bu yardımcı yalnızca katalog henüz yüklenmemişken (ya da geçmiş bir kayıtta
+ * artık katalogda olmayan bir kod geçtiğinde) ham kodu okunur hâle getirir:
+ * "TEMYIZ_ISTINAF" → "Temyiz istinaf".
+ */
+export function scopeCodeLabel(code: string): string {
+  if (!code) return "—";
+  const words = code.replace(/_/g, " ").toLocaleLowerCase("tr-TR");
+  return words.charAt(0).toLocaleUpperCase("tr-TR") + words.slice(1);
+}
+
+/** İmza yöntemleri — `@nomosos/e-signature` kataloğuyla birebir. */
+export const SIGNATURE_METHODS = ["NES", "MOBIL_IMZA", "E_DEVLET", "SAGLAYICI_ICI"] as const;
+
+export const SIGNATURE_METHOD_LABELS: Record<string, string> = {
+  NES: "Nitelikli elektronik imza (NES)",
+  MOBIL_IMZA: "Mobil imza",
+  E_DEVLET: "e-Devlet Kapısı onayı",
+  SAGLAYICI_ICI: "Sağlayıcı içi onay akışı (NES değildir)",
+};
+
+export const SIGNER_ROLES = [
+  "MUVEKKIL",
+  "AVUKAT",
+  "KARSI_TARAF",
+  "SIRKET_YETKILISI",
+  "TANIK",
+  "DIGER",
+] as const;
+
+export const SIGNER_ROLE_LABELS: Record<string, string> = {
+  MUVEKKIL: "Müvekkil",
+  AVUKAT: "Avukat",
+  KARSI_TARAF: "Karşı taraf",
+  SIRKET_YETKILISI: "Şirket yetkilisi",
+  TANIK: "Tanık",
+  DIGER: "Diğer",
+};
+
+/** Azil / istifa / süre dolumu ayrımı (`revokePoaSchema.terminationType`). */
+export const POA_TERMINATION_TYPES = ["AZIL", "ISTIFA", "SURE_DOLUMU"] as const;
+
+export const POA_TERMINATION_TYPE_LABELS: Record<string, string> = {
+  AZIL: "Azil (müvekkil azletti)",
+  ISTIFA: "İstifa (vekil çekildi)",
+  SURE_DOLUMU: "Süre dolumu",
+};
+
+export const POA_VERDICT_LABELS: Record<string, string> = {
+  YETERLI: "Yetki yeterli görünüyor",
+  YETERSIZ: "Yetki YETERSİZ",
+  BELIRSIZ: "Belirsiz — inceleme gerekir",
+};
+
+export const POA_VERDICT_TONES: Record<string, BadgeTone> = {
+  YETERLI: "green",
+  YETERSIZ: "danger",
+  BELIRSIZ: "yellow",
+};
+
+export const POA_VERDICT_DOTS: Record<string, string> = {
+  YETERLI: "🟢",
+  YETERSIZ: "🔴",
+  BELIRSIZ: "🟡",
+};
+
+/**
+ * Vekaletnamenin ekranda gösterilecek DURUMU.
+ *
+ * `isActive` tek gerçek kaynaktır (şema yorumu): azil VE süre dolumu birlikte
+ * pasifleştirir. Bu yardımcı yalnızca pasifliğin NEDENİNİ ayırır.
+ */
+export function poaStateOf(poa: {
+  isActive?: boolean;
+  revokedAt?: string | null;
+  expiresAt?: string | null;
+}): { key: "AKTIF" | "AZILLI" | "SURESI_DOLDU" | "PASIF"; label: string; tone: BadgeTone } {
+  if (poa.revokedAt) return { key: "AZILLI", label: "Azil / istifa", tone: "danger" };
+  const expired =
+    poa.expiresAt !== null && poa.expiresAt !== undefined && daysUntil(poa.expiresAt) < 0;
+  if (expired) return { key: "SURESI_DOLDU", label: "Süresi doldu", tone: "red" };
+  if (poa.isActive === false) return { key: "PASIF", label: "Pasif", tone: "gray" };
+  return { key: "AKTIF", label: "Yürürlükte", tone: "green" };
+}
+
+// ---------- Sözleşme + e-imza (Modül 20) ----------
+
+export const CONTRACT_TYPES = [
+  "VEKALET_UCRET",
+  "DANISMANLIK",
+  "GIZLILIK",
+  "HIZMET",
+  "DIGER",
+] as const;
+
+export const CONTRACT_TYPE_LABELS: Record<string, string> = {
+  VEKALET_UCRET: "Vekâlet Ücreti Sözleşmesi",
+  DANISMANLIK: "Danışmanlık Sözleşmesi",
+  GIZLILIK: "Gizlilik Sözleşmesi (NDA)",
+  HIZMET: "Hizmet Sözleşmesi",
+  DIGER: "Diğer",
+};
+
+export const CONTRACT_STATUSES = [
+  "TASLAK",
+  "MUZAKERE",
+  "IMZAYA_HAZIR",
+  "IMZADA",
+  "YURURLUKTE",
+  "SONA_ERDI",
+  "FESIH",
+] as const;
+
+export const CONTRACT_STATUS_LABELS: Record<string, string> = {
+  TASLAK: "Taslak",
+  MUZAKERE: "Müzakerede",
+  IMZAYA_HAZIR: "İmzaya Hazır",
+  IMZADA: "İmza Sürecinde",
+  YURURLUKTE: "Yürürlükte",
+  SONA_ERDI: "Sona Erdi",
+  FESIH: "Feshedildi",
+};
+
+export const CONTRACT_STATUS_TONES: Record<string, BadgeTone> = {
+  TASLAK: "gray",
+  MUZAKERE: "yellow",
+  IMZAYA_HAZIR: "blue",
+  IMZADA: "gold",
+  YURURLUKTE: "green",
+  SONA_ERDI: "gray",
+  FESIH: "red",
+};
+
+export const SIGNATURE_STATUS_LABELS: Record<string, string> = {
+  OLUSTURULDU: "Oluşturuldu",
+  GONDERILDI: "İmzacılara gönderildi",
+  IMZALANDI: "İmzalandı",
+  REDDEDILDI: "Reddedildi",
+  SURESI_DOLDU: "Süresi doldu",
+  IPTAL: "İptal",
+};
+
+export const SIGNATURE_STATUS_TONES: Record<string, BadgeTone> = {
+  OLUSTURULDU: "gray",
+  GONDERILDI: "blue",
+  IMZALANDI: "green",
+  REDDEDILDI: "danger",
+  SURESI_DOLDU: "red",
+  IPTAL: "gray",
+};
+
+/** Sözleşme yenileme/fesih ihbar uyarısının aciliyet tonu. */
+export function renewalTone(days: number | null | undefined): BadgeTone {
+  if (days === null || days === undefined) return "gray";
+  return urgencyTone(days);
+}
+
 /** Görev iş akışı sırası — ilerleme göstergesi için. */
 export const TASK_WORKFLOW = [
   "ACIK",

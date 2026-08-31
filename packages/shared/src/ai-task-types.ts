@@ -29,6 +29,13 @@ export const AI_TASK_TYPES = [
   "CITATION_VERIFY",
   // Modül 10/19 — Müvekkil iletişimi
   "CLIENT_STATUS_SUMMARY",
+  /**
+   * Faz 5, Modül 19. `AiTaskCost` satırları seed'de ZATEN VARDI (5 ve 2 kredi);
+   * katalogda karşılıkları olmadığı için `@AiCredits("MESSAGE_DRAFT")` derlenmiyor
+   * ve kredi motoru "fiyat satırı yok" (fail-open) dalına düşüyordu.
+   */
+  "MESSAGE_DRAFT",
+  "MESSAGE_CASE_MATCH",
   // Modül 11 — Conflict check
   "CONFLICT_INFERENCE",
   // Modül 12 — Vekaletname
@@ -72,6 +79,8 @@ export const AI_TASK_TYPE_LABELS: Record<AiTaskType, string> = {
   CASELAW_SUMMARIZE: "Karar özeti",
   CITATION_VERIFY: "Atıf doğrulama (Teyit)",
   CLIENT_STATUS_SUMMARY: "Müvekkil durum özeti",
+  MESSAGE_DRAFT: "Müvekkile mesaj taslağı",
+  MESSAGE_CASE_MATCH: "Gelen mesajı dosyayla eşleştirme",
   CONFLICT_INFERENCE: "Çıkar çatışması çıkarımı",
   POA_SCOPE_ANALYSIS: "Vekaletname kapsam analizi",
   EXPERT_REPORT_DIFF: "Bilirkişi raporu karşılaştırma",

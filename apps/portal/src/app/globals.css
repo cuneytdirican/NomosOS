@@ -1,0 +1,104 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==========================================================================
+   Müvekkil portalı — kağıt estetiği, yumuşatılmış.
+   Pazarlama sitesinin (docs/08) paletinden türetilir; kontrast bir tık
+   düşürülmüş, punto ve satır aralığı büyütülmüştür.
+   ========================================================================== */
+
+:root {
+  --font-serif-legal: Lora, "Source Serif 4", Georgia, "Times New Roman", Times, serif;
+  --font-sans-legal: Inter, "Segoe UI", ui-sans-serif, system-ui, -apple-system,
+    "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-paper text-ink antialiased;
+  font-family: var(--font-sans-legal);
+  line-height: 1.7;
+}
+
+h1,
+h2,
+h3,
+.serif {
+  font-family: var(--font-serif-legal);
+  letter-spacing: -0.01em;
+}
+
+/* Tutar ve tarih kolonlarında rakam hizası */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Odak halkası her yerde görünür olmalı — portal klavye ve ekran okuyucuyla
+   kullanılabilir olmak zorundadır. */
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid theme("colors.gold.DEFAULT");
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* details/summary varsayılan üçgeni kaldırılır (Disclosure kendi okunu çizer). */
+details > summary {
+  list-style: none;
+}
+
+details > summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Ölçülü hareket: yalnız yumuşak beliriş. */
+.fade-in {
+  animation: portal-fade-in 380ms ease-out both;
+}
+
+@keyframes portal-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-in {
+    animation: none;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* Geliştirici künyesi (docs/08 §3.13 ile aynı biçim) */
+.credit {
+  font-size: 13px;
+  opacity: 0.75;
+}
+
+.credit a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.credit a:hover,
+.credit a:focus-visible {
+  color: theme("colors.gold.deep");
+  text-decoration: underline;
+}

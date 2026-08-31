@@ -114,3 +114,20 @@ export const COURT_TYPES = [
   "Arabuluculuk Bürosu",
 ] as const;
 export type CourtType = (typeof COURT_TYPES)[number];
+
+/* ------------------------------------------------------------------ *
+ * Gelen mesaj → dosya eşleştirme güven eşikleri (Modül 19)
+ * ------------------------------------------------------------------ *
+ *
+ * EŞİK İKİ YERDE YAŞAYAMAZ. Denetim bulgusu 12: sunucu `0.80`, arayüz `0.85`
+ * kullanıyordu; 0,80–0,85 aralığındaki bir öneride sunucu "ön seçili gelsin"
+ * diyor, ekran seçmiyordu. Aynı sayıyı iki dosyada tutmak, ikisinin er geç
+ * ayrışması demektir — nitekim ayrışmıştı. Tek doğru kaynak buradadır ve hem
+ * `apps/api` hem `apps/web` bunu okur.
+ */
+
+/** Bu güvenin üstündeki AI önerisi arayüzde ÖN SEÇİLİ gelir. Durum yine BEKLIYOR. */
+export const AI_MATCH_PRESELECT_THRESHOLD = 0.8;
+
+/** Bu güvenin altındaki öneri HİÇ KAYDEDİLMEZ; durum ESLESMEDI olur. */
+export const AI_MATCH_MIN_THRESHOLD = 0.5;

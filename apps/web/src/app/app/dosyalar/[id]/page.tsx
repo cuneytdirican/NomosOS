@@ -67,6 +67,9 @@ import { DocumentsTab } from "@/components/documents-tab";
 import { PetitionsTab } from "@/components/petitions-tab";
 import { ProposalCard } from "@/components/proposal-card";
 import { ToastStack, useToasts } from "@/components/ai-ui";
+// ---- Faz 5: dosya bağlamında iletişim ve sözleşmeler ----
+import { CommScopeTab } from "../../_components/comm-scope-tab";
+import { ContractsTab } from "../../_components/contracts-tab";
 import { EvidenceTab } from "../../_components/evidence-tab";
 import { ExpertTab } from "../../_components/expert-tab";
 import { RiskTab } from "../../_components/risk-tab";
@@ -122,6 +125,9 @@ const TABS = [
   { key: "simulasyon", label: "Simülasyon" },
   { key: "oneriler", label: "Öneriler" },
   { key: "dilekceler", label: "Dilekçeler" },
+  // ---- Faz 5 ----
+  { key: "iletisim", label: "İletişim" },
+  { key: "sozlesmeler", label: "Sözleşmeler" },
   { key: "ai", label: "AI Asistan" },
 ] as const;
 
@@ -857,6 +863,34 @@ export default function DosyaDetayPage({ params }: { params: Promise<{ id: strin
             </ul>
           )}
         </div>
+      )}
+
+      {/* ---------- Faz 5: dosyaya ait yazışmalar ---------- */}
+      {tab === "iletisim" && (
+        <CommScopeTab
+          caseId={id}
+          clientId={detail.client?.id}
+          clients={detail.client ? [{ id: detail.client.id, name: detail.client.name }] : []}
+          cases={[
+            {
+              id,
+              title: detail.title,
+              fileNumber: detail.fileNumber ?? null,
+              status: detail.status ?? null,
+            },
+          ]}
+          onNotify={push}
+        />
+      )}
+
+      {/* ---------- Faz 5: bu dosyaya bağlı sözleşmeler ---------- */}
+      {tab === "sozlesmeler" && (
+        <ContractsTab
+          caseId={id}
+          clientId={detail.client?.id}
+          cases={[{ ...detail }]}
+          onNotify={push}
+        />
       )}
 
       {/* ---------- Dilekçeler ---------- */}

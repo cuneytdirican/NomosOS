@@ -62,9 +62,35 @@ function assertPrefixConfig(): void {
  * herhangi bir sitenin tarayıcı üzerinden API'ye kimlikli istek atmasına ve
  * hata/yanıt gövdelerini okumasına izin verir. `credentials: true` ile birlikte
  * çerez tabanlı oturuma geçildiği anda doğrudan CSRF yüzeyi doğar.
+ *
+ * ÜÇ AYRI ARAYÜZ, ÜÇ AYRI PORT. Tek bir API üç ayrı tarayıcı uygulamasına
+ * hizmet eder ve her biri CORS açısından BAĞIMSIZ bir kaynaktır:
+ *
+ *   | Uygulama            | Geliştirme portu | Kullandığı uçlar   |
+ *   |---------------------|------------------|--------------------|
+ *   | apps/web (büro)     | 3000             | /api/v1/**         |
+ *   | apps/admin (platform)| 3002            | /api/admin/v1/**   |
+ *   | apps/portal (müvekkil)| 3003           | /api/v1/portal/**  |
+ *
+ * Varsayılan liste yalnız `localhost:3000` taşıdığı için Faz 5'te eklenen
+ * müvekkil portalı tarayıcıda CORS'a takılıyordu: API ayakta, uçlar doğru,
+ * `curl` çalışıyor — ama gerçek kullanıcı hiçbir şey göremiyor. Bu, ancak
+ * tarayıcıda fark edilen türden sessiz bir entegrasyon açığıdır.
+ *
+ * Varsayılan BİLEREK yalnız `localhost` adresleridir: üretimde `WEB_ORIGIN`
+ * tanımlanır ve bu liste tamamen devre dışı kalır (birleştirilmez — üretim
+ * beyaz listesine geliştirme adresi sızmamalıdır).
  */
+const DEV_ORIGINS = [
+  "http://localhost:3000", // apps/web    — büro paneli + pazarlama sitesi
+  "http://localhost:3002", // apps/admin  — platform yönetim paneli
+  "http://localhost:3003", // apps/portal — müvekkil portalı (Faz 5)
+];
+
 function allowedOrigins(): string[] {
-  return (process.env.WEB_ORIGIN ?? "http://localhost:3000")
+  const configured = process.env.WEB_ORIGIN?.trim();
+  if (!configured) return [...DEV_ORIGINS];
+  return configured
     .split(",")
     .map((o) => o.trim())
     .filter(Boolean);

@@ -33,6 +33,11 @@ import { StrategyModule } from "./strategy/strategy.module";
 import { SimulationModule } from "./simulation/simulation.module";
 import { RiskModule } from "./risk/risk.module";
 import { CreditsModule } from "./credits/credits.module";
+// --- Faz 5 modülleri ---
+import { PortalModule } from "./portal/portal.module";
+import { CommunicationModule } from "./communication/communication.module";
+import { PoaModule } from "./poa/poa.module";
+import { ContractsModule } from "./contracts/contracts.module";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
 import { TenantStatusGuard } from "./common/guards/tenant-status.guard";
 
@@ -148,6 +153,25 @@ function requireJwtSecret(config: ConfigService): string {
     // kalmasına yol açardı. Global kapı + açık dekoratör, "unutulursa
     // ücretlendirilmez" hatasını tek bir görünür satıra indirger.
     CreditsModule,
+    // --- Faz 5 modülleri ---
+    // İletişim merkezi (Modül 19). CaselawModule'den SONRA: MESSAGE_DRAFT ve
+    // MESSAGE_CASE_MATCH koşuları ortak AiRunnerService üzerinden gider.
+    CommunicationModule,
+    // Vekaletname (Modül 12) — POA_SCOPE_ANALYSIS. CaselawModule'den SONRA.
+    PoaModule,
+    // Sözleşme + e-imza (Modül 20) — CONTRACT_REVIEW. CaselawModule'den SONRA.
+    ContractsModule,
+    // Müvekkil portalı (Modül 10) — ÜÇÜNCÜ KİMLİK EVRENİ.
+    // Büro (`aud: "tenant"`) ve platform (`aud: "platform"`) dünyalarından
+    // ayrıdır: kendi tablosu (PortalUser), kendi türetilmiş imza anahtarı ve
+    // kendi audience'ı (`aud: "portal"`) vardır. Uçları `@Public()` olduğu için
+    // global JwtAuthGuard zincirini atlar; yerine controller düzeyinde
+    // PortalJwtGuard + PortalRateLimitGuard çalışır (bkz.
+    // portal/decorators/portal-controller.decorator.ts).
+    //
+    // EN SONA konur: portalda AI çağrısı yoktur, bu yüzden kredi kapısına
+    // bağımlı değildir; sırası yalnızca okunabilirlik içindir.
+    PortalModule,
   ],
   /**
    * GUARD SIRASI ÖNEMLİDİR — dizideki sıra çalışma sırasıdır.

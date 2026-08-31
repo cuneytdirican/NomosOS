@@ -21,6 +21,7 @@
     "@nestjs/platform-express": "^10.4.15",
     "@nomosos/ai": "workspace:*",
     "@nomosos/db": "workspace:*",
+    "@nomosos/e-signature": "workspace:*",
     "@nomosos/legal-ai": "workspace:*",
     "@nomosos/legal-core": "workspace:*",
     "@nomosos/shared": "workspace:*",

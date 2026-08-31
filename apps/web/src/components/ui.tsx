@@ -2,7 +2,7 @@
 
 /** Sade, elle yazılmış Tailwind bileşen seti — NomosOS uygulama arayüzü. */
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { BadgeTone } from "@/lib/labels";
 
 // ---------- Button ----------
@@ -382,5 +382,98 @@ export function Disclosure({
       </summary>
       <div className="border-t border-slate-100 px-3 py-3">{children}</div>
     </details>
+  );
+}
+
+// ---------- Faz 5 eklemeleri (yalnız EKLEME) ----------
+
+/**
+ * Açma/kapama anahtarı — portal yayın yönetiminin ana denetimi.
+ *
+ * `role="switch"` taşıyan gerçek bir düğmedir: klavyeyle erişilir, ekran
+ * okuyucu "açık/kapalı" durumunu okur. Yayın kararı KVKK açısından sonuç
+ * doğurduğu için `busy` sırasında tıklama kapatılır — çift tıklama yayını
+ * açıp hemen kapatmasın.
+ */
+export function Switch({
+  checked,
+  onChange,
+  label,
+  disabled = false,
+  busy = false,
+  tone = "gold",
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  /** Ekran okuyucu etiketi — görsel metin ayrı yazılır. */
+  label: string;
+  disabled?: boolean;
+  busy?: boolean;
+  tone?: "gold" | "green";
+}) {
+  const on = tone === "green" ? "bg-emerald-500" : "bg-amber-500";
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled || busy}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 disabled:cursor-not-allowed disabled:opacity-50 ${
+        checked ? on : "bg-slate-300"
+      }`}
+    >
+      <span
+        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+          checked ? "translate-x-[1.15rem]" : "translate-x-[0.15rem]"
+        } ${busy ? "animate-pulse" : ""}`}
+      />
+    </button>
+  );
+}
+
+/**
+ * BİR KEZ gösterilen gizli değer (portal davet bağlantısı).
+ *
+ * Davet token'ının yalnızca SHA-256 özeti saklanır; ham bağlantı bir daha
+ * üretilemez. Bu yüzden bileşen "bu değer bir daha gösterilmeyecek" uyarısını
+ * kendisi taşır ve panoya kopyalamayı kolaylaştırır.
+ */
+export function CopyOnceField({
+  value,
+  label,
+  warning = "Bu bağlantı bir daha gösterilmeyecek. Kopyalayıp müvekkile iletin.",
+}: {
+  value: string;
+  label: string;
+  warning?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 3000);
+    } catch {
+      // Pano izni yoksa kullanıcı elle seçebilsin diye metin görünür durur.
+      setCopied(false);
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-800">{label}</p>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <code className="min-w-0 flex-1 select-all break-all rounded border border-amber-200 bg-white px-2 py-1.5 text-xs text-slate-800">
+          {value}
+        </code>
+        <Button size="sm" variant={copied ? "secondary" : "gold"} onClick={() => void copy()}>
+          {copied ? "Kopyalandı" : "Kopyala"}
+        </Button>
+      </div>
+      <p className="mt-2 text-[11px] leading-5 text-amber-800">{warning}</p>
+    </div>
   );
 }

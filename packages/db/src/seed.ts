@@ -1076,6 +1076,23 @@ const AI_TASK_COSTS: TaskCostSeed[] = [
   { taskType: "EVIDENCE_GAP", credits: 10, isFree: false, description: "Delil boşluğu tespiti (Faz 4)." },
   { taskType: "CONFLICT_INFERENCE", credits: 5, isFree: false, description: "Çıkar çatışması çıkarımı — tarama ağırlıklı deterministiktir, AI yalnız bağlı şirket çıkarımı ekler." },
 
+  // ---- Faz 5'in yeni görevleri (Modül 19 — İletişim Merkezi) ----
+  // NOT: POA_SCOPE_ANALYSIS (10) ve CONTRACT_REVIEW (20) zaten yukarıda tanımlı.
+  {
+    taskType: "MESSAGE_DRAFT",
+    credits: 5,
+    isFree: false,
+    description:
+      "Müvekkile mesaj taslağı (Modül 19). Taslak ÜRETİMİ ücretlidir, gönderim değil: onay akışı kredi tüketmez.",
+  },
+  {
+    taskType: "MESSAGE_CASE_MATCH",
+    credits: 2,
+    isFree: false,
+    description:
+      "Gelen mesajı dosyayla eşleştirme (Modül 19). Ucuzdur çünkü çıktı tek bir {caseId, confidence, reason} önerisidir; kararı insan verir.",
+  },
+
   // ---- Katalogda olup spec fiyat tablosunda GEÇMEYEN görevler ----
   // Satırı olmayan görev tipi kredi motorunda TANIMSIZ davranıştır (fail-open =
   // bedava AI, fail-closed = çalışmayan özellik). Bu yüzden makul bir başlangıç
@@ -1510,6 +1527,417 @@ async function seedRiskScores(caseId: string, userId: string) {
     historyCount += 1;
   }
   return { scoreCount, historyCount };
+}
+
+// ---------------------------------------------------------------------------
+// Faz 5 — Portal · İletişim merkezi · Vekaletname · Sözleşme
+// ---------------------------------------------------------------------------
+//
+// DEMO VERİSİ UYARISI: buradaki belge kayıtlarının S3/MinIO'da GERÇEK NESNESİ
+// YOKTUR — yalnız üstveridir (storageKey "demo/..." ön ekiyle işaretli).
+// Portal indirme ucu bu kayıtlar için 404 döner; amaç yayın (PortalPublication)
+// akışının uçtan uca sınanabilmesidir, dosya indirmenin değil.
+
+/** Vekaletname özel yetki maddesi — scopeItemsJson içindeki tek eleman. */
+type PoaScopeItem = { code: string; label: string; present: boolean };
+
+/**
+ * Genel dava vekaletnamesinin standart yetki seti. Backfill'de kullanılır:
+ * tipi boş kalmış eski kayıtlar HMK m.74 dışındaki özel yetkiler YOK sayılarak
+ * doldurulur — eksik yetkiyi "var" saymak usul riski doğururdu, tersi doğurmaz.
+ */
+const GENEL_DAVA_SCOPE: PoaScopeItem[] = [
+  { code: "AHZU_KABZ", label: "Ahzu kabz", present: false },
+  { code: "SULH", label: "Sulh ve ibra", present: false },
+  { code: "FERAGAT", label: "Davadan feragat", present: false },
+  { code: "KABUL", label: "Davayı kabul", present: false },
+  { code: "TEMYIZ_ISTINAF", label: "İstinaf / temyiz", present: true },
+  { code: "ARABULUCULUK", label: "Arabuluculuk görüşmelerine katılma", present: true },
+];
+
+/** Sistem mesaj şablonu tohumu (tenantId = null). */
+type MessageTemplateSeed = Omit<
+  Prisma.MessageTemplateUncheckedCreateInput,
+  "id" | "tenantId" | "isSystem" | "createdAt" | "updatedAt"
+>;
+
+/**
+ * 5 SİSTEM ŞABLONU. Yer tutucular {{camelCase}} biçimindedir; şablon çözücü
+ * çözemediği değişken bırakırsa taslak ONAYA DÜŞMEZ (Modül 19, iş kuralı 9).
+ * Metinler bilinçli olarak SONUÇ TAAHHÜDÜ İÇERMEZ ("kazanacağız" yok).
+ */
+const SYSTEM_MESSAGE_TEMPLATES: MessageTemplateSeed[] = [
+  {
+    key: "SISTEM_DURUSMA_HATIRLATMA",
+    name: "Duruşma hatırlatma",
+    channel: "EPOSTA",
+    subject: "{{dosyaNo}} sayılı dosyanızda duruşma hatırlatması",
+    body:
+      "Sayın {{muvekkilAdi}},\n\n" +
+      "{{mahkemeAdi}} nezdinde görülen {{dosyaNo}} sayılı dosyanızın duruşması " +
+      "{{durusmaTarihi}} tarihinde saat {{durusmaSaati}} itibarıyla yapılacaktır.\n\n" +
+      "Duruşmada hazır bulunmanız gerekip gerekmediği konusunda ayrıca " +
+      "bilgilendirileceksiniz.\n\nSaygılarımızla,\n{{buroAdi}}",
+  },
+  {
+    key: "SISTEM_DOSYA_DURUM_BILGILENDIRME",
+    name: "Dosya durum bilgilendirme",
+    channel: "EPOSTA",
+    subject: "{{dosyaNo}} sayılı dosyanızda güncel durum",
+    body:
+      "Sayın {{muvekkilAdi}},\n\n" +
+      "{{dosyaNo}} sayılı dosyanızdaki güncel durum aşağıdadır:\n\n{{durumOzeti}}\n\n" +
+      "Bir sonraki adım: {{sonrakiAdim}}\n\n" +
+      "Sorularınız için bize ulaşabilirsiniz.\n\nSaygılarımızla,\n{{buroAdi}}",
+  },
+  {
+    key: "SISTEM_ODEME_HATIRLATMA",
+    name: "Ödeme hatırlatma",
+    channel: "EPOSTA",
+    subject: "{{faturaNo}} numaralı faturanız hakkında",
+    body:
+      "Sayın {{muvekkilAdi}},\n\n" +
+      "{{faturaNo}} numaralı, {{faturaTutari}} tutarındaki faturanızın vade tarihi " +
+      "{{vadeTarihi}}'dir. Ödemenizi henüz tespit edemedik.\n\n" +
+      "Ödemeyi gerçekleştirdiyseniz bu bildirimi dikkate almayınız.\n\n" +
+      "Saygılarımızla,\n{{buroAdi}}",
+  },
+  {
+    key: "SISTEM_BELGE_TALEBI",
+    name: "Belge talebi",
+    channel: "EPOSTA",
+    subject: "{{dosyaNo}} sayılı dosyanız için belge talebi",
+    body:
+      "Sayın {{muvekkilAdi}},\n\n" +
+      "{{dosyaNo}} sayılı dosyanızın yürütülebilmesi için aşağıdaki belgelere " +
+      "ihtiyacımız bulunmaktadır:\n\n{{belgeListesi}}\n\n" +
+      "Belgeleri {{sonTeslimTarihi}} tarihine kadar müvekkil portalı üzerinden " +
+      "yükleyebilir veya büromuza iletebilirsiniz.\n\nSaygılarımızla,\n{{buroAdi}}",
+  },
+  {
+    key: "SISTEM_KARAR_BILGILENDIRME",
+    name: "Karar bilgilendirme",
+    channel: "EPOSTA",
+    subject: "{{dosyaNo}} sayılı dosyanızda karar verildi",
+    body:
+      "Sayın {{muvekkilAdi}},\n\n" +
+      "{{mahkemeAdi}} {{dosyaNo}} sayılı dosyanızda {{kararTarihi}} tarihinde karar " +
+      "verilmiştir. Kararın özeti: {{kararOzeti}}\n\n" +
+      "Kanun yoluna başvuru süresi gerekçeli kararın tebliğinden itibaren " +
+      "işlemeye başlar; değerlendirmemizi ayrıca paylaşacağız.\n\n" +
+      "Saygılarımızla,\n{{buroAdi}}",
+  },
+];
+
+async function seedMessageTemplates(): Promise<number> {
+  let created = 0;
+  for (const t of SYSTEM_MESSAGE_TEMPLATES) {
+    // tenantId NULL olduğu için @@unique([tenantId, key]) Postgres'te ETKİSİZDİR
+    // (NULL'lar birbirine eşit sayılmaz) — bu yüzden findFirst ile korunuyoruz.
+    const existing = await prisma.messageTemplate.findFirst({ where: { tenantId: null, key: t.key } });
+    if (existing) continue;
+    await prisma.messageTemplate.create({ data: { ...t, tenantId: null, isSystem: true } });
+    created += 1;
+  }
+  return created;
+}
+
+async function ensureDocument(
+  caseId: string,
+  name: string,
+  data: Omit<Prisma.DocumentUncheckedCreateInput, "id" | "tenantId" | "caseId" | "name">,
+) {
+  const existing = await prisma.document.findFirst({ where: { tenantId: TENANT_ID, caseId, name } });
+  if (existing) return existing;
+  return prisma.document.create({ data: { ...data, tenantId: TENANT_ID, caseId, name } });
+}
+
+/**
+ * Müvekkil portalı tohumu: 1 portal kullanıcısı + 1 dosya ve 2 belge yayını.
+ *
+ * YAYIN LİSTESİ ALLOW-LIST'TİR: burada yayınlanmayan hiçbir kayıt portalda
+ * görünmez. Dosyanın 3 safahat kaydı, 2 süresi, görevleri ve risk skorları
+ * BİLEREK yayınlanmadı — portal sorgusunun sızdırmadığı bu veriyle sınanır.
+ */
+async function seedPortal(clientId: string, caseId: string, publisherId: string, passwordHash: string) {
+  const email = "portal@demo.nomosos.local";
+  let portalUser = await prisma.portalUser.findFirst({ where: { tenantId: TENANT_ID, email } });
+  const portalUserCreated = !portalUser;
+  if (!portalUser) {
+    portalUser = await prisma.portalUser.create({
+      data: {
+        tenantId: TENANT_ID,
+        clientId,
+        email,
+        passwordHash,
+        fullName: "Ayşe Yılmaz (ABC Holding Hukuk Müşaviri)",
+        isActive: true,
+        invitedBy: publisherId,
+        invitedAt: utcDaysAgo(20),
+        activatedAt: utcDaysAgo(19),
+      },
+    });
+  }
+
+  const doc1 = await ensureDocument(caseId, "Bilirkişi Raporu (12.08.2026)", {
+    class: "BILIRKISI_RAPORU",
+    classSource: "MANUEL",
+    mimeType: "application/pdf",
+    sizeBytes: 412_336,
+    storageKey: `demo/${TENANT_ID}/faz5/bilirkisi-raporu.pdf`,
+    uploadedBy: publisherId,
+    aiSummary: "[DEMO VERİ] Alacak miktarı bakımından kısmen lehe, faiz başlangıcı bakımından aleyhe tespitler içerir.",
+    source: "SISTEM",
+    pageCount: 24,
+  });
+  const doc2 = await ensureDocument(caseId, "Sözleşme Sureti (Ticari Alım-Satım)", {
+    class: "SOZLESME",
+    classSource: "MANUEL",
+    mimeType: "application/pdf",
+    sizeBytes: 128_904,
+    storageKey: `demo/${TENANT_ID}/faz5/sozlesme-sureti.pdf`,
+    uploadedBy: publisherId,
+    aiSummary: "[DEMO VERİ] Taraflar, bedel, teslim ve gecikme cezası maddelerini içeren çerçeve sözleşme.",
+    source: "MANUEL",
+    pageCount: 9,
+  });
+
+  const publications: Array<{
+    resourceType: Prisma.PortalPublicationUncheckedCreateInput["resourceType"];
+    resourceId: string;
+    note: string;
+  }> = [
+    {
+      resourceType: "DOSYA",
+      resourceId: caseId,
+      note: "Dosya müvekkile açıldı. Alt kaynaklar ayrıca yayınlanmadıkça görünmez.",
+    },
+    { resourceType: "BELGE", resourceId: doc1.id, note: "Bilirkişi raporu müvekkille paylaşıldı." },
+    { resourceType: "BELGE", resourceId: doc2.id, note: "Sözleşme sureti müvekkille paylaşıldı." },
+  ];
+
+  let publicationCount = 0;
+  for (const p of publications) {
+    const existing = await prisma.portalPublication.findUnique({
+      where: {
+        tenantId_resourceType_resourceId_clientId: {
+          tenantId: TENANT_ID,
+          resourceType: p.resourceType,
+          resourceId: p.resourceId,
+          clientId,
+        },
+      },
+    });
+    if (existing) continue;
+    await prisma.portalPublication.create({
+      data: {
+        tenantId: TENANT_ID,
+        clientId,
+        resourceType: p.resourceType,
+        resourceId: p.resourceId,
+        publishedBy: publisherId,
+        publishedAt: utcDaysAgo(3),
+        note: p.note,
+      },
+    });
+    publicationCount += 1;
+  }
+
+  return { portalUserCreated, publicationCount, documentIds: [doc1.id, doc2.id] };
+}
+
+/**
+ * Vekaletname tohumu + Faz 5 alanlarının geriye dönük doldurulması.
+ *
+ * Backfill ÖNCE çalışır: yeni eklenen kayıtların tipi zaten dolu olduğu için
+ * onlara dokunmaz, yalnız `type` alanı boş kalmış ESKİ kayıtları tamamlar.
+ */
+async function seedPowerOfAttorneys(
+  abcClientId: string,
+  abcCaseId: string,
+  mehmetClientId: string,
+  mehmetCaseId: string,
+) {
+  const backfill = await prisma.powerOfAttorney.updateMany({
+    where: { tenantId: TENANT_ID, type: null },
+    data: { type: "GENEL", scopeItemsJson: JSON.stringify(GENEL_DAVA_SCOPE) },
+  });
+
+  const seeds: Array<{
+    clientId: string;
+    caseId: string;
+    number: string;
+    data: Omit<Prisma.PowerOfAttorneyUncheckedCreateInput, "id" | "tenantId" | "clientId" | "caseId" | "number">;
+  }> = [
+    {
+      clientId: abcClientId,
+      caseId: abcCaseId,
+      number: "08921",
+      data: {
+        notary: "Beyoğlu 14. Noterliği",
+        issuedAt: utc(2026, 3, 5),
+        scope: "Genel dava vekaletnamesi — istinaf/temyiz ve arabuluculuk yetkilerini içerir.",
+        type: "GENEL",
+        scopeItemsJson: JSON.stringify([
+          { code: "AHZU_KABZ", label: "Ahzu kabz", present: true },
+          { code: "SULH", label: "Sulh ve ibra", present: true },
+          { code: "FERAGAT", label: "Davadan feragat", present: false },
+          { code: "KABUL", label: "Davayı kabul", present: false },
+          { code: "TEMYIZ_ISTINAF", label: "İstinaf / temyiz", present: true },
+          { code: "ARABULUCULUK", label: "Arabuluculuk görüşmelerine katılma", present: true },
+          { code: "SIRKET_TEMSIL", label: "Şirket temsili", present: true },
+        ] satisfies PoaScopeItem[]),
+        isActive: true,
+      },
+    },
+    {
+      clientId: mehmetClientId,
+      caseId: mehmetCaseId,
+      number: "14205",
+      data: {
+        notary: "Çankaya 3. Noterliği",
+        issuedAt: utc(2026, 1, 22),
+        expiresAt: utc(2027, 1, 22),
+        scope: "İş hukuku uyuşmazlıkları için düzenlenmiş vekaletname.",
+        // KAPSAM ANALİZİ İÇİN BİLİNÇLİ EKSİK: sulh ve feragat yetkisi YOK.
+        // POA_SCOPE_ANALYSIS demosu bu kayıtta YETERSIZ üretebilmelidir.
+        type: "OZEL",
+        scopeItemsJson: JSON.stringify([
+          { code: "AHZU_KABZ", label: "Ahzu kabz", present: true },
+          { code: "SULH", label: "Sulh ve ibra", present: false },
+          { code: "FERAGAT", label: "Davadan feragat", present: false },
+          { code: "TEMYIZ_ISTINAF", label: "İstinaf / temyiz", present: true },
+          { code: "ARABULUCULUK", label: "Arabuluculuk görüşmelerine katılma", present: true },
+        ] satisfies PoaScopeItem[]),
+        isActive: true,
+      },
+    },
+  ];
+
+  let created = 0;
+  for (const s of seeds) {
+    const existing = await prisma.powerOfAttorney.findFirst({
+      where: { tenantId: TENANT_ID, clientId: s.clientId, number: s.number },
+    });
+    if (existing) continue;
+    await prisma.powerOfAttorney.create({
+      data: { ...s.data, tenantId: TENANT_ID, clientId: s.clientId, caseId: s.caseId, number: s.number },
+    });
+    created += 1;
+  }
+
+  return { created, backfilled: backfill.count };
+}
+
+/**
+ * Sözleşme tohumu: 1 vekalet ücret sözleşmesi + 1 (immutable) sürüm.
+ * `currentVersionId` sürüm yazıldıktan SONRA işaretlenir.
+ */
+async function seedContracts(clientId: string, caseId: string, userId: string) {
+  const title = "ABC Holding — Vekalet Ücret Sözleşmesi (2026)";
+  const existing = await prisma.contract.findFirst({ where: { tenantId: TENANT_ID, title } });
+  if (existing) return { contractCreated: false, versionCreated: false };
+
+  const contract = await prisma.contract.create({
+    data: {
+      tenantId: TENANT_ID,
+      clientId,
+      caseId,
+      title,
+      type: "VEKALET_UCRET",
+      status: "YURURLUKTE",
+      effectiveFrom: utc(2026, 3, 1),
+      effectiveTo: utc(2027, 2, 28),
+      renewalNoticeDays: 30,
+      autoRenew: true,
+      createdBy: userId,
+    },
+  });
+
+  const version = await prisma.contractVersion.create({
+    data: {
+      contractId: contract.id,
+      versionNo: 1,
+      createdBy: userId,
+      changeNote: "İlk sürüm — taraflarca imzalanan metin.",
+      contentText: [
+        "VEKALET ÜCRET SÖZLEŞMESİ",
+        "",
+        "Madde 1 — Taraflar: Bir tarafta Demo Hukuk Bürosu (Vekil), diğer tarafta",
+        "ABC Holding A.Ş. (Müvekkil) arasında aşağıdaki şartlarla akdedilmiştir.",
+        "",
+        "Madde 2 — Konu: İstanbul 12. Asliye Ticaret Mahkemesi'nin 2026/145 esas",
+        "sayılı alacak davasının takibi ve sonuçlandırılması.",
+        "",
+        "Madde 3 — Ücret: Peşin ücret 150.000,00 TL olup, dava değerinin %10'u",
+        "oranında başarı primi tahsilat gerçekleştikçe hak edilir. Tutarlara KDV",
+        "dahil değildir.",
+        "",
+        "Madde 4 — Masraflar: Harç, tebligat, bilirkişi ve keşif masrafları",
+        "Müvekkil'e aittir; avans olarak talep edilebilir.",
+        "",
+        "Madde 5 — Süre ve Yenileme: Sözleşme 01.03.2026 tarihinde yürürlüğe girer,",
+        "31.03.2027 [sic: 28.02.2027] tarihine kadar geçerlidir. Taraflardan biri",
+        "sona erme tarihinden en az 30 gün önce yazılı fesih ihbarında bulunmazsa",
+        "sözleşme aynı şartlarla bir yıl uzar.",
+        "",
+        "Madde 6 — Uyuşmazlık: İstanbul Mahkemeleri ve İcra Daireleri yetkilidir.",
+        "",
+        "[DEMO VERİ] Bu metin örnek amaçlıdır; hukuki tavsiye niteliği taşımaz.",
+      ].join("\n"),
+    },
+  });
+
+  await prisma.contract.update({ where: { id: contract.id }, data: { currentVersionId: version.id } });
+  return { contractCreated: true, versionCreated: true };
+}
+
+/**
+ * İletişim geçmişi tohumu — 2 kayıt (bir gelen, bir giden).
+ * Giden kayıt İNSAN ONAYINDAN GEÇMİŞ bir mesajın izidir; onaysız giden mesaj
+ * tohumda BİLEREK YOKTUR (approvedBy dolmadan gönderim yapılamaz).
+ */
+async function seedCommunications(clientId: string, caseId: string, userId: string) {
+  const seeds: Array<Omit<Prisma.CommunicationLogUncheckedCreateInput, "id" | "tenantId" | "createdAt">> = [
+    {
+      clientId,
+      caseId,
+      direction: "GELEN",
+      channel: "EPOSTA",
+      subject: "Bilirkişi raporu hakkında",
+      body:
+        "Merhaba, bilirkişi raporunun tarafımıza tebliğ edildiğini öğrendik. " +
+        "İtiraz süreci ve tahmini takvim hakkında bilgi alabilir miyiz?",
+      contactRef: "ayse@abcholding.example",
+      occurredAt: utcDaysAgo(4),
+      recordedBy: null,
+    },
+    {
+      clientId,
+      caseId,
+      direction: "GIDEN",
+      channel: "TELEFON",
+      subject: "Bilirkişi raporu — bilgilendirme görüşmesi",
+      body:
+        "Müvekkil yetkilisi arandı. Rapordaki lehe/aleyhe tespitler ve iki haftalık " +
+        "itiraz süresi anlatıldı; itiraz dilekçesinin taslak aşamasında olduğu bildirildi. " +
+        "Sonuç taahhüdünde bulunulmadı.",
+      contactRef: "+90 532 000 00 01",
+      occurredAt: utcDaysAgo(3),
+      recordedBy: userId,
+    },
+  ];
+
+  let created = 0;
+  for (const s of seeds) {
+    const existing = await prisma.communicationLog.findFirst({
+      where: { tenantId: TENANT_ID, clientId, direction: s.direction, occurredAt: s.occurredAt as Date },
+    });
+    if (existing) continue;
+    await prisma.communicationLog.create({ data: { ...s, tenantId: TENANT_ID } });
+    created += 1;
+  }
+  return created;
 }
 
 // ---------------------------------------------------------------------------
@@ -1982,6 +2410,19 @@ async function main() {
   const expert = await seedExpert(c5.record.id, partner.id);
   const risk = await seedRiskScores(c1.record.id, partner.id);
 
+  // ---- Faz 5: portal / iletişim / vekaletname / sözleşme -------------------
+  //
+  // Portal ABC Holding'e (tüzel müvekkil) bağlanır: yayın kontrolü tüzel kişide
+  // en anlamlı olan senaryodur (birden çok yetkili, birden çok dosya). Yayın
+  // YALNIZ c1 için yapılır — ABC'nin ikinci dosyası (c2, icra) BİLEREK
+  // yayınlanmaz: "yayınlanmamış kaynak portalda görünmez" kuralı böyle sınanır.
+
+  const messageTemplateCount = await seedMessageTemplates();
+  const portal = await seedPortal(abc.id, c1.record.id, avukat.id, passwordHash);
+  const poa = await seedPowerOfAttorneys(abc.id, c1.record.id, mehmet.id, c3.record.id);
+  const contract = await seedContracts(abc.id, c1.record.id, partner.id);
+  const commCount = await seedCommunications(abc.id, c1.record.id, avukat.id);
+
   // ---- Özet --------------------------------------------------------------
 
   const [
@@ -2121,9 +2562,60 @@ async function main() {
       `İtiraz: ${objectionTotal} (yeni: ${expert.objectionCreated}) | ` +
       `Risk skoru: ${riskScoreTotal} (eklenen ${risk.scoreCount}) | Risk geçmişi: ${riskHistoryTotal} (eklenen ${risk.historyCount})`,
   );
+  const [
+    portalUserTotal,
+    publicationTotal,
+    messageTemplateTotal,
+    systemMessageTemplateTotal,
+    communicationTotal,
+    outboundTotal,
+    inboundTotal,
+    poaTotal,
+    poaTypedTotal,
+    poaScopeCheckTotal,
+    contractTotal,
+    contractVersionTotal,
+    signatureRequestTotal,
+    documentTotal,
+  ] = await Promise.all([
+    prisma.portalUser.count({ where: { tenantId: TENANT_ID } }),
+    prisma.portalPublication.count({ where: { tenantId: TENANT_ID, unpublishedAt: null } }),
+    prisma.messageTemplate.count(),
+    prisma.messageTemplate.count({ where: { tenantId: null } }),
+    prisma.communicationLog.count({ where: { tenantId: TENANT_ID } }),
+    prisma.outboundMessage.count({ where: { tenantId: TENANT_ID } }),
+    prisma.inboundMessage.count({ where: { tenantId: TENANT_ID } }),
+    prisma.powerOfAttorney.count({ where: { tenantId: TENANT_ID } }),
+    prisma.powerOfAttorney.count({ where: { tenantId: TENANT_ID, type: { not: null } } }),
+    prisma.poaScopeCheck.count({ where: { tenantId: TENANT_ID } }),
+    prisma.contract.count({ where: { tenantId: TENANT_ID } }),
+    prisma.contractVersion.count(),
+    prisma.signatureRequest.count({ where: { tenantId: TENANT_ID } }),
+    prisma.document.count({ where: { tenantId: TENANT_ID } }),
+  ]);
+
+  console.log(
+    `Portal kullanıcısı: ${portalUserTotal} (yeni: ${portal.portalUserCreated}) | ` +
+      `YAYINDA kaynak: ${publicationTotal} (eklenen ${portal.publicationCount}) | Belge: ${documentTotal}`,
+  );
+  console.log(
+    `Mesaj şablonu: ${messageTemplateTotal} (sistem ${systemMessageTemplateTotal}, eklenen ${messageTemplateCount}) | ` +
+      `İletişim kaydı: ${communicationTotal} (eklenen ${commCount}) | ` +
+      `Giden mesaj: ${outboundTotal} | Gelen mesaj: ${inboundTotal}`,
+  );
+  console.log(
+    `Vekaletname: ${poaTotal} (eklenen ${poa.created}, tipi doldurulan eski kayıt ${poa.backfilled}, ` +
+      `tipli ${poaTypedTotal}) | Kapsam analizi: ${poaScopeCheckTotal} | ` +
+      `Sözleşme: ${contractTotal} (yeni: ${contract.contractCreated}) | Sürüm: ${contractVersionTotal} | ` +
+      `İmza talebi: ${signatureRequestTotal}`,
+  );
   console.log(
     "NOT: kredi fiyatları ve paket TL değerleri TEMSİLİDİR — iş kararıdır, platform panelinden güncellenir. " +
       "OpenAI/Gemini model fiyatları YAKLAŞIKTIR ve doğrulanmalıdır.",
+  );
+  console.log(
+    "NOT: Faz 5 demo belgelerinin MinIO'da gerçek nesnesi YOKTUR (storageKey 'demo/...'); " +
+      "portal yayın akışı sınanabilir, indirme sınanamaz.",
   );
 
   console.log(
@@ -2133,6 +2625,10 @@ async function main() {
   console.log(
     "Platform girişi: superadmin@nomosos.local / Demo1234!  " +
       "(dört-göz ikinci imzası: superadmin2@nomosos.local · yatırımcı: analist@nomosos.local)",
+  );
+  console.log(
+    "Portal girişi (AYRI KİMLİK — büro/platform uçlarında GEÇERSİZ): " +
+      "portal@demo.nomosos.local / Demo1234!  (ABC Holding A.Ş.)",
   );
 }
 

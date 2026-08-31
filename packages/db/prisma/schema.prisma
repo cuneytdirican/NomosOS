@@ -117,6 +117,15 @@ model Client {
   invoices         Invoice[]
   payments         Payment[]
 
+  /// Faz 5 — müvekkil portalı, iletişim merkezi, sözleşmeler
+  portalUsers        PortalUser[]
+  portalInvites      PortalInvite[]
+  portalPublications PortalPublication[]
+  communicationLogs  CommunicationLog[]
+  outboundMessages   OutboundMessage[]
+  inboundMessages    InboundMessage[]
+  contracts          Contract[]
+
   @@index([tenantId])
   @@index([tenantId, name])
   @@index([tenantId, category])
@@ -215,6 +224,13 @@ model Case {
   claims         Claim[]
   evidences      Evidence[]
   expertReports  ExpertReport[]
+
+  /// Faz 5 — iletişim merkezi, vekalet kapsam analizi, sözleşmeler
+  communicationLogs CommunicationLog[]
+  outboundMessages  OutboundMessage[]
+  inboundMessages   InboundMessage[]
+  poaScopeChecks    PoaScopeCheck[]
+  contracts         Contract[]
 
   @@index([tenantId])
   @@index([tenantId, status])
@@ -793,6 +809,18 @@ model CaseDecision {
 
 // ---------- Vekaletname ----------
 
+/// Vekaletname tipi (docs/moduller/12-vekaletname.md). Tip, kapsam yeterlilik
+/// analizinin ilk ayrımıdır: boşanma/ceza/icra dosyaları özel yetki ister.
+enum PoaType {
+  GENEL
+  OZEL
+  BOSANMA
+  CEZA
+  ICRA
+  SIRKET
+  DIGER
+}
+
 model PowerOfAttorney {
   id         String    @id @default(uuid())
   tenantId   String
@@ -810,8 +838,61 @@ model PowerOfAttorney {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
+  // ---- Faz 5 (Modül 12) ----
+  /// Vekaletname tipi. null = eski kayıt, henüz sınıflandırılmadı.
+  type           PoaType?
+  /// Özel yetki maddeleri (JSON dizi): [{ code, label, present }] — kod kataloğu
+  /// spec'teki AHZU_KABZ | SULH | IBRA | FERAGAT | KABUL | TEMYIZ_ISTINAF |
+  /// BOSANMA | NAFAKA | SIRKET_TEMSIL | TAHKIM | ARABULUCULUK | HACIZ_FEK |
+  /// YEMIN_TEKLIF | DIGER değerlerinden gelir. Kapsam analizinin GİRDİSİDİR.
+  scopeItemsJson String?
+  /// Aktif mi — azil/istifa/süre dolumunda false'a çekilir. Portal erişimi ve
+  /// dosya uyarı bandı BU alana bakar (revokedAt tek başına yeterli değil:
+  /// süresi dolmuş vekaletname de pasiftir).
+  isActive       Boolean   @default(true)
+  /// Azil/istifa gerekçesi (serbest metin).
+  revokeReason   String?
+  /// Süre bitişi uyarısının gönderildiği an — 30/7/1 gün uyarılarının
+  /// yinelenmesini engeller.
+  warningSentAt  DateTime?
+
+  scopeChecks PoaScopeCheck[]
+
   @@index([tenantId])
   @@index([clientId])
+  @@index([tenantId, isActive])
+  @@index([tenantId, expiresAt])
+}
+
+/// AI kapsam yeterlilik analizi (AI görev tipi POA_SCOPE_ANALYSIS, 10 kredi).
+/// ÇIKTI ÖNERİDİR: verdict avukatı bağlamaz, dosyaya rapor olarak düşer.
+model PoaScopeCheck {
+  id                String          @id @default(uuid())
+  tenantId          String
+  powerOfAttorneyId String
+  powerOfAttorney   PowerOfAttorney @relation(fields: [powerOfAttorneyId], references: [id], onDelete: Cascade)
+  caseId            String
+  case              Case            @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  /// Avukatın sorduğu özel soru (örn. "sulh teklifini kabul edebilir miyim?").
+  question          String?
+  verdict           PoaVerdict
+  /// Eksik bulunan yetkiler (JSON dizi): [{ code, label, why }]
+  missingPowersJson String?
+  /// AI yorumu — "hukuki değerlendirme önerisidir, avukat teyidi gerekir".
+  aiCommentary      String?
+  model             String?
+  checkedBy         String // User id
+  checkedAt         DateTime        @default(now())
+
+  @@index([tenantId, checkedAt])
+  @@index([powerOfAttorneyId])
+  @@index([caseId])
+}
+
+enum PoaVerdict {
+  YETERLI
+  YETERSIZ
+  BELIRSIZ
 }
 
 // ---------- Finans ----------
@@ -2335,12 +2416,12 @@ model CreditWallet {
 
   /// Dönem başında tahsis edilen dahil kota. DEVRETMEZ — dönem sonunda sıfırlanır.
   includedCredits  Int
-  includedConsumed Int @default(0)
+  includedConsumed Int       @default(0)
   /// Satın alınan bakiye — DEVREDER, süresi dolmaz. Tüketim sırası: önce dahil kota.
-  purchasedCredits Int @default(0)
+  purchasedCredits Int       @default(0)
   /// Devam eden çağrılar için rezerve. Eşzamanlı isteklerin bakiyeyi negatife
   /// düşürmesini önler (kabul kriteri 2).
-  reservedCredits  Int @default(0)
+  reservedCredits  Int       @default(0)
   /// Rezervasyon sayacının 0'dan yukarı çıktığı an. Süreç çağrı ortasında
   /// ölürse (deploy, OOM, kill) `settle`/`release` hiç çalışmaz ve rezerve
   /// kredi KALICI olarak kilitlenirdi; süpürücü bu damgaya bakarak sahipsiz
@@ -2425,4 +2506,433 @@ model CreditPackage {
   price    Decimal @db.Decimal(18, 2)
   currency String  @default("TRY")
   isActive Boolean @default(true)
+}
+
+// ===========================================================================
+// FAZ 5 — DIŞ YÜZ: MÜVEKKİL PORTALI · İLETİŞİM MERKEZİ · SÖZLEŞME/E-İMZA
+// ===========================================================================
+// ÜÇLÜ KİMLİK AYRIMI: User (büro) · PlatformUser (platform) · PortalUser (müvekkil).
+// Üç tablo, üç JWT `aud` değeri, üç ayrı kapı. Bir tarafın token'ı diğerinde
+// ASLA geçerli değildir — bu ayrım sunucuda zorunludur (Modül 10, iş kuralı 1).
+//
+// YAYIN KONTROLÜ: portal, büro verisinin aynası DEĞİLDİR. Müvekkil yalnızca
+// PortalPublication ile AÇIKÇA yayınlanmış kaydı görür (allow-list). Yayın
+// kaydı olmayan kaynak portal sorgusuna HİÇ GİRMEZ (deny-list değil).
+
+// ---------- A) Müvekkil portalı (docs/moduller/10-muvekkil-portali.md) ----------
+
+/// Portalda yayınlanabilen kaynak türleri. Liste KAPALIDIR: strateji, risk
+/// skoru, iç görev, dosya notu ve simülasyon çıktısı burada YOKTUR ve portala
+/// asla çıkamaz.
+enum PortalResourceType {
+  DOSYA
+  BELGE
+  DURUSMA
+  SAFAHAT_KAYDI
+  FATURA
+  MESAJ
+  ODEME
+}
+
+/// Portal kullanıcısı — büro `User` tablosundan TAMAMEN AYRI.
+/// Bir müvekkile (tüzel kişide şirkete) birden çok portal kullanıcısı bağlanabilir.
+model PortalUser {
+  id           String  @id @default(uuid())
+  tenantId     String
+  clientId     String
+  client       Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  email        String
+  passwordHash String
+  fullName     String
+  /// Vekalet ilişkisi bittiğinde / azil kaydında false'a çekilir; mevcut
+  /// oturumlar da geçersizleşir (uygulama katmanı).
+  isActive     Boolean @default(true)
+
+  lastLoginAt DateTime?
+  /// Daveti gönderen büro kullanıcısı (User.id) — skaler, davet eden kullanıcı
+  /// silinse bile portal hesabı ayakta kalmalıdır.
+  invitedBy   String?
+  invitedAt   DateTime?
+  activatedAt DateTime?
+
+  /// ── HESAP KİLİDİ (KALICI) ────────────────────────────────────────────────
+  /// Bellek içi sayaç süreç yeniden başlayınca sıfırlanıyordu ve çok örnekli
+  /// dağıtımda örnek başına tutuluyordu. Sayaç artık kaydın kendisindedir:
+  /// kilit sürecin ömründen ve örnek sayısından BAĞIMSIZDIR.
+  failedAttempts Int       @default(0)
+  /// Sayaç penceresinin bittiği an — bu andan sonra birikmemiş hatalar unutulur.
+  failureWindowEndsAt DateTime?
+  /// Kilidin bittiği an. null / geçmiş = kilit yok.
+  lockedUntil    DateTime?
+
+  /// ── OTURUM İPTALİ ────────────────────────────────────────────────────────
+  /// Bu andan ÖNCE üretilmiş portal token'ları geçersizdir. Çıkış (logout),
+  /// parola sıfırlama ve hesabın pasifleştirilmesi bu damgayı tazeler; böylece
+  /// ortak bilgisayardan çıkan müvekkilin token'ı 8 saat boyunca yaşamaz.
+  sessionsValidFrom DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([clientId])
+  @@index([tenantId, isActive])
+  @@index([email])
+}
+
+/// Portal daveti. HAM TOKEN SAKLANMAZ — yalnız SHA-256 özeti tutulur; e-postaya
+/// giden ham değer bir daha üretilemez (veritabanı sızıntısı hesabı açmaz).
+model PortalInvite {
+  id        String    @id @default(uuid())
+  tenantId  String
+  clientId  String
+  client    Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  email     String
+  tokenHash String // SHA-256(hex) — ham token ASLA yazılmaz
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdBy String // User id
+  createdAt DateTime  @default(now())
+
+  @@index([tenantId, expiresAt])
+  @@index([clientId])
+  @@index([tokenHash])
+}
+
+/// AÇIK YAYIN LİSTESİ — portal görünürlüğünün TEK kaynağı (allow-list).
+/// `unpublishedAt` dolu kayıt yayından kaldırılmıştır; portal sorgusu
+/// `unpublishedAt: null` süzgeci olmadan ÇALIŞTIRILMAZ.
+model PortalPublication {
+  id            String             @id @default(uuid())
+  tenantId      String
+  clientId      String
+  client        Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  resourceType  PortalResourceType
+  /// Kaynak kaydın id'si — çok biçimli (polymorphic), İLİŞKİ KURULMAZ.
+  resourceId    String
+  publishedBy   String // User id — yayın kararının sorumlusu
+  publishedAt   DateTime           @default(now())
+  /// Yayından kaldırma anı. null = yayında.
+  unpublishedAt DateTime?
+  /// ── SAHİPLİK İKİNCİ AYAĞI ────────────────────────────────────────────────
+  /// Portal görünürlüğü normalde İKİ bağımsız koşula dayanır: açık yayın kararı
+  /// VE kaydın gerçekten bu müvekkile ait olması. Bazı kaynaklarda sahiplik
+  /// çözülemez (ör. hiçbir dosyaya bağlanmamış belge) ve karar YALNIZCA avukatın
+  /// tıklamasına iner. Bu bayrak o tekil kararları görünür kılar: `false` ise
+  /// kaydın ikinci kapısı KAPANMAMIŞTIR, yalnızca atlanmıştır.
+  ownershipVerified Boolean @default(true)
+  /// Avukatın yayın notu / müvekkile gösterilen sade açıklama. SAFAHAT_KAYDI
+  /// yayınında AI durum özetinin ONAYLANMIŞ metni burada DONDURULUR: kaynak
+  /// kayıt sonradan değişse bile müvekkilin gördüğü metin sabit kalır.
+  note          String?
+
+  @@unique([tenantId, resourceType, resourceId, clientId])
+  @@index([tenantId, clientId, resourceType])
+  @@index([tenantId, unpublishedAt])
+}
+
+/// Portal denetim izi — giriş, belge indirme, görüntüleme. Büro AuditLog'undan
+/// ayrıdır; müvekkilin ne gördüğü KVKK açısından ayrıca ispatlanabilir olmalıdır.
+model PortalAuditLog {
+  id           String   @id @default(uuid())
+  tenantId     String
+  /// PortalUser.id — skaler: hesap silinse bile denetim izi korunur.
+  portalUserId String
+  action       String // "PORTAL_LOGIN" | "PORTAL_DOCUMENT_DOWNLOAD" | ...
+  resourceType String?
+  resourceId   String?
+  ipAddress    String?
+  createdAt    DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([portalUserId, createdAt])
+}
+
+// ---------- B) İletişim merkezi (docs/moduller/19-iletisim-merkezi.md) ----------
+
+enum CommDirection {
+  GELEN
+  GIDEN
+}
+
+enum CommChannel {
+  EPOSTA
+  SMS
+  WHATSAPP
+  TELEFON
+  PORTAL
+  YUZ_YUZE
+  DIGER
+}
+
+/// Giden mesaj durum makinesi. GONDERILDI'ye YALNIZCA ONAYLANDI üzerinden
+/// geçilir; `approvedBy` boşken gönderim 409 ile reddedilir (iş kuralı 1).
+enum OutboundStatus {
+  TASLAK
+  ONAY_BEKLIYOR
+  ONAYLANDI
+  GONDERILDI
+  BASARISIZ
+  IPTAL
+}
+
+/// Gelen mesajın dosyayla eşleştirilme durumu. ESLESTI'ye geçiş İNSAN ONAYI
+/// ister; AI önerisi tek başına caseId yazmaz (iş kuralı 5).
+enum MatchStatus {
+  BEKLIYOR
+  ESLESTI
+  ELLE_ESLESTI
+  ESLESMEDI
+}
+
+/// Birleşik iletişim geçmişi — kanal fark etmeksizin her yazışmanın tek
+/// zaman çizelgesi. Telefon görüşmesi de elle buraya not edilir.
+model CommunicationLog {
+  id         String        @id @default(uuid())
+  tenantId   String
+  clientId   String?
+  client     Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  caseId     String?
+  case       Case?         @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  direction  CommDirection
+  channel    CommChannel
+  subject    String?
+  body       String
+  /// Karşı tarafın adresi: e-posta / telefon numarası. KVKK anonimleştirme
+  /// talebinde `body` ile birlikte temizlenir, kayıt iskeleti korunur.
+  contactRef String?
+  occurredAt DateTime
+  /// Kaydı giren büro kullanıcısı (User.id) — gelen mesajda null olabilir.
+  recordedBy String?
+  /// ── KAYNAK AYRIMI ────────────────────────────────────────────────────────
+  /// "SISTEM" = onay makinesinden geçip GERÇEKTEN gönderilmiş mesaj (aşağıdaki
+  /// outboundMessageId doludur). "ELLE" = büro kullanıcısının kendi eliyle
+  /// düştüğü not ("telefonda söyledim"). İkisi ayırt edilemezse "müvekkile ne
+  /// söylendi, kim onayladı?" sorusu tek tablodan cevaplanamaz.
+  source     String?       @default("ELLE")
+  /// Kaydı doğuran giden mesaj (OutboundMessage.id) — skaler. Onaylayanın
+  /// kimliği o kayıttaki `approvedBy` alanındadır.
+  outboundMessageId String?
+  createdAt  DateTime      @default(now())
+
+  @@index([tenantId, occurredAt])
+  @@index([clientId, occurredAt])
+  @@index([caseId, occurredAt])
+  @@index([tenantId, channel, occurredAt])
+  @@index([outboundMessageId])
+}
+
+/// Mesaj şablonu. tenantId null = SİSTEM şablonu (tüm kiracılara açık, salt okunur).
+/// Gövde {{muvekkilAdi}}, {{dosyaNo}}, {{durusmaTarihi}} gibi yer tutucular içerir;
+/// çözülemeyen değişken kalırsa taslak onaya DÜŞMEZ (iş kuralı 9).
+model MessageTemplate {
+  id       String      @id @default(uuid())
+  tenantId String?
+  key      String // Örn. "SISTEM_DURUSMA_HATIRLATMA"
+  name     String
+  channel  CommChannel
+  subject  String?
+  body     String
+  isSystem Boolean     @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  outboundMessages OutboundMessage[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@index([channel])
+}
+
+/// Giden mesaj — İNSAN ONAYININ TAŞIYICISI.
+/// AI/şablon taslağı `draftBody`'de, onaylanan metin `finalBody`'de durur:
+/// "AI ne önerdi" ile "ne gönderildi" her zaman ayrıştırılabilir (iş kuralı 3).
+model OutboundMessage {
+  id          String           @id @default(uuid())
+  tenantId    String
+  clientId    String
+  client      Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  caseId      String?
+  case        Case?            @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  channel     CommChannel
+  templateId  String?
+  template    MessageTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  subject     String?
+  /// AI veya şablon çıktısı — DEĞİŞTİRİLMEZ, onay ekranında diff'in solu.
+  draftBody   String
+  /// Avukatın onayladığı nihai metin. Gönderilen METİN BUDUR.
+  finalBody   String?
+  status      OutboundStatus   @default(TASLAK)
+  /// Gönderim ÖNCESİ KVKK taraması sonucu (packages/ai scanPii çıktısı, JSON).
+  /// Üçüncü kişi TCKN'si / sağlık verisi tespitinde onay ekranı engelleyici
+  /// uyarı gösterir; "yine de gönder" kararı AuditLog'a gerekçeyle yazılır.
+  piiScanJson String?
+
+  createdBy     String // User id — taslağı hazırlayan
+  /// ONAYLAYAN kullanıcı (User.id). BU ALAN DOLMADAN GÖNDERİM YAPILAMAZ.
+  approvedBy    String?
+  approvedAt    DateTime?
+  sentAt        DateTime?
+  /// Sağlayıcı mesaj id'si (idempotency + durum geri bildirimi eşleştirmesi).
+  providerRef   String?
+  failureReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, status, createdAt])
+  @@index([clientId, createdAt])
+  @@index([caseId])
+  @@index([tenantId, providerRef])
+}
+
+/// Gelen mesaj — webhook/e-posta kutusu girişi. Müvekkil ve dosya eşleştirmesi
+/// ayrı bir hattır: `matchConfidence` AI önerisidir, `matchStatus` insan kararıdır.
+model InboundMessage {
+  id         String      @id @default(uuid())
+  tenantId   String
+  channel    CommChannel
+  /// Gönderenin adresi (e-posta / telefon) — müvekkil eşleştirmesinin girdisi.
+  fromRef    String
+  subject    String?
+  body       String
+  receivedAt DateTime
+
+  clientId        String?
+  client          Client?     @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  caseId          String?
+  case            Case?       @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  /// MESSAGE_CASE_MATCH güven skoru 0..1. >=0.85 öneri ön-seçili gelir,
+  /// <0.5 hiç gösterilmez — ama HER İKİ HALDE de insan onayı gerekir.
+  matchConfidence Float?
+  matchStatus     MatchStatus @default(BEKLIYOR)
+  /// Eşleştirmeyi onaylayan büro kullanıcısı (User.id).
+  processedBy     String?
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, receivedAt])
+  @@index([tenantId, matchStatus, receivedAt])
+  @@index([clientId])
+  @@index([caseId])
+}
+
+// ---------- D) Sözleşme + e-imza (docs/moduller/20-sozlesme-eimza.md) ----------
+
+enum ContractType {
+  VEKALET_UCRET
+  DANISMANLIK
+  GIZLILIK
+  HIZMET
+  DIGER
+}
+
+enum ContractStatus {
+  TASLAK
+  MUZAKERE
+  IMZAYA_HAZIR
+  IMZADA
+  YURURLUKTE
+  SONA_ERDI
+  FESIH
+}
+
+/// E-imza süreci durumu. GERÇEK SAĞLAYICI KİMLİK BİLGİSİ YOKTUR: çekirdek
+/// yalnız bu soyutlamayı bilir, sağlayıcı adaptörü yapılandırılmamışsa
+/// "yapılandırılmamış" hatası döner — sahte entegrasyon UYDURULMAZ.
+enum SignatureStatus {
+  OLUSTURULDU
+  GONDERILDI
+  IMZALANDI
+  REDDEDILDI
+  SURESI_DOLDU
+  IPTAL
+}
+
+model Contract {
+  id               String         @id @default(uuid())
+  tenantId         String
+  clientId         String?
+  client           Client?        @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  caseId           String?
+  case             Case?          @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  title            String
+  type             ContractType
+  status           ContractStatus @default(TASLAK)
+  /// Aktif sürüm (ContractVersion.id) — ilişki kurulmaz, döngüyü önlemek için
+  /// skaler (Petition/PetitionVersion ile aynı desen).
+  currentVersionId String?
+
+  effectiveFrom     DateTime?
+  effectiveTo       DateTime?
+  /// Fesih ihbar süresi (gün). Süre Motoru bu değerden `Deadline` üretir —
+  /// hesap DETERMİNİSTİKTİR, @nomosos/legal-core ile yapılır.
+  renewalNoticeDays Int?
+  /// Kendiliğinden yenileme hükmü var mı.
+  autoRenew         Boolean   @default(false)
+
+  createdBy String // User id
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  versions          ContractVersion[]
+  signatureRequests SignatureRequest[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, effectiveTo])
+  @@index([clientId])
+  @@index([caseId])
+}
+
+/// Sözleşme sürümü — DEĞİŞTİRİLEMEZ (immutable). Her müzakere turu yeni sürümdür;
+/// sürümler arası fark bu metinler üzerinden hesaplanır.
+model ContractVersion {
+  id          String   @id @default(uuid())
+  contractId  String
+  contract    Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  versionNo   Int
+  /// Düz metin — diff ve CONTRACT_REVIEW girdisi.
+  contentText String
+  /// Kaynak belge (Document.id) — skaler, belge silinse bile metin korunur.
+  documentId  String?
+  changeNote  String?
+  createdBy   String // User id
+  createdAt   DateTime @default(now())
+
+  signatureRequests SignatureRequest[]
+
+  @@unique([contractId, versionNo])
+  @@index([contractId, createdAt])
+}
+
+/// E-imza talebi — SAĞLAYICI-BAĞIMSIZ. `provider` bir adaptör anahtarıdır
+/// ("noop" = yapılandırılmamış). İmzacı listesi JSON'da tutulur:
+/// [{ name, email?, phone?, order, status, signedAt? }]
+model SignatureRequest {
+  id          String          @id @default(uuid())
+  tenantId    String
+  contractId  String
+  contract    Contract        @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  versionId   String
+  version     ContractVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  provider    String
+  providerRef String?
+  status      SignatureStatus @default(OLUSTURULDU)
+  signersJson String
+
+  sentAt           DateTime?
+  completedAt      DateTime?
+  /// İmzalı nüsha (Document.id) — skaler.
+  signedDocumentId String?
+  failureReason    String?
+
+  createdBy String // User id
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, status])
+  @@index([contractId])
+  @@index([versionId])
+  @@index([tenantId, providerRef])
 }

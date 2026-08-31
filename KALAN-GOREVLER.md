@@ -23,8 +23,8 @@
 | 3 | Faz 3 — İcra + Copilot, finans, faturalama, platform admin API | ✅ |
 | 4 | Faz 4 (strateji/simülasyon/risk/delil/bilirkişi/çakışma) + tanıtım sitesi + Modül 26 kredi sistemi | ✅ |
 | 7 | Üretim dağıtımı — `docs/uretim-dagitimi.md`, CI, Docker üretim profili | ✅ ⚠️ |
-| 5 | **Faz 5 — Müvekkil portalı, iletişim merkezi, vekaletname, e-Fatura, sözleşme + e-imza** | ⏳ SIRADA |
-| 6 | **Faz 6 — Kurumsal raporlama, mobil uygulama, zamanlanmış işler** | ⏳ |
+| 5 | Faz 5 — Müvekkil portalı, iletişim merkezi, vekaletname, sözleşme + e-imza | ✅ |
+| 6 | **Faz 6 — Kurumsal raporlama, mobil uygulama, zamanlanmış işler** | ⏳ SIRADA |
 | 8 | **DERİN DENETİM** (aşağıdaki prompt) | ⏳ |
 | 9 | Final GitHub gönderimi + kapanış raporu | ⏳ |
 

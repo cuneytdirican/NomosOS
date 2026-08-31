@@ -161,6 +161,23 @@ const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
     ],
   },
   {
+    // Faz 5 — Modül 19. Müvekkille yapılan yazışmanın tek adresi; onay bekleyen
+    // giden mesajlar da buradan yönetilir.
+    title: "İletişim",
+    items: [
+      {
+        href: "/app/iletisim",
+        label: "İletişim Merkezi",
+        icon: (
+          <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+            <path d="M3 4a2 2 0 0 0-2 2v.161l8.441 4.221a1.25 1.25 0 0 0 1.118 0L19 6.161V6a2 2 0 0 0-2-2H3Z" />
+            <path d="m19 7.839-7.77 3.885a2.75 2.75 0 0 1-2.46 0L1 7.839V14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7.839Z" />
+          </svg>
+        ),
+      },
+    ],
+  },
+  {
     title: "Para",
     items: [
       {
