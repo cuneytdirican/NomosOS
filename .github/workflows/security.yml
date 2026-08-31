@@ -33,15 +33,15 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Depoyu çek
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: pnpm 9 kurulumu
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           run_install: false
 
       - name: Node 22 kurulumu ve pnpm store önbelleği
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -103,7 +103,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Depoyu çek
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Çalışma ağacında sır ara
         run: bash .github/scripts/scan-secrets.sh
@@ -119,16 +119,16 @@ jobs:
       security-events: write
     steps:
       - name: Depoyu çek
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: CodeQL başlat
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: javascript-typescript
           config-file: ./.github/codeql/codeql-config.yml
           queries: security-and-quality
 
       - name: CodeQL analizini çalıştır
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: '/language:javascript-typescript'
