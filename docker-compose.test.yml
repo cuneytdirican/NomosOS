@@ -1,0 +1,206 @@
+# NomosOS — TEST / DEMO YIĞINI
+#
+# Tek komutla her şeyi ayağa kaldırır, migration ve seed'i KENDİSİ çalıştırır:
+#
+#     docker compose -f docker-compose.test.yml up -d --build
+#
+# Giriş bilgileri ve denenecek davranışlar: docs/test-ortami.md
+#
+# ⛔ ÜRETİMDE KULLANMAYIN. Buradaki sırlar depoda açıkça yazılıdır ve
+#    MinIO konsolu ile bütün portlar dışarı açıktır. Üretim için
+#    docker-compose.prod.yml + docker-compose.prod.env.example kullanın:
+#    orada hiçbir sırrın varsayılanı yoktur, operatör üretmek zorundadır.
+
+x-test-secrets: &test-secrets
+  # Test değerleri — bilinçli olarak sabit. JWT_SECRET 32 karakter kuralını
+  # sağlar (kısa anahtarla API bilinçli olarak açılmaz).
+  JWT_SECRET: "nomosos-test-ortami-icin-yeterince-uzun-jwt-anahtari-2026"
+  PLATFORM_JWT_SECRET: "nomosos-test-ortami-icin-yeterince-uzun-platform-anahtari-2026"
+  MASTER_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  PLATFORM_2FA_ENCRYPTION_KEY: "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+
+x-test-db: &test-db
+  DATABASE_URL: "postgresql://nomosos:nomosos@postgres:5432/nomosos"
+
+x-test-infra: &test-infra
+  REDIS_URL: "redis://redis:6379"
+  S3_ENDPOINT: "http://minio:9000"
+  S3_ACCESS_KEY: "nomosos"
+  S3_SECRET_KEY: "nomosos-gizli-123"
+  S3_BUCKET: "nomosos-belgeler"
+  S3_REGION: "us-east-1"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nomosos-test-postgres
+    environment:
+      POSTGRES_USER: nomosos
+      POSTGRES_PASSWORD: nomosos
+      POSTGRES_DB: nomosos
+    ports:
+      - "5432:5432"
+    volumes:
+      - test-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nomosos -d nomosos"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: nomosos-test-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    container_name: nomosos-test-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: nomosos
+      MINIO_ROOT_PASSWORD: nomosos-gizli-123
+    ports:
+      - "9000:9000"
+      # Konsol test ortamında AÇIK (üretimde kapalıdır) — belgeleri gözle
+      # doğrulayabilmek için: http://localhost:9001
+      - "9001:9001"
+    volumes:
+      - test-minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  # Belge deposu kovasını oluşturur. Tek seferlik çalışır ve çıkar.
+  minio-init:
+    image: minio/mc:latest
+    container_name: nomosos-test-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 nomosos nomosos-gizli-123 &&
+      mc mb --ignore-existing local/nomosos-belgeler &&
+      echo 'Kova hazir: nomosos-belgeler'
+      "
+
+  # Migration + seed. API'den ÖNCE çalışır, bitince çıkar.
+  # Seed idempotenttir: yığını yeniden başlatmak veriyi bozmaz.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: nomosos/api:test
+    container_name: nomosos-test-migrate
+    working_dir: /repo
+    environment:
+      <<: *test-db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      /bin/sh -c "
+      echo '--- migration uygulaniyor ---' &&
+      pnpm --filter @nomosos/db exec prisma migrate deploy &&
+      echo '--- seed calistiriliyor ---' &&
+      pnpm --filter @nomosos/db seed &&
+      echo '--- veritabani hazir ---'
+      "
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: nomosos/api:test
+    container_name: nomosos-test-api
+    environment:
+      <<: [*test-secrets, *test-db, *test-infra]
+      API_PORT: "3001"
+      NODE_ENV: "production"
+      # Test ortamında 2FA kapalı — panele hızlı girebilmek için.
+      # Üretimde true olmalıdır.
+      PLATFORM_REQUIRE_2FA: "false"
+      TRUSTED_PROXY_HOPS: "0"
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3001/api/v1/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # NEXT_PUBLIC_* derleme anında gömülür; tarayıcıdan erişilebilen
+        # adres olmalıdır (konteyner içi "api" adı tarayıcıdan çözülmez).
+        NEXT_PUBLIC_API_URL: "http://localhost:3001"
+    image: nomosos/web:test
+    container_name: nomosos-test-web
+    environment:
+      NEXT_PUBLIC_API_URL: "http://localhost:3001"
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  admin:
+    build:
+      context: .
+      dockerfile: apps/admin/Dockerfile
+      args:
+        NEXT_PUBLIC_ADMIN_API_URL: "http://localhost:3001"
+    image: nomosos/admin:test
+    container_name: nomosos-test-admin
+    environment:
+      NEXT_PUBLIC_ADMIN_API_URL: "http://localhost:3001"
+    ports:
+      - "3002:3002"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  portal:
+    build:
+      context: .
+      dockerfile: apps/portal/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: "http://localhost:3001"
+    image: nomosos/portal:test
+    container_name: nomosos-test-portal
+    environment:
+      NEXT_PUBLIC_API_URL: "http://localhost:3001"
+    ports:
+      - "3003:3003"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  test-postgres-data:
+  test-minio-data:

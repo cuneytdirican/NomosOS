@@ -34,10 +34,12 @@ import {
   Select,
   Spinner,
   Textarea,
+  TruncationNotice,
 } from "@/components/ui";
 import { AiDisclaimer, FeatureUnavailable, PiiApprovalBox, SourceQuote } from "@/components/ai-ui";
 import { CreditBadge, useCreditCosts } from "@/components/credits";
 import { errText } from "@/lib/faz2";
+import { SERVER_MAX_PAGE_SIZE } from "@/lib/api";
 import {
   POA_TERMINATION_TYPES,
   POA_TERMINATION_TYPE_LABELS,
@@ -62,7 +64,7 @@ import {
   createPoa,
   fetchScopeCatalog,
   isFeatureMissing,
-  listPoa,
+  listPoaPaged,
   revokePoa,
 } from "../_lib/faz5";
 import type {
@@ -96,13 +98,18 @@ export function PoaTab({
   const [createOpen, setCreateOpen] = useState(false);
   const [analyzeFor, setAnalyzeFor] = useState<PoaItem | null>(null);
   const [revokeFor, setRevokeFor] = useState<PoaItem | null>(null);
+  /** Sunucu zarfı kırpma gösteriyorsa uyarı çıkar (denetim bulgusu K-15). */
+  const [truncated, setTruncated] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     setMissing(false);
     try {
-      setItems(await listPoa({ clientId }));
+      // Zarf okunur; `total` atılmaz (denetim bulgusu K-15).
+      const res = await listPoaPaged({ clientId, limit: SERVER_MAX_PAGE_SIZE });
+      setItems(res.items);
+      setTruncated(res.hasMore || res.truncated);
     } catch (err) {
       if (isFeatureMissing(err)) setMissing(true);
       else setError(errText(err, "Vekaletnameler yüklenemedi."));
@@ -193,6 +200,7 @@ export function PoaTab({
           </Button>
         }
       >
+        {truncated && <TruncationNotice shown={items.length} noun="vekaletname" />}
         {items.length === 0 ? (
           <EmptyState message="Bu müvekkil için kayıtlı vekaletname yok. Dosya açmadan önce vekaletnameyi kaydedin." />
         ) : (

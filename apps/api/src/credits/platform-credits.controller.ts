@@ -15,6 +15,7 @@ import { PlatformController } from "../platform/decorators/platform-controller.d
 import { ADMIN_ROUTE_PREFIX } from "../platform/platform.constants";
 import { CurrentPlatformUser } from "../platform/decorators/current-platform-user.decorator";
 import {
+  ApprovalWritePermission,
   ReadPermission,
   WritePermission,
 } from "../platform/decorators/platform-permission.decorator";
@@ -62,7 +63,7 @@ export class PlatformCreditsController {
    * döner (kabul kriteri 11). Payload onay anında yeniden doğrulanır.
    */
   @Patch("tenants/:id")
-  @WritePermission("credits.tenant.adjust")
+  @ApprovalWritePermission("credits.tenant.adjust") // denetim bulgusu K-11
   async adjust(
     @CurrentPlatformUser() actor: PlatformAuthUser,
     @Param("id") id: string,

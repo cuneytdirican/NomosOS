@@ -30,10 +30,12 @@ import {
   Spinner,
   SuccessBox,
   Textarea,
+  TruncationNotice,
 } from "@/components/ui";
 import { AiDisclaimer, FeatureUnavailable, PiiApprovalBox, SourceQuote } from "@/components/ai-ui";
 import { CreditBadge, useCreditCosts } from "@/components/credits";
 import { errText } from "@/lib/faz2";
+import { SERVER_MAX_PAGE_SIZE } from "@/lib/api";
 import {
   CONTRACT_STATUSES,
   CONTRACT_STATUS_LABELS,
@@ -64,7 +66,7 @@ import {
   isFeatureMissing,
   isNotConfigured,
   listContractRenewals,
-  listContracts,
+  listContractsPaged,
   listContractVersions,
   NOT_CONFIGURED_TEXT,
   reviewContract,
@@ -112,12 +114,17 @@ export function ContractsTab({
     { contract: ContractItem; toStatus: ContractStatus } | null
   >(null);
 
+  /** Sunucu zarfı kırpma gösteriyorsa uyarı çıkar (denetim bulgusu K-15). */
+  const [truncated, setTruncated] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     setMissing(false);
     try {
-      setItems(await listContracts({ clientId, caseId }));
+      const res = await listContractsPaged({ clientId, caseId, limit: SERVER_MAX_PAGE_SIZE });
+      setItems(res.items);
+      setTruncated(res.hasMore || res.truncated);
     } catch (err) {
       if (isFeatureMissing(err)) setMissing(true);
       else setError(errText(err, "Sözleşmeler yüklenemedi."));
@@ -199,6 +206,7 @@ export function ContractsTab({
           </Button>
         }
       >
+        {truncated && <TruncationNotice shown={items.length} noun="sözleşme" />}
         {items.length === 0 ? (
           <EmptyState message="Kayıtlı sözleşme yok. Vekâlet ücreti, danışmanlık veya gizlilik sözleşmesini buradan açabilirsiniz." />
         ) : (

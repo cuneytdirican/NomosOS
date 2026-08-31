@@ -2,7 +2,11 @@ import { Body, Get, HttpCode, Param, Post, Query } from "@nestjs/common";
 import { ZodValidationPipe } from "../../common/pipes/zod-validation.pipe";
 import { PlatformController } from "../decorators/platform-controller.decorator";
 import { CurrentPlatformUser } from "../decorators/current-platform-user.decorator";
-import { ReadPermission, WritePermission } from "../decorators/platform-permission.decorator";
+import {
+  ApprovalWritePermission,
+  ReadPermission,
+  WritePermission,
+} from "../decorators/platform-permission.decorator";
 import { ADMIN_ROUTE_PREFIX } from "../platform.constants";
 import type { PlatformAuthUser } from "../platform.types";
 import { PlatformPaymentsService } from "./platform-payments.service";
@@ -43,7 +47,7 @@ export class PlatformPaymentsController {
   /** DÖRT-GÖZ: iadeyi açan kişi onaylayamaz (spec kabul kriteri 5). */
   @Post(":id/refund")
   @HttpCode(202)
-  @WritePermission("payment.refund")
+  @ApprovalWritePermission("payment.refund") // denetim bulgusu K-11
   refund(
     @CurrentPlatformUser() user: PlatformAuthUser,
     @Param("id") id: string,

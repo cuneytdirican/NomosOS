@@ -2,8 +2,9 @@
 
 /** Sade, elle yazılmış Tailwind bileşen seti — NomosOS uygulama arayüzü. */
 
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { BadgeTone } from "@/lib/labels";
+import { FOCUSABLE_SELECTOR, nextFocusIndex, nextTabIndexForKey } from "@/lib/a11y";
 
 // ---------- Button ----------
 
@@ -150,6 +151,22 @@ export function Field({
 
 // ---------- Modal ----------
 
+/**
+ * ODAK YÖNETİMİ VE ODAK TUZAĞI (denetim bulgusu Ö-35).
+ *
+ * Önceden yalnızca `role="dialog"`, `aria-modal` ve Escape dinleyicisi vardı.
+ * Klavye kullanıcısı Tab'a bastığında odak modalın ARKASINDAKİ sol menüye
+ * kaçıyor, ekran okuyucu kullanıcısı modalın varlığını fark etmeden arkadaki
+ * bir formu doldurup gönderebiliyordu. Şimdi:
+ *   - açılışta odak modalın ilk odaklanabilir öğesine (yoksa gövdesine) taşınır,
+ *   - Tab / Shift+Tab modalın içinde başa sarar (tuzak),
+ *   - Escape kapatır,
+ *   - kapanışta odak modalı AÇAN öğeye geri verilir,
+ *   - başlık `aria-labelledby` ile diyaloğa bağlanır,
+ *   - arka plan `aria-hidden` yerine gövde kaydırma kilidiyle sabitlenir.
+ *
+ * Tek dosyada düzeltilir; `Modal`'ın 28 dosyadaki 46 kullanımı birden düzelir.
+ */
 export function Modal({
   open,
   title,
@@ -163,14 +180,70 @@ export function Modal({
   children: ReactNode;
   wide?: boolean;
 }) {
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
+  const titleId = useId();
+
+  const focusables = useCallback((): HTMLElement[] => {
+    const root = dialogRef.current;
+    if (!root) return [];
+    return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+      (el) => el.offsetParent !== null || el === document.activeElement,
+    );
+  }, []);
+
+  // Açılışta: tetikleyiciyi hatırla + odağı içeri al. Kapanışta: odağı geri ver.
+  useEffect(() => {
+    if (!open) return;
+    triggerRef.current =
+      typeof document !== "undefined" && document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+
+    // İçerik boyanana kadar bir kare bekle (modal gövdesi aynı anda mount olur).
+    const raf = requestAnimationFrame(() => {
+      const list = focusables();
+      (list[0] ?? dialogRef.current)?.focus();
+    });
+
+    const body = document.body;
+    const prevOverflow = body.style.overflow;
+    body.style.overflow = "hidden";
+
+    return () => {
+      cancelAnimationFrame(raf);
+      body.style.overflow = prevOverflow;
+      triggerRef.current?.focus?.();
+    };
+  }, [open, focusables]);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const list = focusables();
+      if (list.length === 0) {
+        // Odaklanacak hiçbir şey yoksa bile odak dışarı KAÇMAMALI.
+        e.preventDefault();
+        dialogRef.current?.focus();
+        return;
+      }
+      const active = document.activeElement as HTMLElement | null;
+      const current = active ? list.indexOf(active) : -1;
+      const target = list[nextFocusIndex(current, list.length, e.shiftKey)];
+      if (target) {
+        e.preventDefault();
+        target.focus();
+      }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [open, onClose, focusables]);
 
   if (!open) return null;
 
@@ -182,12 +255,17 @@ export function Modal({
       }}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        className={`w-full ${wide ? "max-w-2xl" : "max-w-lg"} rounded-xl bg-white shadow-2xl`}
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className={`w-full ${wide ? "max-w-2xl" : "max-w-lg"} rounded-xl bg-white shadow-2xl outline-none`}
       >
         <header className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-          <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+          <h3 id={titleId} className="text-base font-semibold text-slate-900">
+            {title}
+          </h3>
           <button
             type="button"
             onClick={onClose}
@@ -288,41 +366,180 @@ export function StatCard({
 
 // ---------- Sekmeler ----------
 
+/**
+ * SEKMELER — WAI-ARIA "tabs" deseni (denetim bulgusu Ö-36).
+ *
+ * Önceden `<nav>` içinde düz `<button>`'lar vardı: `role="tablist"/"tab"`,
+ * `aria-selected`, `aria-controls` yoktu ve aktiflik YALNIZCA renkle
+ * gösteriliyordu. Dosya detayında 10'dan fazla sekme arasında gezinen ekran
+ * okuyucu kullanıcısı hangisinin açık olduğunu programatik olarak
+ * öğrenemiyordu (WCAG 4.1.2), renk körü kullanıcı için ayrım renge dayanıyordu
+ * (WCAG 1.4.1). Şimdi:
+ *   - `role="tablist"` / `role="tab"` / `aria-selected` / `aria-controls`,
+ *   - ok tuşları + Home/End ile klavye gezinme, dolaşan tabindex (roving),
+ *   - renk DIŞINDA gösterge: kalın alt çizgi + kalın yazı + "●" işareti.
+ *
+ * `panelId`: sekme panelini saran öğenin id'si. Panel tarafında
+ * `role="tabpanel"` + `id` kullanan ekranlar `tabPanelProps()` ile bağlanır.
+ */
 export function Tabs<T extends string>({
   tabs,
   active,
   onChange,
   ariaLabel = "Sekmeler",
+  idPrefix,
 }: {
   tabs: ReadonlyArray<{ key: T; label: string; count?: number }>;
   active: T;
   onChange: (key: T) => void;
   ariaLabel?: string;
+  idPrefix?: string;
 }) {
+  const autoId = useId();
+  const prefix = idPrefix ?? autoId;
+  const listRef = useRef<HTMLDivElement | null>(null);
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    const current = tabs.findIndex((t) => t.key === active);
+    const next = nextTabIndexForKey(e.key, current < 0 ? 0 : current, tabs.length);
+    if (next === null) return;
+    e.preventDefault();
+    const target = tabs[next];
+    if (!target) return;
+    onChange(target.key);
+    listRef.current
+      ?.querySelector<HTMLButtonElement>(`#${CSS.escape(`${prefix}-tab-${target.key}`)}`)
+      ?.focus();
+  }
+
   return (
     <div className="border-b border-slate-200">
-      <nav className="-mb-px flex flex-wrap gap-1" aria-label={ariaLabel}>
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => onChange(t.key)}
-            className={`border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-              active === t.key
-                ? "border-amber-500 text-slate-900"
-                : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700"
-            }`}
-          >
-            {t.label}
-            {typeof t.count === "number" && t.count > 0 && (
-              <span className="ml-2 rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600">
-                {t.count}
-              </span>
-            )}
-          </button>
-        ))}
-      </nav>
+      <div
+        ref={listRef}
+        role="tablist"
+        aria-label={ariaLabel}
+        onKeyDown={onKeyDown}
+        className="-mb-px flex flex-wrap gap-1"
+      >
+        {tabs.map((t) => {
+          const selected = active === t.key;
+          return (
+            <button
+              key={t.key}
+              id={`${prefix}-tab-${t.key}`}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              // `aria-controls` yalnızca panelini gerçekten `idPrefix` ile
+              // bağlayan ekranlarda yayınlanır; var olmayan bir id'ye işaret
+              // eden aria-controls geçersizdir ve hiç yoktan kötüdür.
+              aria-controls={idPrefix ? `${prefix}-panel-${t.key}` : undefined}
+              tabIndex={selected ? 0 : -1}
+              onClick={() => onChange(t.key)}
+              className={`px-4 py-2.5 text-sm transition-colors ${
+                selected
+                  ? "border-b-4 border-amber-500 font-bold text-slate-900"
+                  : "border-b-2 border-transparent font-medium text-slate-500 hover:border-slate-300 hover:text-slate-700"
+              }`}
+            >
+              {/* Renk DIŞINDA gösterge — renk körü kullanıcı için (WCAG 1.4.1). */}
+              {selected && (
+                <span aria-hidden="true" className="mr-1.5 text-amber-600">
+                  ●
+                </span>
+              )}
+              {t.label}
+              {typeof t.count === "number" && t.count > 0 && (
+                <span className="ml-2 rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600">
+                  {t.count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
     </div>
+  );
+}
+
+// ---------- Sayfalama (denetim bulgusu K-15) ----------
+
+/**
+ * Liste ekranlarının sayfa göstergesi + ileri/geri düğmeleri.
+ *
+ * `muvekkiller/page.tsx` deseninin genelleştirilmiş hâli: sunucu zarfındaki
+ * `total` / `page` / `totalPages` GÖRÜNÜR olur; kullanıcı listenin tamamını
+ * gezebilir. Tek sayfalık listelerde bile toplam sayı gösterilir — "ekranda
+ * gördüğüm kadarı mı, hepsi mi?" sorusu ekranda cevaplanmış olur.
+ */
+export function Pagination({
+  page,
+  totalPages,
+  total,
+  noun,
+  loading = false,
+  onPageChange,
+}: {
+  page: number;
+  totalPages: number;
+  total: number;
+  /** "müvekkil", "dosya", "süre" gibi tekil ad. */
+  noun: string;
+  loading?: boolean;
+  onPageChange: (page: number) => void;
+}) {
+  const pages = Math.max(1, totalPages);
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
+      <p className="text-xs text-slate-500" aria-live="polite">
+        Toplam {total} {noun} · sayfa {page} / {pages}
+      </p>
+      {pages > 1 && (
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            disabled={page <= 1 || loading}
+            onClick={() => onPageChange(Math.max(1, page - 1))}
+          >
+            ‹ Önceki
+          </Button>
+          <Button
+            variant="secondary"
+            disabled={page >= pages || loading}
+            onClick={() => onPageChange(Math.min(pages, page + 1))}
+          >
+            Sonraki ›
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * SESSİZ KIRPMA UYARISI (denetim bulgusu K-15).
+ *
+ * Sayfalanamayan (zarfsız ya da tek atışta çekilen) listelerde, dönen kayıt
+ * sayısı istenen limite dayandıysa kayıt kırpılmış OLABİLİR. Bunu sessizce
+ * yutmak yerine kullanıcıya söyleriz: ekranda gördüğü liste eksik olabilir.
+ */
+export function TruncationNotice({
+  shown,
+  noun,
+  hint,
+}: {
+  shown: number;
+  noun: string;
+  hint?: string;
+}) {
+  return (
+    <p
+      role="status"
+      className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-900"
+    >
+      <strong>Liste eksik olabilir.</strong> Sunucu üst sınırı nedeniyle yalnızca ilk {shown}{" "}
+      {noun} gösteriliyor. {hint ?? "Aradığınızı bulmak için arama kutusunu veya süzgeçleri daraltın."}
+    </p>
   );
 }
 

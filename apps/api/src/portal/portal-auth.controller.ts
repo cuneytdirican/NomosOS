@@ -51,7 +51,7 @@ export class PortalAuthController {
     @Req() request: Request
   ) {
     const result = await this.auth.login(body, portalClientIp(request));
-    this.rateLimit.reset(request, "portal-login");
+    await this.rateLimit.reset(request, "portal-login");
     return result;
   }
 

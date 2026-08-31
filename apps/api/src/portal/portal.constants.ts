@@ -67,6 +67,15 @@ export const PORTAL_BCRYPT_ROUNDS = 10;
  *
  *   1. `PORTAL_MAX_FAILED_ATTEMPTS` — anahtar **IP ∧ e-posta**. Dar ve sıkı.
  *      Saldırgan kendi IP'sini kilitler; kurban etkilenmez.
+ *
+ *      ⚠ BU DÜZELTME `TRUSTED_PROXY_HOPS`UN DOĞRU KURULMASINA BAĞLIDIR (Ö-08).
+ *      Anahtarın dar yarısı GERÇEK istemci IP'sidir; ters vekil arkasında hop
+ *      sayısı yanlışsa `req.ip` ya vekilin sabit adresini (tüm müvekkiller tek
+ *      kovada — kilit yine herkesi vurur) ya da istemcinin uydurabileceği bir
+ *      `X-Forwarded-For` değerini (kova sonsuz, sayaç anlamsız) verir. Bu
+ *      yüzden `TRUSTED_PROXY_HOPS` üretimde ZORUNLU alandır: tanımsız veya
+ *      geçersizse API hiç açılmaz (`common/trusted-proxy.ts`). Vekil yoksa
+ *      doğru cevap "ayarı boş bırakmak" değil, açıkça `0` yazmaktır.
  *   2. `PORTAL_ACCOUNT_MAX_FAILED_ATTEMPTS` — anahtar **hesabın kendisi**
  *      (PortalUser satırı; dolayısıyla KİRACIYA ÖZGÜ). Dağıtık denemeye karşı
  *      son duvardır, bu yüzden eşiği belirgin biçimde yüksektir: hedefli

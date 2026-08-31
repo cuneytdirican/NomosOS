@@ -133,6 +133,22 @@ export class ExpertDeadlinesService {
       };
     }
 
+    // denetim bulgusu Ö-16 — `isHalfDay` / `isApproximate` SÜTUNLARI ÇEKİLİR.
+    // Bu iki alan `select` dışında bırakıldığında motor, bayrakları tatilin
+    // _adından_ okumaya düşüyordu (`buildHolidayIndex` → `name.includes("(yarım
+    // gün)")`); tek bir isim düzenlemesi hesabı sessizce bozmaya yeterdi.
+    //
+    // YARIM GÜNÜN DOĞRU DAVRANIŞI (motorun kuralıyla tutarlı): arife TAM TATİL
+    // DEĞİLDİR. 2429 s.K. m.2/A uyarınca o gün 13.00'e kadar mesai vardır; gün
+    // "resmî tatile rastlamış" sayılmaz ve HMK m.93 / İİK m.19 kaydırması
+    // TETİKLENMEZ (`isNonWorkingDay` → `isFullDayOfficialHoliday`). Son gün arifeye
+    // düşerse süre O GÜN sona erer; motor yalnızca «işlemi 13.00'ten önce
+    // tamamlayınız» uyarısı basar (`collectWarnings` §2). Bayrak gelmezse arife tam
+    // tatil sayılır ve avukata var olmayan 1-3 gün kazandırılırdı.
+    // `isApproximate` ise hicri takvime bağlı bayramlarda teyit uyarısını açar.
+    //
+    // Bilirkişi raporuna itiraz süresi HMK m.281'e tabidir; arifeye düşen son
+    // gün ertelenmez.
     const holidays = await this.prisma.client.holiday.findMany({
       where: {
         date: {

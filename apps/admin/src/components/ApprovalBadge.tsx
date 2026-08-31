@@ -15,7 +15,7 @@ import {
   remainingLabel,
   toneOf,
 } from "@/lib/labels";
-import { ACTION_LABELS, isFourEyesAction, requiresApproval, type AdminAction } from "@/lib/rbac";
+import { ACTION_LABELS, needsFourEyes, type AdminAction } from "@/lib/rbac";
 import { useRole } from "./RoleGate";
 
 /** İşlem bu rol için dört-göz gerektiriyorsa küçük rozet. */
@@ -28,7 +28,11 @@ export function ApprovalBadge({
   force?: boolean;
 }) {
   const role = useRole();
-  const needed = force || requiresApproval(role, action) || isFourEyesAction(action);
+  // denetim bulgusu K-11: burada iki AYRI kaynak `||` ile birleştiriliyordu
+  // (`requiresApproval` matrise, `isFourEyesAction` elle yazılmış listeye
+  // bakıyordu) ve rozet, API'nin tutmadığı bir söz veriyordu. Artık tek kaynak
+  // matristir ve karar tek fonksiyondan gelir.
+  const needed = force || needsFourEyes(role, action);
   if (!needed) return null;
   return (
     <Badge tone="yellow" title="Talep eden ≠ onaylayan — ikinci bir yetkilinin onayı gerekir.">
@@ -69,7 +73,7 @@ export function ApprovalNotice({
   extra?: string;
 }) {
   const role = useRole();
-  const needed = requiresApproval(role, action) || isFourEyesAction(action);
+  const needed = needsFourEyes(role, action); // denetim bulgusu K-11
   if (!needed) return null;
   return (
     <div className="rounded-lg border border-amber-800 bg-amber-950/50 px-4 py-3 text-sm text-amber-200">

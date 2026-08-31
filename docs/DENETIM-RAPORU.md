@@ -940,3 +940,155 @@ Aşağıdakiler **bulgu değildir.** Kod bunları dürüstçe belgeliyor ve sess
 ---
 
 *Rapor sonu. Doğrulanamayan iddialar metin içinde açıkça işaretlenmiştir; hiçbiri KRİTİK olarak etiketlenmemiştir.*
+
+---
+
+## Düzeltme Turu Sonucu
+
+**Tarih:** 31.08.2026 · **Kapsam:** iki turda yapılan düzeltmeler (1. tur: commit `84fe733`; 2. tur: dört paralel ajan + bir bağımsız doğrulama ajanı).
+
+**Bu bölümdeki "doğrulama" sütununun anlamı:**
+
+- **CANLI** — ayakta bir API'ye gerçek istek atılmış, veritabanı satırı ya da tel üzerinden giden bayt okunmuştur. Doğrulama ajanının çıktısına dayanır.
+- **kod incelemesiyle** — düzeltme kaynakta okunmuş ve (varsa) regresyon testi geçmiştir; **canlı uçtan koşulmamıştır.** Bu bir eksiklik beyanıdır, zayıf bir "doğrulandı" değildir.
+
+Düzeltmelerin tamamı kaynakta `denetim bulgusu K-xx / Ö-xx / İ-xx` biçiminde işaretlidir; bulgu numarasıyla aranarak yeri bulunabilir.
+
+### Kapanan bulgular
+
+#### KRİTİK — 16/16
+
+| # | Başlık (kısa) | Yapılan değişiklik | Dosya | Regresyon testi | Doğrulama |
+|---|---|---|---|---|---|
+| K-01 | Panel 2FA anahtar uyuşmazlığı | Kurulum yolu da `platform2faEncryptionKey()` kullanıyor; şifreleme ve çözme tek anahtarda | `platform/auth/platform-auth.service.ts:310-328, 415, 617` | — | **CANLI** — `2fa/setup` → otpauth secret; otplib kodu → `verify` 200 + JWT; sonraki girişte `twoFactorRequired` → yanlış kod 401, doğru kod 200 |
+| K-02 | Bakım kilidi `/health`'i öldürüyor | `isPublic` kontrolü bakım kilidinin ÖNÜNE alındı | `common/guards/tenant-status.guard.ts:86-112` | — | kod incelemesiyle |
+| K-03 | Kiracıda oturum iptali / kilit / parola yolu yok | `User`'a `tokenVersion`, `failedAttempts`, `failureWindowEndsAt`, `lockedUntil`; `POST /auth/change-password` ve çıkış yolu | `schema.prisma:69-79` · `auth/auth.service.ts:160+` · `auth/auth.controller.ts:64` | — | kod incelemesiyle |
+| K-04 | 2027'de resmî tatiller yok sayılıyor | `supplied.length === 0` erken çıkışı kaldırıldı; `SUPPORTED_HOLIDAY_YEARS = [2026, 2027]`; 2027 takvimi tohumlandı | `legal-core/deadline-engine.ts:543` · `legal-core/holidays.ts:171` | `legal-core/__tests__/deadline-engine.test.ts` | **CANLI** — `dueDate = 2027-04-26`; gerekçe "23.04.2027 Ulusal Egemenlik…, 24-25 hafta sonu" |
+| K-05 | Vadesiz açık faturada gecikme sıfırlanıyor | `overdueDays` artık işaretli; kova kararı yalnız bu değere bakıyor; ortak `aging-rules.ts` | `finance/finance-summary.service.ts:444-498` · `finance/aging-rules.ts` | `reports/report-aging.test.ts` (kova sınırı) | kod incelemesiyle |
+| K-06 | Kârlılık raporu para birimlerini topluyor | Para birimi başına kova; süre değeri sütunlarından `currencyKey` kaldırıldı | `reports/builders/karlilik.report.ts:74, 260, 315-332, 412-414` | — | kod incelemesiyle |
+| K-07 | `POST /ai/chat` bağlamı maskesiz gönderiyor | `scanPii` tüm `messages`'a; **ek olarak** sözlük maskesi: ticaret unvanı ekleri sökülerek her ara basamak sözlüğe, avukatın kendi mesajına da uygulanıyor, aksansız yazım için uzunluk koruyan Türkçe katlama | `ai/ai.service.ts` · `packages/ai/src/pii.ts:127, 215-228` | `ai/dictionary-mask.test.ts` (8) | **CANLI** — yakalama sunucusuna giden gövde okundu; **7 sızıntı probunun 7'si temiz** (düzeltme öncesi dosya başlığı açık kimlik taşıyordu) |
+| K-08 | AI sağlayıcı `headers` şifresiz ve herkese açık | `headersJson` `encryptSecret` ile şifreleniyor; `listProviders` alan bazlı beyaz listeye çevrildi, değerler dönmüyor | `ai/ai.service.ts:49, 67, 176, 565` | — | kod incelemesiyle |
+| K-09 | AI sağlayıcı yazma uçlarında rol kapısı yok | Altı uca `assertRole(user, ROLE_SETS.ONAY, …)` | `ai/ai.service.ts:134, 144, 195, 215, 260, 295` | — | kod incelemesiyle |
+| K-10 | Atıf kapısı görmediği künyeyi denetlemiyor (fail-open) | Eksik künye biçimleri için kalıp; **negatif tarama**: mahkeme adı geçip yapılandırılmış künye çıkarılamadıysa HAZIR bloklanır, bu bloğun `override` yolu yok | `legal-ai/guards/citation-patterns.ts` · `petitions/petition-gate.ts:24, 156` · `petitions/petitions.service.ts:452, 730` | `legal-ai/__tests__/citation-patterns.test.ts` | kod incelemesiyle |
+| K-11 | Dört-göz kataloğu ile yetki matrisi çelişiyor | `FOUR_EYES_ACTIONS` matristen türetiliyor; çelişen aksiyonlar ayrıştırıldı (`platform_user.create`, `…credential_reset`, `plan.catalog.price`, `subscription.cancel`); `@ApprovalWritePermission` + guard'da yapısal kontrol (yanlış bağlanan uç çalışma zamanında 500); 9 uç taşındı; istemci ikizi `needsFourEyes()`'a geçti | `platform/platform-permissions.ts` · `platform/guards/platform-permission.guard.ts` · `platform/decorators/platform-permission.decorator.ts` · `admin/src/lib/rbac.ts` | `platform/platform-permissions.test.ts` (10) · `platform/guards/approval-routing.test.ts` (8; tüm controller'ları tarar) | **CANLI** — `POST /plans` → 202, `PlanTier` satır 0; kendi onayı → 403; ikinci SUPER_ADMIN → 200, `ONAYLANDI`, plan oluştu |
+| K-12 | Azil/istifa portal erişimini kesmiyor | `poa.service.revoke()` ve `Client.isActive=false` yolu aynı transaction'da `portalUser.updateMany({ isActive:false, sessionsValidFrom })` yazıyor | `poa/poa.service.ts:436` · `clients/clients.service.ts:191` | — | **CANLI (yazma anı)** — `POST /power-of-attorney/:id/revoke` sonrası `isActive=f`, azil öncesi token 401, yeniden giriş 401. **Kalıntı risk için bkz. Açık kalan bulgular md. 1.** |
+| K-13 | Kaçırılmış süre sekreterce "tamamlandı" yapılabiliyor | Durum geçişleri saf `deadline-status-policy.ts`'e alındı; KACIRILDI'dan çıkış ADMIN/PARTNER + zorunlu gerekçe | `deadlines/deadline-status-policy.ts:9, 45, 67` · `deadlines/deadlines.service.ts:420-470` | **yok** — dosyanın kendi başlığı birim testi vaat ediyor, öyle bir dosya yazılmadı | kod incelemesiyle |
+| K-14 | Motorun ürettiği sürenin girdisi düzeltilemiyor | `PATCH /deadlines/:id/inputs`; girdi düzeltilir, **son günü motor yazar**; ilk tespit yalnız ilk düzeltmede dondurulur; `original*` + `correctionCount` + `correctedBy`; MANUEL ve terminal durumlar hariç | `deadlines/deadlines.{service,controller,dto}.ts` · `schema.prisma` · migration `20260908090000_k14_sure_girdi_duzeltme` | `deadlines/deadline-input-correction.test.ts` (7) | **CANLI** — 18.08 → 01.09.2026; `PATCH` 20.08 → **03.09.2026**, `dueDateChanged:true`, `original*` donmuş, `correctionCount:1` |
+| K-15 | Sayfalama zarfı atılıyor, kayıtlar sessizce kırpılıyor | 29/29 çağrı noktası; `readPaged`/`fetchPaged` yardımcısı (sunucunun FİİLEN uyguladığı `limit`i esas alır), `Pagination` + `TruncationNotice`, `RemoteSelect`; panel sayımları zarftaki `total`den okunuyor. Sunucuda `/clients` 100 tavanı `resolvePage`'e geçirildi | `web/src/lib/api.ts` · `web/src/components/{ui,remote-select}.tsx` · `api/src/clients/clients.service.ts` | `web/src/lib/api.test.ts` (11) · `web/…/_lib/faz5.test.ts` (7) | **CANLI** — zarf alanları mevcut; `limit=200` → 200 (önce 100), `limit=500` → `MAX_PAGE_SIZE`=200 |
+| K-16 | Arama istemcide, sunucudaki `q` kullanılmıyor | `q` + `page` sunucuya taşındı (300 ms debounce); açılır listeler `RemoteSelect` üzerinden sunucudan besleniyor | `web/src/app/app/dosyalar/page.tsx:60-72` + 12 çağrı noktası | `web/src/lib/api.test.ts` | **CANLI** — `q=2026/512`, `q=2026/8842`, `q=Taksirle` doğru tek dosya; olmayan esas no → `total:0` |
+
+#### ÖNEMLİ — 34/39 (5'i backlog'a alındı)
+
+| # | Başlık (kısa) | Yapılan değişiklik ve dosya | Regresyon testi | Doğrulama |
+|---|---|---|---|---|
+| Ö-01 | Oturumla 2FA kurulumu | Mevcut parola zorunlu — `platform-auth.{schemas,service}.ts:27, 272` | — | kod incelemesiyle |
+| Ö-02 | Son SUPER_ADMIN korunmuyor | Eşik `remaining < MIN_ACTIVE_SUPER_ADMINS`; düşürme ve pasifleştirme dört-göze bağlandı; bağlayıcı sayım executor'da tek `$transaction` + koşullu `updateMany` — `platform/users/super-admin-floor.ts` | `users/super-admin-floor.test.ts` (5) | **CANLI** — 2→1 denemesi 400, hesap `isActive=t` kaldı |
+| Ö-03 | Portal kilidi kiracılar arası yayılıyor | Kalıcı sayaç yalnız parolası eşleşen adaya — `portal/portal-auth.service.ts:157` | `portal/portal-lockout.test.ts` (7) | kod incelemesiyle |
+| Ö-04 | `forgotPassword` rastgele hesap seçiyor | Deterministik seçim — `portal/portal-auth.service.ts:429` | — | kod incelemesiyle |
+| Ö-05 | Yeniden aktifleştirmede eski token diriliyor | `sessionsValidFrom` her iki yönde tazeleniyor — `portal/portal-admin.service.ts:193` | — | kod incelemesiyle |
+| Ö-06 | `SupportAccessGrant` hiçbir kapıda okunmuyor | Kapsam hiyerarşisi + `SupportGrantGuard` + `@RequiresSupportGrant`; dört uca bağlandı, red `SUPPORT_ACCESS_DENIED` olarak denetim izine yazılıyor — `platform/support/support-grant.ts` | `platform/support/support-grant.test.ts` (13) | kod incelemesiyle |
+| Ö-07 | Kiracı giriş şeması e-postayı normalize etmiyor | `.trim().toLowerCase().max(200)` + parola üst sınırı — `packages/shared/src/schemas.ts:23` · `auth/auth.constants.ts:51` | — | kod incelemesiyle |
+| Ö-08 | `TRUSTED_PROXY_HOPS` sessizce 0'a düşüyor | Karar saf modüle taşındı: bozuk değer her ortamda açılışı durdurur, üretimde tanımsız değer açılışı durdurur, açık `0` "vekilim yok"un tek geçerli ifadesi — `common/trusted-proxy.ts` | `common/trusted-proxy.test.ts` (6) | kod incelemesiyle |
+| Ö-09 | Süreç-içi kimlik sayaçları | `AttemptCounterBackend` (bellek + Redis); beş sayacın beşi de taşındı; Redis yoksa API açılır, hata verirse o çağrı belleğe düşer, istek reddedilmez — `auth/attempt-counter.ts` · `common/rate-limit/counter-store.ts` · `common/rate-limit/shared-redis.ts` | `auth/attempt-counter.test.ts` (12) · `portal/portal-lockout.test.ts` · `common/rate-limit/shared-redis.test.ts` | kod incelemesiyle |
+| Ö-10 | AI hız sınırı büro bazında değil | Dört kova: kullanıcı+rota/dk, kullanıcı+rota/gün, **büro/dk ve büro/gün (rotadan bağımsız)**; reddedilen istek kotadan yemez | `common/guards/ai-rate-limit.guard.ts` → `common/guards/ai-rate-limit.test.ts` (9) | kod incelemesiyle |
+| Ö-11 | İcra tahsilat raporunda dönem süzgeci yok | Dönem süzgeci dört sorguya eklendi — `reports/builders/icra-tahsilat.report.ts` | — | kod incelemesiyle |
+| Ö-12 | Avans kontrolü transaction dışında | `assertAdvanceCovers` + `create` tek `$transaction` + `FOR UPDATE` — `finance/finance.service.ts` | — | kod incelemesiyle |
+| Ö-13 | Süpürücü uçuştaki rezervasyonu siliyor, `purchasedCredits` negatife düşüyor | Sahipsizlik eşiği yeniden tanımlandı, `GREATEST(0, …)` asimetrisi giderildi — `credits/credit.service.ts:79, 573` | `credits/credit-renewal-race.test.ts` | kod incelemesiyle |
+| Ö-14 | `Payment`'ta para birimi yok | `Payment.currency` kolonu — `schema.prisma:1645` · `payments.service.ts` | — | kod incelemesiyle |
+| Ö-15 | Saat ücreti yanlış tarihe göre çözülüyor | Ücret **çalışmanın yapıldığı** tarihe göre; önbellek anahtarına tarih eklendi — `billing/invoices.service.ts:275, 325` | — | kod incelemesiyle |
+| Ö-16 | Tatil sorguları `isHalfDay`/`isApproximate` çekmiyor | Beş sorgunun beşi; arifenin **tam tatil olmadığı** (2429 s.K. m.2/A) kodda gerekçelendirildi — `deadlines`, `enforcement-deadlines`, `expert-deadlines`, `contract-renewal` | `deadlines/holiday-half-day.test.ts` (6; kaynak taraması + davranış) | kod incelemesiyle |
+| Ö-17 | İcra bakiyesinde UTC/TR gün kayması | `trCalendarDay` — `enforcement/balance.service.ts:203` · `collection-score.service.ts:110` | — | kod incelemesiyle |
+| Ö-18 | Prompt enjeksiyonuna karşı savunma yok | Güvenilmeyen metin sabit ayraçla sarılıyor (ayraç dizgesi girdiden temizlenerek); çekirdek prompta 10. kural — `legal-ai/prompts/system-core.ts:49` · `simulation/simulation.modes.ts:474` | `legal-ai/__tests__/prompts.test.ts` | kod incelemesiyle |
+| Ö-19 | AI çıktısı onaysız `Document.caseId` yazıyor | AI türevli sinyalin güven tavanı sınırlandı, karar öneriye düşüyor — `pipeline/pipeline.service.ts` | — | kod incelemesiyle |
+| Ö-20 | `sourceQuote` hat ve simülasyonda denetlenmiyor | `quote-guard` `common/ai/` altına alındı, hat ve simülasyon yollarında çağrılıyor; elenenler `droppedFindings` ile görünür — `common/ai/quote-guard.ts` | `contracts/quote-guard.test.ts` (14) | kod incelemesiyle |
+| Ö-21 | Uydurma künye "doğrulanmış" sayılıyor | Künyeler `context.built` üzerinden eşleniyor, eşleşmeyen `verified:false` — `assistant/assistant.service.ts:711, 770` | — | kod incelemesiyle |
+| Ö-22 | Maskeleme yalnız dört biçimi tanıyor | Sözlük tabanlı ad ve unvan maskesi (K-07 ile aynı düzeltme) — `packages/ai/src/pii.ts` | `ai/dictionary-mask.test.ts` (8) | **CANLI** (K-07 ile birlikte tel üzerinden) |
+| Ö-23 | `preScanned` sözleşmesi yapısal değil | Nihai `messages` üzerinde doğrulama taraması — `caselaw/ai-runner.service.ts:269` | — | kod incelemesiyle |
+| Ö-27 | `PlatformAuditLog` append-only yalnız yorumda | Servis katmanı **ve DB katmanı**: `nomosos_append_only()` trigger'ı üç tabloda; migration `20260909090000_append_only_denetim_izi` yazıldı ve uygulandı; imha için tek kaçış deliği (`SET LOCAL "nomosos.purge"='on'`, yalnız DELETE) — `platform/audit/append-only.ts` | `platform/audit/append-only.test.ts` (6; repoda `update/delete` çağrısı olmadığını kaynak taramasıyla kanıtlar) | kod incelemesiyle (trigger uygulandı, `migrate status` temiz) |
+| Ö-28 | Katalog spec'in 1. ve 8. maddesini kapsamıyor | `TENANT_DELETE` (silme sırası Postgres FK kataloğundan topolojik; `tenantId` taşımayan bağlı tablo görülürse işlem hiç başlamaz) + `AUDIT_EXPORT` (dört-göz, tek seferlik indirme) — `platform/tenants/tenant-purge-order.ts` · `platform/approvals/*` | `platform/tenants/tenant-purge-order.test.ts` (6) · `platform-permissions.test.ts` (spec'in 8 maddesi + her onay işleminin dört-göz yetkisine bağlılığı) | kod incelemesiyle |
+| Ö-29 | %80 kredi uyarısı hiç üretilmiyor | Eşik saf fonksiyonda (ölçü **kullanılabilir bakiye**, dahil/tüketilen oranı değil); saatlik iş; idempotentlik DB kısıtında (`KREDI_AZALDI:<tenant>:<dönem>:<user>`); alıcı aktif ADMIN/PARTNER — `scheduler/credit-threshold.ts` · `scheduler/jobs/credit-low-warning.job.ts` | `scheduler/credit-low-warning.test.ts` (13) | **CANLI** — %80'de 1 bildirim; 2. ve 3. koşum `islenen=0 atlanan=1`, toplam hâlâ 1; satın alınan bakiye → 0; eşik altı → 0 |
+| Ö-32 | Yetki matrisi ikizleri ayrışmış | `credits.tenant.view` / `SUPPORT_AGENT` eşitlendi; ayrışmayı yakalayan test yazıldı — `admin/src/lib/rbac.ts` | `platform-permissions.test.ts` (235 hücrenin tamamı birebir karşılaştırılır) | kod incelemesiyle |
+| Ö-33 | Mesaj reddetme yolu arayüzde yok | "Reddet" düğmesi + zorunlu gerekçe; ölü `rejectOutboundMessage()` artık çağrılıyor; `:618` ipucu düzeltildi — `web/…/compose-message-modal.tsx:400-422` | `web/…/_lib/faz5.test.ts` | kod incelemesiyle |
+| Ö-33b | `pnpm lint` hiçbir şeyi denetlemiyor | ESLint 9 düz yapılandırma (tek kök dosya), `react-hooks` eklentisi, CI'ya `Lint` adımı, `turbo.json`'daki boş görev silindi — `eslint.config.mjs` · `.github/workflows/ci.yml` | — | **CANLI (dolaylı)** — lint, `case-context.ts`'teki bozuk regex'i **hata olarak yakaladı**; denetimin gerçekten koştuğunun kanıtı budur |
+| Ö-34 | Sunucu tarafı çıkış yok | Çıkış yolu + `tokenVersion` (K-03 ile aynı hat) | — | kod incelemesiyle |
+| Ö-35 | Modal'da odak tuzağı yok | Odak tuzağı, açılışta ilk odaklanabilir öğe, kapanışta tetikleyiciye dönüş, `aria-labelledby`, gövde kaydırma kilidi, Esc — tek dosya, 46 kullanım — `web/src/components/ui.tsx` | `web/src/lib/a11y.test.ts` (14) | kod incelemesiyle |
+| Ö-36 | Sekmelerde ARIA yok, gösterge yalnız renk | `role="tablist"/"tab"`, `aria-selected`, roving `tabIndex`, ok/Home/End; renk dışında gösterge | `web/src/components/ui.tsx` → `web/src/lib/a11y.test.ts` | kod incelemesiyle |
+| Ö-37 | Kronoloji süzgeci istemcide | Kanal ve yön süzgeci `/communications` ucuna taşındı; kapsam farkı ekranda açıkça yazılıyor — `web/…/iletisim/page.tsx` | `web/…/_lib/faz5.test.ts` | kod incelemesiyle |
+| Ö-38 | Expo SDK 52 uyumsuzluğu | `expo-build-properties` `^57.0.15` → **`~0.13.3`**; sürüm SDK'nın kendi `bundledNativeModules.json` manifestiyle doğrulandı — `apps/mobile/package.json:34` · `app.json` | — | kod incelemesiyle (bağımlılık çözüldü; Android manifest gözle teyit **edilmedi**) |
+
+#### İYİLEŞTİRME — 8 kapandı, 1 kısmen
+
+`İ-03` (`GET /users` rol kapısı) · `İ-04` (`assignSuperAdmin` `tokenVersion` artırımı + `isActive` kontrolü) · `İ-05` (`audit.export` artık gerçek bir uç) · `İ-06` (`platform-tenants.list()` sayfalandı) · `İ-13` (`settle()` içinde `update` yerine `updateMany`) · `İ-16` (`hasSource` boş nesneyi kabul etmiyor) · `İ-17` (çakışan PII bulgusu eleniyor, maske etiketi bozulmuyor) · `İ-18` (`officeQuerySchema.piiApproved`) — hepsi kod incelemesiyle.
+
+**Kısmen:** `İ-22` — ölü kod süpürmesi yapılmadı; yalnız bulguda adı geçen `rejectOutboundMessage` canlandırıldı (Ö-33).
+
+### Açık kalan bulgular
+
+**1. K-12 kalıntısı — portal erişiminde okuma-anı canlılık kontrolü yok. (Doğrulama turunda CANLI olarak kanıtlandı.)**
+Kesme yalnızca **yazma-anı yan etkisidir**: azil veya istifada `revoke()` çağrıldığında portal hesabı kapanır. Portal, isteği karşılarken `PowerOfAttorney`'e **hiç bakmaz**. Kanıt: `expiresAt` sekiz ay geriye alındığında portal erişimi açık kaldı (`/portal/cases` → 200), oysa büro tarafı aynı vekaletnameyi `YETERSIZ` sayıyor (`poa-scope.service.ts:128`). Vekaletname süre dolumu için `revoke()` çağıran ne bir kod yolu ne de zamanlanmış iş var. Kimlik kapısı bu turun kapsamı dışında bırakıldı. İki seçenek: portal guard'ında okuma-anı canlılık kontrolü **veya** süre dolumu için zamanlanmış iş.
+
+**2. Ö-27 ile Ö-28 çakışmasının kalan yarısı — `PlatformUser` hard delete'i yalnız gözlemle yasak.**
+Append-only trigger'ına imha için tek kaçış deliği açıldı ve `RiskScoreHistory` ile `CreditTransaction` böylece silinebiliyor. Ama `PlatformAuditLog.platformUser` hâlâ `onDelete: SetNull` taşıyor: bir `PlatformUser` hard delete edilirse Postgres denetim satırlarında UPDATE koşar ve trigger o silmeyi **tamamen bloklar**. Bugün repoda böyle bir çağrı yok — bu bir **kaynak taraması bulgusudur, yapısal bir garanti değildir**. Kalıcı çözüm: `platformUserId`'yi `tenantId` gibi FK'sız nullable kolona indirmek ya da hard delete yolunu şema düzeyinde imkânsız kılmak.
+
+**3. Test borcu — 1. turun düzeltmeleri regresyona kapalı değil.**
+Commit `84fe733` **hiç yeni test dosyası eklemedi** (yalnız `deadline-engine.test.ts` genişletildi). Sonuç: K-01, K-02, K-03, K-05, K-06, K-08, K-09, K-12 ve Ö-01, Ö-04, Ö-05, Ö-07, Ö-11, Ö-12, Ö-14, Ö-15, Ö-17, Ö-19, Ö-21, Ö-23, Ö-34 düzeltmeleri bugün yalnız **kaynaktaki yorumla** korunuyor; biri geri alınırsa hiçbir test kırmızıya dönmez. Ayrıca `deadlines/deadline-status-policy.ts` (K-13) kendi başlığında birim testi vaat ediyor, **öyle bir dosya yok**.
+
+**4. İ-31 — `PortalPublication.ownershipVerified` telafi göçü yazılmadı.**
+`20260905100000_faz5_portal_yayin_sahiplik/migration.sql:7` hâlâ `DEFAULT true` ile duruyor; göç öncesi tüm yayınlar "sahipliği doğrulanmış" damgalı. Erişim kapısı değil, gözlemlenebilirlik körlüğü — ama telafi göçü ya da tek seferlik yeniden hesaplama betiği hâlâ gerekli.
+
+**5. Kimlik sertleştirme kalemleri — kaynaktan doğrulandı, hiçbiri yapılmadı.**
+`İ-01` TOTP `window:1` ve kullanılmış adım saklanmıyor (`platform-auth.service.ts:38`); `İ-02` bcrypt maliyeti üç yerde de **10** (`platform-auth.service.ts:225`, `portal.constants.ts:53`); `İ-19` Gemini API anahtarı hâlâ URL sorgu dizesinde (`packages/ai/src/providers/gemini.ts:25, 57`).
+
+**6. Ön yüz ve doküman borcu.**
+`İ-21` kontrast — `text-slate-400` hâlâ 50 dosyada; portal `ink.faint` değişmedi. `İ-27` — `packages/shared/src/api-routes.ts` hâlâ **78 satır, üç modül**; "var olmayan çözüm yolu tarif etme" hatasının kök nedeni açık duruyor. `İ-29` — `common/jwt-audience.ts:4` hâlâ "**iki** ayrı kimlik evreni" diyor, üç var. `docs/uretim-dagitimi.md` güncellenmedi: `TRUSTED_PROXY_HOPS` artık **üretimde zorunlu alandır** (tanımsız veya geçersizse API açılmıyor) ve `AI_RATE_LIMIT_TENANT_PER_MINUTE/_PER_DAY` ile `RATE_LIMIT_BACKEND` (çok örnekli dağıtımda `redis` olmalı) hiçbir yerde belgelenmedi.
+
+**7. Sunucu sözleşmesi eksikleri — istemci tolere ediyor, sunucu düzeltilmedi.**
+`/communications/timeline` ne `channel`/`direction` süzgeci alıyor ne sayfalama zarfı döndürüyor, ayrıca `clientId`/`caseId` yoksa 400 atıyor. `/cases?status=` tek değer alıyor; panel "aktif dosya"yı bu yüzden üç istekle hesaplıyor. `Tabs` `aria-controls` yayınlıyor ama panellere `role="tabpanel"` eklenmedi (dangling referans üretmemek için opsiyonel bırakıldı).
+
+**8. Ekransız kalan iki uç.** `apps/admin`'de tenant kalıcı silme ve denetim izi dışa aktarma (Ö-28) için **arayüz yok**; API ve dört-göz akışı hazır, UI ileriye bırakıldı.
+
+**9. Lint borcu.** `pnpm lint` → **0 hata, 10 uyarı**. CI adımında `--max-warnings` tavanı yok; uyarı sayısı sessizce artabilir.
+
+**10. Yeniden denetlenmeyen 15 İYİLEŞTİRME.** 31 maddenin 8'i kapandı, 7'si açık olarak doğrulandı; kalan 15'i (İ-07…İ-12, İ-14, İ-15, İ-20, İ-23…İ-26, İ-28, İ-30) bu turda **sistematik olarak yeniden incelenmedi**. Kapandıklarına dair bir kanıt yoktur; açık kabul edilmelidirler.
+
+### Backlog'a alınanlar — bunlar hata değil, yazılmamış özellik
+
+Aşağıdaki beş madde denetimde bulgu olarak kaydedildi ama **kod hatası değildir**; hiç yazılmamış ürün parçalarıdır. Düzeltme turunda kasten ele alınmadılar. Her biri için ürün vaadinin nasıl kısıtlanması gerektiği yazılıdır — **bu kısıtlar kapanana kadar pazarlama metinlerinde ve arayüzde uygulanmalıdır.**
+
+| # | Eksik olan | Ait olduğu faz | Kapanmadan **yapılmaması gereken vaat** |
+|---|---|---|---|
+| **Ö-24** | Gerçek OCR. Taranmış görüntü ve metin katmansız PDF `BASARISIZ` dönüyor — uydurma metin üretilmiyor, yani davranış doğru, yetenek yok. | Faz 3 (belge zekâsı) | "UYAP evrakınızı yükleyin, sistem okusun" **denemez**. Türkiye'de UYAP evrakının büyük kısmı taranmıştır; bugün desteklenen girdi yalnız **metin katmanı olan PDF ve düzenlenebilir belgelerdir** ve bu, yükleme ekranında yazılı olmalıdır. |
+| **Ö-25** | Mevzuat havuzu. `Statute*` modelleri yok; mevzuat atıfları daima `BELIRSIZ` ve avukat beyanına bağlanıyor. | Faz 3 | **"Atıf doğrulama" vaadi yalnız İÇTİHAT için geçerlidir.** Kanun maddesi atıfları doğrulanmıyor, yalnız biçimsel olarak tanınıyor. "Sistem atıflarınızı doğrular" cümlesi bu ayrım açıkça yazılmadan kullanılamaz; arayüzdeki her mevzuat atıfı rozetinin "teyit edilmedi" durumunu göstermesi gerekir. |
+| **Ö-26** | UYAP arka ucu. Extension yazılmış (5.825 satır), spec'in tanımladığı 6 uç **hiç yok**. Kabul edilmiş bir sınır değil, yarım kalmış entegrasyon. | Faz 4 (UYAP) | "UYAP entegrasyonu" **çalışan bir özellik olarak sunulamaz**. Bugün var olan yalnız tarayıcı eklentisinin istemci tarafıdır; senkronizasyon, dosya çekme ve safahat aktarımı yoktur. Yol haritasında "geliştiriliyor" olarak işaretlenmelidir. |
+| **Ö-30** | Delil matrisinde çürüten delil. `ClaimEvidenceLink` yalnız `strength` ve `note` taşıyor; `linkType` (SUPPORTS/CONTRADICTS) **yok**. | Faz 4 (Modül 14) | Modül 14'ün ana vaadi — *"karşı tarafın hangi delili hangi iddiayı çürütüyor"* — **söylenemez**. Bugünkü matris yalnız "hangi delil hangi iddiayı destekliyor, ne kadar güçlü" sorusunu yanıtlar. KK3 (`unsupported=true`) ve KK6 (`CONTRADICTS` + `offered_by=US` → 422) yapısal olarak uygulanamaz durumdadır. |
+| **Ö-31** | Görev workflow şablonları. `WorkflowTemplate` modeli yok; `Task.dependsOn`, süreye bağlanma ve 48 saat eskalasyonu yok. | Faz 4 (Modül 07) | "İstinaf sürecini tek tuşla görev planına çevirin" **denemez**. Görevler bugün elle açılır; bağımlılık, süre bağı ve eskalasyon yoktur. Faz 6'da yazılan zamanlanmış işler süre ve duruşma hatırlatmasını kapsar, **görev eskalasyonunu kapsamaz**. |
+
+### Sayısal özet
+
+Şiddet başlıklarındaki adetler rapordaki bulgu numaralarının **fiilî sayımıdır**. Yönetici Özeti'ndeki tablo (16 / 34 / 21) yazıldığı ana aittir ve adversaryal turda eklenen maddeleri saymamaktadır; doğru sayım aşağıdadır.
+
+| Şiddet | Rapordaki madde | Kapandı | Backlog | Açık | Kapanış oranı |
+|---|---|---|---|---|---|
+| **KRİTİK** (K-01…K-16) | 16 | **16** (1'i kalıntı riskle: K-12) | 0 | 0 | %100 |
+| **ÖNEMLİ** (Ö-01…Ö-38 + Ö-33b) | 39 | **34** | 5 | 0 | %87 |
+| **İYİLEŞTİRME** (İ-01…İ-31) | 31 | **8** (+1 kısmen) | 0 | 7 doğrulanmış açık · 15 yeniden denetlenmedi | %26 |
+| **Toplam** | **86** | **58** | **5** | **23** | **%67** |
+
+**Doğrulama derinliği:** kapanan 58 maddenin **11'i canlı koşuldu** (K-01, K-04, K-07, K-11, K-12, K-14, K-15, K-16, Ö-02, Ö-22, Ö-29; Ö-33b dolaylı olarak), kalanı kod incelemesi ve regresyon testiyle kapatıldı. Üç kimlik alanının ayrımı bir bulgu değil güvencedir; bu turda da canlı çapraz test edildi (5 çapraz istek 401, 3 pozitif kontrol 200).
+
+**Test sayısı:** **663 → 815** (+152). Dağılım: api 512, legal-ai 76, legal-core 79, udf 44, e-signature 37, uyap 35, web 32. Yeni test dosyalarının **tamamı 2. turda** yazıldı; `apps/web` bu turda vitest kazandı.
+
+**Derleme ve denetim:** `pnpm build` 12/12 ✅ · `pnpm typecheck` 20/20 ✅ · `pnpm lint` 1 hata / 30 uyarı → **0 hata / 10 uyarı** ✅. Migration sayısı 13 → **16** (`20260907090000_denetim_duzeltmeleri`, `20260908090000_k14_sure_girdi_duzeltme`, `20260909090000_append_only_denetim_izi`); `prisma migrate status` temiz. **Sonraki migration `20260910090000_…` olmalıdır.**
+
+### Üretim öncesi kalan kapatıcılar
+
+Aşağıdakiler kapanmadan üretime çıkılmamalıdır. Bu liste, denetimin ilk "Aşama 1" listesinden **kalanlardır**; o listenin yedi maddesinin yedisi de kapandı.
+
+1. **K-12 kalıntısı — portal erişiminde okuma-anı canlılık kontrolü.** Süresi dolmuş vekaletnameyle portal erişimi açık kalıyor; canlı olarak kanıtlandı. Vekalet ilişkisi biten müvekkilin dosya, belge ve fatura görmeye devam etmesi KVKK ve meslek kuralları açısından savunulamaz. **Tek gerçek işlevsel kapatıcı budur.**
+2. **`PlatformUser` hard delete'inin yapısal olarak imkânsız kılınması.** Bugünkü güvence yalnız "repoda böyle bir çağrı yok" gözlemidir; bir gün eklenirse denetim izi trigger'ı o silmeyi bloklar ve platform kullanıcı yönetimi kilitlenir. Ya FK kaldırılmalı ya silme yolu kapatılmalıdır.
+3. **1. tur düzeltmelerine regresyon testi.** En azından K-01 (2FA gidiş-dönüş), K-03 (kilit / çıkış / parola), K-05 (vadesiz fatura kovası), K-08 ve K-09 (şifreleme + rol kapısı), K-13 (`deadline-status-policy` birim testi). Bugün bu düzeltmelerin tamamı tek bir yorum satırının ömrüne bağlıdır.
+4. **`docs/uretim-dagitimi.md` güncellemesi.** `TRUSTED_PROXY_HOPS` artık zorunludur; belgelenmediği için ilk üretim kurulumu **API'nin hiç açılmamasıyla** sonuçlanır. `RATE_LIMIT_BACKEND=redis` çok örnekli dağıtımda zorunludur; yazılmazsa güvenlik sayaçları sessizce süreç-içine düşer.
+5. **İ-31 telafi göçü.** Yanlış damgalanmış `ownershipVerified` kayıtları üretim verisine taşınmadan düzeltilmelidir; sonradan ayırmak imkânsıza yakındır.
+6. **Backlog vaatlerinin arayüz ve pazarlama metninden çıkarılması** — özellikle mevzuat atıf doğrulaması (Ö-25), UYAP entegrasyonu (Ö-26) ve OCR (Ö-24). Bunlar kod hatası değildir; **vaat edilirlerse hataya dönüşürler.**
+
+*Düzeltme turu sonu. Bu bölümdeki her "CANLI" işareti ayakta bir sisteme atılmış gerçek isteğe dayanır; diğer her şey kod incelemesidir ve öyle okunmalıdır.*

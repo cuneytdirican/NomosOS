@@ -2,7 +2,11 @@ import { Body, Delete, Get, Param, Patch, Post } from "@nestjs/common";
 import { ZodValidationPipe } from "../../common/pipes/zod-validation.pipe";
 import { PlatformController } from "../decorators/platform-controller.decorator";
 import { CurrentPlatformUser } from "../decorators/current-platform-user.decorator";
-import { ReadPermission, WritePermission } from "../decorators/platform-permission.decorator";
+import {
+  ApprovalWritePermission,
+  ReadPermission,
+  WritePermission,
+} from "../decorators/platform-permission.decorator";
 import { ADMIN_ROUTE_PREFIX } from "../platform.constants";
 import type { PlatformAuthUser } from "../platform.types";
 import { PlatformUsersService } from "./platform-users.service";
@@ -32,7 +36,7 @@ export class PlatformUsersController {
 
   /** SUPER_ADMIN rolüyle oluşturma dört-göz onayına düşer (202 + talep). */
   @Post()
-  @WritePermission("platform_user.manage")
+  @ApprovalWritePermission("platform_user.create") // denetim bulgusu K-11
   create(
     @CurrentPlatformUser() user: PlatformAuthUser,
     @Body(new ZodValidationPipe(platformUserCreateSchema)) body: PlatformUserCreateInput

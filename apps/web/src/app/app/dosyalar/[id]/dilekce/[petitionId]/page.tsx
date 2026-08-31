@@ -32,7 +32,6 @@ import {
   extractStatuteDeclarations,
   getPetition,
   isFeatureMissing,
-  listPetitionVersions,
   savePetitionVersion,
   sectionBody,
   sectionsOf,

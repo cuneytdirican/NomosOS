@@ -26,6 +26,7 @@ import {
   Spinner,
   Textarea,
 } from "@/components/ui";
+import { RemoteSelect } from "@/components/remote-select";
 import {
   DURATION_UNIT_LABELS,
   SERVICE_METHODS,
@@ -56,7 +57,8 @@ export function DeadlineWizard({
   const [rulesLoading, setRulesLoading] = useState(false);
   const [rulesError, setRulesError] = useState<string | null>(null);
 
-  const [cases, setCases] = useState<CaseSummary[]>([]);
+  const [pickedCaseLabel, setPickedCaseLabel] = useState("");
+  const [pickedCaseType, setPickedCaseType] = useState<string | undefined>(undefined);
   const [pickedCaseId, setPickedCaseId] = useState("");
   const [ruleKey, setRuleKey] = useState("");
   const [triggerDate, setTriggerDate] = useState(toIsoDate(new Date()));
@@ -88,24 +90,13 @@ export function DeadlineWizard({
     setComputeError(null);
     setSaveError(null);
     setPickedCaseId(caseId ?? "");
+    setPickedCaseLabel("");
+    setPickedCaseType(undefined);
     void loadRules();
-    if (!caseId) {
-      api<unknown>("/cases", { query: { limit: "200" } })
-        .then((data) => setCases(asList<CaseSummary>(data)))
-        .catch((err) => {
-          // Sessizce yutmak kullanıcıya "hiç dosyam yok" izlenimi veriyordu
-          // (denetim bulgusu 20).
-          setCases([]);
-          setRulesError(
-            err instanceof ApiError ? err.message : "Dosya listesi yüklenemedi.",
-          );
-        });
-    }
   }, [open, caseId, loadRules]);
 
   const effectiveCaseId = caseId ?? pickedCaseId;
-  const effectiveCaseType =
-    caseType ?? cases.find((c) => c.id === pickedCaseId)?.type ?? undefined;
+  const effectiveCaseType = caseType ?? pickedCaseType;
 
   /** Dosya türüne uyan kurallar önce; caseTypes boşsa kural tüm türler için geçerlidir. */
   const applicableRules = useMemo(() => {
@@ -201,26 +192,31 @@ export function DeadlineWizard({
           <ErrorBox message={rulesError} />
         ) : (
           <>
+            {/*
+              Dosya seçimi SUNUCUDA aranır (denetim bulguları K-15, K-16).
+                                            denetim bulgusu K-15 · denetim bulgusu K-16
+              Önceden `/cases?limit=200` ile tek atışta çekiliyordu; 201. dosya
+              bu açılır listede HİÇ seçilemiyor, o dosya için kuraldan süre hiç
+              oluşturulamıyordu.
+            */}
             {!caseId && (
-              <Field label="Dosya">
-                <Select
+              <Field label="Dosya" hint="Başlık veya esas no yazarak arayın">
+                <RemoteSelect<CaseSummary>
+                  path="/cases"
                   value={pickedCaseId}
-                  onChange={(e) => {
-                    setPickedCaseId(e.target.value);
+                  selectedLabel={pickedCaseLabel}
+                  onChange={(id, opt, item) => {
+                    setPickedCaseId(id);
+                    setPickedCaseLabel(opt?.label ?? "");
+                    // Dosya türü kural süzgecinde kullanılır; seçimle gelir.
+                    setPickedCaseType(item?.type ?? undefined);
                     setPreview(null);
                   }}
-                  required
-                >
-                  <option value="" disabled>
-                    Dosya seçin…
-                  </option>
-                  {cases.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.title}
-                      {c.fileNumber ? ` (${c.fileNumber})` : ""}
-                    </option>
-                  ))}
-                </Select>
+                  toOption={(c) => ({ id: c.id, label: c.title, hint: c.fileNumber ?? undefined })}
+                  placeholder="Dosya arayın…"
+                  emptyMessage="Eşleşen dosya yok."
+                  ariaLabel="Dosya ara ve seç"
+                />
               </Field>
             )}
 

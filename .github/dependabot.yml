@@ -46,13 +46,24 @@ updates:
           - "react-dom"
           - "@types/react"
           - "@types/react-dom"
-          - "eslint-config-next"
       tailwind:
         patterns:
           - "tailwindcss"
           - "@tailwindcss/*"
           - "postcss"
           - "autoprefixer"
+      # denetim bulgusu Ö-33b: depoda artık GERÇEK bir ESLint var
+      # (kök `eslint.config.mjs`). Eklentiler çekirdekle birlikte
+      # yükseltilmelidir; ayrı ayrı gelen sürümler düz yapılandırmayı
+      # kolayca uyumsuz hâle getirir.
+      lint:
+        patterns:
+          - "eslint"
+          - "@eslint/*"
+          - "typescript-eslint"
+          - "@typescript-eslint/*"
+          - "eslint-plugin-*"
+          - "globals"
       derleme-araclari:
         patterns:
           - "typescript"

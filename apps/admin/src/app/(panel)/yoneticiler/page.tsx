@@ -163,7 +163,9 @@ function PlatformUsers() {
         title="Yöneticiler"
         description="Platform personeli (PlatformUser) — tenant kullanıcılarından tamamen ayrı kimlik uzayı; aralarında FK yoktur ve e-posta uzayları ayrıdır."
         action={
-          <RoleGate action="platform_user.manage" mutation>
+          // denetim bulgusu K-11: HESAP AÇMAK dört-göz olan ayrı aksiyondur;
+          // `platform_user.manage` (ad düzeltme, kilit açma) doğrudandır.
+          <RoleGate action="platform_user.create" mutation>
             <Button onClick={() => setInviteOpen(true)}>Personel ekle</Button>
           </RoleGate>
         }
@@ -248,7 +250,25 @@ function UserModal({
 
   const superAdminInvolved = role === "SUPER_ADMIN" || platformUser?.role === "SUPER_ADMIN";
   const roleChanged = !isNew && role !== platformUser?.role;
-  const needsApproval = superAdminInvolved && (isNew || roleChanged);
+  const deactivating = !isNew && platformUser?.isActive === true && isActive === false;
+  const credentialReset = !isNew && password.trim().length > 0;
+
+  /**
+   * denetim bulgusu K-11 ve Ö-02: rozet ARTIK API'nin gerçekten yaptığını
+   * söyler. Eskiden yalnız "SUPER_ADMIN karışıyorsa" onay gösteriliyordu;
+   * oysa sunucu HER hesap açmayı ve HER kimlik bilgisi sıfırlamasını onaya
+   * düşürüyordu (ters yönde yanlış vaat: kullanıcı işlemin uygulandığını
+   * sanıp bekleyen talebi görmüyordu). SUPER_ADMIN'i pasifleştirme de artık
+   * dört-gözdür (Ö-02).
+   */
+  const approvalAction: AdminAction | null = isNew
+    ? "platform_user.create"
+    : credentialReset
+      ? "platform_user.credential_reset"
+      : superAdminInvolved && (roleChanged || deactivating)
+        ? "platform_user.assign_super_admin"
+        : null;
+  const needsApproval = approvalAction !== null;
 
   const path = isNew ? EP.platformUsers.create : EP.platformUsers.update(platformUser!.id);
 
@@ -338,14 +358,17 @@ function UserModal({
           </label>
         )}
 
-        {needsApproval && (
+        {approvalAction && (
           <>
             <ApprovalNotice
-              action="platform_user.assign_super_admin"
-              extra="SUPER_ADMIN atama ve mevcut SUPER_ADMIN'i düşürme dört-göz kapsamındadır."
+              action={approvalAction}
+              extra={
+                "Panel hesabı açmak, başkasının parolasını/2FA'sını sıfırlamak ve " +
+                "SUPER_ADMIN atamak/düşürmek dört-göz kapsamındadır."
+              }
             />
             <div>
-              <ApprovalBadge action="platform_user.assign_super_admin" force />
+              <ApprovalBadge action={approvalAction} force />
             </div>
           </>
         )}

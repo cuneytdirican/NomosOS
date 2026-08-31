@@ -14,7 +14,16 @@
  * TEYİT: 422 gövdesi `blocking` taşır; `extractFailedCitations` onu okur.
  */
 
-import { API_BASE, ApiError, api, asList, clearToken, getToken } from "@/lib/api";
+import {
+  API_BASE,
+  ApiError,
+  api,
+  asList,
+  clearToken,
+  fetchPaged,
+  getToken,
+  type PagedResult,
+} from "@/lib/api";
 import type {
   ActionProposal,
   AnalysisReport,
@@ -303,17 +312,35 @@ export interface ProposalQuery {
   limit?: number;
 }
 
+/**
+ * Öneri listesi — SAYFALAMA ZARFIYLA (denetim bulgusu K-15).
+ * `limit: 200` isteyip `total`'i atmak, 200'den fazla bekleyen önerisi olan
+ * büroda önerilerin sessizce kaybolması demekti.
+ */
+export async function listProposalsPaged(
+  query: ProposalQuery & { page?: number } = {},
+): Promise<PagedResult<ActionProposal>> {
+  const { page, limit, ...filters } = query;
+  return fetchPaged<ActionProposal>("/proposals", { query: { ...filters }, page, limit });
+}
+
 export function listProposals(query: ProposalQuery = {}): Promise<ActionProposal[]> {
   return api<unknown>("/proposals", { query: { ...query } }).then((p) =>
     asList<ActionProposal>(p),
   );
 }
 
-/** Sol menü rozeti — uç yoksa 0 döner, hata fırlatmaz. */
+/**
+ * Sol menü rozeti — uç yoksa 0 döner, hata fırlatmaz.
+ *
+ * Önceden 200 kayıt çekip `list.length` sayıyordu: 200'den fazla bekleyen
+ * öneri varsa rozet "200"de takılı kalıyordu (denetim bulgusu K-15). Artık
+ * tek kayıt istenir ve zarftaki `total` okunur — hem doğru hem ucuz.
+ */
 export async function countPendingProposals(): Promise<number> {
   try {
-    const list = await listProposals({ status: "BEKLIYOR", limit: 200 });
-    return list.length;
+    const res = await listProposalsPaged({ status: "BEKLIYOR", limit: 1 });
+    return res.total;
   } catch {
     return 0;
   }

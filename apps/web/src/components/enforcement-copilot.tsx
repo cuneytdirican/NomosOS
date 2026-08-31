@@ -16,7 +16,7 @@
  */
 
 import { useState } from "react";
-import { Badge, Button, Card, EmptyState, ErrorBox } from "@/components/ui";
+import { Badge, Card, EmptyState, ErrorBox } from "@/components/ui";
 import { AiDisclaimer, PiiApprovalBox, ReasoningBlock, SourceQuote } from "@/components/ai-ui";
 import { errText, extractPii, type PiiPrompt } from "@/lib/faz2";
 import { copilotText, ruleSignalsOf, runCopilot } from "@/lib/enforcement";

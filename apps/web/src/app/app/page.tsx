@@ -10,9 +10,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ApiError, api, asList } from "@/lib/api";
+import { ApiError, api, asList, fetchPaged } from "@/lib/api";
 import { firstCount, listOf } from "@/lib/dashboard";
-import { listProposals } from "@/lib/faz2";
+import { listProposalsPaged } from "@/lib/faz2";
 import type {
   ActionProposal,
   CaseSummary,
@@ -94,6 +94,8 @@ export default function PanelPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [proposals, setProposals] = useState<ActionProposal[]>([]);
+  /** Sunucudaki gerçek toplam — kart ilk 50 kaydı gösterir (denetim bulgusu K-15). */
+  const [proposalTotal, setProposalTotal] = useState(0);
   /** Riskli dosyalar — uç yoksa kart gizlenir, panel etkilenmez. */
   const [riskRows, setRiskRows] = useState<RiskCaseRow[]>([]);
   /** Faz 5 — onay bekleyen giden mesajlar ve vekaletname/sözleşme uyarıları. */
@@ -118,12 +120,19 @@ export default function PanelPage() {
   /** Bekleyen AI önerileri — uç yoksa kart gizlenir, panel etkilenmez. */
   useEffect(() => {
     let alive = true;
-    listProposals({ status: "BEKLIYOR", limit: 50 })
-      .then((list) => {
-        if (alive) setProposals(list);
+    // Zarf okunur: kart ilk 50'yi gösterir, toplam ayrıca bilinir (K-15).
+    listProposalsPaged({ status: "BEKLIYOR", limit: 50 })
+      .then((res) => {
+        if (alive) {
+          setProposals(res.items);
+          setProposalTotal(res.total);
+        }
       })
       .catch(() => {
-        if (alive) setProposals([]);
+        if (alive) {
+          setProposals([]);
+          setProposalTotal(0);
+        }
       });
     return () => {
       alive = false;
@@ -154,28 +163,44 @@ export default function PanelPage() {
   const loadLegacy = useCallback(async (): Promise<PanelData> => {
     const today = new Date();
     const weekStart = startOfWeek(today);
-    const [hearingsRes, deadlinesRes, tasksRes, casesRes, clientsRes] = await Promise.allSettled([
-      api<unknown>("/hearings", {
-        query: { from: toIsoDate(weekStart), to: toIsoDate(addDays(weekStart, 6)) },
-      }),
-      api<unknown>("/deadlines/upcoming", { query: { days: 14 } }),
-      api<unknown>("/tasks", { query: { status: "ACIK" } }),
-      api<unknown>("/cases", { query: { limit: "200" } }),
-      api<unknown>("/clients", { query: { limit: "100" } }),
-    ]);
+    /**
+     * SAYIMLAR ZARFTAN OKUNUR (denetim bulgusu K-15).
+     *
+     * Önceden `/cases?limit=200` ve `/clients?limit=100` çekilip dizi
+     * uzunluğu sayılıyordu: 640 dosyalı büroda "Aktif Dosya" kartı en fazla
+     * 200, "Müvekkil" kartı en fazla 100 gösterebiliyordu — panel, büroyu
+     * olduğundan küçük gösteriyordu. Artık tek kayıt istenip zarftaki `total`
+     * okunur; hem doğru hem ucuz.
+     *
+     * "Aktif" = kapanmamış. `/cases` tek bir `status` değeri aldığı için
+     * toplamdan kapanmış iki durum çıkarılır.
+     */
+    const [hearingsRes, deadlinesRes, tasksRes, casesRes, closedRes, archivedRes, clientsRes] =
+      await Promise.allSettled([
+        api<unknown>("/hearings", {
+          query: { from: toIsoDate(weekStart), to: toIsoDate(addDays(weekStart, 6)) },
+        }),
+        api<unknown>("/deadlines/upcoming", { query: { days: 14 } }),
+        api<unknown>("/tasks", { query: { status: "ACIK" } }),
+        fetchPaged<CaseSummary>("/cases", { page: 1, limit: 1 }),
+        fetchPaged<CaseSummary>("/cases", { query: { status: "KAPANDI" }, page: 1, limit: 1 }),
+        fetchPaged<CaseSummary>("/cases", { query: { status: "ARSIV" }, page: 1, limit: 1 }),
+        fetchPaged<Client>("/clients", { page: 1, limit: 1 }),
+      ]);
 
     const hearings = hearingsRes.status === "fulfilled" ? asList<Hearing>(hearingsRes.value) : [];
     const deadlines =
       deadlinesRes.status === "fulfilled" ? asList<Deadline>(deadlinesRes.value) : [];
     const tasks = tasksRes.status === "fulfilled" ? asList<Task>(tasksRes.value) : [];
-    const cases = casesRes.status === "fulfilled" ? asList<CaseSummary>(casesRes.value) : [];
-    const clients = clientsRes.status === "fulfilled" ? asList<Client>(clientsRes.value) : [];
+    const caseTotal = casesRes.status === "fulfilled" ? casesRes.value.total : 0;
+    const closedTotal = closedRes.status === "fulfilled" ? closedRes.value.total : 0;
+    const archivedTotal = archivedRes.status === "fulfilled" ? archivedRes.value.total : 0;
+    const clientTotal = clientsRes.status === "fulfilled" ? clientsRes.value.total : 0;
 
-    const closed = new Set(["KAPANDI", "ARSIV"]);
     const critical = deadlines.filter((d) => daysUntil(d.dueDate) <= 3);
     return {
-      activeCases: cases.filter((c) => !closed.has(c.status ?? "")).length,
-      clientCount: clients.length,
+      activeCases: Math.max(0, caseTotal - closedTotal - archivedTotal),
+      clientCount: clientTotal,
       openTasks: tasks.length,
       hearingCount: hearings.length,
       criticalCount: critical.length,
@@ -317,7 +342,7 @@ export default function PanelPage() {
           {/* Bekleyen AI önerileri — belge hattının ürettiği aksiyonlar */}
           {proposals.length > 0 && (
             <Card
-              title={`Bekleyen Öneriler (${proposals.length})`}
+              title={`Bekleyen Öneriler (${proposalTotal || proposals.length})`}
               action={
                 <Link
                   href="/app/oneriler"
@@ -350,9 +375,9 @@ export default function PanelPage() {
                   </li>
                 ))}
               </ul>
-              {proposals.length > 5 && (
+              {(proposalTotal || proposals.length) > 5 && (
                 <p className="mt-2 text-xs text-slate-400">
-                  ve {proposals.length - 5} öneri daha…
+                  ve {(proposalTotal || proposals.length) - 5} öneri daha…
                 </p>
               )}
             </Card>

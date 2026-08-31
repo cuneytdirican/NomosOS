@@ -38,7 +38,10 @@ export function toCsv<T>(rows: readonly T[], columns: ReadonlyArray<CsvColumn<T>
 /** Tarayıcıda dosya indirir. */
 export function downloadCsv(filename: string, csv: string): void {
   if (typeof window === "undefined") return;
-  const blob = new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8;" });
+  // BOM: Excel'in UTF-8'i Türkçe karakterlerle doğru açması için gerekir.
+  // Kaçış dizisiyle yazılır — kaynakta GÖRÜNMEZ bir karakter olarak durursa
+  // ilk kopyala/yapıştırda sessizce kaybolur (lint bulgusu, D ajanı).
+  const blob = new Blob([`\u{feff}${csv}`], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

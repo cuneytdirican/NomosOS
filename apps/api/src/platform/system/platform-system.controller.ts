@@ -2,7 +2,11 @@ import { Body, Delete, Get, HttpCode, Param, Patch, Post, Put, Query } from "@ne
 import { ZodValidationPipe } from "../../common/pipes/zod-validation.pipe";
 import { PlatformController } from "../decorators/platform-controller.decorator";
 import { CurrentPlatformUser } from "../decorators/current-platform-user.decorator";
-import { ReadPermission, WritePermission } from "../decorators/platform-permission.decorator";
+import {
+  ApprovalWritePermission,
+  ReadPermission,
+  WritePermission,
+} from "../decorators/platform-permission.decorator";
 import { ADMIN_ROUTE_PREFIX } from "../platform.constants";
 import { isAnalyst } from "../platform-permissions";
 import type { PlatformAuthUser } from "../platform.types";
@@ -37,7 +41,7 @@ export class PlatformSettingsController {
   /** DÖRT-GÖZ: bakım TAM KİLİDİ ayrı uçtan ve onayla açılır. */
   @Post("maintenance-lock")
   @HttpCode(202)
-  @WritePermission("system.maintenance_lock")
+  @ApprovalWritePermission("system.maintenance_lock") // denetim bulgusu K-11
   maintenanceLock(
     @CurrentPlatformUser() user: PlatformAuthUser,
     @Body(new ZodValidationPipe(maintenanceLockSchema)) body: MaintenanceLockInput

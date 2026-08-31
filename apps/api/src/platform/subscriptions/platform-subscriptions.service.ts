@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { Prisma as PrismaNs, type Prisma, type SubscriptionStatus } from "@nomosos/db";
 import { PrismaService } from "../../prisma/prisma.service";
 import { paged, resolvePage } from "../../common/pagination";
@@ -6,6 +11,7 @@ import { PlatformAuditService } from "../platform-audit.service";
 import { PlatformApprovalsService } from "../approvals/platform-approvals.service";
 import { APPROVAL_ACTIONS } from "../approvals/approval-actions";
 import { money, parseJson } from "../platform-serialize";
+import { canMutate } from "../platform-permissions";
 import type { PlatformAuthUser } from "../platform.types";
 import {
   assertTransition,
@@ -243,13 +249,26 @@ export class PlatformSubscriptionsService {
     };
   }
 
+  /**
+   * YENİ PLAN OLUŞTURMA — DÖRT-GÖZ (denetim bulgusu K-11).
+   *
+   * Eskiden burada `approvals.request` çağrısı YOKTU: fiyatlı yepyeni bir plan
+   * TEK İMZAYLA yaratılabiliyordu. Oysa `patchPlan`'ın fiyat dalı onaya
+   * düşüyordu ve `apps/admin` paneli aynı aksiyon için dört-göz rozetini
+   * gösteriyordu — arayüz söz veriyor, API tutmuyordu. Fiyat koymanın en güçlü
+   * biçimi yeni bir fiyatlı ürün yaratmaktır; iki imza ister.
+   *
+   * Uç artık `@ApprovalWritePermission("plan.catalog.price")` taşır ve guard
+   * yapısal olarak doğrudan yazmayı engeller.
+   */
   async createPlan(user: PlatformAuthUser, input: PlanUpsertInput) {
     const existing = await this.prisma.client.planTier.findUnique({ where: { key: input.key } });
     if (existing) {
       throw new BadRequestException(`"${input.key}" anahtarlı bir plan zaten var.`);
     }
-    const plan = await this.prisma.client.planTier.create({
-      data: {
+    return this.approvals.request(user, {
+      action: APPROVAL_ACTIONS.PLAN_CREATE,
+      payload: {
         key: input.key,
         name: input.name,
         // Decimal alana STRING verilir (Number vermek kuruş kaybettirir).
@@ -257,16 +276,13 @@ export class PlatformSubscriptionsService {
         maxUsers: input.maxUsers ?? null,
         featuresJson: JSON.stringify(input.features),
         isActive: input.isActive,
+        reason: input.reason,
       },
+      summary:
+        `Yeni plan: ${input.key} — ${input.name} ` +
+        `(${input.monthlyPricePerUser ?? "fiyatsız"} kullanıcı/ay). Bu plan TÜM ` +
+        `kiracılara satışa açılır. Gerekçe: ${input.reason}`,
     });
-    await this.audit.log({
-      actor: user,
-      action: "PLAN_CREATE",
-      entity: "PlanTier",
-      entityId: plan.id,
-      detail: `${plan.key} planı oluşturuldu (${money(plan.monthlyPricePerUser) ?? "fiyatsız"}).`,
-    });
-    return { id: plan.id, key: plan.key };
   }
 
   async patchPlan(user: PlatformAuthUser, id: string, input: PlanPatchInput) {
@@ -289,8 +305,18 @@ export class PlatformSubscriptionsService {
       normalizePrice(input.monthlyPricePerUser) !== normalizePrice(plan.monthlyPricePerUser);
 
     if (priceChanges) {
+      // denetim bulgusu K-11: fiyat kararının kendi matris satırı var.
+      if (!canMutate(user.role, "plan.catalog.price")) {
+        throw new ForbiddenException(
+          "Rolünüz katalog fiyatını değiştiremez; bu işlem dört-göz onayına tabidir."
+        );
+      }
+      // `reason` bir alan değil, talebin gerekçesidir (denetim bulgusu K-11).
       const otherFields = Object.keys(input).filter(
-        (k) => k !== "monthlyPricePerUser" && input[k as keyof PlanPatchInput] !== undefined
+        (k) =>
+          k !== "monthlyPricePerUser" &&
+          k !== "reason" &&
+          input[k as keyof PlanPatchInput] !== undefined
       );
       if (otherFields.length > 0) {
         throw new BadRequestException(
@@ -304,7 +330,7 @@ export class PlatformSubscriptionsService {
         payload: {
           planId: plan.id,
           monthlyPricePerUser: input.monthlyPricePerUser ?? null,
-          reason: `${plan.key} planı fiyat değişikliği`,
+          reason: input.reason ?? `${plan.key} planı fiyat değişikliği`,
         },
         summary:
           `${plan.key}: ${money(plan.monthlyPricePerUser) ?? "-"} → ` +

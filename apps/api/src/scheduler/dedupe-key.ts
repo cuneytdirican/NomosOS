@@ -100,3 +100,28 @@ export function deadlineOverdueKey(deadlineId: string, userId: string, dueDate: 
 export function hearingReminderKey(hearingId: string, hearingDay: Date, userId: string): string {
   return build("DURUSMA_YARIN", hearingId, dayTag(hearingDay), userId);
 }
+
+/**
+ * "KREDI_AZALDI:<tenantId>:<dönem başlangıcı YYYY-MM-DD>:<userId>"
+ * — denetim bulgusu Ö-29.
+ *
+ * PENCERE OLARAK **KREDİ DÖNEMİ** KULLANILIR, işin çalıştığı gün değil.
+ * Sonuç: bir büroya bir dönemde EN FAZLA BİR "kredi azaldı" uyarısı gider.
+ * İşin saatte bir koşması bu yüzden güvenlidir; ikinci koşu P2002 alır ve
+ * `atlandi` sayılır.
+ *
+ * DÖNEM YENİLENDİĞİNDE ANAHTAR DA YENİLENİR: `CreditWallet.periodStart`
+ * ileri gider, dolayısıyla yeni dönemde eşik yeniden aşılırsa büro yeniden
+ * uyarılır. Tarihsiz bir anahtar, bir kez uyarılan büroyu SONSUZA DEK
+ * susturur ve ikinci ayın 402'si yine sürpriz olurdu.
+ *
+ * ALICI ANAHTARDADIR — bu dosyanın başındaki kuralla aynı gerekçe: uyarı büro
+ * yönetimindeki HERKESE (ADMIN/PARTNER) gider; alıcı anahtarda olmasaydı
+ * yalnız ilk yöneticinin kaydı yazılır, kalanlar sessizce düşerdi.
+ * `tenantId` anahtarda AYRICA taşınır (kısıt zaten `[tenantId, dedupeKey]`
+ * çiftindedir): anahtarın kendisi tek başına okunduğunda hangi büroya ait
+ * olduğu görülebilsin diye.
+ */
+export function creditLowKey(tenantId: string, periodStart: Date, userId: string): string {
+  return `KREDI_AZALDI:${tenantId}:${dayTag(periodStart)}:${userId}`;
+}

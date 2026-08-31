@@ -7,6 +7,18 @@ export interface PlatformPermissionMeta {
   action: AdminAction;
   /** read → seviye "none" olmamalı · write → canMutate() true olmalı */
   mode: "read" | "write";
+  /**
+   * denetim bulgusu K-11 — YAPISAL DÖRT-GÖZ BEYANI.
+   *
+   * `true` ise bu uç işlemi DOĞRUDAN uygulamaz; `PlatformApprovalsService`
+   * üzerinden bir onay talebi üretir (202). `PlatformPermissionGuard` iki yönlü
+   * kontrol eder:
+   *   - dört-göz bir aksiyon `viaApproval` beyanı OLMADAN yazma ucuna
+   *     bağlanamaz (sessizce tek imzayla uygulanamaz),
+   *   - dört-göz OLMAYAN bir aksiyon `viaApproval` beyanı taşıyamaz (bayat
+   *     beyan, kullanıcıya var olmayan bir onay sözü verir).
+   */
+  viaApproval?: boolean;
 }
 
 /**
@@ -22,6 +34,21 @@ export const ReadPermission = (action: AdminAction) =>
  */
 export const WritePermission = (action: AdminAction) =>
   SetMetadata<string, PlatformPermissionMeta>(PLATFORM_PERMISSION_KEY, { action, mode: "write" });
+
+/**
+ * DÖRT-GÖZ YAZMA UCU (denetim bulgusu K-11).
+ *
+ * Seviyesi `four_eyes` olan bir aksiyonun tek meşru yazma biçimi budur: uç
+ * `approvals.request(...)` çağırır ve 202 döner. `@WritePermission` ile
+ * bağlanan dört-göz aksiyonu, guard tarafından ÇALIŞMA ZAMANINDA reddedilir —
+ * yapılandırma hatası sessizce tek imzalı bir yola dönüşmez.
+ */
+export const ApprovalWritePermission = (action: AdminAction) =>
+  SetMetadata<string, PlatformPermissionMeta>(PLATFORM_PERMISSION_KEY, {
+    action,
+    mode: "write",
+    viaApproval: true,
+  });
 
 export const PLATFORM_ANY_ROLE_KEY = "platform:any-role";
 

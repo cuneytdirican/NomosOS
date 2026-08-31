@@ -6,7 +6,9 @@ import {
   NotificationOutboxService,
   type OutboxEntry,
 } from "../notification-outbox.service";
-import { TenantRecipientsService, type TenantAudience } from "../tenant-recipients";
+// denetim bulgusu Ö-33b: kullanılmayan `TenantAudience` tip içe aktarımı
+// kaldırıldı — ilk gerçek lint koşusunun yakaladığı ölü içe aktarım.
+import { TenantRecipientsService } from "../tenant-recipients";
 import {
   DEADLINE_REMINDER_WINDOWS,
   JOB_KEYS,

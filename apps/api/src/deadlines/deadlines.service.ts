@@ -22,6 +22,7 @@ import {
 } from "./deadline-status-policy";
 import type {
   ComputeDeadlineInput,
+  CorrectDeadlineInputsInput,
   CreateDeadlineInput,
   DeadlineFromRuleInput,
   UpdateDeadlineInput,
@@ -34,6 +35,9 @@ const OPEN_STATUSES: DbDeadlineStatus[] = ["BEKLIYOR", "ONAYLANDI"];
 
 const DEADLINE_INCLUDE = {
   owner: { select: { id: true, fullName: true } },
+  // denetim bulgusu K-14 — girdiyi düzelten kişi yanıtta görünür; düzeltme izi
+  // yalnız AuditLog'da kalmaz, avukatın baktığı kayıtta da durur.
+  correctedBy: { select: { id: true, fullName: true } },
   case: {
     select: {
       id: true,
@@ -206,8 +210,13 @@ export class DeadlinesService {
       throw new BadRequestException(`«${existing.title}» süresi ${existing.status} durumunda olduğu için güncellenemez.`);
     }
     if (input.dueDate && existing.source !== "MANUEL") {
+      // denetim bulgusu K-14 — eski metin üründe VAR OLMAYAN bir işlemi
+      // öneriyordu ("tetikleyici tarihi düzeltip yeniden hesaplayın"); o uç
+      // yazılmamıştı. Artık gösterdiği uç gerçekten mevcut.
       throw new BadRequestException(
-        "Kural motorundan üretilmiş sürenin son günü doğrudan değiştirilemez. Tetikleyici tarihi düzeltip yeniden hesaplayın."
+        "Kural motorundan üretilmiş sürenin son günü doğrudan değiştirilemez. " +
+          "Tetikleyici tarihi veya tebligat yöntemini «PATCH /deadlines/:id/inputs» ucundan düzeltin; " +
+          "motor son günü yeniden hesaplar ve düzeltme kayda geçer."
       );
     }
     if (input.ownerId) {
@@ -228,6 +237,162 @@ export class DeadlinesService {
       detail: `${existing.title} — güncellenen alanlar: ${Object.keys(input).join(", ")}`,
     });
     return updated;
+  }
+
+  /**
+   * PATCH /deadlines/:id/inputs — KURAL kaynaklı sürenin GİRDİSİNİ düzeltir ve
+   * motoru YENİDEN KOŞTURUR (denetim bulgusu K-14).
+   *
+   * Ürün, kural kaynaklı sürenin son gününü elle değiştirmeyi haklı olarak
+   * reddediyordu; ama düzeltmenin MEŞRU yolunu da açmamıştı. Sonuç: AI'ın
+   * tespit ettiği tebliğ tarihi iki gün yanlışsa avukatın elinde yalnız kaydı
+   * SİLMEK kalıyor, silinen kayıtla birlikte hesap izi ve denetim bağı da
+   * gidiyordu.
+   *
+   * Burada son gün İSTEMCİDEN ALINMAZ — girdi düzeltilir, motor tekrar koşar,
+   * son günü motor yazar. Motorun tekelliği bozulmadan kayıt düzeltilebilir
+   * hâle gelir.
+   *
+   * İLK TESPİT DONDURULUR (Modül 04 KK8): `originalTriggerDate`,
+   * `originalServiceMethod` ve `originalDueDate` yalnızca İLK düzeltmede
+   * yazılır. Sonraki düzeltmeler bunları EZMEZ; aksi hâlde ikinci düzeltmeden
+   * sonra "başlangıçta ne sanıyorduk" sorusunun cevabı kaybolurdu.
+   *
+   * YETKİ: `ROLE_SETS.HUKUKI` (yönetici/ortak/avukat). SEKRETER ve STAJYER
+   * süre girdisini düzeltemez — düzeltme, hak düşürücü bir tarihi yeniden
+   * belirlemektir; kayıt bakımı değildir.
+   */
+  async correctInputs(user: AuthUser, id: string, input: CorrectDeadlineInputsInput) {
+    assertRole(user, ROLE_SETS.HUKUKI, "süre girdisi düzeltme");
+
+    const existing = await this.prisma.client.deadline.findFirst({
+      where: { id, tenantId: user.tenantId },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        caseId: true,
+        dueDate: true,
+        source: true,
+        ruleKey: true,
+        triggerDate: true,
+        serviceMethod: true,
+        originalTriggerDate: true,
+        originalServiceMethod: true,
+        originalDueDate: true,
+        correctionCount: true,
+      },
+    });
+    if (!existing) {
+      throw new NotFoundException("Süre kaydı bulunamadı.");
+    }
+    if (TERMINAL_STATUSES.includes(existing.status as DeadlineStatus)) {
+      throw new BadRequestException(
+        `«${existing.title}» süresi ${existing.status} durumunda olduğu için girdisi düzeltilemez.`
+      );
+    }
+    // MANUEL sürede yeniden koşacak bir kural yoktur; onun son günü zaten
+    // `PATCH /deadlines/:id` ile doğrudan düzeltilebiliyor.
+    if (existing.source !== "KURAL" || !existing.ruleKey) {
+      throw new BadRequestException(
+        "Bu süre kural motorundan üretilmemiştir; girdi düzeltmesi uygulanamaz. " +
+          "Manuel sürenin son günü «PATCH /deadlines/:id» ile değiştirilir."
+      );
+    }
+
+    const nextTriggerDate = input.triggerDate ?? existing.triggerDate;
+    if (!nextTriggerDate) {
+      throw new BadRequestException(
+        "Kayıtta tetikleyici tarih yok; düzeltme isteğinde tetikleyici tarih gönderilmelidir."
+      );
+    }
+    const nextServiceMethod = input.serviceMethod ?? existing.serviceMethod ?? undefined;
+
+    const { rule, result } = await this.runEngine(user.tenantId, {
+      ruleKey: existing.ruleKey,
+      triggerDate: nextTriggerDate,
+      serviceMethod: nextServiceMethod,
+      applyJudicialRecess: input.applyJudicialRecess,
+    });
+
+    const previousDueDate = existing.dueDate;
+    const dueDateChanged = startOfDay(previousDueDate).getTime() !== startOfDay(result.dueDate).getTime();
+    // İlk tespit yalnızca İLK düzeltmede dondurulur (bkz. metot açıklaması).
+    const isFirstCorrection = existing.correctionCount === 0;
+    const baselineTriggerDate = existing.originalTriggerDate ?? existing.triggerDate;
+    const baselineDueDate = existing.originalDueDate ?? previousDueDate;
+
+    const correctionTrail =
+      `--- GİRDİ DÜZELTMESİ (${formatTrDate(new Date())}) ---\n` +
+      `Gerekçe: ${input.reason}\n` +
+      `Tetikleyici tarih: ${existing.triggerDate ? formatTrDate(existing.triggerDate) : "—"} → ${formatTrDate(nextTriggerDate)}\n` +
+      `Tebligat yöntemi: ${existing.serviceMethod ?? "—"} → ${nextServiceMethod ?? "—"}\n` +
+      `Son gün: ${formatTrDate(previousDueDate)} → ${formatTrDate(result.dueDate)}` +
+      (dueDateChanged ? "" : " (değişmedi)") +
+      `\nİLK TESPİT: tetik ${baselineTriggerDate ? formatTrDate(baselineTriggerDate) : "—"}, son gün ${formatTrDate(baselineDueDate)}` +
+      `\nDüzeltme sırası: ${existing.correctionCount + 1}`;
+
+    const computeNote = `${buildComputeNote(result)}\n\n${correctionTrail}`;
+    const correctedAt = new Date();
+
+    const updated = await this.prisma.client.$transaction(async (tx) => {
+      const saved = await tx.deadline.update({
+        where: { id },
+        data: {
+          triggerDate: nextTriggerDate,
+          serviceMethod: nextServiceMethod ?? null,
+          dueDate: result.dueDate,
+          legalBasis: result.legalBasis,
+          computeNote,
+          ruleKey: rule.key,
+          ...(isFirstCorrection
+            ? {
+                originalTriggerDate: existing.triggerDate,
+                originalServiceMethod: existing.serviceMethod,
+                originalDueDate: previousDueDate,
+              }
+            : {}),
+          correctedById: user.userId,
+          correctedAt,
+          correctionCount: { increment: 1 },
+        },
+        include: DEADLINE_INCLUDE,
+      });
+      await tx.timelineEvent.create({
+        data: {
+          tenantId: user.tenantId,
+          caseId: existing.caseId,
+          userId: user.userId,
+          title:
+            `Süre girdisi düzeltildi: «${existing.title}» — son gün ` +
+            `${formatTrDate(previousDueDate)} → ${formatTrDate(result.dueDate)}`,
+          detail: correctionTrail,
+          source: "SISTEM",
+        },
+      });
+      return saved;
+    });
+
+    await touchCase(this.prisma.client, existing.caseId);
+    await this.audit.log({
+      tenantId: user.tenantId,
+      userId: user.userId,
+      action: "DEADLINE_INPUTS_CORRECT",
+      entity: "Deadline",
+      entityId: id,
+      detail:
+        `${existing.title} — tetik ${existing.triggerDate ? formatTrDate(existing.triggerDate) : "—"} → ` +
+        `${formatTrDate(nextTriggerDate)}; son gün ${formatTrDate(previousDueDate)} → ${formatTrDate(result.dueDate)}; ` +
+        `gerekçe: ${input.reason}`,
+    });
+
+    return {
+      deadline: updated,
+      steps: result.steps,
+      warnings: result.warnings,
+      previousDueDate,
+      dueDateChanged,
+    };
   }
 
   /** PATCH /deadlines/:id/status */
@@ -399,6 +564,19 @@ export class DeadlinesService {
     // Hesap penceresi: tetikleyici tarihin yılından itibaren 3 yıl (İİK m.67 gibi 1 yıllık süreler dahil).
     const windowStart = new Date(Date.UTC(input.triggerDate.getUTCFullYear(), 0, 1));
     const windowEnd = addYears(input.triggerDate, 3);
+    // denetim bulgusu Ö-16 — `isHalfDay` / `isApproximate` SÜTUNLARI ÇEKİLİR.
+    // Bu iki alan `select` dışında bırakıldığında motor, bayrakları tatilin
+    // _adından_ okumaya düşüyordu (`buildHolidayIndex` → `name.includes("(yarım
+    // gün)")`); tek bir isim düzenlemesi hesabı sessizce bozmaya yeterdi.
+    //
+    // YARIM GÜNÜN DOĞRU DAVRANIŞI (motorun kuralıyla tutarlı): arife TAM TATİL
+    // DEĞİLDİR. 2429 s.K. m.2/A uyarınca o gün 13.00'e kadar mesai vardır; gün
+    // "resmî tatile rastlamış" sayılmaz ve HMK m.93 / İİK m.19 kaydırması
+    // TETİKLENMEZ (`isNonWorkingDay` → `isFullDayOfficialHoliday`). Son gün arifeye
+    // düşerse süre O GÜN sona erer; motor yalnızca «işlemi 13.00'ten önce
+    // tamamlayınız» uyarısı basar (`collectWarnings` §2). Bayrak gelmezse arife tam
+    // tatil sayılır ve avukata var olmayan 1-3 gün kazandırılırdı.
+    // `isApproximate` ise hicri takvime bağlı bayramlarda teyit uyarısını açar.
     const holidays = await this.prisma.client.holiday.findMany({
       where: { date: { gte: windowStart, lte: windowEnd } },
       orderBy: { date: "asc" },

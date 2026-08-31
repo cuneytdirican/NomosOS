@@ -12,6 +12,7 @@ import { authenticator } from "otplib";
 import * as QRCode from "qrcode";
 import { decryptSecret, encryptSecret } from "@nomosos/ai";
 import { PrismaService } from "../../prisma/prisma.service";
+import { attemptCounter } from "../../auth/attempt-counter";
 import { PlatformAuditService } from "../platform-audit.service";
 import {
   PLATFORM_2FA_AUDIENCE,
@@ -45,26 +46,22 @@ const TOTP_ISSUER = "NomosOS Platform";
  * token'la sınırsız TOTP denemesi yapılabiliyordu (denetim bulgusu 10.2).
  * Sayaç `jti` başına tutulur; sınır aşılınca token iptal edilir.
  *
- * Süreç belleğindedir — `LoginThrottleGuard` ile aynı sınırlama ve aynı
- * gerekçe: çok örnekli dağıtımda Redis'e taşınmalıdır. Hesap düzeyindeki asıl
- * kilit (`PlatformUser.failedAttempts` / `lockedUntil`) VERİTABANINDADIR ve
- * örnekler arasında paylaşılır; bu sayaç onun üzerine konan ikinci settir.
+ * denetim bulgusu Ö-09: SAYAÇ ARTIK SÜREÇ BELLEĞİNDE DEĞİL.
+ * Ortak kova Redis'tedir (`auth/attempt-counter.ts`); üç replikalı bir
+ * kurulumda 3 denemelik sınır 9'a çıkmaz. Hesap düzeyindeki asıl kilit
+ * (`PlatformUser.failedAttempts` / `lockedUntil`) zaten VERİTABANINDADIR;
+ * bu sayaç onun üzerine konan ikinci settir.
  */
-const challengeAttempts = new Map<string, { count: number; expiresAt: number }>();
+const CHALLENGE_WINDOW_MS = 10 * 60_000;
 
-function consumeChallengeAttempt(jti: string): number {
-  const now = Date.now();
-  for (const [key, value] of challengeAttempts) {
-    if (value.expiresAt <= now) challengeAttempts.delete(key);
-  }
-  const bucket = challengeAttempts.get(jti) ?? { count: 0, expiresAt: now + 10 * 60_000 };
-  bucket.count += 1;
-  challengeAttempts.set(jti, bucket);
-  return bucket.count;
+function consumeChallengeAttempt(jti: string): Promise<number> {
+  return attemptCounter()
+    .hit(`platform-2fa|${jti}`, CHALLENGE_WINDOW_MS)
+    .then((hit) => hit.count);
 }
 
-function clearChallenge(jti: string): void {
-  challengeAttempts.delete(jti);
+function clearChallenge(jti: string): Promise<void> {
+  return attemptCounter().reset(`platform-2fa|${jti}`);
 }
 
 /**
@@ -379,7 +376,7 @@ export class PlatformAuthService {
     // TEK KULLANIMLIK KAPI: her deneme challenge'ı biraz daha tüketir. Sınır
     // aşılınca token iptal edilir ve kullanıcı baştan giriş yapmak zorunda
     // kalır — böylece 10 dakikalık pencere sınırsız denemeye açık kalmaz.
-    const attempt = consumeChallengeAttempt(challenge.jti);
+    const attempt = await consumeChallengeAttempt(challenge.jti);
     if (attempt > PLATFORM_MAX_CHALLENGE_ATTEMPTS) {
       await this.registerFailure(
         user.id,
@@ -411,7 +408,7 @@ export class PlatformAuthService {
           locked ? this.lockMessage() : "Doğrulama kodu hatalı. Lütfen tekrar deneyin."
         );
       }
-      clearChallenge(challenge.jti);
+      await clearChallenge(challenge.jti);
       await this.prisma.client.platformUser.update({
         where: { id: user.id },
         data: {
@@ -446,7 +443,7 @@ export class PlatformAuthService {
         locked ? this.lockMessage() : "Doğrulama kodu hatalı. Lütfen tekrar deneyin."
       );
     }
-    clearChallenge(challenge.jti);
+    await clearChallenge(challenge.jti);
     await this.clearFailures(user.id);
     return this.issueSession(user.id, user.email, user.fullName, user.role as AdminRole, true, ip);
   }

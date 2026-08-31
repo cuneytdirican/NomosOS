@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ApiError, api, asList } from "@/lib/api";
+import { ApiError, api, fetchPaged } from "@/lib/api";
 import type { CaseSummary, Deadline } from "@/lib/types";
 import {
   Badge,
@@ -23,11 +23,13 @@ import {
   Field,
   Input,
   Modal,
+  Pagination,
   Select,
   Spinner,
   StatCard,
   Textarea,
 } from "@/components/ui";
+import { RemoteSelect } from "@/components/remote-select";
 import { ComputeNote } from "@/components/compute-note";
 import { DeadlineWizard } from "@/components/deadline-wizard";
 import {
@@ -55,9 +57,15 @@ interface Filters {
 
 const EMPTY_FILTERS: Filters = { status: "", from: "", to: "", caseId: "" };
 
+/** Sayfa boyutu — sunucu zarfı okunduğu için hiçbir kayıt erişilemez kalmaz. */
+const PAGE_SIZE = 50;
+
 export default function SurelerPage() {
   const [deadlines, setDeadlines] = useState<Deadline[]>([]);
-  const [cases, setCases] = useState<CaseSummary[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [caseLabel, setCaseLabel] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
@@ -67,22 +75,33 @@ export default function SurelerPage() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
 
-  const load = useCallback(async (f: Filters) => {
+  /**
+   * GERÇEK SAYFALAMA (denetim bulgusu K-15).
+   *
+   * Önceki kod `limit: "200"` isteyip zarfı atıyordu ve kendi yorumunda
+   * "süre listesi kaçırılmaması gereken bir kayıt olduğu için üst sınıra
+   * yakın çekilir" diyordu. Üst sınıra yakın çekmek sayfalama DEĞİLDİR:
+   * 260 açık süresi olan büroda 60 süre bu ekranda hiç görünmüyordu ve
+   * kırpıldığına dair tek bir işaret yoktu. Artık zarftaki `total` /
+   * `totalPages` okunuyor ve sayfa geçişi var — hiçbir süre erişilemez değil.
+   */
+  const load = useCallback(async (f: Filters, pageNo: number) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await api<unknown>("/deadlines", {
+      const res = await fetchPaged<Deadline>("/deadlines", {
         query: {
           status: f.status || undefined,
           from: f.from || undefined,
           to: f.to || undefined,
           caseId: f.caseId || undefined,
-          // API artık sayfalı döner; süre listesi kaçırılmaması gereken bir
-          // kayıt olduğu için üst sınıra yakın çekilir (Faz 2: sayfalama arayüzü).
-          limit: "200",
         },
+        page: pageNo,
+        limit: PAGE_SIZE,
       });
-      setDeadlines(asList<Deadline>(data));
+      setDeadlines(res.items);
+      setTotal(res.total);
+      setTotalPages(res.totalPages);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Süreler yüklenemedi.");
     } finally {
@@ -91,23 +110,18 @@ export default function SurelerPage() {
   }, []);
 
   useEffect(() => {
-    void load(EMPTY_FILTERS);
-    api<unknown>("/cases", { query: { limit: "200" } })
-      .then((data) => setCases(asList<CaseSummary>(data)))
-      .catch((err) => {
-        // Hatayı sessizce yutmak, kullanıcıya "hiç dosyam yok" izlenimi
-        // veriyordu (denetim bulgusu 20).
-        setCases([]);
-        setError(err instanceof ApiError ? err.message : "Dosya listesi yüklenemedi.");
-      });
-  }, [load]);
+    void load(filters, page);
+    // `filters` bilerek bağımlılık DEĞİL: süzgeçler "Listele" düğmesiyle
+    // uygulanır, her tuşta değil.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load, page]);
 
   async function changeStatus(d: Deadline, status: string) {
     setBusyId(d.id);
     setActionError(null);
     try {
       await api(`/deadlines/${d.id}/status`, { method: "PATCH", body: { status } });
-      await load(filters);
+      await load(filters, page);
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : "Süre durumu güncellenemedi.");
     } finally {
@@ -121,7 +135,7 @@ export default function SurelerPage() {
     setActionError(null);
     try {
       await api(`/deadlines/${d.id}`, { method: "DELETE" });
-      await load(filters);
+      await load(filters, page);
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : "Süre silinemedi.");
     } finally {
@@ -134,7 +148,8 @@ export default function SurelerPage() {
       (d) => d.status !== "TAMAMLANDI" && d.status !== "IPTAL",
     );
     return {
-      total: deadlines.length,
+      // Sunucudaki gerçek toplam (zarftan) — "ekranda gördüğüm kadarı mı?" sorusu biter.
+      total,
       overdue: open.filter((d) => daysUntil(d.dueDate) < 0).length,
       critical: open.filter((d) => {
         const n = daysUntil(d.dueDate);
@@ -142,7 +157,7 @@ export default function SurelerPage() {
       }).length,
       pending: deadlines.filter((d) => d.status === "BEKLIYOR" || d.source === "AI_ONERISI").length,
     };
-  }, [deadlines]);
+  }, [deadlines, total]);
 
   const suggestions = deadlines.filter(
     (d) => d.source === "AI_ONERISI" && d.status === "BEKLIYOR",
@@ -170,26 +185,36 @@ export default function SurelerPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Listelenen Süre" value={stats.total} tone="slate" />
+        {/* İlk kart SUNUCUDAKİ toplamı gösterir; diğer üçü bu sayfada sayılır — */}
+        {/* etiketler bunu açıkça yazar, "listelenen"i "toplam" sanma tuzağı kalkar. */}
+        <StatCard
+          label="Toplam Süre"
+          value={stats.total}
+          tone="slate"
+          hint={totalPages > 1 ? `${totalPages} sayfa` : undefined}
+        />
         <StatCard
           label="Geciken"
           value={stats.overdue}
           tone={stats.overdue > 0 ? "red" : "slate"}
-          hint="Son günü geçmiş, kapatılmamış"
+          hint="Bu sayfada · son günü geçmiş, kapatılmamış"
         />
         <StatCard
           label="Kritik (≤3 gün)"
           value={stats.critical}
           tone={stats.critical > 0 ? "navy" : "slate"}
+          hint="Bu sayfada"
         />
-        <StatCard label="Onay Bekleyen" value={stats.pending} tone="gold" />
+        <StatCard label="Onay Bekleyen" value={stats.pending} tone="gold" hint="Bu sayfada" />
       </div>
 
       <Card>
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            void load(filters);
+            // Süzgeç değişince ilk sayfaya dön — aksi hâlde boş sayfada kalınır.
+            if (page === 1) void load(filters, 1);
+            else setPage(1);
           }}
           className="mb-5 flex flex-wrap items-end gap-4"
         >
@@ -222,20 +247,30 @@ export default function SurelerPage() {
               onChange={(e) => setFilters({ ...filters, to: e.target.value })}
             />
           </Field>
+          {/*
+            Dosya süzgeci SUNUCUDA aranır (denetim bulguları K-15, K-16).
+            Önceden `/cases?limit=200` ile tek atışta çekiliyordu; 201. dosya
+            bu açılır listede HİÇ seçilemiyordu.
+          */}
           <div className="w-64">
             <Field label="Dosya">
-              <Select
+              <RemoteSelect<CaseSummary>
+                path="/cases"
                 value={filters.caseId}
-                onChange={(e) => setFilters({ ...filters, caseId: e.target.value })}
-              >
-                <option value="">Tüm dosyalar</option>
-                {cases.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.title}
-                    {c.fileNumber ? ` (${c.fileNumber})` : ""}
-                  </option>
-                ))}
-              </Select>
+                selectedLabel={caseLabel}
+                onChange={(id, opt) => {
+                  setFilters({ ...filters, caseId: id });
+                  setCaseLabel(opt?.label ?? "");
+                }}
+                toOption={(c) => ({
+                  id: c.id,
+                  label: c.title,
+                  hint: c.fileNumber ?? undefined,
+                })}
+                placeholder="Tüm dosyalar — aramak için yazın…"
+                emptyMessage="Eşleşen dosya yok."
+                ariaLabel="Dosya ara ve süz"
+              />
             </Field>
           </div>
           <Button type="submit" disabled={loading}>
@@ -245,7 +280,9 @@ export default function SurelerPage() {
             variant="ghost"
             onClick={() => {
               setFilters(EMPTY_FILTERS);
-              void load(EMPTY_FILTERS);
+              setCaseLabel("");
+              if (page === 1) void load(EMPTY_FILTERS, 1);
+              else setPage(1);
             }}
           >
             Filtreyi temizle
@@ -361,6 +398,15 @@ export default function SurelerPage() {
                 );
               })}
             </ul>
+
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              noun="süre"
+              loading={loading}
+              onPageChange={setPage}
+            />
           </div>
         )}
       </Card>
@@ -368,14 +414,13 @@ export default function SurelerPage() {
       <DeadlineWizard
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
-        onSaved={() => void load(filters)}
+        onSaved={() => void load(filters, page)}
       />
 
       <ManualDeadlineModal
         open={manualOpen}
-        cases={cases}
         onClose={() => setManualOpen(false)}
-        onSaved={() => void load(filters)}
+        onSaved={() => void load(filters, page)}
       />
     </div>
   );
@@ -433,16 +478,15 @@ function DeadlineRow({ deadline: d }: { deadline: Deadline }) {
 
 function ManualDeadlineModal({
   open,
-  cases,
   onClose,
   onSaved,
 }: {
   open: boolean;
-  cases: CaseSummary[];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [caseId, setCaseId] = useState("");
+  const [caseLabel, setCaseLabel] = useState("");
   const [title, setTitle] = useState("");
   const [dueDate, setDueDate] = useState(toIsoDate(new Date()));
   const [legalBasis, setLegalBasis] = useState("");
@@ -491,18 +535,21 @@ function ManualDeadlineModal({
           Mevzuat kuralına dayanan süreler için <strong>Kuraldan Süre Oluştur</strong> akışını
           kullanın — hesap izi ve dayanak otomatik kaydedilir.
         </p>
-        <Field label="Dosya">
-          <Select value={caseId} onChange={(e) => setCaseId(e.target.value)} required>
-            <option value="" disabled>
-              Dosya seçin…
-            </option>
-            {cases.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.title}
-                {c.fileNumber ? ` (${c.fileNumber})` : ""}
-              </option>
-            ))}
-          </Select>
+        {/* Dosya SUNUCUDA aranır — 201. dosya da seçilebilir (denetim bulgusu K-15). */}
+        <Field label="Dosya" hint="Başlık veya esas no yazarak arayın">
+          <RemoteSelect<CaseSummary>
+            path="/cases"
+            value={caseId}
+            selectedLabel={caseLabel}
+            onChange={(id, opt) => {
+              setCaseId(id);
+              setCaseLabel(opt?.label ?? "");
+            }}
+            toOption={(c) => ({ id: c.id, label: c.title, hint: c.fileNumber ?? undefined })}
+            placeholder="Dosya arayın…"
+            emptyMessage="Eşleşen dosya yok."
+            ariaLabel="Dosya ara ve seç"
+          />
         </Field>
         <Field label="Başlık">
           <Input

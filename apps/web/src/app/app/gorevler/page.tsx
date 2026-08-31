@@ -11,9 +11,18 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ApiError, api, asList } from "@/lib/api";
+import { ApiError, api, fetchPaged, DEFAULT_PAGE_SIZE } from "@/lib/api";
 import type { Task } from "@/lib/types";
-import { Badge, Button, Card, EmptyState, ErrorBox, Spinner, StatCard } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  ErrorBox,
+  Pagination,
+  Spinner,
+  StatCard,
+} from "@/components/ui";
 import { TaskDetailModal } from "@/components/task-detail-modal";
 import { TaskProgress } from "@/components/task-progress";
 import {
@@ -45,15 +54,27 @@ export default function GorevlerPage() {
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [openTaskFallback, setOpenTaskFallback] = useState<Task | null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
-  const load = useCallback(async (status: string) => {
+  /**
+   * GERÇEK SAYFALAMA (denetim bulgusu K-15).
+   * Önceden `limit: "200"` isteniyor, zarftaki `total` atılıyordu: 200'den
+   * fazla görevi olan büroda kalan görevler hiçbir ekranda görünmüyordu.
+   */
+  const load = useCallback(async (status: string, pageNo: number) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await api<unknown>("/tasks", {
-        query: { status: status || undefined, limit: "200" },
+      const res = await fetchPaged<Task>("/tasks", {
+        query: { status: status || undefined },
+        page: pageNo,
+        limit: DEFAULT_PAGE_SIZE,
       });
-      setTasks(asList<Task>(data));
+      setTasks(res.items);
+      setTotal(res.total);
+      setTotalPages(res.totalPages);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Görevler yüklenemedi.");
     } finally {
@@ -62,8 +83,8 @@ export default function GorevlerPage() {
   }, []);
 
   useEffect(() => {
-    void load(filter);
-  }, [filter, load]);
+    void load(filter, page);
+  }, [filter, page, load]);
 
   async function advance(task: Task, status: TaskStatus) {
     setUpdatingId(task.id);
@@ -72,7 +93,7 @@ export default function GorevlerPage() {
     setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status } : t)));
     try {
       await api(`/tasks/${task.id}/status`, { method: "PATCH", body: { status } });
-      await load(filter);
+      await load(filter, page);
     } catch (err) {
       setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: previous } : t)));
       setUpdateError(err instanceof ApiError ? err.message : "Görev durumu güncellenemedi.");
@@ -105,25 +126,52 @@ export default function GorevlerPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Listelenen" value={tasks.length} tone="navy" />
-        <StatCard label="Devam Ediyor" value={counts.DEVAM_EDIYOR ?? 0} tone="slate" />
-        <StatCard label="Onay Bekliyor" value={counts.ONAY_BEKLIYOR ?? 0} tone="gold" />
+        {/* İlk kart sunucudaki gerçek toplam; diğerleri bu sayfanın sayımı. */}
+        <StatCard
+          label="Toplam Görev"
+          value={total}
+          tone="navy"
+          hint={totalPages > 1 ? `${totalPages} sayfa` : undefined}
+        />
+        <StatCard
+          label="Devam Ediyor"
+          value={counts.DEVAM_EDIYOR ?? 0}
+          tone="slate"
+          hint="Bu sayfada"
+        />
+        <StatCard
+          label="Onay Bekliyor"
+          value={counts.ONAY_BEKLIYOR ?? 0}
+          tone="gold"
+          hint="Bu sayfada"
+        />
         <StatCard
           label="Süresi Geçmiş"
           value={overdue}
           tone={overdue > 0 ? "red" : "slate"}
-          hint="Son tarihi geçen açık görev"
+          hint="Bu sayfada · son tarihi geçen açık görev"
         />
       </div>
 
       {/* Durum filtresi — sekme şeridi */}
       <div className="flex flex-wrap gap-2">
-        <FilterChip active={filter === ""} onClick={() => setFilter("")} label="Tümü" />
+        <FilterChip
+          active={filter === ""}
+          onClick={() => {
+            setFilter("");
+            setPage(1);
+          }}
+          label="Tümü"
+        />
         {TASK_STATUSES.map((s) => (
           <FilterChip
             key={s}
             active={filter === s}
-            onClick={() => setFilter(s)}
+            onClick={() => {
+              setFilter(s);
+              // Süzgeç değişince ilk sayfaya dön.
+              setPage(1);
+            }}
             label={labelOf(TASK_STATUS_LABELS, s)}
           />
         ))}
@@ -226,6 +274,16 @@ export default function GorevlerPage() {
                 </li>
               );
             })}
+            <li>
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                total={total}
+                noun="görev"
+                loading={loading}
+                onPageChange={setPage}
+              />
+            </li>
           </ul>
         )}
       </Card>
@@ -238,7 +296,7 @@ export default function GorevlerPage() {
           setOpenTaskId(null);
           setOpenTaskFallback(null);
         }}
-        onChanged={() => void load(filter)}
+        onChanged={() => void load(filter, page)}
       />
     </div>
   );

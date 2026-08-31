@@ -15,11 +15,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ApiError, api, asList } from "@/lib/api";
+import { ApiError, DEFAULT_PAGE_SIZE } from "@/lib/api";
+import { RemoteSelect } from "@/components/remote-select";
 import { errText, isMissingEndpoint } from "@/lib/faz2";
 import {
   createEnforcementFile,
-  listEnforcementFiles,
+  listEnforcementFilesPaged,
   type CreateEnforcementBody,
 } from "@/lib/enforcement";
 import type { EnforcementFile } from "@/lib/faz3-types";
@@ -34,6 +35,7 @@ import {
   Input,
   Modal,
   Select,
+  Pagination,
   Spinner,
   StatCard,
   Textarea,
@@ -67,7 +69,10 @@ type FormState = typeof EMPTY_FORM;
 
 export default function IcraListPage() {
   const [files, setFiles] = useState<EnforcementFile[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
+  const [clientLabel, setClientLabel] = useState("");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [missing, setMissing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,13 +88,17 @@ export default function IcraListPage() {
     setLoading(true);
     setError(null);
     try {
-      const list = await listEnforcementFiles({
+      // Zarf okunur; `total` artık atılmıyor (denetim bulgusu K-15).
+      const res = await listEnforcementFilesPaged({
         stage: stage || undefined,
         trackingType: trackingType || undefined,
         clientId: clientId || undefined,
-        limit: 200,
+        page,
+        limit: DEFAULT_PAGE_SIZE,
       });
-      setFiles(list);
+      setFiles(res.items);
+      setTotal(res.total);
+      setTotalPages(res.totalPages);
       setMissing(false);
     } catch (err) {
       if (isMissingEndpoint(err)) {
@@ -101,17 +110,12 @@ export default function IcraListPage() {
     } finally {
       setLoading(false);
     }
-  }, [stage, trackingType, clientId]);
+  }, [stage, trackingType, clientId, page]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    void api<unknown>("/clients", { query: { limit: 200 } })
-      .then((p) => setClients(asList<Client>(p)))
-      .catch(() => setClients([]));
-  }, []);
 
   /** Sunucu süzgeci uygulamazsa istemcide de daralt (yanlış liste göstermemek için). */
   const visible = useMemo(() => {
@@ -186,15 +190,26 @@ export default function IcraListPage() {
               ))}
             </Select>
           </Field>
+          {/*
+            Müvekkil süzgeci SUNUCUDA aranır (denetim bulguları K-15, K-16).
+            Önceden `/clients?limit=200` çekiliyordu; ucun tavanı 100 olduğu
+            için 101. müvekkil bu süzgeçte HİÇ seçilemiyordu.
+          */}
           <Field label="Müvekkil (alacaklı)">
-            <Select value={clientId} onChange={(e) => setClientId(e.target.value)}>
-              <option value="">Tümü</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
+            <RemoteSelect<Client>
+              path="/clients"
+              value={clientId}
+              selectedLabel={clientLabel}
+              onChange={(id, opt) => {
+                setClientId(id);
+                setClientLabel(opt?.label ?? "");
+                setPage(1);
+              }}
+              toOption={(c) => ({ id: c.id, label: c.name })}
+              placeholder="Tümü — aramak için yazın…"
+              emptyMessage="Eşleşen müvekkil yok."
+              ariaLabel="Müvekkil ara ve süz"
+            />
           </Field>
         </div>
       </Card>
@@ -284,6 +299,16 @@ export default function IcraListPage() {
               </tbody>
             </table>
           </div>
+
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            total={total}
+            noun="icra dosyası"
+            loading={loading}
+            onPageChange={setPage}
+          />
+
           <p className="mt-4 text-[11px] leading-5 text-slate-400">
             Tahsil edilen ve kalan tutarlar sunucudaki deterministik bakiye hesabından gelir
             (mahsup sırası: masraf → faiz → asıl alacak). Boş görünen hücre, sunucunun o dosya
@@ -321,7 +346,7 @@ function NewEnforcementModal({
   onClose: () => void;
   onCreated: (file: EnforcementFile) => void;
 }) {
-  const [cases, setCases] = useState<CaseSummary[]>([]);
+  const [caseLabel, setCaseLabel] = useState("");
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -329,17 +354,9 @@ function NewEnforcementModal({
   useEffect(() => {
     if (!open) return;
     setForm(EMPTY_FORM);
+    setCaseLabel("");
     setError(null);
-    void api<unknown>("/cases", { query: { type: "ICRA", limit: 200 } })
-      .then((p) => setCases(asList<CaseSummary>(p).filter((c) => c.type === "ICRA")))
-      .catch(() => setCases([]));
   }, [open]);
-
-  /** Case ↔ EnforcementFile 1:1'dir; takibi açılmış dosya listede gösterilmez. */
-  const available = useMemo(
-    () => cases.filter((c) => !existingCaseIds.includes(c.id)),
-    [cases, existingCaseIds],
-  );
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -377,24 +394,36 @@ function NewEnforcementModal({
           label="Bağlı dosya (ICRA tipli)"
           hint="Her Case'e yalnızca bir icra dosyası açılabilir; takibi açılmış dosyalar listede yer almaz."
         >
-          <Select
+          {/*
+            Dosya SUNUCUDA aranır (denetim bulguları K-15, K-16). Önceden
+            `/cases?type=ICRA&limit=200` ile tek atışta çekiliyordu; 201. icra
+            dosyası bu listede HİÇ seçilemiyor, o dosyaya takip açılamıyordu.
+            Case ↔ EnforcementFile 1:1'dir; takibi açılmış dosya elenir.
+          */}
+          <RemoteSelect<CaseSummary>
+            path="/cases"
+            query={{ type: "ICRA" }}
             value={form.caseId}
-            onChange={(e) => setForm({ ...form, caseId: e.target.value })}
-            required
-          >
-            <option value="">Seçiniz…</option>
-            {available.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.title}
-                {c.client?.name ? ` — ${c.client.name}` : ""}
-              </option>
-            ))}
-          </Select>
+            selectedLabel={caseLabel}
+            onChange={(id, opt) => {
+              setForm({ ...form, caseId: id });
+              setCaseLabel(opt?.label ?? "");
+            }}
+            toOption={(c) => ({
+              id: c.id,
+              label: c.title,
+              hint: existingCaseIds.includes(c.id)
+                ? "takip zaten açık"
+                : (c.client?.name ?? undefined),
+            })}
+            placeholder="ICRA tipli dosya arayın…"
+            emptyMessage="Eşleşen ICRA tipli dosya yok — önce Dosyalar ekranından açın."
+            ariaLabel="İcra dosyası ara ve seç"
+          />
         </Field>
-        {available.length === 0 && (
-          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-            Takip açılabilecek ICRA tipli dosya bulunamadı. Önce Dosyalar ekranından tür olarak
-            &quot;İcra&quot; seçilmiş bir dosya oluşturun.
+        {form.caseId && existingCaseIds.includes(form.caseId) && (
+          <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            Bu dosyada zaten bir icra takibi açık. Her dosyaya yalnızca bir takip açılabilir.
           </p>
         )}
 
@@ -484,7 +513,10 @@ function NewEnforcementModal({
           <Button variant="secondary" onClick={onClose}>
             Vazgeç
           </Button>
-          <Button type="submit" disabled={saving || available.length === 0}>
+          <Button
+            type="submit"
+            disabled={saving || !form.caseId || existingCaseIds.includes(form.caseId)}
+          >
             {saving ? "Oluşturuluyor…" : "Takibi Aç"}
           </Button>
         </div>

@@ -19,12 +19,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ApiError, api, asList } from "@/lib/api";
+import { ApiError, DEFAULT_PAGE_SIZE } from "@/lib/api";
+import { RemoteSelect } from "@/components/remote-select";
 import { errText, isMissingEndpoint } from "@/lib/faz2";
 import {
   DEFAULT_VAT_RATE,
   createInvoice,
-  listInvoices,
+  listInvoicesPaged,
   listUnbilledTimeEntries,
   type InvoiceLineInput,
 } from "@/lib/billing";
@@ -40,6 +41,7 @@ import {
   Input,
   Modal,
   Select,
+  Pagination,
   Spinner,
   StatCard,
   Textarea,
@@ -63,7 +65,10 @@ import {
 export default function FaturalarPage() {
   const router = useRouter();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
+  const [clientLabel, setClientLabel] = useState("");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [missing, setMissing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,13 +82,16 @@ export default function FaturalarPage() {
     setLoading(true);
     setError(null);
     try {
-      setInvoices(
-        await listInvoices({
-          status: status || undefined,
-          clientId: clientId || undefined,
-          limit: 200,
-        }),
-      );
+      // Zarf okunur; `total` artık atılmıyor (denetim bulgusu K-15).
+      const res = await listInvoicesPaged({
+        status: status || undefined,
+        clientId: clientId || undefined,
+        page,
+        limit: DEFAULT_PAGE_SIZE,
+      });
+      setInvoices(res.items);
+      setTotal(res.total);
+      setTotalPages(res.totalPages);
       setMissing(false);
     } catch (err) {
       if (isMissingEndpoint(err)) {
@@ -95,17 +103,12 @@ export default function FaturalarPage() {
     } finally {
       setLoading(false);
     }
-  }, [status, clientId]);
+  }, [status, clientId, page]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    void api<unknown>("/clients", { query: { limit: 200 } })
-      .then((p) => setClients(asList<Client>(p)))
-      .catch(() => setClients([]));
-  }, []);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -133,7 +136,12 @@ export default function FaturalarPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Toplam Fatura" value={invoices.length} tone="navy" />
+        <StatCard
+          label="Toplam Fatura"
+          value={total}
+          tone="navy"
+          hint={totalPages > 1 ? `${totalPages} sayfa` : undefined}
+        />
         <StatCard label="Taslak" value={counts.TASLAK ?? 0} tone="slate" />
         <StatCard
           label="Kısmi / Bekleyen"
@@ -155,15 +163,26 @@ export default function FaturalarPage() {
               ))}
             </Select>
           </Field>
+          {/*
+            Müvekkil süzgeci SUNUCUDA aranır (denetim bulguları K-15, K-16).
+            Önceden `/clients?limit=200` çekiliyordu; ucun tavanı 100 olduğu
+            için 101. müvekkil bu süzgeçte HİÇ seçilemiyordu.
+          */}
           <Field label="Müvekkil">
-            <Select value={clientId} onChange={(e) => setClientId(e.target.value)}>
-              <option value="">Tümü</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
+            <RemoteSelect<Client>
+              path="/clients"
+              value={clientId}
+              selectedLabel={clientLabel}
+              onChange={(id, opt) => {
+                setClientId(id);
+                setClientLabel(opt?.label ?? "");
+                setPage(1);
+              }}
+              toOption={(c) => ({ id: c.id, label: c.name })}
+              placeholder="Tümü — aramak için yazın…"
+              emptyMessage="Eşleşen müvekkil yok."
+              ariaLabel="Müvekkil ara ve süz"
+            />
           </Field>
         </div>
       </Card>
@@ -247,13 +266,21 @@ export default function FaturalarPage() {
                 })}
               </tbody>
             </table>
+
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              noun="fatura"
+              loading={loading}
+              onPageChange={setPage}
+            />
           </div>
         </Card>
       )}
 
       <ManualInvoiceModal
         open={manualOpen}
-        clients={clients}
         onClose={() => setManualOpen(false)}
         onCreated={(inv) => {
           setManualOpen(false);
@@ -265,7 +292,6 @@ export default function FaturalarPage() {
 
       <TimeEntryInvoiceModal
         open={timeOpen}
-        clients={clients}
         onClose={() => setTimeOpen(false)}
         onCreated={(inv) => {
           setTimeOpen(false);
@@ -298,16 +324,15 @@ const EMPTY_LINE: LineForm = {
 
 function ManualInvoiceModal({
   open,
-  clients,
   onClose,
   onCreated,
 }: {
   open: boolean;
-  clients: Client[];
   onClose: () => void;
   onCreated: (inv: Invoice) => void;
 }) {
   const [clientId, setClientId] = useState("");
+  const [clientLabel, setClientLabel] = useState("");
   const [issueDate, setIssueDate] = useState(toIsoDate(new Date()));
   const [dueDate, setDueDate] = useState(toIsoDate(addDays(new Date(), 30)));
   const [note, setNote] = useState("");
@@ -380,15 +405,21 @@ function ManualInvoiceModal({
     <Modal open={open} title="Yeni Fatura (Taslak)" onClose={onClose} wide>
       <form onSubmit={submit} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-3">
+          {/* Müvekkil SUNUCUDA aranır — 101. müvekkil de seçilebilir (K-15). */}
           <Field label="Müvekkil">
-            <Select value={clientId} onChange={(e) => setClientId(e.target.value)} required>
-              <option value="">Seçiniz…</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
+            <RemoteSelect<Client>
+              path="/clients"
+              value={clientId}
+              selectedLabel={clientLabel}
+              onChange={(id, opt) => {
+                setClientId(id);
+                setClientLabel(opt?.label ?? "");
+              }}
+              toOption={(c) => ({ id: c.id, label: c.name })}
+              placeholder="Müvekkil arayın…"
+              emptyMessage="Eşleşen müvekkil yok."
+              ariaLabel="Müvekkil ara ve seç"
+            />
           </Field>
           <Field label="Düzenleme tarihi">
             <Input
@@ -533,16 +564,15 @@ function ManualInvoiceModal({
 
 function TimeEntryInvoiceModal({
   open,
-  clients,
   onClose,
   onCreated,
 }: {
   open: boolean;
-  clients: Client[];
   onClose: () => void;
   onCreated: (inv: Invoice) => void;
 }) {
   const [clientId, setClientId] = useState("");
+  const [clientLabel, setClientLabel] = useState("");
   const [dateFrom, setDateFrom] = useState(toIsoDate(addDays(new Date(), -30)));
   const [dateTo, setDateTo] = useState(toIsoDate(new Date()));
   const [entries, setEntries] = useState<TimeEntry[]>([]);
@@ -609,22 +639,22 @@ function TimeEntryInvoiceModal({
       <form onSubmit={submit} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-4">
           <Field label="Müvekkil">
-            <Select
+            {/* Müvekkil SUNUCUDA aranır — 101. müvekkil de seçilebilir (K-15). */}
+            <RemoteSelect<Client>
+              path="/clients"
               value={clientId}
-              onChange={(e) => {
-                setClientId(e.target.value);
+              selectedLabel={clientLabel}
+              onChange={(id, opt) => {
+                setClientId(id);
+                setClientLabel(opt?.label ?? "");
                 setSearched(false);
                 setEntries([]);
               }}
-              required
-            >
-              <option value="">Seçiniz…</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
+              toOption={(c) => ({ id: c.id, label: c.name })}
+              placeholder="Müvekkil arayın…"
+              emptyMessage="Eşleşen müvekkil yok."
+              ariaLabel="Müvekkil ara ve seç"
+            />
           </Field>
           <Field label="Başlangıç">
             <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />

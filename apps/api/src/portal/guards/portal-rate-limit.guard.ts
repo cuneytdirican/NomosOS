@@ -9,6 +9,7 @@ import {
 import { Reflector } from "@nestjs/core";
 import type { Request } from "express";
 import type { PortalAuthUser } from "../portal.types";
+import { attemptCounter } from "../../auth/attempt-counter";
 
 export const PORTAL_RATE_LIMIT_KEY = "portalRateLimit";
 
@@ -27,13 +28,6 @@ export interface PortalRateLimitOptions {
 export const PortalRateLimit = (options: PortalRateLimitOptions) =>
   SetMetadata(PORTAL_RATE_LIMIT_KEY, options);
 
-/** Sayaç tablosunun sınırsız büyümesini önleyen üst sınır. */
-const MAX_TRACKED_KEYS = 20_000;
-
-interface Bucket {
-  count: number;
-  resetAt: number;
-}
 
 /**
  * PORTAL HIZ SINIRLAYICI — bellek içi, bağımlılıksız.
@@ -46,10 +40,10 @@ interface Bucket {
  *     büro tarafında bir kuyruk satırı (InboundMessage) doğurur; sınırsız
  *     gönderim avukatın gelen kutusunu boğardı. Anahtar = IP + portalUserId.
  *
- * KAPSAM: sayaç SÜREÇ BELLEĞİNDEDİR. Çok örnekli dağıtımda Redis'e taşınmalıdır
- * (görev tanımı bunu bu fazda zorunlu tutmuyor). Bellek içi sayaç, tek örnekli
- * kurulumda gerçek koruma sağlar; çok örnekli kurulumda korumayı örnek sayısı
- * kadar zayıflatır — ama hiç sınır olmamasından iyidir.
+ * denetim bulgusu Ö-09: SAYAÇ ARTIK SÜREÇ BELLEĞİNDE DEĞİL. Ortak kova
+ * `auth/attempt-counter.ts` üzerinden Redis'tedir; üç replikalı kurulumda
+ * portal giriş sınırı 5'ten 15'e çıkmaz. Redis yoksa süreç-içi kovaya
+ * düşülür ve açılışta uyarı basılır — API yine açılır.
  *
  * BU, HESAP KİLİDİNİN YERİNE GEÇMEZ: dağıtık bir deneme farklı IP'lerden
  * gelirse ayrı kovalara düşer. Hesap düzeyindeki kilit `PortalAuthService`
@@ -57,11 +51,9 @@ interface Bucket {
  */
 @Injectable()
 export class PortalRateLimitGuard implements CanActivate {
-  private readonly buckets = new Map<string, Bucket>();
-
   constructor(private readonly reflector: Reflector) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const options = this.reflector.getAllAndOverride<PortalRateLimitOptions>(
       PORTAL_RATE_LIMIT_KEY,
       [context.getHandler(), context.getClass()]
@@ -72,19 +64,12 @@ export class PortalRateLimitGuard implements CanActivate {
     const request = context
       .switchToHttp()
       .getRequest<Request & { portalUser?: PortalAuthUser }>();
-    const key = `${options.bucket}|${this.identity(request)}`;
+    const key = `portal|${options.bucket}|${this.identity(request)}`;
     const now = Date.now();
 
-    const bucket = this.buckets.get(key);
-    if (!bucket || bucket.resetAt <= now) {
-      this.buckets.set(key, { count: 1, resetAt: now + options.windowMs });
-      this.prune(now);
-      return true;
-    }
-
-    bucket.count += 1;
-    if (bucket.count > options.limit) {
-      const seconds = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+    const hit = await attemptCounter().hit(key, options.windowMs, now);
+    if (hit.count > options.limit) {
+      const seconds = Math.max(1, Math.ceil((hit.resetAt - now) / 1000));
       throw new HttpException(
         `Çok fazla istek gönderildi. Lütfen ${seconds} saniye sonra tekrar deneyin.`,
         HttpStatus.TOO_MANY_REQUESTS
@@ -94,8 +79,8 @@ export class PortalRateLimitGuard implements CanActivate {
   }
 
   /** Başarılı girişte sayacı sıfırlar — meşru kullanıcı cezalandırılmasın. */
-  reset(request: Request, bucket: string): void {
-    this.buckets.delete(`${bucket}|${this.identity(request)}`);
+  async reset(request: Request, bucket: string): Promise<void> {
+    await attemptCounter().reset(`portal|${bucket}|${this.identity(request)}`);
   }
 
   /**
@@ -116,10 +101,4 @@ export class PortalRateLimitGuard implements CanActivate {
     return `${ip}|-`;
   }
 
-  private prune(now: number): void {
-    if (this.buckets.size < MAX_TRACKED_KEYS) return;
-    for (const [key, bucket] of this.buckets) {
-      if (bucket.resetAt <= now) this.buckets.delete(key);
-    }
-  }
 }

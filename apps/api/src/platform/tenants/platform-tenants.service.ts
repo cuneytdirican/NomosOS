@@ -1,4 +1,9 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import type { Prisma, SubscriptionStatus } from "@nomosos/db";
 import { PrismaService } from "../../prisma/prisma.service";
 import { normalizeQuery, paged, resolvePage } from "../../common/pagination";
@@ -440,6 +445,40 @@ export class PlatformTenantsService {
    * SupportAccessGrant executor tarafından oluşturulur ve çift taraflı
    * (platform + büro) denetim kaydı yazılır.
    */
+  /**
+   * KALICI SİLME TALEBİ — DÖRT-GÖZ (denetim bulgusu Ö-28).
+   *
+   * Spec dört-göz listesinin 1. maddesi kodda hiç yoktu, çünkü uç de yoktu:
+   * `DELETE /tenants/:id` mevcut değildi ve KVKK veri özne haklarının imha
+   * ayağı uygulanmamıştı. İşlem GERİ ALINAMAZ olduğu için burada yalnız
+   * TALEP açılır; imha, ikinci imzadan sonra executor'da yürütülür.
+   */
+  async requestDelete(
+    user: PlatformAuthUser,
+    id: string,
+    input: { confirmName: string; reason: string }
+  ) {
+    const tenant = await this.prisma.client.tenant.findUnique({
+      where: { id },
+      select: { id: true, name: true },
+    });
+    if (!tenant) throw new NotFoundException("Büro bulunamadı.");
+    if (tenant.name.trim() !== input.confirmName.trim()) {
+      throw new BadRequestException(
+        `Doğrulama başarısız: büronun adı "${tenant.name}". Kalıcı silme talebi ` +
+          "açmak için adı birebir yazın."
+      );
+    }
+    return this.approvals.request(user, {
+      action: APPROVAL_ACTIONS.TENANT_DELETE,
+      tenantId: tenant.id,
+      payload: { tenantId: tenant.id, confirmName: tenant.name, reason: input.reason },
+      summary:
+        `"${tenant.name}" bürosunun TÜM verisi kalıcı olarak silinecek. Bu işlem ` +
+        `GERİ ALINAMAZ. Gerekçe: ${input.reason}`,
+    });
+  }
+
   async requestSupportAccess(
     user: PlatformAuthUser,
     tenantId: string,

@@ -11,6 +11,16 @@ import type { AdminAction } from "../platform-permissions";
  * `payloadJson` içinde SIR TUTULMAZ (parolalar hash'lenmiş olarak girer).
  */
 export const APPROVAL_ACTIONS = {
+  /**
+   * TENANT KALICI SİLME / VERİ İMHASI — spec §Roller dört-göz listesi MADDE 1.
+   *
+   * denetim bulgusu Ö-28: katalog spec'in 1. ve 8. maddesini kapsamıyordu,
+   * çünkü bu iki işlem için uç de yoktu. İkisi de eklendi. Silme, onay anında
+   * yürütülür ve GERİ ALINAMAZ; bu yüzden talep gövdesi kiracının adını
+   * doğrulama olarak ister ve yalnız SUPER_ADMIN talep/onay edebilir
+   * (matris: tenant.delete → four_eyes yalnız SUPER_ADMIN).
+   */
+  TENANT_DELETE: "TENANT_DELETE",
   TENANT_SUSPEND: "TENANT_SUSPEND",
   TENANT_ACTIVATE: "TENANT_ACTIVATE",
   SUBSCRIPTION_PLAN_CHANGE: "SUBSCRIPTION_PLAN_CHANGE",
@@ -62,6 +72,23 @@ export const APPROVAL_ACTIONS = {
    * bu talebe dâhildir; muafiyet, kotayı tamamen kaldıran bir ticari karardır.
    */
   CREDIT_MANUAL_ADJUST: "CREDIT_MANUAL_ADJUST",
+  /**
+   * YENİ PLAN OLUŞTURMA (denetim bulgusu K-11).
+   *
+   * `patchPlan`'ın fiyat dalı dört-göze düşerken `createPlan` FİYATLI YEPYENİ
+   * bir planı tek imzayla yaratıyordu; panel ise aynı işlem için dört-göz
+   * rozetini gösteriyordu. Fiyat koymanın en güçlü biçimi yeni bir fiyatlı
+   * ürün yaratmaktır — iki imza ister.
+   */
+  PLAN_CREATE: "PLAN_CREATE",
+  /**
+   * PLATFORM DENETİM İZİ DIŞA AKTARIMI — spec §Roller dört-göz listesi MADDE 8.
+   *
+   * denetim bulgusu Ö-28. Dışa aktarım, 10 yıl saklanan denetim izinin
+   * tamamını panel dışına taşır; tek imzayla yapılamaz. Onaylandıktan sonra
+   * dışa aktarım TEK SEFERLİKTİR ve indirme de PlatformAuditLog'a yazılır.
+   */
+  AUDIT_EXPORT: "AUDIT_EXPORT",
 } as const;
 
 export type ApprovalActionKey = (typeof APPROVAL_ACTIONS)[keyof typeof APPROVAL_ACTIONS];
@@ -74,22 +101,29 @@ export type ApprovalActionKey = (typeof APPROVAL_ACTIONS)[keyof typeof APPROVAL_
  * SUPPORT_AGENT iade talebini onaylayamaz (payment.refund → none).
  */
 export const APPROVAL_REQUIRED_PERMISSION: Record<ApprovalActionKey, AdminAction> = {
+  TENANT_DELETE: "tenant.delete",
   TENANT_SUSPEND: "tenant.suspend",
   TENANT_ACTIVATE: "tenant.reactivate",
   SUBSCRIPTION_PLAN_CHANGE: "tenant.plan_change",
-  SUBSCRIPTION_CANCEL: "subscription.transition",
+  SUBSCRIPTION_CANCEL: "subscription.cancel",
   PAYMENT_REFUND: "payment.refund",
   SUPPORT_ACCESS_GRANT: "support_grant.request",
   SYSTEM_MAINTENANCE_LOCK: "system.maintenance_lock",
   FEATURE_FLAG_GLOBAL: "system.flag_global_write",
   PLATFORM_USER_SUPER_ADMIN: "platform_user.assign_super_admin",
-  PLATFORM_USER_CREATE: "platform_user.manage",
-  PLATFORM_USER_CREDENTIAL_RESET: "platform_user.manage",
-  PLAN_PRICE_CHANGE: "plan.catalog.write",
+  // denetim bulgusu K-11: bu üç işlem artık KENDİ matris satırına bakıyor;
+  // "manage"/"write" satırları (ad düzeltme, kilit açma, katalog düzeni)
+  // doğrudan kalır, dört-göz olan alt işlem ayrı aksiyondur.
+  PLATFORM_USER_CREATE: "platform_user.create",
+  PLATFORM_USER_CREDENTIAL_RESET: "platform_user.credential_reset",
+  PLAN_PRICE_CHANGE: "plan.catalog.price",
+  PLAN_CREATE: "plan.catalog.price",
+  AUDIT_EXPORT: "audit.export",
   CREDIT_MANUAL_ADJUST: "credits.tenant.adjust",
 };
 
 export const APPROVAL_LABELS: Record<ApprovalActionKey, string> = {
+  TENANT_DELETE: "Tenant kalıcı silme / veri imhası",
   TENANT_SUSPEND: "Tenant askıya alma",
   TENANT_ACTIVATE: "Tenant aktifleştirme",
   SUBSCRIPTION_PLAN_CHANGE: "Plan / koltuk değişikliği",
@@ -103,6 +137,8 @@ export const APPROVAL_LABELS: Record<ApprovalActionKey, string> = {
   PLATFORM_USER_CREDENTIAL_RESET: "Panel kullanıcısının parola/2FA sıfırlaması",
   PLAN_PRICE_CHANGE: "Plan kataloğu fiyat değişikliği",
   CREDIT_MANUAL_ADJUST: "Manuel kredi tahsisi / kota düzeltmesi",
+  PLAN_CREATE: "Yeni plan oluşturma",
+  AUDIT_EXPORT: "Platform denetim izi dışa aktarımı",
 };
 
 export function isApprovalAction(value: string): value is ApprovalActionKey {
@@ -157,10 +193,57 @@ export interface FeatureFlagGlobalPayload {
 }
 
 export interface SuperAdminPayload {
-  /** Var olan kullanıcıyı yükseltme. */
+  /** Var olan kullanıcıyı yükseltme / düşürme / pasifleştirme. */
   targetUserId?: string;
   /** Yeni kullanıcı oluşturma (parola HASH'lenmiş gelir, düz metin ASLA). */
   newUser?: { email: string; fullName: string; passwordHash: string };
+  /**
+   * denetim bulgusu Ö-02: SUPER_ADMIN'İ DÜŞÜRME VE PASİFLEŞTİRME DE DÖRT-GÖZ.
+   *
+   * Spec §Roller madde 7 "yeni SUPER_ADMIN atama / mevcut SUPER_ADMIN'i
+   * DÜŞÜRME" der; kodda yalnız atama onaya düşüyordu. Düşürme ve pasifleştirme
+   * tek imzayla yapılabildiği için tek kişi, sistemi tek SUPER_ADMIN'e
+   * indirip TÜM dört-göz işlemlerini kalıcı olarak kilitleyebiliyordu
+   * (talep eden ≠ onaylayan kuralı yüzünden kurtarma yolu da kapanıyordu).
+   *
+   * Yokluğunda "promote" varsayılır (eski payload'larla uyumluluk).
+   */
+  mode?: "promote" | "demote" | "deactivate";
+  reason: string;
+}
+
+/**
+ * Tenant kalıcı silme / veri imhası (spec dört-göz madde 1, denetim bulgusu Ö-28).
+ * `confirmName`, talebi açan kişinin doğru büroyu hedeflediğinin kanıtıdır ve
+ * onay anında yeniden doğrulanır.
+ */
+export interface TenantDeletePayload {
+  tenantId: string;
+  confirmName: string;
+  reason: string;
+}
+
+/** Yeni plan oluşturma (denetim bulgusu K-11). */
+export interface PlanCreatePayload {
+  key: string;
+  name: string;
+  monthlyPricePerUser: string | null;
+  maxUsers: number | null;
+  featuresJson: string;
+  isActive: boolean;
+  reason: string;
+}
+
+/**
+ * Platform denetim izi dışa aktarımı (spec dört-göz madde 8, denetim bulgusu Ö-28).
+ * Onaydan sonra dışa aktarım TEK SEFER indirilebilir; indirme kaydı
+ * PlatformAuditLog'a yazılır ve ikinci indirme reddedilir.
+ */
+export interface AuditExportPayload {
+  from?: string;
+  to?: string;
+  tenantId?: string;
+  action?: string;
   reason: string;
 }
 

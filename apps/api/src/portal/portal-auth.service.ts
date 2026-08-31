@@ -89,7 +89,7 @@ export class PortalAuthService {
     // herkes hesabı hedefli biçimde kilitleyebilirdi (denetim bulgusu 9).
     const narrowKey = `${ip}|${input.email}`;
 
-    const locked = this.lockout.remainingLockSeconds(narrowKey);
+    const locked = await this.lockout.remainingLockSeconds(narrowKey);
     if (locked > 0) {
       throw new HttpException(
         `Çok fazla hatalı deneme yapıldı. Giriş bu bağlantı için geçici olarak ` +
@@ -153,7 +153,7 @@ export class PortalAuthService {
     // Farklı mesajlar, portalda hangi e-postaların kayıtlı olduğunu sayan bir
     // tarayıcıya doğrudan bilgi verirdi.
     if (!matched || !matched.isActive || !matched.client.isActive) {
-      this.lockout.recordFailure(narrowKey);
+      await this.lockout.recordFailure(narrowKey);
       // KALICI SAYAÇ YALNIZ PAROLASI EŞLEŞEN ADAYA YAZILIR (denetim bulgusu Ö-03).
       //
       // Eskiden `recordAccountFailures(candidates)` çağrılıyordu ve yorumu
@@ -190,7 +190,7 @@ export class PortalAuthService {
       throw new UnauthorizedException("E-posta veya parola hatalı.");
     }
 
-    this.lockout.clear(narrowKey);
+    await this.lockout.clear(narrowKey);
 
     const accessToken = await this.signToken(matched);
 

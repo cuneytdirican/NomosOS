@@ -30,7 +30,7 @@
  */
 
 import { BILLING_ROUTES } from "@nomosos/shared";
-import { api, asList } from "@/lib/api";
+import { api, asList, fetchPaged, type PagedResult } from "@/lib/api";
 import type {
   AgreementStatus,
   EInvoiceSendResult,
@@ -152,6 +152,18 @@ export interface InvoiceQuery {
   dateFrom?: string;
   dateTo?: string;
   limit?: number;
+}
+
+/**
+ * Faturalar — SAYFALAMA ZARFIYLA (denetim bulgusu K-15).
+ * `limit: 200` isteyip `total`'i atmak, 200'den fazla faturası olan büroda
+ * faturaların sessizce kaybolması demekti.
+ */
+export async function listInvoicesPaged(
+  query: InvoiceQuery & { page?: number } = {},
+): Promise<PagedResult<Invoice>> {
+  const { page, limit, ...filters } = query;
+  return fetchPaged<Invoice>(BILLING_ROUTES.invoices, { query: { ...filters }, page, limit });
 }
 
 export function listInvoices(query: InvoiceQuery = {}): Promise<Invoice[]> {

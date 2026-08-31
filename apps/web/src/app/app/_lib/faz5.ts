@@ -27,7 +27,7 @@
  * "henüz hazır değil" kartına düşer.
  */
 
-import { ApiError, api, asList } from "@/lib/api";
+import { ApiError, api, asList, fetchPaged, SERVER_MAX_PAGE_SIZE, type PagedResult } from "@/lib/api";
 import { isMissingEndpoint } from "@/lib/faz2";
 import type {
   CaseRef,
@@ -510,23 +510,56 @@ export function listTimeline(
   query: { clientId?: string; caseId?: string; limit?: number } = {},
 ): Promise<CommEntry[]> {
   return api<unknown>(FAZ5_ROUTES.commTimeline, {
-    query: { clientId: query.clientId, caseId: query.caseId, limit: query.limit ?? 200 },
+    query: {
+      clientId: query.clientId,
+      caseId: query.caseId,
+      limit: query.limit ?? SERVER_MAX_PAGE_SIZE,
+    },
   }).then((p) => asList<unknown>(p).map(toCommEntry));
 }
 
-/** Elle kaydedilmiş görüşmeler (telefon, yüz yüze). */
-export function listCommunicationLogs(
+/**
+ * Kronoloji ucu DÜZ DİZİ döndürür (zarf yok) ve her kaynağı ayrı ayrı
+ * `take: 200` ile keser. Kaç kaydın dışarıda kaldığını söyleyemeyiz; ama
+ * kırpılmış OLABİLECEĞİNİ söyleyebiliriz — ekran buna göre uyarı gösterir.
+ * (denetim bulgusu K-15)
+ *
+ * ENTEGRASYONA NOT: `/communications/timeline` ucu ne sayfalama zarfı ne de
+ * `channel`/`direction` süzgeci alıyor; ikisi de sunucu tarafında eklenmeli.
+ */
+export function timelineMayBeTruncated(entries: CommEntry[]): boolean {
+  return entries.length >= SERVER_MAX_PAGE_SIZE;
+}
+
+/**
+ * ELLE KAYDEDİLMİŞ GÖRÜŞMELER — SUNUCU SÜZGECİYLE VE ZARFIYLA (Ö-37, K-15).
+ *
+ * `GET /communications` `clientId`, `caseId`, `channel`, `direction`, `from`,
+ * `to`, `q` süzgeçlerini SUNUCUDA uygular ve sayfalama zarfı döndürür.
+ * Kronoloji ekranı kanal/yön süzgecini önceden İSTEMCİDE, üstelik yalnızca
+ * son 200 kaydın üzerinde uyguluyordu: "Kanal: WhatsApp" seçildiğinde ekran
+ * "son 200 kaydın içindeki WhatsApp mesajları"nı gösteriyor, "son 200
+ * WhatsApp mesajı"nı değil. Araya 200 e-posta girdiyse bir hafta önceki
+ * yazışma listede yoktu ve hiçbir uyarı çıkmıyordu.
+ */
+export async function listCommunicationLogsPaged(
   query: {
     clientId?: string;
     caseId?: string;
     channel?: string;
     direction?: string;
+    q?: string;
+    page?: number;
     limit?: number;
   } = {},
-): Promise<CommEntry[]> {
-  return api<unknown>(FAZ5_ROUTES.communications, {
-    query: { ...query, limit: query.limit ?? 200 },
-  }).then((p) => asList<unknown>(p).map(toCommEntry));
+): Promise<PagedResult<CommEntry>> {
+  const { page, limit, ...filters } = query;
+  const res = await fetchPaged<unknown>(FAZ5_ROUTES.communications, {
+    query: { ...filters },
+    page,
+    limit,
+  });
+  return { ...res, items: res.items.map(toCommEntry) };
 }
 
 /** Telefon / yüz yüze görüşme kaydı — gönderilmez, NOT EDİLİR. */
@@ -874,12 +907,17 @@ export function toPoaItem(raw: unknown): PoaItem {
   };
 }
 
-export function listPoa(
-  query: { clientId?: string; caseId?: string; status?: string } = {},
-): Promise<PoaItem[]> {
-  return api<unknown>(FAZ5_ROUTES.poaList, { query: { ...query, limit: 200 } }).then((p) =>
-    asList<unknown>(p).map(toPoaItem),
-  );
+/**
+ * Vekaletname listesi — SAYFALAMA ZARFIYLA (denetim bulgusu K-15).
+ * Önceden `limit: 200` isteyip zarfı atıyordu; 200'den fazla vekaleti olan
+ * büroda fazlası sessizce düşüyordu.
+ */
+export async function listPoaPaged(
+  query: { clientId?: string; caseId?: string; status?: string; page?: number; limit?: number } = {},
+): Promise<PagedResult<PoaItem>> {
+  const { page, limit, ...filters } = query;
+  const res = await fetchPaged<unknown>(FAZ5_ROUTES.poaList, { query: { ...filters }, page, limit });
+  return { ...res, items: res.items.map(toPoaItem) };
 }
 
 /** Dosyanın vekalet durumu — bağlar ve yeterlilik özeti. */
@@ -1123,12 +1161,19 @@ export function toContract(raw: unknown): ContractItem {
   };
 }
 
-export function listContracts(
-  query: { clientId?: string; caseId?: string; status?: string } = {},
-): Promise<ContractItem[]> {
-  return api<unknown>(FAZ5_ROUTES.contracts, { query: { ...query, limit: 200 } }).then((p) =>
-    asList<unknown>(p).map(toContract),
-  );
+/**
+ * Sözleşme listesi — SAYFALAMA ZARFIYLA (denetim bulgusu K-15).
+ */
+export async function listContractsPaged(
+  query: { clientId?: string; caseId?: string; status?: string; page?: number; limit?: number } = {},
+): Promise<PagedResult<ContractItem>> {
+  const { page, limit, ...filters } = query;
+  const res = await fetchPaged<unknown>(FAZ5_ROUTES.contracts, {
+    query: { ...filters },
+    page,
+    limit,
+  });
+  return { ...res, items: res.items.map(toContract) };
 }
 
 export function getContract(id: string): Promise<ContractItem> {

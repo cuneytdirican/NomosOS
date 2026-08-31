@@ -114,6 +114,7 @@ export interface DictionaryMaskResult {
  * - Zaten yerleştirilmiş maske etiketleri korunur (etiket içinde arama yapılmaz;
  *   etiketler `[...]` biçimindedir ve terimler harf/rakamla başlar).
  * - 3 karakterden kısa terimler yok sayılır (yanlış pozitif üretir).
+ * - Her terim TİCARET UNVANI EKLERİ ATILMIŞ hâliyle de aranır (aşağıya bkz.).
  */
 export function maskTerms(
   text: string,
@@ -121,21 +122,145 @@ export function maskTerms(
 ): DictionaryMaskResult {
   let out = text;
   let replaced = 0;
-  const ordered = [...terms]
+  const ordered = expandTermVariants(terms)
     .filter((t) => t.value && t.value.trim().length >= 3)
     .sort((a, b) => b.value.trim().length - a.value.trim().length);
 
+  /** Aynı terimin iki varyantı eşleşirse çift sayılmasın. */
+  const countedLabels = new Set<string>();
   for (const term of ordered) {
     const needle = term.value.trim();
-    const regex = new RegExp(escapeRegExp(needle), "gi");
+    // Arama KATLANMIŞ metinde yapılır (Türkçe aksan duyarsız), değiştirme
+    // ORİJİNAL metinde: `foldTurkishPreservingLength` uzunluğu koruduğu için
+    // katlanmış metindeki indis, orijinaldeki aynı indistir.
+    const haystack = foldTurkishPreservingLength(out);
+    const folded = foldTurkishPreservingLength(needle);
+    const regex = new RegExp(escapeRegExp(folded), "g");
+
     let hit = false;
-    out = out.replace(regex, () => {
+    let result = "";
+    let cursor = 0;
+    for (let m = regex.exec(haystack); m !== null; m = regex.exec(haystack)) {
       hit = true;
-      return term.label;
-    });
-    if (hit) replaced += 1;
+      result += out.slice(cursor, m.index) + term.label;
+      cursor = m.index + m[0].length;
+      // Etiket, kaynak metinden farklı uzunlukta olabilir; `regex.lastIndex`
+      // haystack üzerinde ilerlediği için bu güvenlidir.
+      if (m[0].length === 0) regex.lastIndex += 1;
+    }
+    if (hit) {
+      out = result + out.slice(cursor);
+      if (!countedLabels.has(term.label)) {
+        countedLabels.add(term.label);
+        replaced += 1;
+      }
+    }
   }
   return { maskedText: out, replaced };
+}
+
+/**
+ * TÜRKÇE AKSAN KATLAMA — UZUNLUK KORUYARAK.
+ *
+ * Neden gerekli: sözlükteki kayıt "XYZ İnşaat Ltd. Şti."dir ama avukat soru
+ * kutusuna Türkçe klavye kullanmadan "XYZ Insaat Ltd. Sti." yazar. Tam
+ * eşleşme bunu ıskalıyordu ve karşı tarafın unvanı dış sağlayıcıya AÇIK
+ * gidiyordu (canlı yakalandı).
+ *
+ * Neden UZUNLUK KORUYAN: `toLowerCase()` Türkçede "İ" → "i̇" (iki kod birimi)
+ * üretir ve normalize/`NFD` de uzunluğu değiştirir. Uzunluk değişirse
+ * katlanmış metindeki eşleşme indisi orijinal metinde BAŞKA bir yeri gösterir
+ * ve maske yanlış karakterleri yer. Aşağıdaki eşleme yalnız TEK KOD BİRİMİ →
+ * TEK KOD BİRİMİ dönüşümü yapar; uzunluk her zaman aynı kalır.
+ */
+const TR_FOLD_MAP: Readonly<Record<string, string>> = {
+  İ: "i", I: "i", ı: "i", i: "i",
+  Ş: "s", ş: "s", Ğ: "g", ğ: "g",
+  Ü: "u", ü: "u", Ö: "o", ö: "o",
+  Ç: "c", ç: "c", Â: "a", â: "a",
+  Î: "i", î: "i", Û: "u", û: "u",
+};
+
+export function foldTurkishPreservingLength(value: string): string {
+  let out = "";
+  for (const ch of value) {
+    const mapped = TR_FOLD_MAP[ch];
+    if (mapped !== undefined) {
+      out += mapped;
+      continue;
+    }
+    const lower = ch.toLowerCase();
+    // Güvenlik ağı: uzunluğu değiştiren hiçbir dönüşüm kabul edilmez.
+    out += lower.length === ch.length ? lower : ch;
+  }
+  return out;
+}
+
+/**
+ * ╔══════════════════════════════════════════════════════════════════════════╗
+ * ║ TİCARET UNVANI EKLERİ — canlı doğrulamada bulunan maskeleme kaçağı        ║
+ * ╚══════════════════════════════════════════════════════════════════════════╝
+ *
+ * Sözlük yalnız TAM eşleşme arıyordu. Müvekkil kaydı "ABC Holding A.Ş.",
+ * taraf kaydı "XYZ İnşaat Ltd. Şti." iken dosya BAŞLIĞI ürünün her yerinde
+ * kısa ticaret adıyla yazılır: "ABC Holding / XYZ İnşaat — Alacak davası".
+ * Tam eşleşme bu satırı ıskalıyordu; sonuç, dış sağlayıcıya giden bağlamın
+ * ilk satırının müvekkil ve karşı taraf kimliğini AÇIKÇA taşımasıydı —
+ * üstelik iki satır aşağıda aynı adlar özenle "[MÜVEKKİL]" / "[TARAF-2]"
+ * olarak maskeleniyordu. (Canlı olarak yakalandı: sağlayıcıya giden gövde
+ * `Dosya: ABC Holding / XYZ İnşaat …` içeriyordu.)
+ *
+ * Çözüm: her terim, sondaki tüzel kişilik/faaliyet ekleri atılarak İKİNCİ bir
+ * varyant üretir ve o da sözlüğe girer. Yön DAİMA FAZLA MASKELEMEDİR: varyant
+ * yalnızca kaydın kendi adından türetilir, sözlüğe dışarıdan kelime eklenmez.
+ *
+ * Çekirdek 3 karakterden kısaysa varyant ÜRETİLMEZ ("Ay Ltd. Şti." → "Ay"
+ * gibi bir çekirdek, metindeki sıradan kelimeleri delerdi).
+ */
+/**
+ * SONDAKİ TEK bir eki söker. Anahtar ayrıntı: desen `$` ile SONA bağlıdır ve
+ * her çağrıda YALNIZ BİR ek atar. Genel `/g` ile toptan temizlik denendi ve
+ * "ABC Holding A.Ş." tek adımda "ABC"ye indi; ara basamak ("ABC Holding")
+ * sözlüğe hiç girmediği için dosya başlığı "[MÜVEKKİL] Holding" biçiminde
+ * YARIM maskelendi — kimliğe hâlâ işaret eden bir çıktı.
+ */
+const COMPANY_SUFFIX_PATTERN =
+  /[\s.,]+(?:a\s?\.?\s?ş|a\s?\.?\s?s|ltd|limited|şti|sti|san|sanayi|tic|ticaret|holding|koll|kom|inş|insaat|paz|pazarlama|nak|nakliyat|end|endüstri|müh|mühendislik|ve)\.?$/iu;
+
+/** Terim listesini, ek atılmış çekirdek varyantlarıyla genişletir. */
+function expandTermVariants(
+  terms: ReadonlyArray<{ value: string; label: string }>,
+): Array<{ value: string; label: string }> {
+  const out: Array<{ value: string; label: string }> = [];
+  const seen = new Set<string>();
+
+  const push = (value: string, label: string): void => {
+    const key = `${label} ${value.toLocaleLowerCase("tr-TR")}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ value, label });
+  };
+
+  for (const term of terms) {
+    const raw = (term.value ?? "").trim();
+    if (!raw) continue;
+    push(raw, term.label);
+
+    // Ekleri YİNELEMELİ at ve HER ARA BASAMAĞI sözlüğe koy:
+    //   "ABC Holding A.Ş." → "ABC Holding" → "ABC"
+    // Ara basamak şart: yalnız en kısa çekirdek ("ABC") tutulsaydı
+    // "ABC Holding" başlığı "[MÜVEKKİL] Holding" olarak yarım maskelenirdi.
+    // `maskTerms` varyantları uzundan kısaya uyguladığı için en uzun eşleşme
+    // kazanır ve yarım maske oluşmaz.
+    let core = raw;
+    for (let guard = 0; guard < 8; guard += 1) {
+      const stripped = core.replace(COMPANY_SUFFIX_PATTERN, "").trim();
+      if (stripped === core || stripped.length < 3) break;
+      core = stripped;
+      push(core, term.label);
+    }
+  }
+  return out;
 }
 
 /**

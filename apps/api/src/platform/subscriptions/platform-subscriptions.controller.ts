@@ -2,7 +2,11 @@ import { Body, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
 import { ZodValidationPipe } from "../../common/pipes/zod-validation.pipe";
 import { PlatformController } from "../decorators/platform-controller.decorator";
 import { CurrentPlatformUser } from "../decorators/current-platform-user.decorator";
-import { ReadPermission, WritePermission } from "../decorators/platform-permission.decorator";
+import {
+  ApprovalWritePermission,
+  ReadPermission,
+  WritePermission,
+} from "../decorators/platform-permission.decorator";
 import { ADMIN_ROUTE_PREFIX } from "../platform.constants";
 import type { PlatformAuthUser } from "../platform.types";
 import { PlatformSubscriptionsService } from "./platform-subscriptions.service";
@@ -33,7 +37,7 @@ export class PlatformSubscriptionsController {
   /** DÖRT-GÖZ: plan/koltuk değişimi onaysız uygulanmaz. */
   @Patch(":id")
   @HttpCode(202)
-  @WritePermission("tenant.plan_change")
+  @ApprovalWritePermission("tenant.plan_change") // denetim bulgusu K-11
   change(
     @CurrentPlatformUser() user: PlatformAuthUser,
     @Param("id") id: string,
@@ -45,7 +49,7 @@ export class PlatformSubscriptionsController {
   /** DÖRT-GÖZ: iptal terminaldir, geri alınamaz. */
   @Post(":id/cancel")
   @HttpCode(202)
-  @WritePermission("subscription.transition")
+  @ApprovalWritePermission("subscription.cancel") // denetim bulgusu K-11
   cancel(
     @CurrentPlatformUser() user: PlatformAuthUser,
     @Param("id") id: string,
@@ -81,8 +85,10 @@ export class PlatformPlansController {
     return this.subscriptions.listPlans();
   }
 
+  /** DÖRT-GÖZ: fiyatlı yeni plan tek imzayla yaratılamaz (denetim bulgusu K-11). */
   @Post()
-  @WritePermission("plan.catalog.write")
+  @HttpCode(202)
+  @ApprovalWritePermission("plan.catalog.price")
   create(
     @CurrentPlatformUser() user: PlatformAuthUser,
     @Body(new ZodValidationPipe(planUpsertSchema)) body: PlanUpsertInput

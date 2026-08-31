@@ -20,7 +20,7 @@
 
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ApiError, api, asList } from "@/lib/api";
+import { ApiError, api, fetchPaged, SERVER_MAX_PAGE_SIZE } from "@/lib/api";
 import type { CaseSummary, Client, ClientContact } from "@/lib/types";
 import {
   Badge,
@@ -34,6 +34,7 @@ import {
   Modal,
   Select,
   Spinner,
+  TruncationNotice,
   StatCard,
   SuccessBox,
   Tabs,
@@ -112,6 +113,7 @@ export default function MuvekkilDetayPage({ params }: { params: Promise<{ id: st
 
   const [client, setClient] = useState<Client | null>(null);
   const [cases, setCases] = useState<CaseSummary[]>([]);
+  const [casesTruncated, setCasesTruncated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>("genel");
@@ -156,12 +158,19 @@ export default function MuvekkilDetayPage({ params }: { params: Promise<{ id: st
         setCases(data.cases);
       } else {
         try {
-          const list = await api<unknown>("/cases", { query: { clientId: id, limit: "200" } });
-          const all = asList<CaseSummary>(list);
+          // Zarf okunur; `total` atılmaz (denetim bulgusu K-15). Bir müvekkilin
+          // dosya sayısı üst sınırı aşarsa ekranda görünür uyarı çıkar.
+          const res = await fetchPaged<CaseSummary>("/cases", {
+            query: { clientId: id },
+            page: 1,
+            limit: SERVER_MAX_PAGE_SIZE,
+          });
           // API clientId filtresini yok sayarsa istemci tarafında süz.
-          setCases(all.filter((c) => !c.client || c.client.id === id));
+          setCases(res.items.filter((c) => !c.client || c.client.id === id));
+          setCasesTruncated(res.hasMore || res.truncated);
         } catch {
           setCases([]);
+          setCasesTruncated(false);
         }
       }
     } catch (err) {
@@ -298,6 +307,8 @@ export default function MuvekkilDetayPage({ params }: { params: Promise<{ id: st
               ))}
             </div>
           )}
+          {/* Sessiz kırpma yasak (denetim bulgusu K-15). */}
+          {casesTruncated && <TruncationNotice shown={cases.length} noun="dosya" />}
           {cases.length === 0 ? (
             <EmptyState message="Bu müvekkile bağlı dosya yok." />
           ) : (

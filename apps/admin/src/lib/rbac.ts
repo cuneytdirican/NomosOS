@@ -73,6 +73,10 @@ export type AdminAction =
   | "support.tenant_content"
   | "ai.provider_config"
   | "platform_user.manage"
+  // denetim bulgusu K-11: dört-göz olan alt işlemler ayrı satır oldu; katalog
+  // artık matristen TÜRETİLİYOR (elle senkronlanan ikinci liste kaldırıldı).
+  | "platform_user.create"
+  | "platform_user.credential_reset"
   | "platform_user.assign_super_admin"
   | "audit.view"
   | "audit.export"
@@ -82,8 +86,12 @@ export type AdminAction =
   | "platform_user.view"
   | "subscription.view"
   | "subscription.transition"
+  // denetim bulgusu K-11: iptal terminaldir ve her zaman onaya düşer.
+  | "subscription.cancel"
   | "plan.catalog.view"
   | "plan.catalog.write"
+  // denetim bulgusu K-11: fiyat koymak/değiştirmek TÜM kiracıları etkiler.
+  | "plan.catalog.price"
   | "invoice.view"
   | "invoice.issue"
   | "support_grant.view"
@@ -163,10 +171,11 @@ export const PERMISSION_MATRIX: Matrix = {
     ANALYST_READONLY: N,
   },
   // | Plan değiştir / özel fiyat | ✅ / ✅ | ❌ | ✅ / 4️⃣ | ❌ | ❌ |
+  // denetim bulgusu K-11: PATCH /subscriptions/:id her zaman onaya düşer.
   "tenant.plan_change": {
-    SUPER_ADMIN: "full",
+    SUPER_ADMIN: "four_eyes",
     OPS_ADMIN: N,
-    BILLING_ADMIN: "full",
+    BILLING_ADMIN: "four_eyes",
     SUPPORT_AGENT: N,
     ANALYST_READONLY: N,
   },
@@ -289,6 +298,20 @@ export const PERMISSION_MATRIX: Matrix = {
     SUPPORT_AGENT: N,
     ANALYST_READONLY: N,
   },
+  "platform_user.create": {
+    SUPER_ADMIN: "four_eyes",
+    OPS_ADMIN: N,
+    BILLING_ADMIN: N,
+    SUPPORT_AGENT: N,
+    ANALYST_READONLY: N,
+  },
+  "platform_user.credential_reset": {
+    SUPER_ADMIN: "four_eyes",
+    OPS_ADMIN: N,
+    BILLING_ADMIN: N,
+    SUPPORT_AGENT: N,
+    ANALYST_READONLY: N,
+  },
   "platform_user.assign_super_admin": {
     SUPER_ADMIN: "four_eyes",
     OPS_ADMIN: N,
@@ -354,6 +377,13 @@ export const PERMISSION_MATRIX: Matrix = {
     SUPPORT_AGENT: N,
     ANALYST_READONLY: N,
   },
+  "subscription.cancel": {
+    SUPER_ADMIN: "four_eyes",
+    OPS_ADMIN: "four_eyes",
+    BILLING_ADMIN: "four_eyes",
+    SUPPORT_AGENT: N,
+    ANALYST_READONLY: N,
+  },
   // GET /plans → S O B D A
   "plan.catalog.view": {
     SUPER_ADMIN: "full",
@@ -367,6 +397,14 @@ export const PERMISSION_MATRIX: Matrix = {
     SUPER_ADMIN: "full",
     OPS_ADMIN: N,
     BILLING_ADMIN: "full",
+    SUPPORT_AGENT: N,
+    ANALYST_READONLY: N,
+  },
+  // POST /plans + PATCH /plans/:id (fiyat) → S B, dört-göz
+  "plan.catalog.price": {
+    SUPER_ADMIN: "four_eyes",
+    OPS_ADMIN: N,
+    BILLING_ADMIN: "four_eyes",
     SUPPORT_AGENT: N,
     ANALYST_READONLY: N,
   },
@@ -452,11 +490,16 @@ export const PERMISSION_MATRIX: Matrix = {
   },
 
   // --- Modül 26 (docs/moduller/26 §API Uçları) ---
+  // denetim bulgusu Ö-32: SUPPORT_AGENT burada "read"di, sunucuda "none".
+  // Kredi bakiyesi bir DESTEK verisi değil, TİCARİ veridir; destek talebinin
+  // çözümü için gerekmez. Sunucu spec'e döndürülmüştü, istemci geride kalmıştı;
+  // destek personeli var olmayan bir yetkiyi görüp her tıklamada 403 duvarına
+  // çarpıyordu. İki matrisin ayrışması artık testle yakalanıyor.
   "credits.tenant.view": {
     SUPER_ADMIN: "full",
     OPS_ADMIN: "full",
     BILLING_ADMIN: "full",
-    SUPPORT_AGENT: "read",
+    SUPPORT_AGENT: N,
     ANALYST_READONLY: N,
   },
   "credits.tenant.adjust": {
@@ -513,7 +556,9 @@ export const ACTION_LABELS: Record<AdminAction, string> = {
   "ai.analytics.tenant": "AI analitiği — tenant detayı",
   "support.tenant_content": "Tenant içeriği görüntüle (destek erişimi)",
   "ai.provider_config": "AI sağlayıcı metadata (anahtar asla)",
-  "platform_user.manage": "Platform kullanıcısı oluştur / rol ata",
+  "platform_user.manage": "Platform kullanıcısı yönetimi",
+  "platform_user.create": "Panel kullanıcısı açma",
+  "platform_user.credential_reset": "Panel kullanıcısının parola/2FA sıfırlaması",
   "platform_user.assign_super_admin": "SUPER_ADMIN atama / düşürme",
   "audit.view": "PlatformAuditLog görüntüle",
   "audit.export": "PlatformAuditLog dışa aktar",
@@ -522,8 +567,10 @@ export const ACTION_LABELS: Record<AdminAction, string> = {
   "platform_user.view": "Platform kullanıcıları listesi",
   "subscription.view": "Abonelik listesi",
   "subscription.transition": "Abonelik durum geçişi",
+  "subscription.cancel": "Abonelik iptali",
   "plan.catalog.view": "Plan kataloğu görüntüle",
-  "plan.catalog.write": "Plan kataloğu düzenle",
+  "plan.catalog.write": "Plan kataloğu düzenleme (fiyat dışı)",
+  "plan.catalog.price": "Plan oluşturma / katalog fiyat değişikliği",
   "invoice.view": "Platform faturaları",
   "invoice.issue": "Fatura kesme (DRAFT → ISSUED)",
   "support_grant.view": "Destek erişim kayıtları",
@@ -587,29 +634,36 @@ export function requiresApproval(
 }
 
 /**
- * Dört-göz listesindeki (spec 1–8) işlemler — rolden bağımsız olarak
- * her zaman ikinci bir kişinin onayıyla tamamlanır.
+ * DÖRT-GÖZ İŞLEM KATALOĞU — MATRİSTEN TÜRETİLİR, ELLE YAZILMAZ.
+ *
+ * denetim bulgusu K-11: burada ELLE YAZILMIŞ bir liste vardı ve matrisle
+ * ayrışmıştı (`platform_user.manage`, `plan.catalog.write` listede vardı ama
+ * matriste "full"du). `ApprovalBadge` iki kaynağı `||` ile birleştirdiği için
+ * panel dört-göz rozetini gösteriyor, API tek imzayla uyguluyordu. Artık tek
+ * kaynak matristir; `apps/api/src/platform/platform-permissions.ts` ikizi de
+ * aynı türetmeyi yapar ve iki dosyanın ayrışması testle yakalanır.
  */
-export const FOUR_EYES_ACTIONS: readonly AdminAction[] = [
-  "tenant.delete",
-  "tenant.suspend",
-  "payment.refund",
-  "tenant.custom_price",
-  "support_grant.request",
-  "system.maintenance_lock",
-  "system.flag_global_write",
-  "platform_user.assign_super_admin",
-  "audit.export",
-  // Denetim bulguları 1 ve 9: panel personeli açma / kimlik bilgisi sıfırlama
-  // ve katalog fiyatı değişikliği de iki imza ister.
-  "platform_user.manage",
-  "plan.catalog.write",
-  // Modül 26: kredi paraya eşdeğerdir; tek imzayla yaratılamaz.
-  "credits.tenant.adjust",
-];
+export const FOUR_EYES_ACTIONS: readonly AdminAction[] = Object.freeze(
+  (Object.keys(PERMISSION_MATRIX) as AdminAction[]).filter((action) =>
+    ADMIN_ROLES.some((role) => PERMISSION_MATRIX[action][role] === "four_eyes"),
+  ),
+);
+
+const FOUR_EYES_SET = new Set<AdminAction>(FOUR_EYES_ACTIONS);
 
 export function isFourEyesAction(action: AdminAction): boolean {
-  return FOUR_EYES_ACTIONS.includes(action);
+  return FOUR_EYES_SET.has(action);
+}
+
+/**
+ * Rozet/uyarı kararının TEK fonksiyonu — çağıranlar artık iki fonksiyonu
+ * `||` ile birleştirmez (denetim bulgusu K-11).
+ */
+export function needsFourEyes(
+  role: AdminRole | null | undefined,
+  action: AdminAction,
+): boolean {
+  return isFourEyesAction(action) || requiresApproval(role, action);
 }
 
 /** Yatırımcı/ortak rolü — hiçbir yazma işlemi ve hiçbir tenant kimliği görmez. */

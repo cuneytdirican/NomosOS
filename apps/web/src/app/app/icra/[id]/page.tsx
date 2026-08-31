@@ -19,7 +19,7 @@
 
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ApiError, api, asList } from "@/lib/api";
+import { ApiError, fetchPaged, SERVER_MAX_PAGE_SIZE } from "@/lib/api";
 import { errText, isMissingEndpoint } from "@/lib/faz2";
 import {
   changeStage,
@@ -56,6 +56,7 @@ import {
   Modal,
   Select,
   Spinner,
+  TruncationNotice,
   Tabs,
   Textarea,
 } from "@/components/ui";
@@ -960,16 +961,23 @@ function CollectionsTab({
 
 function DeadlinesTab({ caseId }: { caseId: string }) {
   const [items, setItems] = useState<Deadline[]>([]);
+  const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    void api<unknown>("/deadlines", { query: { caseId, limit: 200 } })
-      .then((p) => {
+    // Zarf okunur; `total` atılmaz (denetim bulgusu K-15).
+    void fetchPaged<Deadline>("/deadlines", {
+      query: { caseId },
+      page: 1,
+      limit: SERVER_MAX_PAGE_SIZE,
+    })
+      .then((res) => {
         if (alive) {
-          setItems(asList<Deadline>(p));
+          setItems(res.items);
+          setTruncated(res.hasMore || res.truncated);
           setError(null);
         }
       })
@@ -994,6 +1002,12 @@ function DeadlinesTab({ caseId }: { caseId: string }) {
         <EmptyState message="Bu dosyaya bağlı süre kaydı yok. Ödeme emri tebliğ tarihi girildiğinde İİK itiraz süresi kural motorunda oluşur." />
       ) : (
         <ul className="space-y-2">
+          {/* Sessiz kırpma yasak (denetim bulgusu K-15). */}
+          {truncated && (
+            <li>
+              <TruncationNotice shown={items.length} noun="süre" />
+            </li>
+          )}
           {items.map((d) => {
             const days = daysUntil(d.dueDate);
             return (

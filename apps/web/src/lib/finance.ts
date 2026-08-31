@@ -19,7 +19,7 @@
  */
 
 import { FINANCE_ROUTES } from "@nomosos/shared";
-import { api, asList } from "@/lib/api";
+import { api, asList, fetchPaged, type PagedResult } from "@/lib/api";
 import type {
   AgingBucket,
   ClientFinanceSummary,
@@ -38,6 +38,20 @@ export interface FinanceEntryQuery {
   dateFrom?: string;
   dateTo?: string;
   limit?: number;
+}
+
+/**
+ * Finans hareketleri — SAYFALAMA ZARFIYLA (denetim bulgusu K-15).
+ *
+ * Önceden ekranlar `limit: 200` isteyip zarfı atıyordu; 200'den fazla hareketi
+ * olan büroda kalan hareketler hiçbir ekranda görünmüyordu ve kırpıldığına
+ * dair bir işaret yoktu.
+ */
+export async function listFinanceEntriesPaged(
+  query: FinanceEntryQuery & { page?: number } = {},
+): Promise<PagedResult<FinanceEntry>> {
+  const { page, limit, ...filters } = query;
+  return fetchPaged<FinanceEntry>(FINANCE_ROUTES.entries, { query: { ...filters }, page, limit });
 }
 
 export function listFinanceEntries(query: FinanceEntryQuery = {}): Promise<FinanceEntry[]> {

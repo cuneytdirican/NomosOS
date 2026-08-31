@@ -4,6 +4,7 @@ import { DeadlineReminderJob } from "./jobs/deadline-reminder.job";
 import { HearingReminderJob } from "./jobs/hearing-reminder.job";
 import { SubscriptionRenewalJob } from "./jobs/subscription-renewal.job";
 import { CreditPeriodRenewalJob } from "./jobs/credit-period-renewal.job";
+import { CreditLowWarningJob } from "./jobs/credit-low-warning.job";
 import type { ScheduledJobHandler } from "./scheduler.types";
 
 /**
@@ -27,7 +28,9 @@ export class JobRegistryService {
     deadlineReminder: DeadlineReminderJob,
     hearingReminder: HearingReminderJob,
     subscriptionRenewal: SubscriptionRenewalJob,
-    creditPeriodRenewal: CreditPeriodRenewalJob
+    creditPeriodRenewal: CreditPeriodRenewalJob,
+    // denetim bulgusu Ö-29
+    creditLowWarning: CreditLowWarningJob
   ) {
     const all: ScheduledJobHandler[] = [
       usageSnapshot,
@@ -35,6 +38,7 @@ export class JobRegistryService {
       hearingReminder,
       subscriptionRenewal,
       creditPeriodRenewal,
+      creditLowWarning,
     ];
     this.handlers = new Map(all.map((h) => [h.key, h]));
   }

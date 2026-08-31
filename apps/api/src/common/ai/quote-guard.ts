@@ -48,10 +48,13 @@ export function normalizeForQuoteMatch(text: string): string {
     .replace(/[‘’‚‛′]/g, "'")
     .replace(/[“”„‟″«»]/g, '"')
     .replace(/[‐-―−]/g, "-")
-    .replace(/ /g, " ")
+    // denetim bulgusu Ö-33b: bölünemez boşluk (U+00A0) kaynakta GÖRÜNMEZ bir
+    // karakter olarak duruyordu; kaçış dizisiyle yazmak hem lint'in
+    // `no-irregular-whitespace` kuralını karşılar hem de niyeti okunur kılar.
+    .replace(/\u00a0/g, " ")
     .replace(/\s+/g, " ")
     .trim()
-    .replace(/^[\s"'`.,;:()\[\]-]+|[\s"'`.,;:()\[\]-]+$/g, "")
+    .replace(/^[\s"'`.,;:()[\]-]+|[\s"'`.,;:()[\]-]+$/g, "")
     .toLocaleLowerCase("tr-TR");
 }
 

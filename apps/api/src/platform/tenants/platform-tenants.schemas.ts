@@ -28,6 +28,21 @@ export const tenantNoteSchema = z.object({
 export type TenantNoteInput = z.infer<typeof tenantNoteSchema>;
 
 export const tenantStatusSchema = z.object({ reason: reasonField });
+
+/**
+ * KALICI SİLME / VERİ İMHASI — spec §Roller dört-göz listesi madde 1
+ * (denetim bulgusu Ö-28). `confirmName`, talebi açanın doğru büroyu
+ * hedeflediğinin kanıtıdır ve hem talep hem UYGULAMA anında doğrulanır:
+ * geri alınamaz bir işlemde tek doğrulama yeterli değildir.
+ */
+export const tenantDeleteSchema = z.object({
+  confirmName: z
+    .string()
+    .trim()
+    .min(2, "Silmek için büronun adını birebir yazmalısınız."),
+  reason: reasonField,
+});
+export type TenantDeleteInput = z.infer<typeof tenantDeleteSchema>;
 export type TenantStatusInput = z.infer<typeof tenantStatusSchema>;
 
 /**

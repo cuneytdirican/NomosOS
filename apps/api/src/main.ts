@@ -9,6 +9,7 @@ import type { NextFunction, Request, Response } from "express";
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { ADMIN_ROUTE_PREFIX, assertTwoFactorPolicy } from "./platform/platform.constants";
+import { resolveTrustedProxy } from "./common/trusted-proxy";
 
 /** Kiracı (büro) API'sinin genel öneki. */
 const TENANT_ROUTE_PREFIX = "api/v1";
@@ -124,29 +125,29 @@ function securityHeaders() {
 }
 
 /**
- * GÜVENİLEN VEKİL (reverse proxy) SAYISI.
+ * GÜVENİLEN VEKİL (reverse proxy) SAYISI — denetim bulgusu Ö-08.
  *
- * Express, `X-Forwarded-For` başlığını YALNIZCA `trust proxy` ayarlandığında
- * çözer. Ayar yokken başlık istemci tarafından uydurulabilir ve `request.ip`
- * ile başlık birbirinden ayrışır: hız sınırlayıcı bir IP, denetim kaydı başka
- * bir IP görür (denetim bulgusu 4).
+ * KARAR MANTIĞI `common/trusted-proxy.ts`e TAŞINDI ve orada birim testlenir.
+ * Buradaki eski hâl (`Number(process.env.TRUSTED_PROXY_HOPS ?? 0)`) tanımsız
+ * değeri de bozuk değeri de SESSİZCE 0'a düşürüyordu; üretimde bu, hesap
+ * kilidini, oran sınırını ve denetim izindeki IP alanını hiçbir uyarı
+ * üretmeden birlikte çürütüyordu. Artık üretimde tanımsız ya da geçersiz
+ * değer AÇILIŞI DURDURUR (JWT_SECRET deseni).
  *
- * VARSAYILAN 0 = "önümde vekil yok, başlığa hiç bakma" (en güvenli varsayım).
- * Nginx/ALB arkasında dağıtıyorsanız kaç hop olduğunu AÇIKÇA yazın:
- *   TRUSTED_PROXY_HOPS=1
+ * ÜRETİM REHBERİ: Caddy/Traefik/nginx/ALB arkasında `TRUSTED_PROXY_HOPS=1`;
+ * CDN + vekil zinciri varsa 2; API doğrudan internete açıksa AÇIKÇA 0.
  */
-function trustedProxyHops(): number {
-  const raw = Number(process.env.TRUSTED_PROXY_HOPS ?? 0);
-  return Number.isInteger(raw) && raw >= 0 && raw <= 10 ? raw : 0;
-}
 
 async function bootstrap(): Promise<void> {
   assertPrefixConfig();
   // 2FA politikası uygulama AÇILMADAN önce doğrulanır: üretimde 2FA'sız bir
   // panel, çalışır durumdayken fark edilecek bir eksiklik değildir.
   assertTwoFactorPolicy();
+  // denetim bulgusu Ö-08: geçersiz/eksik vekil ayarı UYGULAMA AÇILMADAN önce
+  // fark edilir; sessizce 0'a düşen eski davranış kaldırıldı.
+  const proxy = resolveTrustedProxy();
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
-  app.set("trust proxy", trustedProxyHops());
+  app.set("trust proxy", proxy.hops);
   app.setGlobalPrefix(TENANT_ROUTE_PREFIX, {
     exclude: [{ path: ADMIN_PREFIX_EXCLUDE_PATTERN, method: RequestMethod.ALL }],
   });
@@ -171,12 +172,12 @@ async function bootstrap(): Promise<void> {
 
   const port = Number(process.env.API_PORT ?? 3001);
   await app.listen(port);
-  // eslint-disable-next-line no-console
   console.log(`NomosOS API hazır: http://localhost:${port}/${TENANT_ROUTE_PREFIX}`);
-  // eslint-disable-next-line no-console
   console.log(`Platform yönetim paneli API'si: http://localhost:${port}/${ADMIN_ROUTE_PREFIX}`);
-  // eslint-disable-next-line no-console
   console.log(`CORS izinli kaynaklar: ${origins.join(", ")}`);
+  // denetim bulgusu Ö-08: karar açılış günlüğüne AÇIKÇA basılır — "hangi IP'yi
+  // gerçek istemci sayıyoruz" sorusu üretimde log'dan yanıtlanabilmelidir.
+  console.log(`Ters vekil: ${proxy.summary}`);
 }
 
 void bootstrap();

@@ -93,6 +93,9 @@ model User {
   assignedTasks    Task[]          @relation("Assignee")
   reviewTasks      Task[]          @relation("Reviewer")
   deadlines        Deadline[]      @relation("DeadlineOwner")
+  /// denetim bulgusu K-14 — kural motorundan üretilmiş sürenin girdisini
+  /// düzelten avukat/ortak.
+  correctedDeadlines Deadline[]   @relation("DeadlineCorrectedBy")
   timelineEvents   TimelineEvent[]
   caseNotes        CaseNote[]
   taskStatusLogs   TaskStatusLog[]
@@ -365,6 +368,25 @@ model Deadline {
   triggerDate   DateTime?
   /// Tebligat yöntemi — bazı sürelerde başlangıç gününü etkiler
   serviceMethod ServiceMethod?
+
+  // ---- denetim bulgusu K-14: girdi düzeltmesinin izi (Modül 04 KK8) ----
+  // Kural motorundan üretilen sürenin son günü doğrudan değiştirilemez; girdi
+  // düzeltilir ve motor YENİDEN KOŞAR. İLK TESPİT aşağıdaki alanlarda
+  // dondurulur ki "ne sanıyorduk / ne çıktı" farkı kayıttan okunabilsin.
+  // Bu üç alan İLK düzeltmede bir kez yazılır, sonraki düzeltmelerde DEĞİŞMEZ.
+  /// İlk tespit edilen tetikleyici (tebliğ/karar) tarihi.
+  originalTriggerDate   DateTime?
+  /// İlk tespit edilen tebligat yöntemi.
+  originalServiceMethod ServiceMethod?
+  /// İlk hesapta motorun ürettiği son gün.
+  originalDueDate       DateTime?      @db.Date
+  /// Girdiyi son düzelten kullanıcı (AVUKAT/ORTAK/YÖNETİCİ).
+  correctedById         String?
+  correctedBy           User?          @relation("DeadlineCorrectedBy", fields: [correctedById], references: [id])
+  correctedAt           DateTime?
+  /// Kaç kez düzeltildi — sıfırdan büyükse kayıt "düzeltilmiş" sayılır.
+  correctionCount       Int            @default(0)
+
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
@@ -372,6 +394,7 @@ model Deadline {
   @@index([tenantId, status, dueDate])
   @@index([caseId])
   @@index([ruleKey])
+  @@index([correctedById])
 }
 
 // ---------- Süre motoru: kurallar ve tatiller ----------

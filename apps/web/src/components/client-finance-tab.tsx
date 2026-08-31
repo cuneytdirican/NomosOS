@@ -15,10 +15,20 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { SERVER_MAX_PAGE_SIZE } from "@/lib/api";
 import { errText, isMissingEndpoint } from "@/lib/faz2";
-import { getClientFinanceSummary, listFinanceEntries, summaryFields } from "@/lib/finance";
+import { getClientFinanceSummary, listFinanceEntriesPaged, summaryFields } from "@/lib/finance";
 import type { ClientFinanceSummary, FinanceEntry } from "@/lib/faz3-types";
-import { Badge, Card, EmptyState, ErrorBox, Select, Spinner, StatCard } from "@/components/ui";
+import {
+  Badge,
+  Card,
+  EmptyState,
+  ErrorBox,
+  Select,
+  Spinner,
+  StatCard,
+  TruncationNotice,
+} from "@/components/ui";
 import { FeatureUnavailable } from "@/components/ai-ui";
 import { fmtAmount } from "@/lib/money";
 import {
@@ -38,6 +48,7 @@ export function ClientFinanceTab({ clientId }: { clientId: string }) {
   const [missing, setMissing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState("");
+  const [truncated, setTruncated] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -45,12 +56,16 @@ export function ClientFinanceTab({ clientId }: { clientId: string }) {
     try {
       const [s, e] = await Promise.all([
         getClientFinanceSummary(clientId),
-        listFinanceEntries({ clientId, type: typeFilter || undefined, limit: 200 }).catch(
-          () => [] as FinanceEntry[],
-        ),
+        // Zarf okunur; `total` atılmaz (denetim bulgusu K-15).
+        listFinanceEntriesPaged({
+          clientId,
+          type: typeFilter || undefined,
+          limit: SERVER_MAX_PAGE_SIZE,
+        }).catch(() => null),
       ]);
       setSummary(s);
-      setEntries(e);
+      setEntries(e?.items ?? []);
+      setTruncated(Boolean(e && (e.hasMore || e.truncated)));
       setMissing(false);
     } catch (err) {
       if (isMissingEndpoint(err)) {
@@ -134,6 +149,8 @@ export function ClientFinanceTab({ clientId }: { clientId: string }) {
           </div>
         }
       >
+        {/* Sessiz kırpma yasak (denetim bulgusu K-15). */}
+        {truncated && <TruncationNotice shown={entries.length} noun="hareket" />}
         {entries.length === 0 ? (
           <EmptyState message="Bu müvekkile ait finans hareketi yok." />
         ) : (

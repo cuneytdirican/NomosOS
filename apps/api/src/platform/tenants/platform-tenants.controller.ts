@@ -1,17 +1,24 @@
-import { Body, Get, HttpCode, Param, Patch, Post, Put, Query } from "@nestjs/common";
+import { Body, Delete, Get, HttpCode, Param, Patch, Post, Put, Query } from "@nestjs/common";
 import { ZodValidationPipe } from "../../common/pipes/zod-validation.pipe";
 import { PlatformController } from "../decorators/platform-controller.decorator";
 import { CurrentPlatformUser } from "../decorators/current-platform-user.decorator";
-import { ReadPermission, WritePermission } from "../decorators/platform-permission.decorator";
+import {
+  ApprovalWritePermission,
+  ReadPermission,
+  WritePermission,
+} from "../decorators/platform-permission.decorator";
+import { RequiresSupportGrant } from "../decorators/requires-support-grant.decorator";
 import { ADMIN_ROUTE_PREFIX } from "../platform.constants";
 import type { PlatformAuthUser } from "../platform.types";
 import { PlatformTenantsService } from "./platform-tenants.service";
 import {
   supportAccessSchema,
+  tenantDeleteSchema,
   tenantNoteSchema,
   tenantStatusSchema,
   tenantUpdateSchema,
   type SupportAccessInput,
+  type TenantDeleteInput,
   type TenantNoteInput,
   type TenantStatusInput,
   type TenantUpdateInput,
@@ -31,8 +38,14 @@ export class PlatformTenantsController {
     return this.tenants.list(user, query);
   }
 
+  /**
+   * denetim bulgusu Ö-06: SUPPORT_AGENT için büro detayı artık AKTİF bir
+   * destek erişim penceresi ister; süresi dolmuşsa 403. Diğer roller
+   * etkilenmez (erişimleri destek talebine değil, göreve bağlıdır).
+   */
   @Get(":id")
   @ReadPermission("tenant.view")
+  @RequiresSupportGrant("SADECE_USTVERI")
   detail(@CurrentPlatformUser() user: PlatformAuthUser, @Param("id") id: string) {
     return this.tenants.detail(user, id);
   }
@@ -43,18 +56,21 @@ export class PlatformTenantsController {
    */
   @Get(":id/users")
   @ReadPermission("tenant.users.view")
+  @RequiresSupportGrant("SADECE_USTVERI") // denetim bulgusu Ö-06
   users(@CurrentPlatformUser() user: PlatformAuthUser, @Param("id") id: string) {
     return this.tenants.users(user, id);
   }
 
   @Get(":id/ai-config")
   @ReadPermission("ai.provider_config")
+  @RequiresSupportGrant("YAPILANDIRMA") // denetim bulgusu Ö-06
   aiConfig(@CurrentPlatformUser() user: PlatformAuthUser, @Param("id") id: string) {
     return this.tenants.aiConfig(user, id);
   }
 
   @Get(":id/usage")
   @ReadPermission("tenant.usage.view")
+  @RequiresSupportGrant("SADECE_USTVERI") // denetim bulgusu Ö-06
   usage(
     @CurrentPlatformUser() user: PlatformAuthUser,
     @Param("id") id: string,
@@ -91,7 +107,7 @@ export class PlatformTenantsController {
    */
   @Post(":id/suspend")
   @HttpCode(202)
-  @WritePermission("tenant.suspend")
+  @ApprovalWritePermission("tenant.suspend") // denetim bulgusu K-11
   suspend(
     @CurrentPlatformUser() user: PlatformAuthUser,
     @Param("id") id: string,
@@ -102,7 +118,7 @@ export class PlatformTenantsController {
 
   @Post(":id/activate")
   @HttpCode(202)
-  @WritePermission("tenant.reactivate")
+  @ApprovalWritePermission("tenant.reactivate") // denetim bulgusu K-11
   activate(
     @CurrentPlatformUser() user: PlatformAuthUser,
     @Param("id") id: string,
@@ -111,10 +127,25 @@ export class PlatformTenantsController {
     return this.tenants.requestActivate(user, id, body);
   }
 
+  /**
+   * DÖRT-GÖZ: KALICI SİLME / VERİ İMHASI (denetim bulgusu Ö-28).
+   * 202 döner — talep açıldı, veri HENÜZ silinmedi.
+   */
+  @Delete(":id")
+  @HttpCode(202)
+  @ApprovalWritePermission("tenant.delete")
+  remove(
+    @CurrentPlatformUser() user: PlatformAuthUser,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(tenantDeleteSchema)) body: TenantDeleteInput
+  ) {
+    return this.tenants.requestDelete(user, id, body);
+  }
+
   /** DÖRT-GÖZ: destek erişim penceresi talebi (impersonation ucu YOKTUR). */
   @Post(":id/support-access")
   @HttpCode(202)
-  @WritePermission("support_grant.request")
+  @ApprovalWritePermission("support_grant.request") // denetim bulgusu K-11
   supportAccess(
     @CurrentPlatformUser() user: PlatformAuthUser,
     @Param("id") id: string,

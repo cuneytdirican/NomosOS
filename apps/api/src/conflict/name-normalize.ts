@@ -102,7 +102,7 @@ export function foldTurkish(value: string): string {
 export function normalizeName(value: string): string {
   const folded = foldTurkish(value)
     // Noktalama ve ayraçlar boşluğa dönüşür ("a.ş." → "a s ").
-    .replace(/[.,;:()\[\]{}"'`/\\|_+\-–—*&]/g, " ")
+    .replace(/[.,;:()[\]{}"'`/\\|_+\-–—*&]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 

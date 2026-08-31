@@ -1,8 +1,9 @@
 name: CI
 
 # NomosOS sürekli entegrasyon hattı.
-# Her push ve her PR'da: bağımlılık kurulumu → derleme → tip denetimi → testler
-# → migration bütünlüğü (boş PostgreSQL'e uygulama + şema/migration ayrışması).
+# Her push ve her PR'da: bağımlılık kurulumu → derleme → tip denetimi → lint →
+# testler → migration bütünlüğü (boş PostgreSQL'e uygulama + şema/migration
+# ayrışması).
 #
 # Buradaki tüm gizli görünümlü değerler CI'ya ÖZEL, atılabilir sahte değerlerdir;
 # üretimde kullanılmazlar ve depoda gerçek bir sır bulunmaz.
@@ -47,7 +48,7 @@ env:
 
 jobs:
   dogrula:
-    name: Derle · Tip denetle · Test et · Migration bütünlüğü
+    name: Derle · Tip denetle · Lint · Test et · Migration bütünlüğü
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -122,6 +123,19 @@ jobs:
         run: |
           set -o pipefail
           pnpm typecheck 2>&1 | tee "$RUNNER_TEMP/typecheck.log"
+
+      # denetim bulgusu Ö-33b: CI'da lint adımı YOKTU ve `pnpm lint` hiçbir
+      # şeyi denetlemiyordu. Adım DERLEMEDEN SONRA, testlerden ÖNCE koşar:
+      # lint saniyeler sürer ve bir yazım/desen hatasını test paketinin
+      # dakikalarını harcamadan önce yakalar. `--max-warnings` BİLEREK
+      # VERİLMEZ: kurallar bu turda uyarı seviyesinde başlatıldı (bkz.
+      # eslint.config.mjs); uyarı tavanı koymak, CI'yı ilk günden kırardı.
+      # Uyarı sayısı düştükçe buraya `--max-warnings <n>` eklenmelidir.
+      - name: Lint (pnpm lint)
+        id: lint
+        run: |
+          set -o pipefail
+          pnpm lint 2>&1 | tee "$RUNNER_TEMP/lint.log"
 
       - name: Testler (pnpm -r test)
         id: testler
@@ -292,8 +306,27 @@ jobs:
             echo "| Aşama | Sonuç |"
             echo "| --- | --- |"
             echo "| Derleme (\`pnpm build\`) | ${{ steps.derleme.outcome || 'çalışmadı' }} |"
+            echo "| Lint (\`pnpm lint\`) | ${{ steps.lint.outcome || 'çalışmadı' }} |"
             echo "| Testler (\`pnpm -r test\`) | ${{ steps.testler.outcome || 'çalışmadı' }} |"
             echo "| İşin genel durumu | ${{ job.status }} |"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          {
+            echo "### Lint"
+            echo ""
+            if [ -f "$RUNNER_TEMP/lint.log" ]; then
+              ozet="$(temiz "$RUNNER_TEMP/lint.log" | grep -E '✖ [0-9]+ problems' || true)"
+              if [ -n "$ozet" ]; then
+                echo '```'
+                printf '%s\n' "$ozet"
+                echo '```'
+              else
+                echo "Lint temiz: hiçbir hata ya da uyarı yok."
+              fi
+            else
+              echo "_Lint adımı çalışmadı._"
+            fi
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
 

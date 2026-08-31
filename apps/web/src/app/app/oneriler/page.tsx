@@ -14,17 +14,26 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ApiError } from "@/lib/api";
+import { ApiError, DEFAULT_PAGE_SIZE } from "@/lib/api";
 import {
   approveProposal,
   type ApproveProposalBody,
   errText,
   isFeatureMissing,
-  listProposals,
+  listProposalsPaged,
   rejectProposal,
 } from "@/lib/faz2";
 import type { ActionProposal, ProposalType } from "@/lib/types";
-import { Badge, Button, Card, EmptyState, ErrorBox, Select, Spinner } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  ErrorBox,
+  Pagination,
+  Select,
+  Spinner,
+} from "@/components/ui";
 import { AiDisclaimer, FeatureUnavailable, ToastStack, useToasts } from "@/components/ai-ui";
 import { ProposalCard } from "@/components/proposal-card";
 import {
@@ -52,6 +61,9 @@ export default function OnerilerPage() {
   const [status, setStatus] = useState<StatusFilter>("BEKLIYOR");
   const [typeFilter, setTypeFilter] = useState<string>("");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const { toasts, push, dismiss } = useToasts();
 
   const load = useCallback(async () => {
@@ -59,8 +71,16 @@ export default function OnerilerPage() {
     setError(null);
     setMissing(false);
     try {
-      const list = await listProposals({ status: status || undefined, limit: 200 });
-      setItems(list);
+      // Zarf okunur; `total` artık atılmıyor (denetim bulgusu K-15).
+      const res = await listProposalsPaged({
+        status: status || undefined,
+        type: typeFilter || undefined,
+        page,
+        limit: DEFAULT_PAGE_SIZE,
+      });
+      setItems(res.items);
+      setTotal(res.total);
+      setTotalPages(res.totalPages);
     } catch (err) {
       if (isFeatureMissing(err)) setMissing(true);
       else setError(err instanceof ApiError ? err.message : "Öneriler yüklenemedi.");
@@ -68,16 +88,20 @@ export default function OnerilerPage() {
     } finally {
       setLoading(false);
     }
-  }, [status]);
+  }, [status, typeFilter, page]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const visible = useMemo(
-    () => (typeFilter ? items.filter((p) => p.type === typeFilter) : items),
-    [items, typeFilter],
-  );
+  /**
+   * Tür süzgeci artık SUNUCUDA uygulanır (denetim bulguları K-15, K-16).
+   * Önceden 200 kaydın üzerinde istemcide süzülüyordu: "Tür: SÜRE" seçen
+   * kullanıcı "son 200 önerinin içindeki süre önerileri"ni görüyordu.
+   *
+   * denetim bulgusu K-15 · denetim bulgusu K-16
+   */
+  const visible = items;
 
   const countsByType = useMemo(() => {
     const map = new Map<string, number>();
@@ -143,7 +167,11 @@ export default function OnerilerPage() {
             <button
               key={t.key || "hepsi"}
               type="button"
-              onClick={() => setStatus(t.key)}
+              onClick={() => {
+                setStatus(t.key);
+                // Süzgeç değişince ilk sayfaya dön.
+                setPage(1);
+              }}
               className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                 status === t.key
                   ? "bg-slate-900 text-white"
@@ -151,12 +179,18 @@ export default function OnerilerPage() {
               }`}
             >
               {t.label}
-              {t.key === status && items.length > 0 ? ` (${items.length})` : ""}
+              {t.key === status && total > 0 ? ` (${total})` : ""}
             </button>
           ))}
         </div>
         <div className="w-56">
-          <Select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+          <Select
+            value={typeFilter}
+            onChange={(e) => {
+              setTypeFilter(e.target.value);
+              setPage(1);
+            }}
+          >
             <option value="">Tüm öneri tipleri</option>
             {PROPOSAL_TYPES.map((t) => (
               <option key={t} value={t}>
@@ -227,6 +261,16 @@ export default function OnerilerPage() {
               onReject={handleReject}
             />
           ))}
+          <li>
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              noun="öneri"
+              loading={loading}
+              onPageChange={setPage}
+            />
+          </li>
         </ul>
       )}
 

@@ -35,6 +35,11 @@ export const planUpsertSchema = z.object({
   /** { aiCallQuota, storageGb, modules[] } gibi serbest bayraklar. */
   features: z.record(z.unknown()).default({}),
   isActive: z.boolean().default(true),
+  /**
+   * denetim bulgusu K-11: plan oluşturma DÖRT-GÖZ onayına tabidir; onay
+   * kuyruğundaki her talep gibi gerekçe taşımak zorundadır.
+   */
+  reason: reasonField,
 });
 export type PlanUpsertInput = z.infer<typeof planUpsertSchema>;
 

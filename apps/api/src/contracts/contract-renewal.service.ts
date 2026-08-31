@@ -113,6 +113,24 @@ export class ContractRenewalService {
     // Tatil takvimi: ihbar gününün etrafındaki iki yıl yeterlidir.
     const holidays =
       holidayCache ??
+      // denetim bulgusu Ö-16 — `isHalfDay` / `isApproximate` SÜTUNLARI ÇEKİLİR.
+      // Bu iki alan `select` dışında bırakıldığında motor, bayrakları tatilin
+      // _adından_ okumaya düşüyordu (`buildHolidayIndex` → `name.includes("(yarım
+      // gün)")`); tek bir isim düzenlemesi hesabı sessizce bozmaya yeterdi.
+      //
+      // YARIM GÜNÜN DOĞRU DAVRANIŞI (motorun kuralıyla tutarlı): arife TAM TATİL
+      // DEĞİLDİR. 2429 s.K. m.2/A uyarınca o gün 13.00'e kadar mesai vardır; gün
+      // "resmî tatile rastlamış" sayılmaz ve HMK m.93 / İİK m.19 kaydırması
+      // TETİKLENMEZ (`isNonWorkingDay` → `isFullDayOfficialHoliday`). Son gün arifeye
+      // düşerse süre O GÜN sona erer; motor yalnızca «işlemi 13.00'ten önce
+      // tamamlayınız» uyarısı basar (`collectWarnings` §2). Bayrak gelmezse arife tam
+      // tatil sayılır ve avukata var olmayan 1-3 gün kazandırılırdı.
+      // `isApproximate` ise hicri takvime bağlı bayramlarda teyit uyarısını açar.
+      //
+      // BURADA YÖN GERİYEDİR (`previousWorkingDay`): fesih ihbarı son güne kadar
+      // YETİŞTİRİLMELİDİR. Arife iş günü olduğu için ihbar günü geriye ÇEKİLMEZ;
+      // yanlışlıkla tam tatil sayılsaydı ihbar günü bir gün ERKENE alınır ve
+      // sözleşme gereksiz yere erken feshedilmiş görünürdü.
       (await this.prisma.client.holiday.findMany({
         where: {
           date: {
@@ -315,6 +333,22 @@ export class ContractRenewalService {
       .map((c) => c.effectiveTo?.getUTCFullYear())
       .filter((y): y is number => typeof y === "number");
     const holidays = years.length
+      // denetim bulgusu Ö-16 — `isHalfDay` / `isApproximate` SÜTUNLARI ÇEKİLİR.
+      // Bu iki alan `select` dışında bırakıldığında motor, bayrakları tatilin
+      // _adından_ okumaya düşüyordu (`buildHolidayIndex` → `name.includes("(yarım
+      // gün)")`); tek bir isim düzenlemesi hesabı sessizce bozmaya yeterdi.
+      //
+      // YARIM GÜNÜN DOĞRU DAVRANIŞI (motorun kuralıyla tutarlı): arife TAM TATİL
+      // DEĞİLDİR. 2429 s.K. m.2/A uyarınca o gün 13.00'e kadar mesai vardır; gün
+      // "resmî tatile rastlamış" sayılmaz ve HMK m.93 / İİK m.19 kaydırması
+      // TETİKLENMEZ (`isNonWorkingDay` → `isFullDayOfficialHoliday`). Son gün arifeye
+      // düşerse süre O GÜN sona erer; motor yalnızca «işlemi 13.00'ten önce
+      // tamamlayınız» uyarısı basar (`collectWarnings` §2). Bayrak gelmezse arife tam
+      // tatil sayılır ve avukata var olmayan 1-3 gün kazandırılırdı.
+      // `isApproximate` ise hicri takvime bağlı bayramlarda teyit uyarısını açar.
+      //
+      // Toplu (N+1 önleyen) tek sorgu; yukarıdaki tekil sorguyla AYNI sütunları
+      // çekmelidir, aksi hâlde liste ekranı ile tekil hesap ayrışırdı.
       ? await this.prisma.client.holiday.findMany({
           where: {
             date: {

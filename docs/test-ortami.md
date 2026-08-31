@@ -76,13 +76,21 @@ Mobil uygulama (`apps/mobile`) Docker'a girmez; Expo ile cihazda çalışır (bk
 
 ---
 
-## 3. Docker ile Çalıştırma
+## 3. Docker ile Çalıştırma (önerilen)
+
+Tek komut — migration ve seed **otomatik** çalışır, elle adım yoktur:
 
 ```bash
-# Tüm yığın (altyapı + api + web + admin + portal), migration ve seed otomatik
 docker compose -f docker-compose.test.yml up -d --build
+```
 
-# Günlükleri izle
+İlk açılış imaj derlemesi nedeniyle 5–15 dakika sürebilir. Sonrasında:
+
+```bash
+# Durum
+docker compose -f docker-compose.test.yml ps
+
+# API günlükleri
 docker compose -f docker-compose.test.yml logs -f api
 
 # Durdur (veri korunur)
@@ -92,10 +100,25 @@ docker compose -f docker-compose.test.yml down
 docker compose -f docker-compose.test.yml down -v
 ```
 
-İlk açılış imaj derlemesi nedeniyle birkaç dakika sürer. `api` servisi sağlıklı olduğunda
-(`/api/v1/health` → `{"status":"ok"}`) diğer uygulamalar kullanılabilir.
+Yığın hazır olduğunda `http://localhost:3001/api/v1/health` → `{"status":"ok"}` döner.
 
----
+### Test yığınının üretimden farkları (bilinçli)
+
+| | Test | Üretim (`docker-compose.prod.yml`) |
+|---|---|---|
+| Sırlar | Dosyada sabit, hazır | Operatör üretir; varsayılan YOK, boş sır kabul edilmez |
+| Migration + seed | Otomatik (`migrate` servisi) | Elle, kontrollü (`scripts/prod-migrate.sh`) |
+| MinIO konsolu | Açık (`:9001`) | Kapalı, port yayınlanmaz |
+| Portlar | Hepsi dışarı açık | Yalnız `127.0.0.1`, dışarıya ters vekil bakar |
+| Platform 2FA | Kapalı (hızlı giriş için) | Zorunlu |
+
+### Yayımlama (registry)
+
+Test için kayıt defterine **gerek yoktur** — yukarıdaki `--build` yeterlidir.
+Başka makinede çalıştırmak isterseniz imajlar GitHub Container Registry'ye
+gönderilebilir; bunun için depo token'ında `write:packages` yetkisi gerekir
+(`gh auth refresh -h github.com -s write:packages`). Docker Hub ayrı bir hesap
+gerektirdiği ve test için ek fayda sağlamadığı için tercih edilmemiştir.
 
 ## 4. Yerel Çalıştırma (Docker'sız, geliştirme için)
 

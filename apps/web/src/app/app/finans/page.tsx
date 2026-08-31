@@ -16,9 +16,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ApiError, api, asList } from "@/lib/api";
+import { ApiError, DEFAULT_PAGE_SIZE } from "@/lib/api";
+import { RemoteSelect } from "@/components/remote-select";
 import { errText, isMissingEndpoint } from "@/lib/faz2";
-import { createFinanceEntry, getOfficeReport, listFinanceEntries } from "@/lib/finance";
+import { createFinanceEntry, getOfficeReport, listFinanceEntriesPaged } from "@/lib/finance";
 import type { FinanceEntry, OfficeFinanceReport } from "@/lib/faz3-types";
 import type { CaseSummary, Client } from "@/lib/types";
 import {
@@ -31,6 +32,7 @@ import {
   Input,
   Modal,
   Select,
+  Pagination,
   Spinner,
   StatCard,
   Textarea,
@@ -72,7 +74,10 @@ export default function FinansPage() {
   const [typeFilter, setTypeFilter] = useState("");
   const [clientFilter, setClientFilter] = useState("");
 
-  const [clients, setClients] = useState<Client[]>([]);
+  const [clientFilterLabel, setClientFilterLabel] = useState("");
+  const [entriesPage, setEntriesPage] = useState(1);
+  const [entriesTotal, setEntriesTotal] = useState(0);
+  const [entriesTotalPages, setEntriesTotalPages] = useState(1);
   const [open, setOpen] = useState(false);
   const { toasts, push, dismiss } = useToasts();
 
@@ -98,15 +103,18 @@ export default function FinansPage() {
     setEntriesLoading(true);
     setEntriesError(null);
     try {
-      setEntries(
-        await listFinanceEntries({
-          type: typeFilter || undefined,
-          clientId: clientFilter || undefined,
-          dateFrom,
-          dateTo,
-          limit: 200,
-        }),
-      );
+      // Zarf okunur; `total` artık atılmıyor (denetim bulgusu K-15).
+      const res = await listFinanceEntriesPaged({
+        type: typeFilter || undefined,
+        clientId: clientFilter || undefined,
+        dateFrom,
+        dateTo,
+        page: entriesPage,
+        limit: DEFAULT_PAGE_SIZE,
+      });
+      setEntries(res.items);
+      setEntriesTotal(res.total);
+      setEntriesTotalPages(res.totalPages);
       setEntriesMissing(false);
     } catch (err) {
       if (isMissingEndpoint(err)) {
@@ -118,7 +126,7 @@ export default function FinansPage() {
     } finally {
       setEntriesLoading(false);
     }
-  }, [typeFilter, clientFilter, dateFrom, dateTo]);
+  }, [typeFilter, clientFilter, dateFrom, dateTo, entriesPage]);
 
   useEffect(() => {
     void loadReport();
@@ -128,11 +136,6 @@ export default function FinansPage() {
     void loadEntries();
   }, [loadEntries]);
 
-  useEffect(() => {
-    void api<unknown>("/clients", { query: { limit: 200 } })
-      .then((p) => setClients(asList<Client>(p)))
-      .catch(() => setClients([]));
-  }, []);
 
   const currency = report?.currency ?? "TRY";
   const aging = report?.aging ?? [];
@@ -174,15 +177,26 @@ export default function FinansPage() {
               ))}
             </Select>
           </Field>
+          {/*
+            Müvekkil süzgeci SUNUCUDA aranır (denetim bulguları K-15, K-16).
+            Önceden `/clients?limit=200` çekiliyordu; ucun tavanı 100 olduğu
+            için 101. müvekkil bu süzgeçte HİÇ seçilemiyordu.
+          */}
           <Field label="Müvekkil">
-            <Select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)}>
-              <option value="">Tümü</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
+            <RemoteSelect<Client>
+              path="/clients"
+              value={clientFilter}
+              selectedLabel={clientFilterLabel}
+              onChange={(id, opt) => {
+                setClientFilter(id);
+                setClientFilterLabel(opt?.label ?? "");
+                setEntriesPage(1);
+              }}
+              toOption={(c) => ({ id: c.id, label: c.name })}
+              placeholder="Tümü — aramak için yazın…"
+              emptyMessage="Eşleşen müvekkil yok."
+              ariaLabel="Müvekkil ara ve süz"
+            />
           </Field>
         </div>
       </Card>
@@ -396,13 +410,21 @@ export default function FinansPage() {
                 ))}
               </tbody>
             </table>
+
+            <Pagination
+              page={entriesPage}
+              totalPages={entriesTotalPages}
+              total={entriesTotal}
+              noun="hareket"
+              loading={entriesLoading}
+              onPageChange={setEntriesPage}
+            />
           </div>
         )}
       </Card>
 
       <NewEntryModal
         open={open}
-        clients={clients}
         onClose={() => setOpen(false)}
         onCreated={() => {
           setOpen(false);
@@ -421,16 +443,15 @@ export default function FinansPage() {
 
 function NewEntryModal({
   open,
-  clients,
   onClose,
   onCreated,
 }: {
   open: boolean;
-  clients: Client[];
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [cases, setCases] = useState<CaseSummary[]>([]);
+  const [clientLabel, setClientLabel] = useState("");
+  const [caseLabel, setCaseLabel] = useState("");
   const [form, setForm] = useState({
     clientId: "",
     caseId: "",
@@ -450,15 +471,6 @@ function NewEntryModal({
     setForm((f) => ({ ...f, amount: "", description: "" }));
   }, [open]);
 
-  useEffect(() => {
-    if (!open || !form.clientId) {
-      setCases([]);
-      return;
-    }
-    void api<unknown>("/cases", { query: { clientId: form.clientId, limit: 200 } })
-      .then((p) => setCases(asList<CaseSummary>(p)))
-      .catch(() => setCases([]));
-  }, [open, form.clientId]);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -487,34 +499,39 @@ function NewEntryModal({
     <Modal open={open} title="Yeni Finans Hareketi" onClose={onClose} wide>
       <form onSubmit={submit} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
+          {/* Hedefler SUNUCUDA aranır — 101. müvekkil / 201. dosya da seçilebilir (K-15). */}
           <Field label="Müvekkil" hint="Her hareket bir müvekkile bağlanmak zorundadır.">
-            <Select
+            <RemoteSelect<Client>
+              path="/clients"
               value={form.clientId}
-              onChange={(e) => setForm({ ...form, clientId: e.target.value, caseId: "" })}
-              required
-            >
-              <option value="">Seçiniz…</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
+              selectedLabel={clientLabel}
+              onChange={(id, opt) => {
+                setForm({ ...form, clientId: id, caseId: "" });
+                setClientLabel(opt?.label ?? "");
+                setCaseLabel("");
+              }}
+              toOption={(c) => ({ id: c.id, label: c.name })}
+              placeholder="Müvekkil arayın…"
+              emptyMessage="Eşleşen müvekkil yok."
+              ariaLabel="Müvekkil ara ve seç"
+            />
           </Field>
           <Field label="Dosya (isteğe bağlı)">
-            <Select
+            <RemoteSelect<CaseSummary>
+              path="/cases"
+              query={{ clientId: form.clientId || undefined }}
               value={form.caseId}
-              onChange={(e) => setForm({ ...form, caseId: e.target.value })}
+              selectedLabel={caseLabel}
               disabled={!form.clientId}
-            >
-              <option value="">Dosyaya bağlı değil</option>
-              {cases.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.fileNumber ? `${c.fileNumber} — ` : ""}
-                  {c.title}
-                </option>
-              ))}
-            </Select>
+              onChange={(id, opt) => {
+                setForm({ ...form, caseId: id });
+                setCaseLabel(opt?.label ?? "");
+              }}
+              toOption={(c) => ({ id: c.id, label: c.title, hint: c.fileNumber ?? undefined })}
+              placeholder="Dosyaya bağlı değil — aramak için yazın…"
+              emptyMessage="Eşleşen dosya yok."
+              ariaLabel="Dosya ara ve seç"
+            />
           </Field>
         </div>
 

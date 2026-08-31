@@ -34,7 +34,7 @@ export class AuthController {
     @Req() request: Request
   ) {
     const result = await this.authService.login(body);
-    this.loginThrottle.reset(request);
+    await this.loginThrottle.reset(request);
     return result;
   }
 

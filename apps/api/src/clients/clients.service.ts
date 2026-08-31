@@ -5,7 +5,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import type { AuthUser } from "../common/types";
 import { assertRole, ROLE_SETS } from "../common/roles";
-import { normalizeQuery } from "../common/pagination";
+import { normalizeQuery, paged, resolvePage } from "../common/pagination";
 import type { CreateContactInput, UpdateClientInput, UpdateContactInput } from "./clients.dto";
 
 /**
@@ -67,8 +67,10 @@ export class ClientsService {
     tenantId: string,
     params: { q?: string; page?: string; limit?: string; category?: string; isActive?: string }
   ) {
-    const page = Math.max(1, Number(params.page) || 1);
-    const limit = Math.min(100, Math.max(1, Number(params.limit) || 20));
+    // Entegrasyon notu (C ajani): bu uc kendi tavanini (100) elle hesapliyordu;
+    // diger tum liste uclari `resolvePage` kullaniyor. Istemci `MAX_PAGE_SIZE`
+    // (200) varsayarken sunucu sessizce 100'e kirpiyordu.
+    const pageParams = resolvePage(params, 20);
 
     const where: Prisma.ClientWhereInput = { tenantId };
     const q = normalizeQuery(params.q);
@@ -91,20 +93,14 @@ export class ClientsService {
       this.prisma.client.client.findMany({
         where,
         orderBy: { createdAt: "desc" },
-        skip: (page - 1) * limit,
-        take: limit,
+        skip: pageParams.skip,
+        take: pageParams.take,
         select: { ...CLIENT_PUBLIC_SELECT, _count: { select: { cases: true, contacts: true } } },
       }),
       this.prisma.client.client.count({ where }),
     ]);
 
-    return {
-      items: items.map(maskClient),
-      total,
-      page,
-      limit,
-      totalPages: Math.max(1, Math.ceil(total / limit)),
-    };
+    return paged(items.map(maskClient), total, pageParams);
   }
 
   async create(user: AuthUser, input: CreateClientInput) {

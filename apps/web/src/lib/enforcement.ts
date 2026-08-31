@@ -25,7 +25,7 @@
  */
 
 import { ENFORCEMENT_ROUTES } from "@nomosos/shared";
-import { api, asList } from "@/lib/api";
+import { api, asList, fetchPaged, type PagedResult } from "@/lib/api";
 import type {
   AssetRecord,
   AssetStatus,
@@ -52,6 +52,22 @@ export interface EnforcementQuery {
   clientId?: string;
   q?: string;
   limit?: number;
+}
+
+/**
+ * İcra dosyaları — SAYFALAMA ZARFIYLA (denetim bulgusu K-15).
+ * `limit: 200` isteyip `total`'i atmak, 200'den fazla takibi olan büroda
+ * dosyaların sessizce kaybolması demekti.
+ */
+export async function listEnforcementFilesPaged(
+  query: EnforcementQuery & { page?: number } = {},
+): Promise<PagedResult<EnforcementFile>> {
+  const { page, limit, ...filters } = query;
+  return fetchPaged<EnforcementFile>(ENFORCEMENT_ROUTES.list, {
+    query: { ...filters },
+    page,
+    limit,
+  });
 }
 
 export function listEnforcementFiles(query: EnforcementQuery = {}): Promise<EnforcementFile[]> {

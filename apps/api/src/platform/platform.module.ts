@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { LoginThrottleGuard } from "../auth/login-throttle.guard";
 import { PlatformJwtGuard } from "./guards/platform-jwt.guard";
 import { PlatformPermissionGuard } from "./guards/platform-permission.guard";
+import { SupportGrantGuard } from "./guards/support-grant.guard";
 import { PlatformAuditService } from "./platform-audit.service";
 import { PlatformAuthController } from "./auth/platform-auth.controller";
 import { PlatformAuthService } from "./auth/platform-auth.service";
@@ -78,6 +79,8 @@ import { PlatformUsersService } from "./users/platform-users.service";
   providers: [
     PlatformJwtGuard,
     PlatformPermissionGuard,
+    // denetim bulgusu Ö-06: destek erişim penceresini gerçekten kapıya bağlar.
+    SupportGrantGuard,
     LoginThrottleGuard,
     PlatformAuditService,
     PlatformAuthService,

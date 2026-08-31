@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { SERVER_MAX_PAGE_SIZE } from "@/lib/api";
 import {
   deleteDocument,
   documentDownloadUrl,
@@ -20,7 +21,7 @@ import {
   getPipelineRun,
   isFeatureMissing,
   listCaseDocuments,
-  listProposals,
+  listProposalsPaged,
   pipelineSteps,
   updateDocumentClass,
   uploadDocument,
@@ -127,9 +128,12 @@ export function DocumentsTab({
   // Dosyaya ait önerilerin belge bazında sayısı (rozet için).
   useEffect(() => {
     let alive = true;
-    listProposals({ caseId, status: "BEKLIYOR", limit: 200 })
-      .then((list: ActionProposal[]) => {
+    // Rozet sayımı zarfı okur; kırpma varsa "200+" gösterilir, sessiz kalınmaz
+    // (denetim bulgusu K-15).
+    listProposalsPaged({ caseId, status: "BEKLIYOR", limit: SERVER_MAX_PAGE_SIZE })
+      .then((res) => {
         if (!alive) return;
+        const list: ActionProposal[] = res.items;
         const map: Record<string, number> = {};
         for (const p of list) {
           if (p.documentId) map[p.documentId] = (map[p.documentId] ?? 0) + 1;

@@ -335,10 +335,22 @@ export class AiService {
     // yazılıydı: TÜM mesajları tara, tümünü maskele.
     let systemPrompt = SYSTEM_PROMPT;
     let contextTerms = 0;
+    let userMessage = input.message;
     if (input.caseId) {
       const ctx = await this.buildCaseContext(user.tenantId, input.caseId);
       contextTerms = ctx.maskedTerms;
       systemPrompt += `\n\n${ctx.text}`;
+
+      // SÖZLÜK, AVUKATIN KENDİ YAZDIĞI METNE DE UYGULANIR (canlı doğrulamada
+      // bulundu). Bağlam özenle "[MÜVEKKİL]" olarak maskelenirken, avukatın
+      // soru kutusuna yazdığı "ABC Holding A.Ş." dış sağlayıcıya AÇIK
+      // gidiyordu: `scanPii` yalnız TCKN/IBAN/telefon/e-posta KALIPLARINI
+      // tanır, ad ve unvan hiçbir kalıba girmez. Aynı dosyanın bilinen
+      // adlarını iki farklı mesajda farklı işlemek, maskelemeyi anlamsız
+      // kılıyordu — model iki satırı yan yana görüp eşleştirebiliyordu.
+      const maskedUser = maskTerms(input.message, ctx.terms);
+      userMessage = maskedUser.maskedText;
+      contextTerms += maskedUser.replaced;
     }
 
     const external = isExternalDestination(config.type, config.baseUrl);
@@ -347,7 +359,7 @@ export class AiService {
     let scans: ReturnType<typeof scanPii>[];
     const draft: LlmMessage[] = [
       { role: "system", content: systemPrompt },
-      { role: "user", content: input.message },
+      { role: "user", content: userMessage },
     ];
     try {
       scans = draft.map((m) => scanPii(m.content));
@@ -477,7 +489,7 @@ export class AiService {
   private async buildCaseContext(
     tenantId: string,
     caseId: string,
-  ): Promise<{ text: string; maskedTerms: number }> {
+  ): Promise<{ text: string; maskedTerms: number; terms: Array<{ value: string; label: string }> }> {
     const found = await this.prisma.client.case.findFirst({
       where: { id: caseId, tenantId },
       include: {
@@ -538,7 +550,9 @@ export class AiService {
 
     // 2) Serbest metinlerde kalan ad geçişlerini de temizle.
     const masked = maskTerms(lines.join("\n"), terms);
-    return { text: masked.maskedText, maskedTerms: masked.replaced };
+    // Sözlük DIŞARI da verilir: aynı adlar avukatın kendi mesajında da
+    // maskelenmek zorundadır (bkz. `chat`).
+    return { text: masked.maskedText, maskedTerms: masked.replaced, terms };
   }
 
   /** DB kaydını @nomosos/ai için çözülmüş yapılandırmaya çevirir (API anahtarı şifresi açılır). */

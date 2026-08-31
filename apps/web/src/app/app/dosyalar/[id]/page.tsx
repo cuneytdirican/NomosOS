@@ -22,13 +22,13 @@
 
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ApiError, api, asList } from "@/lib/api";
+import { ApiError, api, asList, SERVER_MAX_PAGE_SIZE } from "@/lib/api";
 import {
   approveProposal,
   type ApproveProposalBody,
   errText,
   listCaseLawRefs,
-  listProposals,
+  listProposalsPaged,
   rejectProposal,
 } from "@/lib/faz2";
 import type {
@@ -54,6 +54,7 @@ import {
   Modal,
   Select,
   Spinner,
+  TruncationNotice,
   Tabs,
   Textarea,
 } from "@/components/ui";
@@ -158,6 +159,7 @@ export default function DosyaDetayPage({ params }: { params: Promise<{ id: strin
 
   // Faz 2 durumu
   const [proposals, setProposals] = useState<ActionProposal[]>([]);
+  const [proposalsTruncated, setProposalsTruncated] = useState(false);
   const [proposalBusyId, setProposalBusyId] = useState<string | null>(null);
   const [caseLawRefs, setCaseLawRefs] = useState<CaseLawRef[]>([]);
   const [focusDocumentId, setFocusDocumentId] = useState<string | null>(null);
@@ -179,9 +181,17 @@ export default function DosyaDetayPage({ params }: { params: Promise<{ id: strin
 
   const loadProposals = useCallback(async () => {
     try {
-      setProposals(await listProposals({ caseId: id, status: "BEKLIYOR", limit: 100 }));
+      // Zarf okunur; kırpma olursa ekranda uyarı çıkar (denetim bulgusu K-15).
+      const res = await listProposalsPaged({
+        caseId: id,
+        status: "BEKLIYOR",
+        limit: SERVER_MAX_PAGE_SIZE,
+      });
+      setProposals(res.items);
+      setProposalsTruncated(res.hasMore || res.truncated);
     } catch {
       setProposals([]);
+      setProposalsTruncated(false);
     }
   }, [id]);
 
@@ -844,6 +854,8 @@ export default function DosyaDetayPage({ params }: { params: Promise<{ id: strin
               Tüm öneriler →
             </Link>
           </div>
+          {/* Sessiz kırpma yasak (denetim bulgusu K-15). */}
+          {proposalsTruncated && <TruncationNotice shown={proposals.length} noun="öneri" />}
           {proposals.length === 0 ? (
             <Card>
               <EmptyState message="Bu dosyada onay bekleyen öneri yok. Belgeler sekmesinden bir tebligat veya karar yüklediğinizde hat otomatik olarak öneri üretir." />

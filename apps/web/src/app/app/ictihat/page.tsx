@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ApiError, api, asList } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import {
   addCaseLawRef,
   createCaseLaw,
@@ -38,6 +38,7 @@ import {
   Spinner,
   Textarea,
 } from "@/components/ui";
+import { RemoteSelect } from "@/components/remote-select";
 import {
   AiDisclaimer,
   FeatureUnavailable,
@@ -69,16 +70,9 @@ export default function IctihatPage() {
   const [missing, setMissing] = useState(false);
   const [pii, setPii] = useState<PiiPrompt | null>(null);
 
-  const [cases, setCases] = useState<CaseSummary[]>([]);
   const [attachTarget, setAttachTarget] = useState<CaseLawDoc | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
   const { toasts, push, dismiss } = useToasts();
-
-  useEffect(() => {
-    api<unknown>("/cases", { query: { limit: "200" } })
-      .then((p) => setCases(asList<CaseSummary>(p)))
-      .catch(() => setCases([]));
-  }, []);
 
   /**
    * `mode` state'i asenkron güncellendiği için arama kipi PARAMETRE olarak
@@ -242,7 +236,6 @@ export default function IctihatPage() {
 
       <AttachModal
         doc={attachTarget}
-        cases={cases}
         onClose={() => setAttachTarget(null)}
         onDone={(caseTitle) => {
           setAttachTarget(null);
@@ -349,24 +342,24 @@ function CaseLawCard({ doc, onAttach }: { doc: CaseLawDoc; onAttach: () => void 
 
 function AttachModal({
   doc,
-  cases,
   onClose,
   onDone,
   onError,
 }: {
   doc: CaseLawDoc | null;
-  cases: CaseSummary[];
   onClose: () => void;
   onDone: (caseTitle: string) => void;
   onError: (msg: string) => void;
 }) {
   const [caseId, setCaseId] = useState("");
+  const [caseLabel, setCaseLabel] = useState("");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (doc) {
       setCaseId("");
+      setCaseLabel("");
       setNote("");
     }
   }, [doc]);
@@ -377,7 +370,7 @@ function AttachModal({
     setSaving(true);
     try {
       await addCaseLawRef(caseId, doc.id, note);
-      onDone(cases.find((c) => c.id === caseId)?.title ?? "seçilen");
+      onDone(caseLabel || "seçilen");
     } catch (err) {
       onError(errText(err, "Emsal eklenemedi."));
     } finally {
@@ -396,16 +389,26 @@ function AttachModal({
             </strong>{" "}
             · E. {doc.caseNumber} · K. {doc.decisionNumber}
           </p>
-          <Field label="Dosya">
-            <Select value={caseId} onChange={(e) => setCaseId(e.target.value)} required>
-              <option value="">Dosya seçin…</option>
-              {cases.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.title}
-                  {c.fileNumber ? ` (${c.fileNumber})` : ""}
-                </option>
-              ))}
-            </Select>
+          {/*
+            Dosya seçimi SUNUCUDA aranır (denetim bulguları K-15, K-16).
+                                          denetim bulgusu K-15 · denetim bulgusu K-16
+            Önceden `/cases?limit=200` ile tek atışta çekiliyordu; 201. dosya
+            bu listede HİÇ seçilemediği için emsal karar o dosyaya eklenemiyordu.
+          */}
+          <Field label="Dosya" hint="Başlık veya esas no yazarak arayın">
+            <RemoteSelect<CaseSummary>
+              path="/cases"
+              value={caseId}
+              selectedLabel={caseLabel}
+              onChange={(id, opt) => {
+                setCaseId(id);
+                setCaseLabel(opt?.label ?? "");
+              }}
+              toOption={(c) => ({ id: c.id, label: c.title, hint: c.fileNumber ?? undefined })}
+              placeholder="Dosya arayın…"
+              emptyMessage="Eşleşen dosya yok."
+              ariaLabel="Dosya ara ve seç"
+            />
           </Field>
           <Field label="İlgi notu" hint="Bu kararın dosyanızla bağını kısaca yazın.">
             <Textarea

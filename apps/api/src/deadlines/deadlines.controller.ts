@@ -5,11 +5,13 @@ import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe";
 import type { AuthUser } from "../common/types";
 import {
   computeDeadlineSchema,
+  correctDeadlineInputsSchema,
   createDeadlineSchema,
   deadlineFromRuleSchema,
   updateDeadlineSchema,
   updateDeadlineStatusSchema,
   type ComputeDeadlineInput,
+  type CorrectDeadlineInputsInput,
   type CreateDeadlineInput,
   type DeadlineFromRuleInput,
   type UpdateDeadlineInput,
@@ -96,6 +98,24 @@ export class DeadlinesController {
     @Body(new ZodValidationPipe(updateDeadlineSchema)) body: UpdateDeadlineInput
   ) {
     return this.deadlinesService.update(user, id, body);
+  }
+
+  /**
+   * Kural motorundan üretilmiş sürenin GİRDİSİNİ düzeltir; motor yeniden
+   * koşar ve son günü kendisi yazar (denetim bulgusu K-14).
+   *
+   * `PATCH /deadlines/:id` son günü elle değiştirmeyi reddeder ve bu ucu
+   * gösterir. Rota sırası önemlidir: `:id/inputs`, `:id`den sonra tanımlansa
+   * bile Nest daha spesifik yolu doğru eşler; yine de okunurluk için status
+   * ucunun yanında durur.
+   */
+  @Patch(":id/inputs")
+  correctInputs(
+    @CurrentUser() user: AuthUser,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(correctDeadlineInputsSchema)) body: CorrectDeadlineInputsInput
+  ) {
+    return this.deadlinesService.correctInputs(user, id, body);
   }
 
   @Patch(":id/status")

@@ -5,14 +5,19 @@ import { adjustmentRejection } from "../../credits/credit-plans";
 import { PlatformAuditService } from "../platform-audit.service";
 import { MAINTENANCE_SETTING_KEY, SUPPORT_GRANT_MAX_HOURS } from "../platform.constants";
 import { ADMIN_ROLES } from "../platform-permissions";
+import { superAdminFloorViolation } from "../users/super-admin-floor";
+import { PURGE_ESCAPE_HATCH_GUC } from "../audit/append-only";
+import { topologicalDeleteOrder, type ForeignKeyEdge } from "../tenants/tenant-purge-order";
 import { assertTransition } from "../subscriptions/subscription-state";
 import type { PlatformAuthUser } from "../platform.types";
 import {
   APPROVAL_ACTIONS,
+  type AuditExportPayload,
   type CreditManualAdjustPayload,
   type FeatureFlagGlobalPayload,
   type MaintenanceLockPayload,
   type PaymentRefundPayload,
+  type PlanCreatePayload,
   type PlanPriceChangePayload,
   type PlatformUserCreatePayload,
   type PlatformUserCredentialResetPayload,
@@ -20,6 +25,7 @@ import {
   type SubscriptionPlanChangePayload,
   type SuperAdminPayload,
   type SupportAccessPayload,
+  type TenantDeletePayload,
   type TenantStatusPayload,
 } from "./approval-actions";
 
@@ -55,6 +61,14 @@ export class PlatformApprovalExecutorService {
     const payload = this.parsePayload(request.payloadJson);
 
     switch (request.action) {
+      // denetim bulgusu O-28 -> spec dort-goz listesinin 1. ve 8. maddeleri.
+      case APPROVAL_ACTIONS.TENANT_DELETE:
+        return this.deleteTenant(payload as TenantDeletePayload, approver);
+      case APPROVAL_ACTIONS.AUDIT_EXPORT:
+        return this.authorizeAuditExport(request.id, payload as AuditExportPayload, approver);
+      // denetim bulgusu K-11 -> fiyatli yeni plan tek imzayla yaratilamaz.
+      case APPROVAL_ACTIONS.PLAN_CREATE:
+        return this.createPlan(payload as PlanCreatePayload, approver);
       case APPROVAL_ACTIONS.TENANT_SUSPEND:
         return this.setTenantSubscriptionStatus(payload as TenantStatusPayload, "SUSPENDED", approver);
       case APPROVAL_ACTIONS.TENANT_ACTIVATE:
@@ -403,22 +417,26 @@ export class PlatformApprovalExecutorService {
     approver: PlatformAuthUser
   ): Promise<string> {
     if (payload.targetUserId) {
-      const target = await this.prisma.client.platformUser.findUnique({
-        where: { id: payload.targetUserId },
-      });
-      if (!target) throw new NotFoundException("Panel kullanıcısı bulunamadı.");
-      await this.prisma.client.platformUser.update({
-        where: { id: target.id },
-        data: { role: "SUPER_ADMIN" },
-      });
-      await this.audit.log({
-        actor: approver,
-        action: "PLATFORM_USER_SUPER_ADMIN",
-        entity: "PlatformUser",
-        entityId: target.id,
-        detail: `${target.email} rolü ${target.role} → SUPER_ADMIN. Gerekçe: ${payload.reason}`,
-      });
-      return `${target.email} artık SUPER_ADMIN.`;
+      const mode = payload.mode ?? "promote";
+      if (mode === "promote") {
+        const target = await this.prisma.client.platformUser.findUnique({
+          where: { id: payload.targetUserId },
+        });
+        if (!target) throw new NotFoundException("Panel kullanıcısı bulunamadı.");
+        await this.prisma.client.platformUser.update({
+          where: { id: target.id },
+          data: { role: "SUPER_ADMIN" },
+        });
+        await this.audit.log({
+          actor: approver,
+          action: "PLATFORM_USER_SUPER_ADMIN",
+          entity: "PlatformUser",
+          entityId: target.id,
+          detail: `${target.email} rolü ${target.role} → SUPER_ADMIN. Gerekçe: ${payload.reason}`,
+        });
+        return `${target.email} artık SUPER_ADMIN.`;
+      }
+      return this.demoteSuperAdmin(payload.targetUserId, mode, payload.reason, approver);
     }
 
     if (!payload.newUser) {
@@ -446,6 +464,261 @@ export class PlatformApprovalExecutorService {
       detail: `Yeni SUPER_ADMIN oluşturuldu: ${created.email}. Gerekçe: ${payload.reason}`,
     });
     return `${created.email} SUPER_ADMIN olarak oluşturuldu.`;
+  }
+
+  /**
+   * SUPER_ADMIN DÜŞÜRME / PASİFLEŞTİRME — denetim bulgusu Ö-02.
+   *
+   * Spec §Roller madde 7 "yeni SUPER_ADMIN atama / mevcut SUPER_ADMIN'i
+   * DÜŞÜRME" der; kodda yalnız atama onaya düşüyordu, düşürme ve pasifleştirme
+   * tek imzalıydı.
+   *
+   * TABAN SAYIMI TRANSACTION İÇİNDEDİR: talep 72 saate kadar bekleyebilir ve
+   * bu sürede başka SUPER_ADMIN'ler pasifleşmiş olabilir. Ayrıca aynı anda
+   * onaylanan iki talep, ikisi de "geriye yeterli sayı kalıyor" görüp sistemi
+   * tabanın altına düşürebilirdi. Sayım ve yazma tek transaction'dadır ve
+   * yazma, sayımın dayandığı koşulu kendi WHERE'inde taşır.
+   */
+  private async demoteSuperAdmin(
+    targetUserId: string,
+    mode: "demote" | "deactivate",
+    reason: string,
+    approver: PlatformAuthUser
+  ): Promise<string> {
+    const message = await this.prisma.client.$transaction(async (tx) => {
+      const target = await tx.platformUser.findUnique({ where: { id: targetUserId } });
+      if (!target) throw new NotFoundException("Panel kullanıcısı bulunamadı.");
+      if (target.role !== "SUPER_ADMIN") {
+        throw new BadRequestException(
+          `${target.email} zaten SUPER_ADMIN değil; bu talep uygulanamaz.`
+        );
+      }
+      if (mode === "deactivate" && !target.isActive) {
+        throw new BadRequestException("Bu hesap zaten pasif.");
+      }
+
+      const remaining = await tx.platformUser.count({
+        where: { role: "SUPER_ADMIN", isActive: true, id: { not: target.id } },
+      });
+      const violation = superAdminFloorViolation(remaining);
+      if (violation) throw new BadRequestException(violation);
+
+      const data =
+        mode === "deactivate"
+          ? { isActive: false, tokenVersion: { increment: 1 } }
+          : { role: "OPS_ADMIN" as PlatformRole, tokenVersion: { increment: 1 } };
+
+      const written = await tx.platformUser.updateMany({
+        where: { id: target.id, role: "SUPER_ADMIN", isActive: true },
+        data,
+      });
+      if (written.count === 0) {
+        throw new BadRequestException(
+          "Hedef hesabın durumu talep açıldıktan sonra değişti; talep uygulanamadı."
+        );
+      }
+
+      return mode === "deactivate"
+        ? `${target.email} pasifleştirildi. Geriye ${remaining} aktif SUPER_ADMIN kaldı.`
+        : `${target.email} rolü SUPER_ADMIN → OPS_ADMIN. Geriye ${remaining} aktif SUPER_ADMIN kaldı.`;
+    });
+
+    await this.audit.log({
+      actor: approver,
+      action: mode === "deactivate" ? "PLATFORM_USER_DEACTIVATE" : "PLATFORM_USER_SUPER_ADMIN",
+      entity: "PlatformUser",
+      entityId: targetUserId,
+      detail: `${message} DÖRT-GÖZ onayıyla. Gerekçe: ${reason}`,
+    });
+    return message;
+  }
+
+  /**
+   * TENANT KALICI SİLME / VERİ İMHASI — spec dört-göz madde 1 (bulgu Ö-28).
+   *
+   * GERİ ALINAMAZ. Bu yüzden üç kapı vardır:
+   *   1. talep anında VE uygulama anında büro adı doğrulaması,
+   *   2. silme sırası Postgres'in FK kataloğundan topolojik olarak hesaplanır
+   *      (elle taşınan bir tablo listesi bir sonraki migration'da bayatlardı),
+   *   3. kiracıya bağlı olup `tenantId` TAŞIMAYAN bir tablo bulunursa işlem
+   *      HİÇ BAŞLAMAZ — yarım silinmiş kiracı, silinmemiş kiracıdan kötüdür.
+   *
+   * Denetim izi silinmez: `PlatformAuditLog.tenantId` FK taşımaz (şema yorumu:
+   * "kiracı silinse iz kalır") ve tablo kasten hariç tutulur — 10 yıllık
+   * saklama yükümlülüğü kiracının ömründen uzundur.
+   */
+  private async deleteTenant(
+    payload: TenantDeletePayload,
+    approver: PlatformAuthUser
+  ): Promise<string> {
+    const tenant = await this.prisma.client.tenant.findUnique({
+      where: { id: payload.tenantId },
+      select: { id: true, name: true },
+    });
+    if (!tenant) throw new NotFoundException("Büro bulunamadı; silme uygulanamadı.");
+    if (tenant.name.trim() !== (payload.confirmName ?? "").trim()) {
+      throw new BadRequestException(
+        `Doğrulama başarısız: talepte "${payload.confirmName}" yazıyor, büronun adı ` +
+          `"${tenant.name}". Veri imhası uygulanmadı.`
+      );
+    }
+
+    const plan = await this.buildTenantPurgePlan();
+    if (plan.blockers.length > 0) {
+      throw new BadRequestException(
+        "Veri imhası BAŞLATILMADI: şu tablolar kiracı verisine bağlı ama `tenantId` " +
+          `sütunu taşımıyor, silme sırası güvenle hesaplanamıyor: ${plan.blockers.join(", ")}.`
+      );
+    }
+
+    const deleted = await this.prisma.client.$transaction(async (tx) => {
+      // Ö-27 ile Ö-28'in kesişimi: `RiskScoreHistory` ve `CreditTransaction`
+      // append-only tetikleyicisi taşır ama `tenantId` de taşır, yani imha
+      // kapsamındadır. `SET LOCAL` yalnız BU transaction için DELETE'i açar;
+      // UPDATE hâlâ reddedilir ve `PlatformAuditLog` zaten kapsam dışıdır.
+      // Bu, dört-göz onaylı ve denetim izine yazılan tek kaçış deliğidir.
+      await tx.$executeRawUnsafe(`SET LOCAL "${PURGE_ESCAPE_HATCH_GUC}" = 'on'`);
+      let rows = 0;
+      for (const table of plan.order) {
+        rows += await tx.$executeRawUnsafe(
+          `DELETE FROM "${table}" WHERE "tenantId" = $1`,
+          tenant.id
+        );
+      }
+      rows += await tx.$executeRawUnsafe(`DELETE FROM "Tenant" WHERE "id" = $1`, tenant.id);
+      return rows;
+    });
+
+    await this.audit.log({
+      actor: approver,
+      action: "TENANT_DELETE",
+      entity: "Tenant",
+      entityId: tenant.id,
+      tenantId: tenant.id,
+      detail:
+        `"${tenant.name}" bürosu ve tüm verisi KALICI olarak silindi (${deleted} satır, ` +
+        `${plan.order.length} tablo). DÖRT-GÖZ onayıyla. Gerekçe: ${payload.reason}. ` +
+        "Denetim izi kaydı korunur.",
+    });
+    return `"${tenant.name}" bürosu kalıcı olarak silindi (${deleted} satır).`;
+  }
+
+  /**
+   * Silme planını Postgres kataloğundan çıkarır.
+   * `PlatformAuditLog` bilinçli olarak hariçtir (10 yıllık saklama).
+   */
+  private async buildTenantPurgePlan(): Promise<{ order: string[]; blockers: string[] }> {
+    const KEEP: readonly string[] = ["PlatformAuditLog", "Tenant"];
+
+    const columns = await this.prisma.client.$queryRaw<{ table_name: string }[]>`
+      SELECT c.table_name FROM information_schema.columns c
+      JOIN information_schema.tables t
+        ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+      WHERE c.table_schema = 'public'
+        AND c.column_name = 'tenantId'
+        AND t.table_type = 'BASE TABLE'
+    `;
+    const scoped = columns
+      .map((r) => r.table_name)
+      .filter((name) => /^[A-Za-z0-9_]+$/.test(name) && !KEEP.includes(name));
+    const scopedSet = new Set(scoped);
+
+    const fks = await this.prisma.client.$queryRaw<{ dependent: string; referenced: string }[]>`
+      SELECT child.relname AS dependent, parent.relname AS referenced
+      FROM pg_constraint con
+      JOIN pg_class child ON child.oid = con.conrelid
+      JOIN pg_class parent ON parent.oid = con.confrelid
+      JOIN pg_namespace ns ON ns.oid = child.relnamespace
+      WHERE con.contype = 'f' AND ns.nspname = 'public'
+    `;
+
+    const blockers = [
+      ...new Set(
+        fks
+          .filter((e) => scopedSet.has(e.referenced) && !scopedSet.has(e.dependent))
+          .filter((e) => !KEEP.includes(e.dependent))
+          .map((e) => e.dependent)
+      ),
+    ].sort();
+
+    const edges: ForeignKeyEdge[] = fks.filter(
+      (e) => scopedSet.has(e.dependent) && scopedSet.has(e.referenced)
+    );
+    return { order: topologicalDeleteOrder(scoped, edges), blockers };
+  }
+
+  /**
+   * DENETİM İZİ DIŞA AKTARIMINI YETKİLENDİRİR — spec dört-göz madde 8 (Ö-28).
+   *
+   * Onay, dosyayı burada ÜRETMEZ: talep 72 saate kadar bekleyebilir ve o sürede
+   * yeni kayıtlar oluşur; dondurulmuş bir kopya yanıltıcı olurdu. Onay,
+   * `GET /audit/export/:approvalId` ucunu TEK SEFERLİK açar; indirme anı ayrıca
+   * denetim izine yazılır ve ikinci indirme reddedilir.
+   */
+  private async authorizeAuditExport(
+    approvalId: string,
+    payload: AuditExportPayload,
+    approver: PlatformAuthUser
+  ): Promise<string> {
+    await this.audit.log({
+      actor: approver,
+      action: "AUDIT_EXPORT_APPROVED",
+      entity: "PlatformApprovalRequest",
+      entityId: approvalId,
+      tenantId: payload.tenantId ?? null,
+      detail:
+        "Platform denetim izi dışa aktarımı DÖRT-GÖZ onayıyla yetkilendirildi. " +
+        `Süzgeç: ${payload.from ?? "-"} → ${payload.to ?? "-"}` +
+        `${payload.tenantId ? `, büro ${payload.tenantId}` : ""}` +
+        `${payload.action ? `, işlem ${payload.action}` : ""}. Gerekçe: ${payload.reason}. ` +
+        "İndirme TEK SEFERLİKTİR ve ayrıca loglanır.",
+    });
+    return (
+      "Dışa aktarım yetkilendirildi. Talebi açan kişi " +
+      `GET /api/admin/v1/audit/export/${approvalId} ucundan TEK SEFER indirebilir.`
+    );
+  }
+
+  /**
+   * YENİ PLAN OLUŞTURMA — denetim bulgusu K-11.
+   *
+   * `createPlan` fiyatlı yepyeni bir ürünü tek imzayla yaratıyordu; panel ise
+   * aynı işlem için dört-göz rozetini gösteriyordu. Artık onay anında uygulanır
+   * ve anahtar çakışması UYGULAMA anında yeniden kontrol edilir.
+   */
+  private async createPlan(
+    payload: PlanCreatePayload,
+    approver: PlatformAuthUser
+  ): Promise<string> {
+    const existing = await this.prisma.client.planTier.findUnique({
+      where: { key: payload.key },
+    });
+    if (existing) {
+      throw new BadRequestException(
+        `"${payload.key}" anahtarlı bir plan talep açıldıktan sonra oluşturulmuş; ` +
+          "bu talep uygulanamaz."
+      );
+    }
+    const plan = await this.prisma.client.planTier.create({
+      data: {
+        key: payload.key,
+        name: payload.name,
+        monthlyPricePerUser: payload.monthlyPricePerUser,
+        maxUsers: payload.maxUsers,
+        featuresJson: payload.featuresJson,
+        isActive: payload.isActive,
+      },
+    });
+    await this.audit.log({
+      actor: approver,
+      action: "PLAN_CREATE",
+      entity: "PlanTier",
+      entityId: plan.id,
+      detail:
+        `${plan.key} planı DÖRT-GÖZ onayıyla oluşturuldu ` +
+        `(${plan.monthlyPricePerUser?.toFixed(2) ?? "fiyatsız"}). Gerekçe: ${payload.reason}`,
+    });
+    return `${plan.key} planı oluşturuldu.`;
   }
 
   /**

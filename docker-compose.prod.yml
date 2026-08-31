@@ -285,6 +285,13 @@ services:
       AI_TIMEOUT_MS: ${AI_TIMEOUT_MS:-60000}
       AI_RATE_LIMIT_PER_MINUTE: ${AI_RATE_LIMIT_PER_MINUTE:-20}
       AI_RATE_LIMIT_PER_DAY: ${AI_RATE_LIMIT_PER_DAY:-300}
+      # Büro (kiracı) başına, UÇTAN BAĞIMSIZ tavan — denetim bulgusu Ö-10.
+      AI_RATE_LIMIT_TENANT_PER_MINUTE: ${AI_RATE_LIMIT_TENANT_PER_MINUTE:-60}
+      AI_RATE_LIMIT_TENANT_PER_DAY: ${AI_RATE_LIMIT_TENANT_PER_DAY:-2000}
+      # Oran sınırı sayacının yeri — denetim bulgusu Ö-09. Üretimde varsayılan
+      # "redis": Redis zaten bu dosyada tanımlı ve çok örnekli dağıtımda
+      # süreç-içi sayaç bütün sınırları örnek sayısıyla çarpar.
+      RATE_LIMIT_BACKEND: ${RATE_LIMIT_BACKEND:-redis}
 
       # --- Yükleme / ayrıştırma sınırları ---
       MAX_PDF_PAGES: ${MAX_PDF_PAGES:-300}

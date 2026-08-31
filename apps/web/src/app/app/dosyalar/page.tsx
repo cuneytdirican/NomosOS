@@ -1,10 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { api, asList, ApiError } from "@/lib/api";
+import { api, fetchPaged, ApiError, DEFAULT_PAGE_SIZE } from "@/lib/api";
 import type { CaseSummary, Client } from "@/lib/types";
-import { Badge, Button, Card, EmptyState, ErrorBox, Field, Input, Modal, Select, Spinner } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  ErrorBox,
+  Field,
+  Input,
+  Modal,
+  Pagination,
+  Select,
+  Spinner,
+} from "@/components/ui";
+import { RemoteSelect } from "@/components/remote-select";
 import {
   CASE_STATUS_LABELS,
   CASE_STATUS_TONES,
@@ -34,19 +47,42 @@ export default function DosyalarPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [clients, setClients] = useState<Client[]>([]);
   const [form, setForm] = useState<NewCaseForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  /**
+   * ARAMA VE SAYFALAMA SUNUCUDA YAPILIR (denetim bulguları K-15, K-16).
+   *
+   * Önceden `/cases?limit=200` ile tek atışta 200 kayıt çekilip arama
+   * İSTEMCİDE `title`/`fileNumber`/`courtName`/`client.name` üzerinde
+   * süzülüyordu — oysa sunucu `where.OR` ile TAM OLARAK aynı dört alanı zaten
+   * süzüyordu. 640 dosyalı büroda `openedAt desc` sıralamasında 430. sıradaki
+   * dosya aranınca ekran "sonuç yok" diyor, avukat dosyanın sistemde olmadığı
+   * sonucuna varıyordu. Ayrıca zarftaki `total` atıldığı için 200'den
+   * sonrasının var olduğu bile görünmüyordu.
+   *
+   * Desen `muvekkiller/page.tsx:61-82` ile aynıdır (300 ms debounce dahil).
+   *
+   * denetim bulgusu K-15 · denetim bulgusu K-16
+   */
+  const load = useCallback(async (q: string, pageNo: number) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await api<unknown>("/cases", { query: { limit: "200" } });
-      setCases(asList<CaseSummary>(data));
+      const res = await fetchPaged<CaseSummary>("/cases", {
+        query: { q: q.trim() || undefined },
+        page: pageNo,
+        limit: DEFAULT_PAGE_SIZE,
+      });
+      setCases(res.items);
+      setTotal(res.total);
+      setTotalPages(res.totalPages);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Dosyalar yüklenemedi.");
     } finally {
@@ -54,30 +90,16 @@ export default function DosyalarPage() {
     }
   }, []);
 
+  // Yazarken her tuşta istek atmamak için kısa gecikme (debounce).
   useEffect(() => {
-    void load();
-  }, [load]);
+    const timer = setTimeout(() => void load(search, page), search ? 300 : 0);
+    return () => clearTimeout(timer);
+  }, [load, search, page]);
 
-  async function openModal() {
+  function openModal() {
     setModalOpen(true);
     setSaveError(null);
-    try {
-      const data = await api<unknown>("/clients", { query: { limit: "200" } });
-      setClients(asList<Client>(data));
-    } catch {
-      setSaveError("Müvekkil listesi yüklenemedi — önce müvekkil ekleyin.");
-    }
   }
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLocaleLowerCase("tr-TR");
-    if (!q) return cases;
-    return cases.filter((c) =>
-      [c.title, c.fileNumber ?? "", c.courtName ?? "", c.client?.name ?? ""].some((v) =>
-        v.toLocaleLowerCase("tr-TR").includes(q),
-      ),
-    );
-  }, [cases, search]);
 
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -96,7 +118,7 @@ export default function DosyalarPage() {
       });
       setModalOpen(false);
       setForm(EMPTY_FORM);
-      void load();
+      void load(search, page);
     } catch (err) {
       setSaveError(err instanceof ApiError ? err.message : "Dosya kaydedilemedi.");
     } finally {
@@ -113,7 +135,7 @@ export default function DosyalarPage() {
             Dava, icra, arabuluculuk, ceza ve danışmanlık dosyalarınız.
           </p>
         </div>
-        <Button variant="gold" onClick={() => void openModal()}>
+        <Button variant="gold" onClick={openModal}>
           + Yeni Dosya
         </Button>
       </div>
@@ -123,7 +145,11 @@ export default function DosyalarPage() {
           <Input
             type="search"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              // Arama değişince ilk sayfaya dön — aksi hâlde boş sayfada kalınır.
+              setPage(1);
+            }}
             placeholder="Başlık, esas no, mahkeme veya müvekkil ara…"
             aria-label="Dosya ara"
           />
@@ -133,7 +159,7 @@ export default function DosyalarPage() {
           <Spinner />
         ) : error ? (
           <ErrorBox message={error} />
-        ) : filtered.length === 0 ? (
+        ) : cases.length === 0 ? (
           <EmptyState message={search ? "Aramanızla eşleşen dosya yok." : "Henüz dosya kaydı yok."} />
         ) : (
           <div className="overflow-x-auto">
@@ -149,7 +175,7 @@ export default function DosyalarPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtered.map((c) => (
+                {cases.map((c) => (
                   <tr key={c.id} className="hover:bg-slate-50">
                     <td className="py-3 pr-4">
                       <Link
@@ -172,27 +198,37 @@ export default function DosyalarPage() {
                 ))}
               </tbody>
             </table>
+
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              noun="dosya"
+              loading={loading}
+              onPageChange={setPage}
+            />
           </div>
         )}
       </Card>
 
       <Modal open={modalOpen} title="Yeni Dosya" onClose={() => setModalOpen(false)}>
         <form onSubmit={handleCreate} className="space-y-4">
-          <Field label="Müvekkil">
-            <Select
+          {/*
+            Müvekkil seçimi SUNUCUDA aranır (denetim bulgusu K-15).
+            Önceden `/clients?limit=200` ile tek atışta çekiliyordu; müvekkil
+            ucunun sunucu tavanı 100 olduğu için 101. müvekkil bu açılır
+            listede HİÇ seçilemiyordu.
+          */}
+          <Field label="Müvekkil" hint="Ad yazarak arayın">
+            <RemoteSelect<Client>
+              path="/clients"
               value={form.clientId}
-              onChange={(e) => setForm({ ...form, clientId: e.target.value })}
-              required
-            >
-              <option value="" disabled>
-                Müvekkil seçin…
-              </option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
+              onChange={(id) => setForm({ ...form, clientId: id })}
+              toOption={(c) => ({ id: c.id, label: c.name })}
+              placeholder="Müvekkil arayın…"
+              emptyMessage="Eşleşen müvekkil yok — önce müvekkil ekleyin."
+              ariaLabel="Müvekkil ara ve seç"
+            />
           </Field>
           <Field label="Dosya türü">
             <Select

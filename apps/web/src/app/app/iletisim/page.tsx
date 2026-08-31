@@ -19,9 +19,20 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { api, asList } from "@/lib/api";
+import { SERVER_MAX_PAGE_SIZE } from "@/lib/api";
 import type { CaseSummary, Client } from "@/lib/types";
-import { Badge, Button, Card, ErrorBox, Field, Select, Spinner } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  ErrorBox,
+  Field,
+  Pagination,
+  Select,
+  Spinner,
+  TruncationNotice,
+} from "@/components/ui";
+import { RemoteSelect } from "@/components/remote-select";
 import { FeatureUnavailable, ToastStack, useToasts } from "@/components/ai-ui";
 import { CreditBadge, useCreditCosts } from "@/components/credits";
 import {
@@ -45,28 +56,58 @@ import {
   isFeatureMissing,
   listApprovalQueue,
   listChannelStatus,
+  listCommunicationLogsPaged,
   listInboundMessages,
   listTimeline,
+  timelineMayBeTruncated,
   matchInboundMessage,
   suggestInboundCase,
   type ChannelStatus,
 } from "../_lib/faz5";
-import type { CaseRef, ClientRef, CommEntry } from "../_lib/faz5-types";
+import type { CommEntry } from "../_lib/faz5-types";
 
 export default function IletisimMerkeziPage() {
   const [entries, setEntries] = useState<CommEntry[]>([]);
   const [pending, setPending] = useState<CommEntry[]>([]);
   const [inbound, setInbound] = useState<CommEntry[]>([]);
   const [channelStatus, setChannelStatus] = useState<ChannelStatus[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [cases, setCases] = useState<CaseSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [missing, setMissing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [channel, setChannel] = useState("");
   const [clientId, setClientId] = useState("");
+  const [clientLabel, setClientLabel] = useState("");
   const [direction, setDirection] = useState("");
+
+  /** Kronoloji sayfalaması — yalnız sunucu süzgeçli kaynakta anlamlı. */
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [truncated, setTruncated] = useState(false);
+
+  /**
+   * KANAL/YÖN SÜZGECİ SUNUCUDA UYGULANIR (denetim bulgusu Ö-37).
+   *
+   * `GET /communications/timeline` üç tabloyu birleştirir ama `channel` /
+   * `direction` süzgeci ALMAZ ve sayfalama zarfı döndürmez; süzme istemcide,
+   * üstelik yalnızca son 200 kaydın üzerinde yapılıyordu. "Kanal: WhatsApp"
+   * seçen avukat "son 200 kaydın içindeki WhatsApp mesajları"nı görüyordu,
+   * "son 200 WhatsApp mesajı"nı değil — araya 200 e-posta girdiyse bir hafta
+   * önceki yazışma listede yoktu ve hiçbir uyarı çıkmıyordu.
+   *
+   * `GET /communications` ise bu iki süzgeci de sunucuda uygular ve sayfalama
+   * zarfı döndürür. Bu yüzden kanal/yön seçildiğinde kaynak oraya geçer;
+   * kapsam farkı kullanıcıya AÇIKÇA yazılır. Müvekkil seçilmediğinde de aynı
+   * uç kullanılır: birleşik kronoloji ucu `clientId`/`caseId` olmadan 400
+   * döndürüyor ve ekran boş kalıyordu.
+   *
+   * ENTEGRASYONA NOT: kalıcı çözüm, `/communications/timeline` ucuna
+   * `channel`/`direction` süzgeci ve sayfalama zarfı eklenmesidir.
+   *
+   * denetim bulgusu Ö-37 · denetim bulgusu K-15 · denetim bulgusu K-16
+   */
+  const serverFiltered = Boolean(channel || direction) || !clientId;
 
   const [composeOpen, setComposeOpen] = useState(false);
   const [editing, setEditing] = useState<CommEntry | null>(null);
@@ -77,13 +118,42 @@ export default function IletisimMerkeziPage() {
     setLoading(true);
     setError(null);
     setMissing(false);
+
+    const timelineCall = serverFiltered
+      ? listCommunicationLogsPaged({
+          clientId: clientId || undefined,
+          channel: channel || undefined,
+          direction: direction || undefined,
+          page,
+          limit: 50,
+        })
+      : listTimeline({ clientId }).then((items) => ({
+          items,
+          total: items.length,
+          page: 1,
+          limit: SERVER_MAX_PAGE_SIZE,
+          totalPages: 1,
+          hasMore: false,
+          truncated: timelineMayBeTruncated(items),
+        }));
+
     const [t, a, i] = await Promise.allSettled([
-      listTimeline({ clientId: clientId || undefined }),
+      timelineCall,
       listApprovalQueue(),
       listInboundMessages({ matchStatus: "BEKLIYOR" }),
     ]);
 
-    setEntries(t.status === "fulfilled" ? t.value : []);
+    if (t.status === "fulfilled") {
+      setEntries(t.value.items);
+      setTotal(t.value.total);
+      setTotalPages(t.value.totalPages);
+      setTruncated(t.value.truncated);
+    } else {
+      setEntries([]);
+      setTotal(0);
+      setTotalPages(1);
+      setTruncated(false);
+    }
     setPending(a.status === "fulfilled" ? a.value : []);
     setInbound(i.status === "fulfilled" ? i.value : []);
 
@@ -92,55 +162,29 @@ export default function IletisimMerkeziPage() {
       else setError(errText(t.reason, "İletişim kayıtları yüklenemedi."));
     }
     setLoading(false);
-  }, [clientId]);
+  }, [clientId, channel, direction, page, serverFiltered]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  /** Kanal durumu + seçenek listeleri — bir kez yüklenir. */
+  /** Kanal durumu — bir kez yüklenir. Seçim listeleri artık SUNUCUDA aranır. */
   useEffect(() => {
     let alive = true;
-    void Promise.allSettled([
-      api<unknown>("/clients", { query: { limit: "200" } }),
-      api<unknown>("/cases", { query: { limit: "200" } }),
-      listChannelStatus(),
-    ]).then(([c, k, ch]) => {
-      if (!alive) return;
-      setClients(c.status === "fulfilled" ? asList<Client>(c.value) : []);
-      setCases(k.status === "fulfilled" ? asList<CaseSummary>(k.value) : []);
-      setChannelStatus(ch.status === "fulfilled" ? ch.value : []);
-    });
+    listChannelStatus()
+      .then((ch) => {
+        if (alive) setChannelStatus(ch);
+      })
+      .catch(() => {
+        if (alive) setChannelStatus([]);
+      });
     return () => {
       alive = false;
     };
   }, []);
 
-  const clientRefs: ClientRef[] = useMemo(
-    () => clients.map((c) => ({ id: c.id, name: c.name })),
-    [clients],
-  );
-  const caseRefs: Array<CaseRef & { clientId?: string | null }> = useMemo(
-    () =>
-      cases.map((c) => ({
-        id: c.id,
-        title: c.title,
-        fileNumber: c.fileNumber ?? null,
-        status: c.status ?? null,
-        clientId: c.client?.id ?? null,
-      })),
-    [cases],
-  );
-
-  /** Kronolojiyi istemcide süzeriz: uç kanal/yön süzgeci almıyor. */
-  const visible = useMemo(
-    () =>
-      entries.filter(
-        (e) =>
-          (!channel || e.channel === channel) && (!direction || e.direction === direction),
-      ),
-    [entries, channel, direction],
-  );
+  /** Süzme artık SUNUCUDA yapılır; ekran gelen kaydı olduğu gibi gösterir. */
+  const visible = entries;
 
   const unconfigured = useMemo(
     () => channelStatus.filter((c) => !c.configured),
@@ -202,7 +246,13 @@ export default function IletisimMerkeziPage() {
       <Card title="Filtreler">
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Kanal">
-            <Select value={channel} onChange={(e) => setChannel(e.target.value)}>
+            <Select
+              value={channel}
+              onChange={(e) => {
+                setChannel(e.target.value);
+                setPage(1);
+              }}
+            >
               <option value="">Tümü</option>
               {COMM_CHANNELS.map((c) => (
                 <option key={c} value={c}>
@@ -211,18 +261,35 @@ export default function IletisimMerkeziPage() {
               ))}
             </Select>
           </Field>
+          {/*
+            Müvekkil süzgeci SUNUCUDA aranır (denetim bulguları K-15, K-16).
+            Önceden `/clients?limit=200` ile tek atışta çekiliyordu; müvekkil
+            ucunun tavanı 100 olduğu için 101. müvekkil HİÇ seçilemiyordu.
+          */}
           <Field label="Müvekkil">
-            <Select value={clientId} onChange={(e) => setClientId(e.target.value)}>
-              <option value="">Tümü</option>
-              {clientRefs.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name ?? c.id}
-                </option>
-              ))}
-            </Select>
+            <RemoteSelect<Client>
+              path="/clients"
+              value={clientId}
+              selectedLabel={clientLabel}
+              onChange={(id, opt) => {
+                setClientId(id);
+                setClientLabel(opt?.label ?? "");
+                setPage(1);
+              }}
+              toOption={(c) => ({ id: c.id, label: c.name })}
+              placeholder="Tümü — aramak için yazın…"
+              emptyMessage="Eşleşen müvekkil yok."
+              ariaLabel="Müvekkil ara ve süz"
+            />
           </Field>
           <Field label="Yön">
-            <Select value={direction} onChange={(e) => setDirection(e.target.value)}>
+            <Select
+              value={direction}
+              onChange={(e) => {
+                setDirection(e.target.value);
+                setPage(1);
+              }}
+            >
               <option value="">Tümü</option>
               {(["GELEN", "GIDEN"] as const).map((d) => (
                 <option key={d} value={d}>
@@ -273,8 +340,6 @@ export default function IletisimMerkeziPage() {
                   <InboundMatchRow
                     key={e.id}
                     entry={e}
-                    clients={clientRefs}
-                    cases={caseRefs}
                     onChanged={async (text) => {
                       push(text, "success");
                       await load();
@@ -331,7 +396,25 @@ export default function IletisimMerkeziPage() {
             </Card>
           )}
 
-          {/* 3. Birleşik kronoloji */}
+          {/* 3. Kronoloji */}
+          {serverFiltered && (channel || direction) && (
+            <p
+              role="status"
+              className="rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5 text-xs leading-5 text-slate-600"
+            >
+              <strong>Kanal/yön süzgeci sunucuda uygulanıyor.</strong> Bu süzgeçlerle listelenen
+              kayıtlar <em>kaydedilmiş görüşmelerdir</em>; onay bekleyen giden taslaklar ve
+              eşleşmemiş gelen mesajlar yukarıdaki bölümlerde durur. Süzgeci kaldırdığınızda
+              birleşik kronolojiye dönersiniz.
+            </p>
+          )}
+          {truncated && (
+            <TruncationNotice
+              shown={visible.length}
+              noun="yazışma"
+              hint="Müvekkil, kanal veya yön süzgeciyle daraltın."
+            />
+          )}
           <CommTimeline
             entries={visible}
             onOpen={(e) => {
@@ -340,14 +423,22 @@ export default function IletisimMerkeziPage() {
             }}
             emptyMessage="Seçtiğiniz filtrelerde yazışma yok. “Yeni Mesaj” ile ilk taslağı oluşturabilirsiniz."
           />
+          {serverFiltered && (
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              noun="yazışma"
+              loading={loading}
+              onPageChange={setPage}
+            />
+          )}
         </>
       )}
 
       <ComposeMessageModal
         open={composeOpen}
         existing={editing}
-        clients={clientRefs}
-        cases={caseRefs}
         channelStatus={channelStatus}
         onNotify={push}
         onClose={() => setComposeOpen(false)}
@@ -375,14 +466,10 @@ export default function IletisimMerkeziPage() {
  */
 function InboundMatchRow({
   entry,
-  clients,
-  cases,
   onChanged,
   onError,
 }: {
   entry: CommEntry;
-  clients: ClientRef[];
-  cases: Array<CaseRef & { clientId?: string | null }>;
   onChanged: (text: string) => void | Promise<void>;
   onError: (message: string) => void;
 }) {
@@ -394,13 +481,12 @@ function InboundMatchRow({
   const preselect = showSuggestion && confidence !== null && confidence >= MATCH_PRESELECT_FLOOR;
 
   const [clientId, setClientId] = useState(entry.client?.id ?? "");
+  const [clientLabel, setClientLabel] = useState(entry.client?.name ?? "");
   const [caseId, setCaseId] = useState(preselect ? (entry.case?.id ?? "") : "");
-  const [busy, setBusy] = useState<"match" | "reject" | "suggest" | null>(null);
-
-  const caseOptions = useMemo(
-    () => (clientId ? cases.filter((c) => !c.clientId || c.clientId === clientId) : cases),
-    [cases, clientId],
+  const [caseLabel, setCaseLabel] = useState(
+    preselect ? (entry.case?.title ?? entry.case?.fileNumber ?? "") : "",
   );
+  const [busy, setBusy] = useState<"match" | "reject" | "suggest" | null>(null);
 
   async function act(kind: "match" | "reject" | "suggest") {
     setBusy(kind);
@@ -463,31 +549,44 @@ function InboundMatchRow({
       )}
 
       <div className="mt-3 grid items-end gap-3 sm:grid-cols-[1fr_1fr_auto]">
+        {/*
+          Eşleştirme hedefleri SUNUCUDA aranır (denetim bulguları K-15, K-16).
+          Önceden ekranın `?limit=200` ile çektiği diziler besliyordu; 201.
+          dosya / 101. müvekkil bu açılır listelerde HİÇ seçilemiyordu ve
+          gelen mesaj doğru dosyaya bağlanamıyordu.
+        */}
         <Field label="Müvekkil">
-          <Select
+          <RemoteSelect<Client>
+            path="/clients"
             value={clientId}
-            onChange={(e) => {
-              setClientId(e.target.value);
+            selectedLabel={clientLabel}
+            onChange={(id, opt) => {
+              setClientId(id);
+              setClientLabel(opt?.label ?? "");
               setCaseId("");
+              setCaseLabel("");
             }}
-          >
-            <option value="">Seçiniz…</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name ?? c.id}
-              </option>
-            ))}
-          </Select>
+            toOption={(c) => ({ id: c.id, label: c.name })}
+            placeholder="Müvekkil arayın…"
+            emptyMessage="Eşleşen müvekkil yok."
+            ariaLabel="Müvekkil ara ve seç"
+          />
         </Field>
         <Field label="Dosya">
-          <Select value={caseId} onChange={(e) => setCaseId(e.target.value)}>
-            <option value="">(dosyasız — yalnız müvekkile bağla)</option>
-            {caseOptions.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.title ?? c.fileNumber ?? c.id}
-              </option>
-            ))}
-          </Select>
+          <RemoteSelect<CaseSummary>
+            path="/cases"
+            query={{ clientId: clientId || undefined }}
+            value={caseId}
+            selectedLabel={caseLabel}
+            onChange={(id, opt) => {
+              setCaseId(id);
+              setCaseLabel(opt?.label ?? "");
+            }}
+            toOption={(c) => ({ id: c.id, label: c.title, hint: c.fileNumber ?? undefined })}
+            placeholder="(dosyasız) — aramak için yazın…"
+            emptyMessage="Eşleşen dosya yok."
+            ariaLabel="Dosya ara ve seç"
+          />
         </Field>
         <Button
           disabled={busy !== null || (!clientId && !caseId)}

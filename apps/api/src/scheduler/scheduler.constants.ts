@@ -40,6 +40,8 @@ export const JOB_KEYS = {
   HEARING_REMINDER: "hearing-reminder-daily",
   SUBSCRIPTION_RENEWAL: "subscription-renewal-daily",
   CREDIT_PERIOD_RENEWAL: "credit-period-renewal-daily",
+  /** denetim bulgusu Ö-29 — %80 kredi uyarısı. Saatlik: 402 sürpriz olmamalı. */
+  CREDIT_LOW_WARNING: "credit-low-warning-hourly",
 } as const;
 
 export type JobKey = (typeof JOB_KEYS)[keyof typeof JOB_KEYS];

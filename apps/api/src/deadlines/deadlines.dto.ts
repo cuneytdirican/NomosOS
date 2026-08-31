@@ -56,6 +56,48 @@ export const updateDeadlineSchema = z
   .refine((data) => Object.keys(data).length > 0, "Güncellenecek en az bir alan gönderilmelidir.");
 export type UpdateDeadlineInput = z.infer<typeof updateDeadlineSchema>;
 
+/**
+ * PATCH /deadlines/:id/inputs — KURAL kaynaklı sürenin GİRDİSİNİ düzeltir
+ * (denetim bulgusu K-14).
+ *
+ * NEDEN AYRI BİR UÇ. `PATCH /deadlines/:id` kural kaynaklı sürenin
+ * `dueDate`'ini bilinçli olarak reddeder — son gün elle yazılabilseydi
+ * "deterministik motor" iddiası çökerdi. Ama reddin verdiği tavsiye
+ * ("tetikleyici tarihi düzeltip yeniden hesaplayın") üründe karşılıksızdı:
+ * `updateDeadlineSchema` `triggerDate`/`serviceMethod` almıyordu ve avukatın
+ * elinde yalnız kaydı SİLMEK kalıyordu; bu da hesap izini koparıyordu.
+ *
+ * Bu uç son günü İSTEMCİDEN ALMAZ: girdiyi alır, motoru yeniden koşturur ve
+ * son günü motorun ürettiğini yazar. Yani düzeltme yolu açılırken motorun
+ * tekelliği korunur.
+ *
+ * `reason` ZORUNLUDUR: girdi düzeltmesi, kayda geçmiş bir tespitin geri
+ * alınmasıdır (Modül 04 KK8). Neyin niçin değiştiğini yazmayan bir düzeltme,
+ * denetim izinde "sebepsiz tarih oynaması" olarak görünür.
+ */
+export const correctDeadlineInputsSchema = z
+  .object({
+    triggerDate: z.coerce.date({ invalid_type_error: "Tetikleyici tarih geçerli olmalıdır." }).optional(),
+    serviceMethod: z
+      .enum(SERVICE_METHODS, { errorMap: () => ({ message: "Geçersiz tebligat yöntemi." }) })
+      .optional(),
+    /**
+     * HMK m.103 istisnası — `computeDeadlineSchema` ile aynı anlam.
+     * Gönderilmezse kuralın kendi ayarı uygulanır.
+     */
+    applyJudicialRecess: z.boolean().optional(),
+    reason: z
+      .string()
+      .trim()
+      .min(10, "Düzeltme gerekçesi en az 10 karakter olmalıdır; bu kayıt denetim izinde kalır.")
+      .max(2000, "Düzeltme gerekçesi en fazla 2000 karakter olabilir."),
+  })
+  .refine(
+    (data) => data.triggerDate !== undefined || data.serviceMethod !== undefined || data.applyJudicialRecess !== undefined,
+    "Düzeltilecek en az bir girdi (tetikleyici tarih, tebligat yöntemi veya adli tatil tercihi) gönderilmelidir."
+  );
+export type CorrectDeadlineInputsInput = z.infer<typeof correctDeadlineInputsSchema>;
+
 /** PATCH /deadlines/:id/status */
 export const updateDeadlineStatusSchema = z.object({
   status: z.enum(DEADLINE_TARGET_STATUSES, {

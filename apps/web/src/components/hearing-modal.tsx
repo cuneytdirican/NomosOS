@@ -10,9 +10,10 @@
  */
 
 import { useEffect, useState } from "react";
-import { ApiError, api, asList } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import type { CaseSummary, Hearing } from "@/lib/types";
 import { Button, ErrorBox, Field, Input, Modal, Select, Textarea } from "@/components/ui";
+import { RemoteSelect } from "@/components/remote-select";
 import {
   HEARING_STATUSES,
   HEARING_STATUS_LABELS,
@@ -59,7 +60,7 @@ export function HearingFormModal({
   onSaved: () => void;
 }) {
   const [form, setForm] = useState<HearingFormState>(emptyForm(caseId));
-  const [cases, setCases] = useState<CaseSummary[]>([]);
+  const [caseLabel, setCaseLabel] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,11 +79,7 @@ export function HearingFormModal({
     } else {
       setForm(emptyForm(caseId));
     }
-    if (!caseId) {
-      api<unknown>("/cases", { query: { limit: "200" } })
-        .then((data) => setCases(asList<CaseSummary>(data)))
-        .catch(() => setCases([]));
-    }
+    setCaseLabel(hearing?.case?.title ?? "");
   }, [open, hearing, caseId]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -120,23 +117,27 @@ export function HearingFormModal({
       wide
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        {/*
+          Dosya seçimi SUNUCUDA aranır (denetim bulguları K-15, K-16).
+                                        denetim bulgusu K-15 · denetim bulgusu K-16
+          Önceden `/cases?limit=200` ile tek atışta çekiliyordu; 201. dosya bu
+          açılır listede HİÇ seçilemiyor, o dosyaya duruşma eklenemiyordu.
+        */}
         {!caseId && (
-          <Field label="Dosya">
-            <Select
+          <Field label="Dosya" hint="Başlık veya esas no yazarak arayın">
+            <RemoteSelect<CaseSummary>
+              path="/cases"
               value={form.caseId}
-              onChange={(e) => setForm({ ...form, caseId: e.target.value })}
-              required
-            >
-              <option value="" disabled>
-                Dosya seçin…
-              </option>
-              {cases.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.title}
-                  {c.fileNumber ? ` (${c.fileNumber})` : ""}
-                </option>
-              ))}
-            </Select>
+              selectedLabel={caseLabel}
+              onChange={(id, opt) => {
+                setForm({ ...form, caseId: id });
+                setCaseLabel(opt?.label ?? "");
+              }}
+              toOption={(c) => ({ id: c.id, label: c.title, hint: c.fileNumber ?? undefined })}
+              placeholder="Dosya arayın…"
+              emptyMessage="Eşleşen dosya yok."
+              ariaLabel="Dosya ara ve seç"
+            />
           </Field>
         )}
 

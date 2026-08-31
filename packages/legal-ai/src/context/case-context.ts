@@ -115,6 +115,26 @@ export interface BuildCaseContextOptions {
   charsPerToken?: number;
   /** Politika üstü açık dahil/hariç kararı. */
   include?: Partial<Record<CaseContextSection, boolean>>;
+  /**
+   * SÖZLÜK TABANLI AD MASKELEME (denetim bulgusu Ö-22).
+   *
+   * `scanPii` yalnız TCKN/IBAN/telefon/e-posta kalıplarını tanır; KVKK m.3
+   * anlamında kişisel veri olan AD-SOYAD ve ŞİRKET UNVANI hiçbir kalıba girmez.
+   * Sonucu ölçüldü: `POST /cases/:caseId/simulate` bağlam metni müvekkil adı,
+   * karşı taraf adı, karşı vekil adı, esas numarası ve mahkeme adı taşıyor;
+   * TCKN/IBAN olmadığı için `scan.hasPii=false` çıkıyor → 409 onay akışı HİÇ
+   * tetiklenmiyor, maskeleme yapılmıyor ve `AiUsageLog.piiMasked=false` yazılıyordu.
+   *
+   * Regex tabanlı NER güvenilir değildir — ama bağlamı KURAN taraf adları ZATEN
+   * elinde tutar. `true` verildiğinde müvekkil `[MÜVEKKİL]`, her karşı taraf
+   * `[TARAF-n]`, vekilleri `[VEKİL-n]` olur ve bu değişim SERBEST METİNLERE
+   * (safahat açıklaması, dosya konusu, belge özeti) de uygulanır — ad orada da
+   * geçer.
+   *
+   * Etiketler KARARLIDIR: model taraflar arasında ilişki kurabilsin diye aynı
+   * kişi daima aynı etiketi alır.
+   */
+  maskEntityNames?: boolean;
 }
 
 export interface BuiltCaseContext {
@@ -138,6 +158,12 @@ export interface BuiltCaseContext {
   policyOverrides: CaseContextSection[];
   /** Bütçe nedeniyle bağlama alınamayan kayıt sayısı. */
   droppedItemCount: number;
+  /**
+   * Ö-22: sözlükle maskelenen ayrı terim sayısı (ad/unvan). Sıfırdan büyükse
+   * çağıran `AiUsageLog.piiMasked` alanını `true` yazmalıdır — metin gerçekten
+   * maskelenmiştir.
+   */
+  maskedEntityCount: number;
 }
 
 const DEFAULT_CHARS_PER_TOKEN = 3.2;
@@ -372,6 +398,14 @@ export function buildCaseContext(
     );
   }
 
+  /**
+   * Ö-22: sözlük kurulur ve GİRDİ metinleri baştan maskelenir. Maskeleme
+   * BÖLÜM SEÇİMİNDEN ÖNCE yapılır ki hangi bölüm bütçeye girerse girsin
+   * maskeli hâli girsin.
+   */
+  const entityMask = options.maskEntityNames === true ? buildEntityMask(input) : null;
+  const effectiveInput = entityMask ? entityMask.input : input;
+
   const policySections = (taskType && TASK_CONTEXT_POLICY[taskType]) || DEFAULT_SECTIONS;
   const allowed = policySections.filter((s) => include?.[s] !== false);
   const forced = (Object.keys(include ?? {}) as CaseContextSection[]).filter(
@@ -379,7 +413,7 @@ export function buildCaseContext(
   );
   const sections: CaseContextSection[] = [...allowed, ...forced];
 
-  const blocks = buildSectionBlocks(input, sections, maxTimelineEvents, maxDocuments);
+  const blocks = buildSectionBlocks(effectiveInput, sections, maxTimelineEvents, maxDocuments);
 
   const budgetChars = Math.floor(tokenBudget * charsPerToken);
   const lines: string[] = [];
@@ -451,5 +485,95 @@ export function buildCaseContext(
     // Politika dışına çıkılarak eklenen ve GERÇEKTEN bağlama giren bölümler.
     policyOverrides: forced.filter((section) => includedSections.includes(section)),
     droppedItemCount,
+    maskedEntityCount: entityMask?.maskedCount ?? 0,
   };
+}
+
+/* -------------------------------------------------------------------------- *
+ * SÖZLÜK TABANLI AD MASKELEME (denetim bulgusu Ö-22)
+ * -------------------------------------------------------------------------- */
+
+/** Regex için güvenli hâle getirir. */
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Bilinen ad/unvanları kararlı etiketlerle değiştirir.
+ *
+ * UZUNDAN KISAYA uygulanır ("Yılmaz İnşaat Ltd. Şti." önce, "Yılmaz" sonra):
+ * aksi hâlde kısa terim uzun terimin içini deler ve
+ * "[TARAF-1] İnşaat Ltd. Şti." gibi yarım maskeler doğar.
+ */
+function applyTerms(
+  text: string | undefined,
+  terms: ReadonlyArray<{ needle: RegExp; label: string }>,
+  hit: Set<string>,
+): string | undefined {
+  if (!text) return text;
+  let out = text;
+  for (const term of terms) {
+    term.needle.lastIndex = 0;
+    if (term.needle.test(out)) {
+      hit.add(term.label);
+      term.needle.lastIndex = 0;
+      out = out.replace(term.needle, term.label);
+    }
+  }
+  return out;
+}
+
+interface EntityMaskResult {
+  input: CaseContextInput;
+  maskedCount: number;
+}
+
+function buildEntityMask(input: CaseContextInput): EntityMaskResult {
+  const raw: Array<{ value: string; label: string }> = [];
+  if (input.case.clientLabel) raw.push({ value: input.case.clientLabel, label: "[MÜVEKKİL]" });
+  (input.parties ?? []).forEach((p, i) => {
+    raw.push({ value: p.name, label: p.isClient ? "[MÜVEKKİL]" : `[TARAF-${i + 1}]` });
+    if (p.counselName) raw.push({ value: p.counselName, label: `[VEKİL-${i + 1}]` });
+  });
+
+  const terms = raw
+    .filter((t) => t.value && t.value.trim().length >= 3)
+    .sort((a, b) => b.value.trim().length - a.value.trim().length)
+    .map((t) => ({ needle: new RegExp(escapeRegExp(t.value.trim()), "gi"), label: t.label }));
+
+  if (terms.length === 0) return { input, maskedCount: 0 };
+
+  const hit = new Set<string>();
+  const masked: CaseContextInput = {
+    ...input,
+    case: {
+      ...input.case,
+      clientLabel: input.case.clientLabel ? "[MÜVEKKİL]" : undefined,
+      subject: applyTerms(input.case.subject, terms, hit),
+    },
+    parties: (input.parties ?? []).map((p, i) => ({
+      ...p,
+      name: p.isClient ? "[MÜVEKKİL]" : `[TARAF-${i + 1}]`,
+      counselName: p.counselName ? `[VEKİL-${i + 1}]` : undefined,
+    })),
+    timeline: (input.timeline ?? []).map((e) => ({
+      ...e,
+      description: applyTerms(e.description, terms, hit) ?? e.description,
+      documentTitle: applyTerms(e.documentTitle, terms, hit),
+    })),
+    documents: (input.documents ?? []).map((d) => ({
+      ...d,
+      title: applyTerms(d.title, terms, hit) ?? d.title,
+      // `summary` ZORUNLU alandır (`CaseContextDocument`); `applyTerms` boş
+      // metinde girdiyi olduğu gibi döndürdüğü için `?? d.summary` yalnızca
+      // tipi geri kazandırır, davranışı değiştirmez.
+      summary: applyTerms(d.summary, terms, hit) ?? d.summary,
+    })),
+    evidenceGaps: (input.evidenceGaps ?? []).map((g) => applyTerms(g, terms, hit) ?? g),
+    strategySummary: applyTerms(input.strategySummary, terms, hit),
+  };
+
+  // Taraf/müvekkil satırları HER HÂLÜKÂRDA maskelendi; sayıya onlar da girer.
+  for (const term of terms) hit.add(term.label);
+  return { input: masked, maskedCount: hit.size };
 }

@@ -18,6 +18,7 @@ import { DeadlineReminderJob } from "./jobs/deadline-reminder.job";
 import { HearingReminderJob } from "./jobs/hearing-reminder.job";
 import { SubscriptionRenewalJob } from "./jobs/subscription-renewal.job";
 import { CreditPeriodRenewalJob } from "./jobs/credit-period-renewal.job";
+import { CreditLowWarningJob } from "./jobs/credit-low-warning.job";
 
 import { PlatformJobsController } from "./platform-jobs.controller";
 import { PlatformJobsService } from "./platform-jobs.service";
@@ -91,6 +92,8 @@ import { DeviceTokensService } from "./device-tokens.service";
     HearingReminderJob,
     SubscriptionRenewalJob,
     CreditPeriodRenewalJob,
+    // denetim bulgusu Ö-29: %80 kredi uyarısı üreten iş.
+    CreditLowWarningJob,
 
     // --- uç servisleri ---
     PlatformJobsService,

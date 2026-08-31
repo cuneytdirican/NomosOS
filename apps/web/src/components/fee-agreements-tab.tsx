@@ -18,7 +18,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ApiError, api, asList } from "@/lib/api";
+import { ApiError } from "@/lib/api";
+import { RemoteSelect } from "@/components/remote-select";
 import { errText, isMissingEndpoint } from "@/lib/faz2";
 import {
   DEFAULT_VAT_RATE,
@@ -236,7 +237,7 @@ function NewAgreementModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [cases, setCases] = useState<CaseSummary[]>([]);
+  const [caseLabel, setCaseLabel] = useState("");
   const [form, setForm] = useState({
     type: "SAATLIK" as FeeType,
     caseId: "",
@@ -255,9 +256,7 @@ function NewAgreementModal({
   useEffect(() => {
     if (!open) return;
     setError(null);
-    void api<unknown>("/cases", { query: { clientId, limit: 200 } })
-      .then((p) => setCases(asList<CaseSummary>(p)))
-      .catch(() => setCases([]));
+    setCaseLabel("");
   }, [open, clientId]);
 
   const show = fieldsFor(form.type);
@@ -312,16 +311,26 @@ function NewAgreementModal({
               ))}
             </Select>
           </Field>
+          {/*
+            Dosya SUNUCUDA aranır (denetim bulguları K-15, K-16). Önceden
+            `/cases?clientId=…&limit=200` ile tek atışta çekiliyordu; 201.
+            dosya bu açılır listede HİÇ seçilemiyordu.
+          */}
           <Field label="Dosya (isteğe bağlı)">
-            <Select value={form.caseId} onChange={(e) => setForm({ ...form, caseId: e.target.value })}>
-              <option value="">Müvekkil geneli</option>
-              {cases.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.fileNumber ? `${c.fileNumber} — ` : ""}
-                  {c.title}
-                </option>
-              ))}
-            </Select>
+            <RemoteSelect<CaseSummary>
+              path="/cases"
+              query={{ clientId }}
+              value={form.caseId}
+              selectedLabel={caseLabel}
+              onChange={(id, opt) => {
+                setForm({ ...form, caseId: id });
+                setCaseLabel(opt?.label ?? "");
+              }}
+              toOption={(c) => ({ id: c.id, label: c.title, hint: c.fileNumber ?? undefined })}
+              placeholder="Müvekkil geneli — aramak için yazın…"
+              emptyMessage="Eşleşen dosya yok."
+              ariaLabel="Dosya ara ve seç"
+            />
           </Field>
         </div>
 

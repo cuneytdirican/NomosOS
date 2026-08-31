@@ -6,6 +6,8 @@ import { PlatformAuditService } from "../platform-audit.service";
 import { PlatformApprovalsService } from "../approvals/platform-approvals.service";
 import { APPROVAL_ACTIONS } from "../approvals/approval-actions";
 import { MIN_ACTIVE_SUPER_ADMINS } from "../platform.constants";
+import { superAdminFloorViolation } from "./super-admin-floor";
+import { canMutate } from "../platform-permissions";
 import type { PlatformAuthUser } from "../platform.types";
 import type { PlatformUserCreateInput, PlatformUserPatchInput } from "./platform-users.schemas";
 
@@ -83,6 +85,12 @@ export class PlatformUsersService {
    * Parola talep anında HASH'lenir; `payloadJson` düz parola taşımaz.
    */
   async create(user: PlatformAuthUser, input: PlatformUserCreateInput) {
+    // denetim bulgusu K-11: hesap AÇMAK dört-göz olan ayrı bir aksiyondur.
+    if (!canMutate(user.role, "platform_user.create")) {
+      throw new ForbiddenException(
+        "Rolünüz panel kullanıcısı açamaz; bu işlem dört-göz onayına tabidir."
+      );
+    }
     const existing = await this.prisma.client.platformUser.findUnique({
       where: { email: input.email },
     });
@@ -157,6 +165,18 @@ export class PlatformUsersService {
      * ta kendisidir.
      */
     if (input.password !== undefined || input.resetTwoFactor) {
+      /**
+       * denetim bulgusu K-11: uç `platform_user.manage` ile bağlıdır (ad
+       * düzeltme, kilit açma bu satırla doğrudan yapılır) ama KİMLİK BİLGİSİ
+       * SIFIRLAMA kendi dört-göz satırına sahiptir. Guard karışık ucun en dar
+       * seviyesini bilemez; kapıyı burada kuruyoruz ki yetki kararı yine
+       * matristen gelsin, koda gömülü bir rol adından değil.
+       */
+      if (!canMutate(user.role, "platform_user.credential_reset")) {
+        throw new ForbiddenException(
+          "Rolünüz başka bir panel kullanıcısının parolasını/2FA kaydını sıfırlayamaz."
+        );
+      }
       if (!input.reason || input.reason.trim().length < 10) {
         throw new BadRequestException(
           "Başka bir panel kullanıcısının parolasını/2FA kaydını sıfırlamak için en az " +
@@ -202,12 +222,39 @@ export class PlatformUsersService {
       });
     }
 
-    // KORUMA 2 — son aktif SUPER_ADMIN korunur.
+    /**
+     * KORUMA 2 — SUPER_ADMIN'İ DÜŞÜRMEK / PASİFLEŞTİRMEK DE DÖRT-GÖZDÜR.
+     *
+     * denetim bulgusu Ö-02: spec §Roller madde 7 "yeni SUPER_ADMIN atama /
+     * mevcut SUPER_ADMIN'i DÜŞÜRME" der, kodda yalnız ATAMA onaya düşüyordu.
+     * Düşürme tek imzalı olduğu sürece tek kişi sistemi taban sayının altına
+     * indirip TÜM dört-göz işlemlerini kilitleyebilirdi.
+     *
+     * Eşik de düzeltildi: `remaining === 0` değil, `remaining <
+     * MIN_ACTIVE_SUPER_ADMINS` (bkz. super-admin-floor.ts). Burada YALNIZCA
+     * erken geri bildirim için bakılır; bağlayıcı sayım onay anında
+     * transaction içinde yapılır.
+     */
     const losesSuperAdmin =
       target.role === "SUPER_ADMIN" &&
       ((input.role !== undefined && input.role !== "SUPER_ADMIN") || input.isActive === false);
     if (losesSuperAdmin) {
-      await this.assertNotLastSuperAdmin(target.id);
+      await this.assertSuperAdminFloor(target.id);
+      if (!input.reason || input.reason.trim().length < 10) {
+        throw new BadRequestException(
+          "SUPER_ADMIN rolünü düşürmek veya hesabı pasifleştirmek için en az 10 karakterlik " +
+            "gerekçe zorunludur; işlem dört-göz onayına tabidir."
+        );
+      }
+      const mode = input.isActive === false ? "deactivate" : "demote";
+      return this.approvals.request(user, {
+        action: APPROVAL_ACTIONS.PLATFORM_USER_SUPER_ADMIN,
+        payload: { targetUserId: id, mode, reason: input.reason },
+        summary:
+          mode === "deactivate"
+            ? `${target.email} (SUPER_ADMIN) pasifleştirilecek.`
+            : `${target.email} rolü SUPER_ADMIN → ${input.role} olacak.`,
+      });
     }
 
     const data: Prisma.PlatformUserUpdateInput = {};
@@ -257,8 +304,24 @@ export class PlatformUsersService {
     if (!target.isActive) {
       throw new BadRequestException("Bu hesap zaten pasif.");
     }
+    /**
+     * denetim bulgusu Ö-02: SUPER_ADMIN'i pasifleştirmek TEK İMZAYLA
+     * yapılabiliyordu (`approvals.request` çağrısı yoktu). Artık onay talebine
+     * dönüşür; bağlayıcı taban sayımı onay anında transaction içinde yapılır.
+     */
     if (target.role === "SUPER_ADMIN") {
-      await this.assertNotLastSuperAdmin(target.id);
+      await this.assertSuperAdminFloor(target.id);
+      return this.approvals.request(user, {
+        action: APPROVAL_ACTIONS.PLATFORM_USER_SUPER_ADMIN,
+        payload: {
+          targetUserId: id,
+          mode: "deactivate",
+          reason: `${target.email} (SUPER_ADMIN) pasifleştirme talebi.`,
+        },
+        summary:
+          `${target.email} (SUPER_ADMIN) pasifleştirilecek. Sistemde her an en az ` +
+          `${MIN_ACTIVE_SUPER_ADMINS} aktif SUPER_ADMIN bulunmalıdır.`,
+      });
     }
 
     await this.prisma.client.platformUser.update({
@@ -287,24 +350,22 @@ export class PlatformUsersService {
   }
 
   /**
-   * SON SUPER_ADMIN KORUMASI.
+   * SUPER_ADMIN TABANI — denetim bulgusu Ö-02.
    *
-   * Hedef sayı `MIN_ACTIVE_SUPER_ADMINS` (2); ancak SERT KAPI, işlemden sonra
-   * GERİYE HİÇ AKTİF SUPER_ADMIN KALMAMASIDIR — bu durumda sistem hem rol
-   * yönetimini hem de tüm dört-göz onaylarını kalıcı olarak kilitler ve
-   * kurtarma yalnız veritabanına elle müdahaleyle mümkün olur.
-   * Sayı 2'nin altına düşüyorsa işlem geçer ama yanıtta uyarı döner.
+   * Eski kapı `remaining === 0` idi: sistem TEK SUPER_ADMIN'e düşürülebiliyordu
+   * ve o noktada "talep eden ≠ onaylayan" kuralı yüzünden hiçbir dört-göz
+   * işlemi bir daha tamamlanamıyordu. `MIN_ACTIVE_SUPER_ADMINS` sabiti
+   * tanımlıydı ama hiçbir yerde EŞİK değildi — yalnız metinlerde geçiyordu.
+   *
+   * Karar `super-admin-floor.ts`teki saf fonksiyondadır ve iki yerde çağrılır:
+   * burada (erken geri bildirim) ve onay uygulanırken transaction içinde
+   * (bağlayıcı sayım — eşzamanlı iki onayın tabanı birlikte delmesini önler).
    */
-  private async assertNotLastSuperAdmin(excludingId: string): Promise<void> {
+  private async assertSuperAdminFloor(excludingId: string): Promise<void> {
     const remaining = await this.prisma.client.platformUser.count({
       where: { role: "SUPER_ADMIN", isActive: true, id: { not: excludingId } },
     });
-    if (remaining === 0) {
-      throw new BadRequestException(
-        "Sistemdeki son aktif SUPER_ADMIN pasifleştirilemez, silinemez ve rolü düşürülemez. " +
-          `Sistemde her an en az ${MIN_ACTIVE_SUPER_ADMINS} aktif SUPER_ADMIN bulunmalıdır; ` +
-          "önce yeni bir SUPER_ADMIN atayın."
-      );
-    }
+    const violation = superAdminFloorViolation(remaining);
+    if (violation) throw new BadRequestException(violation);
   }
 }

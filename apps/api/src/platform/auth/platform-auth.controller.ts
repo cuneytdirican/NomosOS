@@ -49,7 +49,7 @@ export class PlatformAuthController {
     const result = await this.auth.login(body, clientIp(request));
     // Parola doğrulandığı anda sayaç sıfırlanır; ikinci adımı bekleyen meşru
     // kullanıcı, 2FA kodunu ararken kilitlenmez.
-    this.throttle.reset(request);
+    await this.throttle.reset(request);
     return result;
   }
 
@@ -84,7 +84,7 @@ export class PlatformAuthController {
     @Req() request: Request
   ) {
     const result = await this.auth.verify(body, clientIp(request));
-    this.throttle.reset(request);
+    await this.throttle.reset(request);
     return result;
   }
 

@@ -21,7 +21,19 @@
     "typecheck": {
       "dependsOn": ["^build"]
     },
-    "lint": {},
+    // LINT GÖREVİ BİLEREK YOKTUR (denetim bulgusu Ö-33b).
+    //
+    // Eskiden burada `"lint": {}` duruyordu ve kökteki `pnpm lint`
+    // (`turbo run lint`) onu çağırıyordu. Hiçbir pakette `lint` script'i
+    // olmadığı için Turbo bütün paketleri sessizce eliyor, komut 0 görevle
+    // BAŞARIYLA çıkıyordu: yeşil yanan ama hiçbir şeyi denetlemeyen bir
+    // kontrol. Çalışmayan bir kontrolden daha kötüsü, çalıştığı sanılandır.
+    //
+    // Lint artık kökte TEK bir düz yapılandırmayla koşar (`eslint.config.mjs`)
+    // ve `pnpm lint` doğrudan `eslint .` çağırır. Turbo'ya taşımanın tek
+    // kazancı önbellek olurdu; buna karşılık 14 ayrı paket script'i ve 14
+    // ayrı kural setinin zamanla ayrışma riski gelirdi. Kurallar depo
+    // genelinde AYNI olmalıdır.
     "dev": {
       "cache": false,
       "persistent": true

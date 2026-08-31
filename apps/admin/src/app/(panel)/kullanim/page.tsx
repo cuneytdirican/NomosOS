@@ -104,7 +104,10 @@ function UsageAnalytics() {
         if (groupBy === "tenant") {
           const id = r.tenantId ?? r.key ?? "";
           if (anonymous || !canSeeTenant) return pseudoTenant(String(id));
-          return r.tenantName ?? String(id) ?? "—";
+          // `String(id) ?? "—"` ÖLÜ KODDU: `String()` asla null/undefined
+          // dönmez, dolayısıyla adı da kimliği de olmayan satır boş etiketle
+          // çiziliyordu (lint bulgusu, D ajanı). Boşluk açıkça sınanır.
+          return r.tenantName ?? (id ? String(id) : "—");
         }
         if (groupBy === "taskType") {
           const t = r.taskType ?? r.key ?? "";

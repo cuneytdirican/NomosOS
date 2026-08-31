@@ -49,11 +49,14 @@ import {
   type ThirdPartyPiiPrompt,
   listMessageTemplates,
   NOT_CONFIGURED_TEXT,
+  rejectOutboundMessage,
   sendOutboundMessage,
   updateOutboundMessage,
   type ChannelStatus,
 } from "../_lib/faz5";
 import type { CaseRef, ClientRef, CommChannel, CommEntry, MessageTemplateItem } from "../_lib/faz5-types";
+import { RemoteSelect } from "@/components/remote-select";
+import type { CaseSummary, Client } from "@/lib/types";
 
 type Notify = (text: string, tone?: "success" | "error" | "info") => void;
 
@@ -91,8 +94,12 @@ export function ComposeMessageModal({
   open: boolean;
   onClose: () => void;
   onSaved: () => void | Promise<void>;
-  clients: ClientRef[];
-  cases: CaseRef[];
+  /**
+   * Yalnızca SEÇİLİ kaydın etiketini göstermek için. Arama sunucuda yapılır
+   * (denetim bulguları K-15, K-16) — bu diziler açılır listeyi BESLEMEZ.
+   */
+  clients?: ClientRef[];
+  cases?: CaseRef[];
   fixedClientId?: string;
   fixedCaseId?: string;
   /** Var olan bir taslağı onay için açmak. */
@@ -122,7 +129,10 @@ export function ComposeMessageModal({
   const [savedSubject, setSavedSubject] = useState("");
 
   const [draft, setDraft] = useState<CommEntry | null>(null);
-  const [busy, setBusy] = useState<"create" | "save" | "approve" | "send" | null>(null);
+  const [busy, setBusy] = useState<"create" | "save" | "approve" | "send" | "reject" | null>(null);
+  /** Ö-33: onaylanmış mesajı reddetme akışı — gerekçe ZORUNLU. */
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   /** KVKK: taramaya rağmen devam kararının gerekçesi (sunucu zorunlu tutar). */
@@ -200,13 +210,15 @@ export function ComposeMessageModal({
     };
   }, [open]);
 
-  const caseOptions = useMemo(() => {
-    if (!clientId) return cases;
-    return cases.filter((c) => {
-      const raw = c as CaseRef & { clientId?: string | null };
-      return raw.clientId ? raw.clientId === clientId : true;
-    });
-  }, [cases, clientId]);
+  /** Seçili kaydın ETİKETİ — arama sunucuda, etiket burada çözülür. */
+  const clientLabel = useMemo(
+    () => (clients ?? []).find((c) => c.id === clientId)?.name ?? "",
+    [clients, clientId],
+  );
+  const caseLabel = useMemo(() => {
+    const found = (cases ?? []).find((c) => c.id === caseId);
+    return found ? (found.title ?? found.fileNumber ?? "") : "";
+  }, [cases, caseId]);
 
   const channelTemplates = useMemo(
     () => templates.filter((t) => t.channel === channel),
@@ -380,6 +392,47 @@ export function ComposeMessageModal({
     }
   }
 
+  /**
+   * REDDETME (denetim bulgusu Ö-33).
+   *
+   * Onaydan sonra metin kilitlenir ve ipucu "mesajı reddedip yeni taslak
+   * açın" derdi — ama eylem çubuğunda REDDET DÜĞMESİ YOKTU; kullanıcı var
+   * olmayan bir düğmeye yönlendiriliyordu. `rejectOutboundMessage()` istemci
+   * fonksiyonu yazılmış ama SIFIR ÇAĞRI ile ölü kod olarak duruyordu; sunucu
+   * ucu hazır ve denetim kaydı üretiyor.
+   *
+   * Senaryo: onaydan sonra avukat metindeki duruşma tarihinin yanlış
+   * olduğunu fark eder. Kilitli metin + reddet yok = ya yanlış mesajı
+   * göndermek ya da kaydı süresiz bırakmak. Üstelik ONAYLANDI kaydı onay
+   * kuyruğu sorgusuna (`TASLAK`/`ONAY_BEKLIYOR`) girmediği için hiçbir
+   * ekranda "bekleyen iş" olarak da görünmüyordu.
+   *
+   * Gerekçe ZORUNLUDUR: gerekçesiz karar denetim değeri taşımaz.
+   */
+  async function handleReject() {
+    if (!draft) return;
+    setError(null);
+    setNotice(null);
+    if (rejectReason.trim().length === 0) {
+      setError("Reddetme gerekçesi zorunludur; gerekçesiz karar denetim değeri taşımaz.");
+      return;
+    }
+    setBusy("reject");
+    try {
+      const res = await rejectOutboundMessage(draft.id, rejectReason.trim());
+      adopt(res);
+      setRejectOpen(false);
+      setRejectReason("");
+      setNotice("Mesaj reddedildi; onay düştü. Metni düzenleyip yeniden onaylayabilirsiniz.");
+      onNotify("Mesaj reddedildi.", "info");
+      await onSaved();
+    } catch (err) {
+      setError(errText(err, "Mesaj reddedilemedi."));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   /** Gönderim. Onayla aynı disiplin: `piiApproved` yalnızca AÇIK kararla gider. */
   async function handleSend(override = false) {
     if (!draft) return;
@@ -450,36 +503,41 @@ export function ComposeMessageModal({
 
         {/* Hedef — taslak oluştuktan sonra değiştirilemez */}
         <div className="grid gap-4 sm:grid-cols-3">
+          {/*
+            Hedef seçimi SUNUCUDA aranır (denetim bulguları K-15, K-16).
+            Önceden ekran `?limit=200` ile çekilmiş bir dizi geçiyordu; müvekkil
+            ucunun sunucu tavanı 100 olduğu için 101. müvekkil bu açılır listede
+            HİÇ seçilemiyordu ve kullanıcıya bunu söyleyen bir işaret yoktu.
+          */}
           <Field label="Müvekkil">
-            <Select
+            <RemoteSelect<Client>
+              path="/clients"
               value={clientId}
+              selectedLabel={clientLabel}
               disabled={Boolean(fixedClientId) || Boolean(draft)}
-              onChange={(e) => {
-                setClientId(e.target.value);
+              onChange={(id) => {
+                setClientId(id);
                 setCaseId("");
               }}
-            >
-              <option value="">Seçiniz…</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name ?? c.id}
-                </option>
-              ))}
-            </Select>
+              toOption={(c) => ({ id: c.id, label: c.name })}
+              placeholder="Müvekkil arayın…"
+              emptyMessage="Eşleşen müvekkil yok."
+              ariaLabel="Müvekkil ara ve seç"
+            />
           </Field>
           <Field label="Dosya" hint="AI taslağı için zorunlu">
-            <Select
+            <RemoteSelect<CaseSummary>
+              path="/cases"
+              query={{ clientId: clientId || undefined }}
               value={caseId}
+              selectedLabel={caseLabel}
               disabled={Boolean(fixedCaseId) || Boolean(draft)}
-              onChange={(e) => setCaseId(e.target.value)}
-            >
-              <option value="">(dosyasız)</option>
-              {caseOptions.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.title ?? c.fileNumber ?? c.id}
-                </option>
-              ))}
-            </Select>
+              onChange={(id) => setCaseId(id)}
+              toOption={(c) => ({ id: c.id, label: c.title, hint: c.fileNumber ?? undefined })}
+              placeholder="(dosyasız) — aramak için yazın…"
+              emptyMessage="Eşleşen dosya yok."
+              ariaLabel="Dosya ara ve seç"
+            />
           </Field>
           <Field label="Kanal">
             <Select
@@ -615,7 +673,7 @@ export function ComposeMessageModal({
           label="Mesaj metni"
           hint={
             approved
-              ? "Onaylanan metin kilitlidir. Değiştirmek isterseniz mesajı reddedip yeni taslak açın — metni düzenlemek onayı düşürür."
+              ? "Onaylanan metin kilitlidir. Değiştirmek için aşağıdaki “Reddet” düğmesiyle onayı düşürün (gerekçe zorunludur), sonra metni düzenleyip yeniden onaylayın."
               : draft
                 ? "Düzenlediğiniz metin `finalBody` alanına yazılır; AI/şablon çıktısı ayrıca saklanır."
                 : "Elle yazma kaynağında metni buraya girin."
@@ -754,6 +812,17 @@ export function ComposeMessageModal({
                 >
                   {busy === "approve" ? "Onaylanıyor…" : approved ? "Onaylandı ✓" : "Onayla"}
                 </Button>
+                {/* Ö-33: onaylanmış ama GÖNDERİLMEMİŞ mesaj için reddetme yolu. */}
+                {approved && !sent && (
+                  <Button
+                    variant="danger"
+                    disabled={busy !== null}
+                    onClick={() => setRejectOpen((v) => !v)}
+                    title="Onayı düşürür; metin yeniden düzenlenebilir hâle gelir."
+                  >
+                    Reddet
+                  </Button>
+                )}
                 <Button
                   variant="gold"
                   disabled={
@@ -766,6 +835,42 @@ export function ComposeMessageModal({
               </>
             )}
           </div>
+
+          {/* Reddetme gerekçesi — zorunlu, denetim kaydına yazılır. */}
+          {rejectOpen && approved && !sent && (
+            <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-3">
+              <Field
+                label="Reddetme gerekçesi (zorunlu)"
+                hint="Gerekçe denetim kaydına yazılır; onay düşer ve metin yeniden düzenlenebilir."
+              >
+                <Textarea
+                  rows={3}
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="Örn. Metindeki duruşma tarihi hatalı."
+                />
+              </Field>
+              <div className="mt-2 flex justify-end gap-2">
+                <Button
+                  variant="secondary"
+                  disabled={busy !== null}
+                  onClick={() => {
+                    setRejectOpen(false);
+                    setRejectReason("");
+                  }}
+                >
+                  Vazgeç
+                </Button>
+                <Button
+                  variant="danger"
+                  disabled={busy !== null || rejectReason.trim().length === 0}
+                  onClick={() => void handleReject()}
+                >
+                  {busy === "reject" ? "Reddediliyor…" : "Reddetmeyi onayla"}
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Pasif "Gönder" düğmesinin GEREKÇESİ — daima yazılı. */}
           {!sent && sendBlockReason && (

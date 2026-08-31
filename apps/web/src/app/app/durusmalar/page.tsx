@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ApiError, api, asList } from "@/lib/api";
+import { ApiError, api, fetchPaged, SERVER_MAX_PAGE_SIZE } from "@/lib/api";
 import type { Hearing } from "@/lib/types";
 import {
   Badge,
@@ -24,6 +24,7 @@ import {
   Input,
   Spinner,
   StatCard,
+  TruncationNotice,
 } from "@/components/ui";
 import { HearingFormModal, HearingResultModal } from "@/components/hearing-modal";
 import {
@@ -50,13 +51,30 @@ export default function DurusmalarPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Hearing | null>(null);
   const [resultHearing, setResultHearing] = useState<Hearing | null>(null);
+  const [total, setTotal] = useState(0);
+  const [truncated, setTruncated] = useState(false);
 
+  /**
+   * SAYFALAMA ZARFI OKUNUR (denetim bulgusu K-15).
+   *
+   * Bu ekran haftalık takvim görünümüdür; kayıtlar güne göre gruplanır, bu
+   * yüzden sayfa geçişi anlamlı değildir. Ama zarfı ATMAK da kabul edilemez:
+   * bir haftada 200'den fazla duruşma varsa (çok avukatlı büro + toplu icra
+   * duruşmaları) fazlası SESSİZCE düşüyordu. Artık `total` okunuyor ve
+   * kırpma varsa ekranda görünür uyarı çıkıyor.
+   */
   const load = useCallback(async (fromDate: string, toDate: string) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await api<unknown>("/hearings", { query: { from: fromDate, to: toDate, limit: "200" } });
-      setHearings(asList<Hearing>(data));
+      const res = await fetchPaged<Hearing>("/hearings", {
+        query: { from: fromDate, to: toDate },
+        page: 1,
+        limit: SERVER_MAX_PAGE_SIZE,
+      });
+      setHearings(res.items);
+      setTotal(res.total);
+      setTruncated(res.hasMore || res.truncated);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Duruşmalar yüklenemedi.");
     } finally {
@@ -138,7 +156,7 @@ export default function DurusmalarPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Aralıktaki Duruşma" value={hearings.length} tone="navy" hint={weekLabel} />
+        <StatCard label="Aralıktaki Duruşma" value={total} tone="navy" hint={weekLabel} />
         <StatCard label="Planlandı" value={planned} tone="slate" />
         <StatCard label="Yapıldı" value={done} tone="green" />
         <StatCard label="Ertelendi" value={postponed} tone="slate" />
@@ -190,6 +208,14 @@ export default function DurusmalarPage() {
           <EmptyState message="Seçili aralıkta duruşma bulunmuyor." />
         ) : (
           <div className="space-y-6">
+            {/* Sessiz kırpma yasak (denetim bulgusu K-15). */}
+            {truncated && (
+              <TruncationNotice
+                shown={hearings.length}
+                noun="duruşma"
+                hint="Aralığı daraltın (ör. tek güne bakın) ya da haftayı bölerek listeleyin."
+              />
+            )}
             {grouped.map(([day, items]) => (
               <section key={day}>
                 <h3 className="mb-3 border-b border-slate-100 pb-2 text-sm font-semibold text-slate-900">
