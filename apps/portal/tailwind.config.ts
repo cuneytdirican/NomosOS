@@ -23,11 +23,13 @@ const config: Config = {
           alt: "#F4F1EA",
           deep: "#EBE6DA",
         },
-        // Yumuşatılmış lacivert — apps/web'in #0F172A'sından daha sıcak
+        // Yumuşatılmış lacivert — apps/web'in #0F172A'sından daha sıcak.
+        // faint: AA kontrastı için koyulaştırıldı (İ-21): #6E7B94 kağıt
+        // zeminde ~3,8:1 veriyordu; #5B6880 ~5,3:1 verir.
         ink: {
           DEFAULT: "#1B2A47",
           soft: "#40506D",
-          faint: "#6E7B94",
+          faint: "#5B6880",
         },
         // Ölçülü altın. `deep` yazı rengi olarak kağıt üzerinde AA kontrast sağlar.
         gold: {

@@ -300,7 +300,7 @@ export function DeadlineWizard({
       {preview && (
         <div className="mt-6 space-y-4 border-t border-slate-200 pt-6">
           <div className="rounded-xl bg-slate-900 px-6 py-5 text-white">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
               Hesaplanan son gün
             </p>
             <p className="mt-1 text-3xl font-bold text-amber-400">{fmtDate(preview.dueDate)}</p>

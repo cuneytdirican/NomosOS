@@ -47,6 +47,7 @@ import type { AiProviderType, AiTaskType } from "@nomosos/shared";
 import type { TypeOf, ZodTypeAny } from "zod";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
+import { AgentRunService } from "../agents/agent-run.service";
 import { assertAiPolicyAllows } from "../common/ai-policy";
 import { creditRunContext } from "../credits/credit-context";
 import { providerUnreachable } from "../common/errors";
@@ -135,6 +136,7 @@ export class AiRunnerService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly agentRuns: AgentRunService,
   ) {}
 
   /**
@@ -312,6 +314,22 @@ export class AiRunnerService {
       const provider = createProvider(this.resolveConfig(config));
       result = await provider.chat({ model, messages, maxTokens: input.maxTokens ?? 3072 });
     } catch (err) {
+      // F2 · E1: sağlayıcı arızası da iz bırakır — "neden koşmadı" sorusunun
+      // cevabı bu satırdadır. İz yazımı asla ana akışı bozmaz.
+      await this.agentRuns.record({
+        tenantId: input.user.tenantId,
+        userId: input.user.userId,
+        taskType: input.taskType,
+        status: "BASARISIZ",
+        model,
+        providerType: config.type,
+        durationMs: Date.now() - startedAt,
+        piiMasked: gate.piiMasked,
+        entity: input.entity,
+        entityId: input.entityId,
+        outboundTexts: gate.texts,
+        errorMessage: (err as Error).message,
+      });
       // Ham sağlayıcı gövdesi vekil adresi / iç hata izi / kısmi anahtar ipucu
       // taşıyabilir; istemciye korelasyon kimlikli sabit mesaj döner.
       throw providerUnreachable(this.logger, err);
@@ -353,6 +371,25 @@ export class AiRunnerService {
       const detail = guarded.issues
         .map((i) => (i.path ? `${i.path}: ${i.message}` : i.message))
         .join(" · ");
+      // F2 · E1: guard'ın ELEDİĞİ çıktı ayrı durumdur — sağlayıcı arızası
+      // değil, modelin şemaya uymayan yanıt vermesidir. "Neden yarım kaldı"
+      // sorusunun cevabı bu ayrımdadır.
+      await this.agentRuns.record({
+        tenantId: input.user.tenantId,
+        userId: input.user.userId,
+        taskType: input.taskType,
+        status: "REDDEDILDI",
+        model,
+        providerType: config.type,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+        durationMs,
+        piiMasked: gate.piiMasked,
+        entity: input.entity,
+        entityId: input.entityId,
+        outboundTexts: gate.texts,
+        rejectionDetail: detail,
+      });
       // KREDİ YAZILMADAN fırlar: `record()` aşağıdadır. Çıktısı kullanılmayan
       // çağrıdan kredi alınmaz (iş kuralı 4); `AiUsageLog` satırı ise yukarıda
       // yazılmıştır — çağrı gerçekten yapıldı, iç maliyet muhasebesi görmeli.
@@ -360,6 +397,23 @@ export class AiRunnerService {
         `AI çıktısı beklenen biçimde değil, sonuç kullanılmadı. Ayrıntı: ${detail || "bilinmiyor"}`,
       );
     }
+
+    // F2 · E1: başarılı koşunun izi — ajan kim, hangi girdiyle, ne kadar sürdü.
+    await this.agentRuns.record({
+      tenantId: input.user.tenantId,
+      userId: input.user.userId,
+      taskType: input.taskType,
+      status: "BASARILI",
+      model,
+      providerType: config.type,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      durationMs,
+      piiMasked: gate.piiMasked,
+      entity: input.entity,
+      entityId: input.entityId,
+      outboundTexts: gate.texts,
+    });
 
     // MODÜL 26 KANCASI — gerçek token'ı kredi kapısına bildirir.
     // Bağlam yoksa (ücretsiz görev, BYO-LLM tenant'ı, pipeline) hiçbir şey

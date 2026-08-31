@@ -231,7 +231,10 @@ export interface ClaimEvidenceLink {
   id: string;
   claimId: string;
   evidenceId: string;
+  /** 1-5 tamsayı (sunucu şeması z.number().int()). */
   strength?: string | number | null;
+  /** Bağın YÖNÜ (F2 · E6): SUPPORTS · CONTRADICTS · BELIRSIZ. */
+  linkType?: "SUPPORTS" | "CONTRADICTS" | "BELIRSIZ" | string | null;
   note?: string | null;
   createdAt?: string;
   evidence?: Evidence | null;

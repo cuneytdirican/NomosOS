@@ -21,11 +21,17 @@ export class GeminiProvider implements LlmProvider {
         parts: [{ text: m.content }],
       }));
 
+    // API ANAHTARI URL SORGUSUNDA GÖNDERİLMEZ (denetim bulgusu İ-19): sorgu
+    // dizeleri erişim günlüklerine, vekil günlüklerine ve hata mesajlarına
+    // düşer. Gemini, anahtarı `x-goog-api-key` başlığından da kabul eder.
     const res = await fetchWithTimeout(
-      `${this.baseUrl()}/models/${encodeURIComponent(options.model)}:generateContent?key=${this.config.apiKey ?? ""}`,
+      `${this.baseUrl()}/models/${encodeURIComponent(options.model)}:generateContent`,
       {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "x-goog-api-key": this.config.apiKey ?? "",
+        },
         body: JSON.stringify({
           ...(systemParts.length ? { systemInstruction: { parts: systemParts } } : {}),
           contents,
@@ -54,7 +60,10 @@ export class GeminiProvider implements LlmProvider {
   }
 
   async listModels(): Promise<string[]> {
-    const res = await fetchWithTimeout(`${this.baseUrl()}/models?key=${this.config.apiKey ?? ""}`);
+    // Anahtar başlıkta (İ-19) — bkz. chat().
+    const res = await fetchWithTimeout(`${this.baseUrl()}/models`, {
+      headers: { "x-goog-api-key": this.config.apiKey ?? "" },
+    });
     if (!res.ok) throw new Error(`Gemini model listesi alınamadı (${res.status})`);
     const data = (await res.json()) as { models?: Array<{ name: string }> };
     return (data.models ?? []).map((m) => m.name.replace(/^models\//, ""));

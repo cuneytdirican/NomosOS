@@ -4,6 +4,7 @@ import { PlatformJwtGuard } from "../platform/guards/platform-jwt.guard";
 import { PlatformPermissionGuard } from "../platform/guards/platform-permission.guard";
 import { PlatformAuditService } from "../platform/platform-audit.service";
 import { CreditsModule } from "../credits/credits.module";
+import { RiskModule } from "../risk/risk.module";
 
 import { JobRegistryService } from "./job-registry.service";
 import { JobRunnerService } from "./job-runner.service";
@@ -19,6 +20,7 @@ import { HearingReminderJob } from "./jobs/hearing-reminder.job";
 import { SubscriptionRenewalJob } from "./jobs/subscription-renewal.job";
 import { CreditPeriodRenewalJob } from "./jobs/credit-period-renewal.job";
 import { CreditLowWarningJob } from "./jobs/credit-low-warning.job";
+import { RiskNightlyJob } from "./jobs/risk-nightly.job";
 
 import { PlatformJobsController } from "./platform-jobs.controller";
 import { PlatformJobsService } from "./platform-jobs.service";
@@ -35,6 +37,7 @@ import { DeviceTokensService } from "./device-tokens.service";
  *
  *   SchedulerModule ──▶ PlatformModule   (UsageSnapshotService — dışa açık)
  *                   └─▶ CreditsModule    (CreditService — dışa açık)
+ *                   └─▶ RiskModule      (RiskNightlyService — dışa açık; F2 · E2)
  *
  *   CreditsModule ──▶ PlatformModule
  *
@@ -60,7 +63,7 @@ import { DeviceTokensService } from "./device-tokens.service";
  * ajanının işidir.
  */
 @Module({
-  imports: [PlatformModule, CreditsModule],
+  imports: [PlatformModule, CreditsModule, RiskModule],
   controllers: [
     // Platform (/api/admin/v1/jobs) — PlatformJwtGuard + yetki matrisi.
     PlatformJobsController,
@@ -94,6 +97,8 @@ import { DeviceTokensService } from "./device-tokens.service";
     CreditPeriodRenewalJob,
     // denetim bulgusu Ö-29: %80 kredi uyarısı üreten iş.
     CreditLowWarningJob,
+    // F2 · E2: gece risk tazeleme + panel fotoğrafı.
+    RiskNightlyJob,
 
     // --- uç servisleri ---
     PlatformJobsService,

@@ -134,7 +134,7 @@ export function CreditMeter({ wallet }: { wallet: CreditWalletResponse | null })
         </span>
         <span className={`text-xs font-bold tabular-nums ${style.text}`}>
           {c.kullanilabilir}
-          <span className="font-normal text-slate-400"> / {total}</span>
+          <span className="font-normal text-slate-500"> / {total}</span>
         </span>
       </div>
       <div
@@ -357,7 +357,7 @@ export function CreditErrorAlert() {
         type="button"
         onClick={() => setError(null)}
         aria-label="Uyarıyı kapat"
-        className="absolute right-2 top-2 rounded-md p-1 text-slate-400 hover:bg-white hover:text-slate-600"
+        className="absolute right-2 top-2 rounded-md p-1 text-slate-500 hover:bg-white hover:text-slate-600"
       >
         <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
           <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />

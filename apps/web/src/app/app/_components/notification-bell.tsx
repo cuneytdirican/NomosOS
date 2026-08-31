@@ -270,7 +270,7 @@ function NotificationRow({
         {item.body && (
           <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-slate-600">{item.body}</p>
         )}
-        <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-slate-400">
+        <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-slate-500">
           <span className={critical ? "font-semibold text-red-700" : ""}>
             {labelOf(NOTIFICATION_KIND_LABELS, item.kind)}
           </span>

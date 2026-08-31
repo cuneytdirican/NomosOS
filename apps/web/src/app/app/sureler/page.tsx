@@ -450,7 +450,7 @@ function DeadlineRow({ deadline: d }: { deadline: Deadline }) {
           </p>
         )}
         {(d.triggerDate || d.serviceMethod) && (
-          <p className="mt-0.5 text-[11px] text-slate-400">
+          <p className="mt-0.5 text-[11px] text-slate-500">
             {d.triggerDate ? `Tetik: ${fmtDate(d.triggerDate)}` : ""}
             {d.serviceMethod ? ` · ${labelOf(SERVICE_METHOD_LABELS, d.serviceMethod)}` : ""}
           </p>

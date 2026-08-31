@@ -115,7 +115,7 @@ export function CommEntryRow({
             {entry.body.length > 420 ? `${entry.body.slice(0, 420)}…` : entry.body || "(boş metin)"}
           </p>
 
-          <p className="mt-1.5 flex flex-wrap gap-x-2 text-[11px] text-slate-400">
+          <p className="mt-1.5 flex flex-wrap gap-x-2 text-[11px] text-slate-500">
             {showClient && entry.client && (
               <Link
                 href={`/app/muvekkiller/${entry.client.id}`}
@@ -202,7 +202,7 @@ export function CommTimeline({
         <div className="space-y-5">
           {days.map(([day, items]) => (
             <div key={day}>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                 {day === "—" ? "Tarihsiz" : fmtDayHeading(items[0].occurredAt)}
               </p>
               <ul className="space-y-2">

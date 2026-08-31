@@ -349,7 +349,7 @@ export default function ReportViewPage({ params }: { params: Promise<{ key: stri
           )}
         </div>
         {result && (
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             {fmtCount(result.rowCount)} satır
             {result.generatedAt ? ` · ${fmtDateTime(result.generatedAt)}` : ""}
             {result.durationMs !== null ? ` · ${fmtCount(result.durationMs)} ms` : ""}
@@ -415,7 +415,7 @@ export default function ReportViewPage({ params }: { params: Promise<{ key: stri
             <MetricStrip metrics={result.metrics} />
 
             {result.previousPeriod && (
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-slate-500">
                 Karşılaştırma dönemi:{" "}
                 {periodLabel(
                   result.previousPeriod.from,
@@ -434,7 +434,7 @@ export default function ReportViewPage({ params }: { params: Promise<{ key: stri
                   : "Sonuç tablosu"
               }
               action={
-                <span className="text-[11px] text-slate-400">
+                <span className="text-[11px] text-slate-500">
                   Sütun başlığına tıklayarak sıralayın
                 </span>
               }
@@ -461,7 +461,7 @@ export default function ReportViewPage({ params }: { params: Promise<{ key: stri
                         }
                       >
                         {t.title}
-                        <span className={active ? "ml-1.5 text-slate-300" : "ml-1.5 text-slate-400"}>
+                        <span className={active ? "ml-1.5 text-slate-300" : "ml-1.5 text-slate-500"}>
                           {fmtCount(t.totalRowCount ?? t.rows.length)}
                         </span>
                       </button>
@@ -512,7 +512,7 @@ export default function ReportViewPage({ params }: { params: Promise<{ key: stri
         />
       )}
 
-      <p className="text-[11px] leading-5 text-slate-400">
+      <p className="text-[11px] leading-5 text-slate-500">
         Bu rapordaki bütün rakamlar veritabanından deterministik olarak hesaplanmıştır. Rol
         kısıtları sunucuda uygulanır: rolünüze kapalı sütun ve satırlar bu sonuca hiç girmez.
       </p>
@@ -536,7 +536,7 @@ export default function ReportViewPage({ params }: { params: Promise<{ key: stri
 
 function Breadcrumb({ title }: { title: string }) {
   return (
-    <nav className="flex items-center gap-2 text-xs text-slate-400 print:hidden" aria-label="Konum">
+    <nav className="flex items-center gap-2 text-xs text-slate-500 print:hidden" aria-label="Konum">
       <Link href="/app/raporlar" className="hover:text-amber-600">
         Raporlar
       </Link>

@@ -274,7 +274,7 @@ export default function PanelPage() {
             Bugün müdahale etmeniz gerekenler: duruşmalar, kritik süreler ve açık görevleriniz.
           </p>
         </div>
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-slate-500">
           {new Date().toLocaleDateString("tr-TR", {
             weekday: "long",
             day: "2-digit",
@@ -376,7 +376,7 @@ export default function PanelPage() {
                 ))}
               </ul>
               {(proposalTotal || proposals.length) > 5 && (
-                <p className="mt-2 text-xs text-slate-400">
+                <p className="mt-2 text-xs text-slate-500">
                   ve {(proposalTotal || proposals.length) - 5} öneri daha…
                 </p>
               )}
@@ -444,7 +444,7 @@ export default function PanelPage() {
                 <div className="space-y-4">
                   {hearingsByDay.map(([day, items]) => (
                     <div key={day}>
-                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                         {fmtDayHeading(items[0].date)}
                       </p>
                       <ul className="space-y-2">
@@ -472,7 +472,7 @@ export default function PanelPage() {
                                   )}
                                 </p>
                                 {h.case?.courtName && (
-                                  <p className="truncate text-[11px] text-slate-400">
+                                  <p className="truncate text-[11px] text-slate-500">
                                     {h.case.courtName}
                                   </p>
                                 )}
@@ -519,7 +519,7 @@ export default function PanelPage() {
                               {d.case?.title ? ` · ${d.case.title}` : ""}
                             </p>
                             {d.legalBasis && (
-                              <p className="mt-0.5 truncate text-[11px] text-slate-400">
+                              <p className="mt-0.5 truncate text-[11px] text-slate-500">
                                 {d.legalBasis}
                               </p>
                             )}
@@ -583,7 +583,7 @@ export default function PanelPage() {
           </div>
 
           {data.degraded && (
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-500">
               Not: <code>/dashboard/summary</code> ucuna ulaşılamadığı için panel tekil uçlardan
               derlendi.
             </p>
@@ -639,7 +639,7 @@ function PendingMessagesCard({ entries }: { entries: CommEntry[] }) {
         ))}
       </ul>
       {entries.length > 5 && (
-        <p className="mt-2 text-xs text-slate-400">ve {entries.length - 5} mesaj daha…</p>
+        <p className="mt-2 text-xs text-slate-500">ve {entries.length - 5} mesaj daha…</p>
       )}
     </Card>
   );
@@ -664,7 +664,7 @@ function PoaContractAlertsCard({
     <Card title={`Vekaletname ve Sözleşme Uyarıları (${alerts.length + renewals.length})`}>
       {alerts.length > 0 && (
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             Vekaletname
           </p>
           <ul className="mt-2 space-y-2">
@@ -700,7 +700,7 @@ function PoaContractAlertsCard({
 
       {renewals.length > 0 && (
         <div className={alerts.length > 0 ? "mt-4" : ""}>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             Sözleşme yenileme / fesih ihbarı
           </p>
           <ul className="mt-2 space-y-2">
@@ -726,7 +726,7 @@ function PoaContractAlertsCard({
         </div>
       )}
 
-      <p className="mt-3 text-[11px] leading-5 text-slate-400">
+      <p className="mt-3 text-[11px] leading-5 text-slate-500">
         Süre hesapları sunucudaki deterministik süre motorundan gelir; bu kart yalnızca gösterir.
       </p>
     </Card>
@@ -810,7 +810,7 @@ function RiskyCasesCard({ rows }: { rows: RiskCaseRow[] }) {
         })}
       </ul>
 
-      <p className="mt-3 text-[11px] leading-5 text-slate-400">
+      <p className="mt-3 text-[11px] leading-5 text-slate-500">
         Skor tabanı deterministik kural sinyalleridir; AI düzeltmesi ±25 ile sınırlıdır ve
         bandı tek başına değiştiremez.
       </p>

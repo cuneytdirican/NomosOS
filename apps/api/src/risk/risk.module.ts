@@ -3,6 +3,7 @@ import { CaseContextBuilder } from "../assistant/case-context.builder";
 import { CaselawModule } from "../caselaw/caselaw.module";
 import { CaseRiskController, RiskController } from "./risk.controller";
 import { RiskService } from "./risk.service";
+import { RiskNightlyService } from "./risk-nightly.service";
 
 /**
  * Risk Motoru (Modül 17).
@@ -18,12 +19,15 @@ import { RiskService } from "./risk.service";
  * düğümlerini ve simülasyon koşularını doğrudan Prisma'dan SAYAR (yorumlamaz).
  * Böylece üç modül arasında döngüsel bağımlılık oluşmaz.
  *
+ * F2 · E2: `RiskNightlyService` dışa açıktır — SchedulerModule gece işi
+ * sarmalayıcısına hesabı SAHİBİNDEN alır; zamanlayıcı modülünde hesap yazılmaz.
+ *
  * NOT: app.module.ts kaydı Entegrasyon ajanının işidir.
  */
 @Module({
   imports: [CaselawModule],
   controllers: [CaseRiskController, RiskController],
-  providers: [RiskService, CaseContextBuilder],
-  exports: [RiskService],
+  providers: [RiskService, CaseContextBuilder, RiskNightlyService],
+  exports: [RiskService, RiskNightlyService],
 })
 export class RiskModule {}

@@ -76,7 +76,6 @@ describe("RedisAttemptCounter (paylaşılan kova)", () => {
       get: vi.fn().mockResolvedValue(null),
       del: vi.fn().mockResolvedValue(1),
       ...overrides,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     }) as any;
 
   it("ilk vuruşta pencereyi kurar", async () => {

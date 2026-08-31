@@ -1227,6 +1227,58 @@ model CitationCheck {
   @@index([tenantId, status])
 }
 
+// ---------- AI Ajan Gözlemlenebilirliği (F2 · E1) ----------
+
+/// Sistemdeki AI ajanının TANIMI — koddaki katalogdan (agent-catalog.ts) tohumlanır.
+/// Tanım tablosu, "hangi ajan var, ne iş yapar" sorusunun tek kaynağıdır; kapatma
+/// (aktif=false) yalnızca platform panelinden yapılır ve kod kataloğuyla ÇELİŞMEZ:
+/// katalogda olmayan satır tohumlanmaz.
+model AgentDefinition {
+  id          String  @id @default(uuid())
+  /// Koddaki katalog anahtarı — değişmez (örn. "ICTIHAT_ARASTIRMA").
+  agentKey    String  @unique
+  /// Görev tipi — @nomosos/shared AI_TASK_TYPES değerlerinden.
+  taskType    String
+  name        String
+  description String
+  /// Katalogda tanımlı mı (kod silinirse tanım tohumlanmaz, satır kalır)?
+  active      Boolean @default(true)
+  createdAt   DateTime @default(now())
+}
+
+/// Bir ajan KOŞUSU — her LLM çağrısı için tek satır (F2 · E1).
+/// AiUsageLog İÇ MUHASEBE (token/kredi) içindir; AgentRun İZDİR: ajan kim,
+/// ne zaman, hangi girdiyle, hangi durumla döndü. input/output ÖZET taşır —
+/// tam metin ASLA yazılmaz (KVKK: maskeleme öncesi metin kayda girmez).
+model AgentRun {
+  id          String   @id @default(uuid())
+  tenantId    String
+  agentKey    String
+  taskType    String
+  /// BASARILI | BASARISIZ | REDDEDILDI (çıktı guard'ı eledi).
+  status      String
+  userId      String?
+  /// Çağrının bağlandığı iş kaydı (örn. dosya kimliği) — varsa.
+  entity      String?
+  entityId     String?
+  model       String?
+  providerType String?
+  inputTokens  Int?
+  outputTokens Int?
+  durationMs   Int?
+  piiMasked    Boolean  @default(false)
+  /// Girdi ÖZETİ (JSON): alan adları + uzunluklar + maskelenmiş kısa alıntı.
+  inputSummaryJson  String?
+  /// Çıktı ÖZETİ (JSON): şema geçtiyse anahtar alanlar.
+  outputSummaryJson String?
+  errorMessage String?
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId, agentKey, createdAt])
+  @@index([tenantId, taskType, createdAt])
+  @@index([tenantId, status, createdAt])
+}
+
 // ---------- Denetim ----------
 
 model AuditLog {
@@ -1684,6 +1736,11 @@ model PlatformUser {
   /// TOTP gizli anahtarı — AES-256-GCM ile şifreli saklanır (MASTER_ENCRYPTION_KEY).
   /// ASLA düz metin dönülmez; yalnız kurulum anında QR üretiminde kullanılır.
   twoFactorSecret String?
+  /// SON KULLANILAN TOTP ADIMI — tekrar oynatma koruması (denetim bulgusu İ-01).
+  /// `window: 1` saat kayması toleransı verir; bu sütun olmadan AYNI kod
+  /// 90 saniye boyunca tekrar tekrar kabul edilirdi. Bu adımdan küçük/eşit
+  /// hiçbir sayaç kabul edilmez; 2FA sıfırlanınca null'lanır.
+  lastTotpCounter Int?
   lastLoginAt     DateTime?
   /// OTURUM SÜRÜMÜ. Panel token'ı `tv` alanında bu değeri taşır; guard
   /// eşleşmeyeni reddeder. Parola değişimi, 2FA sıfırlama ve rol düşürme bu
@@ -2151,6 +2208,31 @@ model RiskScoreHistory {
 
   @@index([tenantId, caseId, dimension, computedAt])
   @@index([caseId, computedAt])
+}
+
+/// Gece risk işinin kiracı günlük fotoğrafı (F2 · E2). Ortak paneli (E4) ve
+/// büro panelini, her istekte yüzlerce RiskScore satırını toplayan canlı
+/// sorgudan kurtarır: dashboard açılışı TEK satırdan okunur.
+model DashboardSnapshot {
+  id     String @id @default(uuid())
+  tenantId String
+  /// Fotoğrafın hangi GÜNE ait olduğu (TR takvimi; yyyy-mm-dd).
+  date   String
+  /// Fotoğrafa giren AKTİK dosya sayısı.
+  caseCount Int
+  /// GENEL bant YUKSEK olan dosya sayısı — "şu an en kritik sayı".
+  highRiskCount Int
+  /// GENEL skorların tam sayı ortalaması (dosya yoksa null).
+  avgGenelScore Int?
+  /// Bant dağılımı: { DUSUK, ORTA, YUKSEK } sayıları (JSON).
+  bandDistributionJson String
+  /// En riskli 5 dosya: [{ caseId, fileNumber, title, genel }] (JSON).
+  topCasesJson String
+  /// Bu fotoğrafta skor satırı YENİDEN hesaplanan dosya sayısı (iş telemetrisi).
+  recomputedCount Int
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, date])
 }
 
 /// Avukatın elle bant geçersiz kılması. GEREKÇE ZORUNLUDUR — gerekçesiz

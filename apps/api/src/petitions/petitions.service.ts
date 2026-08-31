@@ -256,7 +256,9 @@ export class PetitionsService {
       },
     });
 
-    const version = await this.appendVersion(petition.id, sections, user.userId, "İlk taslak (şablon iskeleti).");
+    // İlk sürüm kaydedilir; dönüş değeri yalnızca sürüm numarasıdır ve
+    // aşağıdaki yanıtta petition.include ile okunur.
+    await this.appendVersion(petition.id, sections, user.userId, "İlk taslak (şablon iskeleti).");
 
     await this.audit.log({
       tenantId: user.tenantId,

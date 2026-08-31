@@ -361,7 +361,7 @@ function ContractRow({
 
       {/* Durum geçişi */}
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
+        <span className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
           Durumu değiştir
         </span>
         <Select
@@ -375,7 +375,7 @@ function ContractRow({
             </option>
           ))}
         </Select>
-        <span className="text-[11px] text-slate-400">
+        <span className="text-[11px] text-slate-500">
           Geçersiz geçişleri sunucu reddeder.
         </span>
       </div>
@@ -389,9 +389,9 @@ function ContractRow({
           {versionsError ? (
             <ErrorBox message={versionsError} />
           ) : !versions ? (
-            <p className="text-xs text-slate-400">Yükleniyor…</p>
+            <p className="text-xs text-slate-500">Yükleniyor…</p>
           ) : versions.length === 0 ? (
-            <p className="text-xs text-slate-400">Henüz sürüm yok.</p>
+            <p className="text-xs text-slate-500">Henüz sürüm yok.</p>
           ) : (
             <ul className="space-y-1.5">
               {[...versions]
@@ -405,7 +405,7 @@ function ContractRow({
                       <strong>v{v.versionNo}</strong>
                       {v.changeNote ? ` · ${v.changeNote}` : ""}
                     </span>
-                    <span className="flex items-center gap-2 text-[11px] text-slate-400">
+                    <span className="flex items-center gap-2 text-[11px] text-slate-500">
                       {v.createdAt ? fmtDateTime(v.createdAt) : ""}
                       {contract.currentVersionId === v.id && <Badge tone="green">Güncel</Badge>}
                     </span>
@@ -973,7 +973,7 @@ function ReviewModal({
           <div className="space-y-3">
             {result.summary && (
               <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   Özet
                 </p>
                 <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-slate-700">
@@ -1047,7 +1047,7 @@ function ReviewModal({
                         </p>
                       )}
                       {d.quote && (
-                        <p className="mt-1 text-[11px] italic leading-5 text-slate-400">
+                        <p className="mt-1 text-[11px] italic leading-5 text-slate-500">
                           Modelin verdiği alıntı: “{d.quote}”
                         </p>
                       )}

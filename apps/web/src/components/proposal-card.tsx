@@ -248,7 +248,7 @@ export function ProposalCard({
           <dl className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
             {rows.map((r) => (
               <div key={r.label} className="flex gap-2 text-sm">
-                <dt className="shrink-0 text-xs font-medium uppercase tracking-wide text-slate-400">
+                <dt className="shrink-0 text-xs font-medium uppercase tracking-wide text-slate-500">
                   {r.label}
                 </dt>
                 <dd className="min-w-0 text-slate-800">{r.value}</dd>
@@ -256,7 +256,7 @@ export function ProposalCard({
             ))}
           </dl>
         ) : (
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             Öneri ayrıntısı yapılandırılmış olarak gelmedi; gerekçe ve kaynak alıntıya bakın.
           </p>
         )}
@@ -267,7 +267,7 @@ export function ProposalCard({
             {computeNote ? (
               <ComputeNote note={computeNote} />
             ) : (
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-slate-500">
                 Hesap izi öneriyle birlikte gelmedi. Süre onaylandığında deterministik motor
                 hesabı yeniden üretir ve izi süre kaydına yazar.
               </p>
@@ -334,7 +334,7 @@ export function ProposalCard({
                           <span className="block text-[11px] text-slate-500">{c.reason}</span>
                         )}
                         {typeof c.confidence === "number" && (
-                          <span className="block text-[11px] text-slate-400">
+                          <span className="block text-[11px] text-slate-500">
                             eşleşme güveni %{Math.round(c.confidence * 100)}
                           </span>
                         )}

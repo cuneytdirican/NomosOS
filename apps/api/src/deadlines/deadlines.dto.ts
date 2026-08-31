@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { DEADLINE_SOURCES, DEADLINE_STATUSES } from "@nomosos/shared";
 import { nullableText, nullableUuid } from "../common/zod";
 
 /** Prisma ServiceMethod ile birebir. */

@@ -305,6 +305,9 @@ export class EvidenceService {
           tenantId: user.tenantId,
           claimId: claim.id,
           evidenceId: evidence.id,
+          // Bağın YÖNÜ kayda yazılır (F2 · E6): yönü olmayan bağ matriste
+          // destek olarak sayılıyordu — çürüten delil "destekliyor" görünüyordu.
+          linkType: input.linkType ?? "SUPPORTS",
           strength: input.strength ?? null,
           note: input.note ?? null,
           createdBy: user.userId,
@@ -317,7 +320,9 @@ export class EvidenceService {
         action: "EVIDENCE_LINK_CREATE",
         entity: "ClaimEvidenceLink",
         entityId: link.id,
-        detail: `iddia=${claim.id} delil=${evidence.id} güç=${input.strength ?? "-"}`,
+        detail:
+          `iddia=${claim.id} delil=${evidence.id} yön=${input.linkType ?? "SUPPORTS"} ` +
+          `güç=${input.strength ?? "-"}`,
       });
       return link;
     } catch (err) {

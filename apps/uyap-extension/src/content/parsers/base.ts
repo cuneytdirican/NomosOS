@@ -21,7 +21,6 @@ import type {
   ParseFailure,
   ParseFailureCode,
   ParseSuccess,
-  RequiredNode,
   SelectorIssue,
 } from "../../types/parser";
 import type { UyapPageKind } from "../../types/uyap";

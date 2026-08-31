@@ -16,7 +16,7 @@ const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   gold:
     "bg-amber-500 text-slate-900 hover:bg-amber-400 disabled:bg-amber-200 focus-visible:outline-amber-500",
   secondary:
-    "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:text-slate-400 focus-visible:outline-slate-400",
+    "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:text-slate-500 focus-visible:outline-slate-400",
   danger:
     "bg-red-600 text-white hover:bg-red-500 disabled:bg-red-300 focus-visible:outline-red-600",
   ghost:
@@ -103,7 +103,7 @@ export function Badge({
 // ---------- Form ----------
 
 const FIELD_CLS =
-  "w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 disabled:bg-slate-50";
+  "w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-500 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 disabled:bg-slate-50";
 
 export function Input({
   className = "",
@@ -144,7 +144,7 @@ export function Field({
     <label className="block">
       <span className="mb-1 block text-xs font-medium text-slate-600">{label}</span>
       {children}
-      {hint && <span className="mt-1 block text-xs text-slate-400">{hint}</span>}
+      {hint && <span className="mt-1 block text-xs text-slate-500">{hint}</span>}
     </label>
   );
 }
@@ -270,7 +270,7 @@ export function Modal({
             type="button"
             onClick={onClose}
             aria-label="Kapat"
-            className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            className="rounded-md p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-600"
           >
             <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
               <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
@@ -288,7 +288,7 @@ export function Modal({
 export function Spinner({ label = "Yükleniyor…" }: { label?: string }) {
   return (
     <div className="flex items-center gap-2 py-6 text-sm text-slate-500">
-      <svg className="h-4 w-4 animate-spin text-slate-400" viewBox="0 0 24 24" fill="none">
+      <svg className="h-4 w-4 animate-spin text-slate-500" viewBox="0 0 24 24" fill="none">
         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z" />
       </svg>
@@ -462,6 +462,26 @@ export function Tabs<T extends string>({
   );
 }
 
+/**
+ * Sekme PANELİNİ Tabs ile bağlayan aria öznitelikleri (F2 · F7).
+ *
+ * Tabs `aria-controls`'u yalnızca `idPrefix` verilirse yayınlar; bu yardımcı,
+ * panel tarafının AYNı sözleşmeye bağlanmasını sağlar:
+ *
+ *     <div {...tabPanelProps("dosya", "belgeler")}>…</div>
+ *     <Tabs idPrefix="dosya" … />
+ *
+ * Yayınlanan `aria-controls`'un işaret ettiği panel gerçekte VAR olur —
+ * eksik panel işaret eden aria-controls hiç yoktan kötüdür (İ-26).
+ */
+export function tabPanelProps<T extends string>(idPrefix: string, key: T) {
+  return {
+    role: "tabpanel" as const,
+    id: `${idPrefix}-panel-${key}`,
+    "aria-labelledby": `${idPrefix}-tab-${key}`,
+  };
+}
+
 // ---------- Sayfalama (denetim bulgusu K-15) ----------
 
 /**
@@ -549,7 +569,7 @@ export function TruncationNotice({
 export function DataRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-4 py-2">
-      <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-slate-400">
+      <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-slate-500">
         {label}
       </span>
       <span className="text-right text-sm text-slate-800">{children}</span>
@@ -588,7 +608,7 @@ export function Disclosure({
           viewBox="0 0 20 20"
           fill="currentColor"
           aria-hidden="true"
-          className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-open:rotate-180"
+          className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open:rotate-180"
         >
           <path
             fillRule="evenodd"
@@ -740,7 +760,7 @@ export function DeltaIndicator({
   if (delta === null || delta === undefined || !Number.isFinite(delta)) {
     return (
       <span
-        className={`inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-400 ring-1 ring-inset ring-slate-200 ${className}`}
+        className={`inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-500 ring-1 ring-inset ring-slate-200 ${className}`}
         title="Önceki dönem verisi yok — karşılaştırma yapılamıyor."
       >
         karşılaştırma yok
@@ -873,7 +893,7 @@ export function BarList({
         ))}
       </ul>
       {hasPrevious && (
-        <p className="mt-3 flex items-center gap-2 text-[11px] text-slate-400">
+        <p className="mt-3 flex items-center gap-2 text-[11px] text-slate-500">
           <span aria-hidden="true" className="inline-block h-3 w-0.5 rounded-full bg-slate-400" />
           önceki dönem değeri
         </p>
@@ -991,7 +1011,7 @@ export function LineChart({
           ))}
         </g>
       </svg>
-      <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
+      <div className="mt-1 flex items-center justify-between text-[11px] text-slate-500">
         <span>{points[0].label}</span>
         <span className="font-medium text-slate-600 tabular-nums">
           {format(points[points.length - 1].value)}

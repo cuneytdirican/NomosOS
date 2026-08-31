@@ -266,7 +266,7 @@ export default function AiKullanimPage() {
                         style={{ height: `${Math.max(3, (g.kredi / maxDaily) * 100)}%` }}
                         title={`${g.tarih}: ${g.kredi} kredi`}
                       />
-                      <span className="text-[9px] text-slate-400">{g.tarih.slice(8, 10)}</span>
+                      <span className="text-[9px] text-slate-500">{g.tarih.slice(8, 10)}</span>
                     </div>
                   ))}
                 </div>
@@ -288,7 +288,7 @@ export default function AiKullanimPage() {
                       </span>
                       <span className="shrink-0 tabular-nums text-slate-900">
                         {g.kredi.toLocaleString("tr-TR")}{" "}
-                        <span className="text-xs text-slate-400">({g.adet} çağrı)</span>
+                        <span className="text-xs text-slate-500">({g.adet} çağrı)</span>
                       </span>
                     </div>
                     <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
@@ -450,7 +450,7 @@ export default function AiKullanimPage() {
         </div>
         <p className="-mx-5 -mb-5 mt-0 border-t border-slate-100 px-5 py-3 text-xs text-slate-500">
           Yeşil satırlar kredi tüketmez: süre hesabı, belge sınıflandırma, belgeden veri çıkarma,
-          süre tespiti, atıf doğrulama ve RAG indeksleme. <strong>Avukatın süre kaçırmasına yol
+          süre tespiti, içtihat atıf teyidi ve RAG indeksleme. <strong>Avukatın süre kaçırmasına yol
           açabilecek hiçbir işlem krediye bağlanmaz.</strong>
         </p>
       </Card>

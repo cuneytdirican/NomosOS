@@ -49,8 +49,8 @@ export const PORTAL_DOWNLOAD_TTL_SECONDS = 120;
 /** Portal parolası asgari uzunluğu. */
 export const PORTAL_MIN_PASSWORD_LENGTH = 10;
 
-/** bcrypt maliyet katsayısı (büro tarafıyla aynı disiplin). */
-export const PORTAL_BCRYPT_ROUNDS = 10;
+/** bcrypt maliyet katsayısı — büro tarafıyla AYNI (12; denetim bulgusu İ-02). */
+export const PORTAL_BCRYPT_ROUNDS = 12;
 
 /**
  * GİRİŞ KİLİDİ — İKİ AYRI SAYAÇ, İKİ AYRI EŞİK (spec §İş Kuralları 9).

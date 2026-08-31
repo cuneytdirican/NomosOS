@@ -153,7 +153,7 @@ export default function CakismaPage() {
                 {scanning ? "Taranıyor…" : "Tara"}
               </Button>
             </form>
-            <p className="mt-3 text-[11px] leading-5 text-slate-400">
+            <p className="mt-3 text-[11px] leading-5 text-slate-500">
               Tarama anlık verilerle çalışır ve o anın fotoğrafı olarak saklanır; aynı ad
               için yeni tarama yeni bir kayıt açar, eski rapor değişmez.
             </p>
@@ -205,7 +205,7 @@ export default function CakismaPage() {
                                 {labelOf(CONFLICT_DECISION_LABELS, decision)}
                               </Badge>
                             ) : (
-                              <span className="text-xs text-slate-400">Karar verilmedi</span>
+                              <span className="text-xs text-slate-500">Karar verilmedi</span>
                             )}
                           </td>
                           <td className="py-3 pr-4 text-slate-500">{fmtDateTime(c.createdAt)}</td>

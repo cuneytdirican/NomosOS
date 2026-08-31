@@ -19,6 +19,7 @@ import {
   expandJudicialRecess,
   parseDateOnly,
 } from "@nomosos/legal-core";
+import { agentCatalogForSeed } from "@nomosos/shared";
 
 const prisma = new PrismaClient();
 
@@ -65,6 +66,50 @@ async function retireRemovedSystemRules(): Promise<number> {
     data: { isActive: false },
   });
   return count;
+}
+
+/**
+ * F2 · E1 — AI ajan tanımları (@nomosos/shared agent-catalog'undan).
+ * Katalog TEK KAYNAKtır: kod silinen ajanın satırı burada silinmez,
+ * `active: false` yapılır (mezar taşı deseni).
+ */
+async function seedAgentDefinitions(): Promise<number> {
+  const catalog = agentCatalogForSeed();
+  const currentKeys = catalog.map((a) => a.agentKey);
+  let created = 0;
+  for (const agent of catalog) {
+    const existing = await prisma.agentDefinition.findUnique({
+      where: { agentKey: agent.agentKey },
+    });
+    if (existing) {
+      await prisma.agentDefinition.update({
+        where: { id: existing.id },
+        data: {
+          taskType: agent.taskTypes[0] ?? "CASE_CHAT",
+          name: agent.name,
+          description: agent.description,
+          active: true,
+        },
+      });
+      continue;
+    }
+    await prisma.agentDefinition.create({
+      data: {
+        agentKey: agent.agentKey,
+        taskType: agent.taskTypes[0] ?? "CASE_CHAT",
+        name: agent.name,
+        description: agent.description,
+        active: true,
+      },
+    });
+    created += 1;
+  }
+  // Katalogdan çıkarılan ajanlar pasifleşir.
+  await prisma.agentDefinition.updateMany({
+    where: { agentKey: { notIn: currentKeys }, active: true },
+    data: { active: false },
+  });
+  return created;
 }
 
 async function seedDeadlineRules(): Promise<number> {
@@ -2163,6 +2208,8 @@ async function main() {
   const holidayCounts = await seedHolidays();
   const templateCount = await seedPetitionTemplates();
   const caseLawCount = await seedCaseLaw();
+  const agentCount = await seedAgentDefinitions();
+  void agentCount; // tohum sayısı; özet çıktısında kullanılmıyor
 
   // ---- Müvekkiller -------------------------------------------------------
 

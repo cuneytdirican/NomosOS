@@ -543,7 +543,7 @@ function InboundMatchRow({
         </p>
       )}
       {confidence !== null && confidence < MATCH_SUGGESTION_FLOOR && (
-        <p className="mt-2 text-[11px] leading-5 text-slate-400">
+        <p className="mt-2 text-[11px] leading-5 text-slate-500">
           AI önerisi güven eşiğinin altında kaldığı için gösterilmiyor; eşleştirmeyi elle yapın.
         </p>
       )}
@@ -620,7 +620,7 @@ function InboundMatchRow({
         {entry.client?.id && (
           <Link
             href={`/app/muvekkiller/${entry.client.id}`}
-            className="text-[11px] text-slate-400 hover:text-amber-600"
+            className="text-[11px] text-slate-500 hover:text-amber-600"
           >
             Müvekkil kartı →
           </Link>

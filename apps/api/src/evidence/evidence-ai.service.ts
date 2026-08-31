@@ -164,6 +164,8 @@ export class EvidenceAiService {
     const unsupported = computed.rows.filter((r) => r.unsupported);
     const weak = computed.rows.filter((r) => r.weaklySupported);
     const onlyPlanned = computed.rows.filter((r) => r.onlyPlannedSupport);
+    /** Çürüten bağı olan BİZ iddiaları — deterministik tespit (F2 · E6). */
+    const contradicted = computed.rows.filter((r) => r.contradicted);
     /** Karşı tarafın, hiçbir delilimizle karşılanmamış iddiaları. */
     const unansweredOpposing = computed.rows.filter(
       (r) => r.side === "KARSI_TARAF" && r.status !== "CURUTULDU" && r.supportingCount === 0,
@@ -172,6 +174,11 @@ export class EvidenceAiService {
     const gapLines = [
       ...unsupported.map(
         (r) => `[BOŞLUK] ${r.ref} hiçbir delille desteklenmiyor (deterministik tespit).`,
+      ),
+      ...contradicted.map(
+        (r) =>
+          `[ÇÜRÜTÜLEN] ${r.ref} delillerimizden ${r.contradictingCount} tanesi bu iddiayı ÇÜRÜTÜYOR ` +
+          "(deterministik tespit).",
       ),
       ...weak.map(
         (r) =>
@@ -259,6 +266,12 @@ export class EvidenceAiService {
         computedBy: "deterministik matris hesabı (AI kullanılmaz)",
         summary: computed.summary,
         unsupportedClaims: unsupported.map((r) => ({ ref: r.ref, claimId: r.claimId, text: r.text })),
+        contradictedClaims: contradicted.map((r) => ({
+          ref: r.ref,
+          claimId: r.claimId,
+          text: r.text,
+          contradictingCount: r.contradictingCount,
+        })),
         weaklySupportedClaims: weak.map((r) => ({
           ref: r.ref,
           claimId: r.claimId,

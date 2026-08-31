@@ -229,7 +229,7 @@ export default function MuvekkilDetayPage({ params }: { params: Promise<{ id: st
               {client.email ? ` · ${client.email}` : ""}
               {client.phone ? ` · ${client.phone}` : ""}
             </p>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-xs text-slate-500">
               {isLegal ? (
                 <>
                   VKN: {client.taxNumber ?? "—"}
@@ -254,7 +254,7 @@ export default function MuvekkilDetayPage({ params }: { params: Promise<{ id: st
               )}
             </p>
           </div>
-          <div className="text-right text-xs text-slate-400">
+          <div className="text-right text-xs text-slate-500">
             <p>Kayıt: {fmtDate(client.createdAt)}</p>
             <p className="mt-1">
               {cases.length} dosya · {openCases} açık
@@ -592,7 +592,7 @@ function GeneralTab({ client, onSaved }: { client: Client; onSaved: () => Promis
           <DataRow label="IBAN">{client.iban ?? "—"}</DataRow>
           <DataRow label="Kayıt">{fmtDate(client.createdAt)}</DataRow>
         </div>
-        <p className="mt-4 text-[11px] leading-5 text-slate-400">
+        <p className="mt-4 text-[11px] leading-5 text-slate-500">
           KVKK: kimlik ve IBAN alanları hassas veridir; ekranda maskeli gösterilir ve erişimler
           denetim kaydına yazılır.
         </p>

@@ -50,7 +50,7 @@ export const hero = {
     "Deterministik süre hesabı",
     "KVKK uyumlu veri mimarisi",
     "Kendi LLM'inizi bağlayın",
-    "UYAP entegrasyonu",
+    "İçtihat atıf teyidi",
   ],
 } as const;
 
@@ -159,15 +159,15 @@ export const modules = {
     },
     {
       title: "Dilekçe Stüdyosu",
-      text: "Dosya bilgilerinden bölüm bölüm dilekçe taslağı. UDF formatında dışa aktarım. Atıflar doğrulanmadan “hazır” olmaz.",
+      text: "Dosya bilgilerinden bölüm bölüm dilekçe taslağı. UDF formatında dışa aktarım. İçtihat atıfları kayıt üzerinden doğrulanmadan “hazır” olmaz; mevzuat atıfları tanınır ama doğrulanmaz.",
     },
     {
       title: "İçtihat Araştırma",
-      text: "Karar arama, özetleme ve dosyaya emsal olarak bağlama. Her atıf kayıt üzerinden doğrulanır.",
+      text: "Karar arama, özetleme ve dosyaya emsal olarak bağlama. Her içtihat atfı kayıt üzerinden doğrulanır.",
     },
     {
-      title: "UYAP Köprüsü",
-      text: "Tarayıcı eklentisiyle dosya, safahat ve evrak aktarımı. UYAP'ın yerine geçmez; üzerine bir operasyon katmanı kurar.",
+      title: "UYAP Köprüsü (geliştirme aşamasında)",
+      text: "Tarayıcı eklentisiyle dosya, safahat ve evrak aktarımı hedefleniyor. UYAP'ın yerine geçmez; üzerine bir operasyon katmanı kurar.",
     },
   ],
 } as const;
@@ -205,7 +205,7 @@ export const deadline = {
       "açıklamanın kendisidir.",
   },
   footnote:
-    "18 hazır süre kuralı — HMK, İİK, CMK, İYUK, TKHK ve İş Kanunu hükümleriyle; büroya özel kural tanımlanabilir.",
+    "29 hazır süre kuralı — HMK, İİK, CMK, İYUK, TKHK ve İş Kanunu hükümleriyle; büroya özel kural tanımlanabilir.",
 } as const;
 
 /* --------------------------------------------------------------------------
@@ -217,10 +217,10 @@ export const pipeline = {
   title: "Evrak geldi. Sistem ne yapılacağını çıkardı.",
   lead: "Bugün belge yüklemek bir arşivleme işidir. NomosOS'ta belge, sürecin başlangıcıdır.",
   steps: [
-    { title: "Evrak sisteme girer", detail: "UYAP eklentisi veya yükleme" },
+    { title: "Evrak sisteme girer", detail: "yükleme (UYAP eklentisi: geliştirme aşamasında)" },
     {
       title: "Metin çıkarılır ve sınıflandırılır",
-      detail: "ara karar · bilirkişi raporu · tebligat …",
+      detail: "ara karar · bilirkişi raporu · tebligat … (metin katmanı olan belgelerde)",
     },
     { title: "İlgili dosyayla eşleştirilir", detail: "" },
     { title: "Süre başlatan olaylar tespit edilir", detail: "kural motoru hesaplar" },
@@ -261,8 +261,8 @@ export const ai = {
   ],
   hallucination: {
     title: "Uydurma içtihat sorunu.",
-    text: "Yapay zekâ modelleri, var olmayan Yargıtay kararlarını gerçekmiş gibi üretebilir. NomosOS'ta bir dilekçedeki her atıf, kayıt üzerinden doğrulanır — modele “bu karar var mı” diye sorulmaz, kayıtta aranır.",
-    strong: "Doğrulanmamış atıf içeren bir dilekçe “hazır” durumuna geçemez.",
+    text: "Yapay zekâ modelleri, var olmayan Yargıtay kararlarını gerçekmiş gibi üretebilir. NomosOS'ta bir dilekçedeki her İÇTİHAT künyesi, kayıt üzerinden doğrulanır — modele “bu karar var mı” diye sorulmaz, kayıtta aranır. Mevzuat atıfları tanınır ancak doğrulanmaz; madde numarasını yürürlükteki metinden siz teyit edersiniz.",
+    strong: "Doğrulanmamış içtihat atfı içeren bir dilekçe “hazır” durumuna geçemez.",
   },
 } as const;
 
@@ -305,28 +305,28 @@ export const byollm = {
  * ----------------------------------------------------------------------- */
 
 export const uyap = {
-  kicker: "ENTEGRASYON",
+  kicker: "ENTEGRASYON · GELİŞTİRME AŞAMASINDA",
   title: "UYAP'ın yerine geçmez. Üzerine bir katman kurar.",
   paragraphs: [
-    "Tarayıcı eklentisi, kendi UYAP oturumunuz üzerinden çalışır. Dosya listesi, safahat, duruşma bilgileri ve evraklar NomosOS'a aktarılır; gelen her evrak otomatik aksiyon hattına girer.",
+    "Hedef: kendi UYAP oturumunuz üzerinden çalışan bir tarayıcı eklentisiyle dosya listesi, safahat, duruşma bilgileri ve evrakların NomosOS'a aktarılması ve gelen her evrakın otomatik aksiyon hattına girmesi. Eklentinin istemci tarafı yazıldı; senkronizasyon ve aktarım altyapısı geliştirme aşamasındadır — kullanıma açıldığında duyurulacaktır.",
   ],
   signature: {
-    before: "Hazırladığınız dilekçeyi UDF formatında dışa aktarır, UYAP ekranını sizin için doldurur — ancak ",
-    strong: "e-imzanızı siz atar, gönderimi siz onaylarsınız.",
+    before: "Hazırladığınız dilekçeyi UDF formatında dışa aktarır; UYAP ekranına aktarım hedefi eklentiyle birlikte gelecek — ancak ",
+    strong: "e-imzanızı siz atarsınız, gönderimi siz onaylarsınız.",
     after: " Sistem sizin adınıza hiçbir evrak göndermez.",
   },
   note: "UYAP oturum ve e-imza bilgileriniz NomosOS'a hiçbir şekilde aktarılmaz.",
 } as const;
 
-/** UYAP köprüsü mockup'ı (gerçek veri değildir). */
+/** UYAP köprüsü mockup'ı (gerçek veri değildir; hedeflenen akışın gösterimi). */
 export const uyapMockup = {
   sampleBadge: "örnek veri",
   windowTitle: "NomosOS · UYAP Köprüsü",
   rows: [
-    { label: "Dosya listesi", detail: "142 dosya eşleşti", state: "Aktarıldı" },
-    { label: "Safahat", detail: "38 yeni kayıt", state: "Aktarıldı" },
-    { label: "Duruşma bilgileri", detail: "9 duruşma güncellendi", state: "Aktarıldı" },
-    { label: "Evrak", detail: "5 evrak aksiyon hattına girdi", state: "İşleniyor" },
+    { label: "Dosya listesi", detail: "142 dosya eşleşti", state: "Hedef akış" },
+    { label: "Safahat", detail: "38 yeni kayıt", state: "Hedef akış" },
+    { label: "Duruşma bilgileri", detail: "9 duruşma güncellendi", state: "Hedef akış" },
+    { label: "Evrak", detail: "5 evrak aksiyon hattına girdi", state: "Hedef akış" },
     { label: "Dilekçe gönderimi", detail: "e-imza sizde", state: "Onayınızda" },
   ],
 } as const;
@@ -544,7 +544,7 @@ export const pricing = {
     blocks: [
       {
         title: "Kredi tüketmeyen işlemler",
-        text: "süre hesabı, belge sınıflandırma, evrakın dosyaya bağlanması, atıf doğrulama ve dosya/müvekkil/duruşma yönetiminin tamamı.",
+        text: "süre hesabı, belge sınıflandırma, evrakın dosyaya bağlanması, içtihat atıf teyidi ve dosya/müvekkil/duruşma yönetiminin tamamı.",
       },
       {
         title: "Krediniz biterse ne olur?",

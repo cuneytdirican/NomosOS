@@ -13,7 +13,7 @@ export function TaskProgress({
 }) {
   if (status === "IPTAL") {
     return (
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
         İptal edildi — iş akışı durduruldu
       </p>
     );
@@ -50,7 +50,7 @@ export function TaskProgress({
                   ? "bg-slate-900 text-amber-400"
                   : done
                     ? "bg-emerald-50 text-emerald-700"
-                    : "bg-slate-100 text-slate-400"
+                    : "bg-slate-100 text-slate-500"
               }`}
             >
               <span

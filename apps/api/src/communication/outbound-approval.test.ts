@@ -7,7 +7,7 @@
  */
 
 import { ConflictException, ForbiddenException } from "@nestjs/common";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { AuthUser } from "../common/types";
 import { ChannelNotConfiguredError, ChannelProviderRegistry } from "./channel-providers";
 import { OutboundService } from "./outbound.service";

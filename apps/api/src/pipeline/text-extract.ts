@@ -6,14 +6,18 @@
  * (sınıflandırma, süre tespiti) metin yoksa ATLANIR — "boş metinden sınıf
  * uydurmak" halüsinasyonun en ucuz yoludur.
  *
- * Faz 2 kapsamı:
+ * Kapsam (F2 · B2 ile DOCX ve UDF eklendi):
  *   - PDF  → pdf-parse (gömülü metin katmanı). Taranmış PDF'te metin katmanı
  *            yoktur; bu durumda gerçek OCR gerekir → BASARISIZ + açık not.
  *   - TXT  → doğrudan UTF-8.
- *   - DOCX → Faz 3 (mammoth/docx ayrıştırıcısı) → GEREKSIZ + açık not.
- *   - Görsel (JPEG/PNG) → gerçek OCR Faz 3 (tesseract) → BASARISIZ + açık not.
- *   - UDF  → içindeki content.xml Faz 3'te okunacak → GEREKSIZ + açık not.
+ *   - DOCX → word/document.xml içindeki <w:t> metin düğümleri (F2 · B2).
+ *   - Görsel (JPEG/PNG) → gerçek OCR yok → BASARISIZ + açık not
+ *            (taranmış görüntü için OCR henüz kurulmadı; yanlış metin
+ *            üretmemek sessiz kalmaktan iyidir).
+ *   - UDF  → @nomosos/udf parser'ı, CDATA ham metni (rawText) (F2 · B2).
  */
+
+import { readUdf } from "@nomosos/udf";
 
 export type TextExtractOutcome = "TAMAM" | "BASARISIZ" | "GEREKSIZ";
 
@@ -53,27 +57,22 @@ export async function extractText(params: {
     case "txt":
       return extractFromTxt(params.buffer);
     case "docx":
-      return {
-        outcome: "GEREKSIZ",
-        note:
-          "DOCX metin çıkarma Faz 3 kapsamındadır. Belge saklandı ancak metni okunmadı; " +
-          "sınıflandırma ve süre tespiti bu belge için çalıştırılmadı. " +
-          "Metni PDF veya düz metin olarak yüklerseniz hat tam çalışır.",
-      };
+      // F2 · B2: "ucuz kazanç" — DOCX bir zip'tir; word/document.xml içindeki
+      // <w:t> düğümleri belgenin metin katmanıdır. Yeni bağımlılık: jszip
+      // (paket zaten @nomosos/udf üzerinden bağımlılık ağacındaydı).
+      return extractFromDocx(params.buffer);
     case "image":
       return {
         outcome: "BASARISIZ",
         note:
-          "Görsel belgelerde OCR Faz 3 kapsamındadır (henüz kurulu değil). " +
+          "Görsel belgelerde OCR henüz kurulu değil. " +
           "Belge saklandı; metni okunamadığı için sınıflandırma ve süre tespiti yapılmadı. " +
           "Metin katmanı olan bir PDF yüklerseniz hat tam çalışır.",
       };
     case "udf":
-      return {
-        outcome: "GEREKSIZ",
-        note:
-          "UDF içerik ayrıştırması Faz 3 kapsamındadır. Belge saklandı ancak metni okunmadı.",
-      };
+      // F2 · B2: UDF arşivi @nomosos/udf ile ayrıştırılır. PII taraması ve
+      // indeksleme DAİMA ham CDATA metni (rawText) üzerinden yapılır.
+      return extractFromUdf(params.buffer);
     default:
       return {
         outcome: "GEREKSIZ",
@@ -132,6 +131,91 @@ function extractFromTxt(buffer: Buffer): TextExtractResult {
     text: truncate(text),
     note: `Düz metin dosyasından ${text.length} karakter okundu.`,
   };
+}
+
+/**
+ * DOCX metin çıkarma (F2 · B2).
+ *
+ * ZIP'teki `word/document.xml` alınır; paragraflar `<w:p>` sonuyla bölünür ve
+ * her paragraftaki `<w:t>…</w:t>` içerikleri birleştirilir. Biçim, üstveri ve
+ * diğer bölümler YOK SAYILIR — hattın işi belgenin METNİDİR.
+ *
+ * Paragraf sonu `\n` ile taşınır: metnin tamamı tek satıra indirilirse süre
+ * tespiti "tebliğ tarihi ... satır sonu" ipuçlarını yitirir.
+ */
+async function extractFromDocx(buffer: Buffer): Promise<TextExtractResult> {
+  try {
+    const { default: JSZip } = await import("jszip");
+    const zip = await JSZip.loadAsync(buffer);
+    const entry = zip.file("word/document.xml");
+    if (!entry) {
+      return {
+        outcome: "BASARISIZ",
+        note: "DOCX arşivinde word/document.xml bulunamadı; belge bozuk olabilir.",
+      };
+    }
+    const xml = await entry.async("string");
+    const paragraphs = xml.split(/<\/w:p>/).map((chunk) => {
+      const runs = [...chunk.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)].map((m) => m[1]);
+      return runs.join("");
+    });
+    const text = normalizeWhitespace(
+      paragraphs
+        .map((p) => p.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">"))
+        .join("\n"),
+    );
+    if (text.length < MIN_MEANINGFUL_TEXT_LENGTH) {
+      return {
+        outcome: "BASARISIZ",
+        note: "DOCX içinde okunabilir metin bulunamadı (belge yalnız görsel içeriyor olabilir).",
+      };
+    }
+    return {
+      outcome: "TAMAM",
+      text: truncate(text),
+      note: `DOCX metin katmanından ${text.length} karakter okundu (${paragraphs.length} paragraf).`,
+    };
+  } catch (err) {
+    return {
+      outcome: "BASARISIZ",
+      note: `DOCX ayrıştırılamadı: ${(err as Error).message}`,
+    };
+  }
+}
+
+/**
+ * UDF metin çıkarma (F2 · B2).
+ *
+ * `readUdf` arşivi açar; `rawText` (CDATA ham metni) kullanılır —
+ * packages/udf'teki sözleşme gereği PII taraması ve indeksleme DAİMA bu alan
+ * üzerinden yapılmalıdır (paragraflardan yeniden kurulan metin, kapsanmayan
+ * kısmı sessizce düşürebilir).
+ */
+async function extractFromUdf(buffer: Buffer): Promise<TextExtractResult> {
+  try {
+    const doc = await readUdf(buffer);
+    const text = normalizeWhitespace(doc.rawText ?? "");
+    if (text.length === 0) {
+      return {
+        outcome: "BASARISIZ",
+        note: "UDF arşivi okundu ancak içinde metin bulunamadı.",
+      };
+    }
+    const warnings =
+      doc.parseWarnings && doc.parseWarnings.length > 0
+        ? ` Ayrıştırma uyarıları: ${doc.parseWarnings.join("; ")}`
+        : "";
+    return {
+      outcome: "TAMAM",
+      text: truncate(text),
+      note: `UDF ham metninden ${text.length} karakter okundu (${doc.paragraphs.length} paragraf).${warnings}`,
+    };
+  } catch (err) {
+    return {
+      outcome: "BASARISIZ",
+      note: `UDF ayrıştırılamadı: ${(err as Error).message}`,
+    };
+  }
 }
 
 type FileKind = "pdf" | "txt" | "docx" | "image" | "udf" | "unknown";

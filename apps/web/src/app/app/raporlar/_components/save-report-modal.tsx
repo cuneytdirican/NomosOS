@@ -84,7 +84,7 @@ export function SaveReportModal({
                 .join(", ")}
             </p>
           )}
-          <p className="mt-1.5 text-[11px] text-slate-400">
+          <p className="mt-1.5 text-[11px] text-slate-500">
             Rakamlar saklanmaz — rapor her açılışta yeniden hesaplanır.
           </p>
         </div>

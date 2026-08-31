@@ -183,7 +183,7 @@ export function RemoteSelect<T>({
           setOpen(true);
         }}
         onKeyDown={onKeyDown}
-        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-200 disabled:bg-slate-50 disabled:text-slate-400"
+        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-200 disabled:bg-slate-50 disabled:text-slate-500"
       />
       {chosen && !open && (
         <button
@@ -193,7 +193,7 @@ export function RemoteSelect<T>({
             setChosen(null);
             onChange("", null, null);
           }}
-          className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+          className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-1 text-slate-500 hover:bg-slate-100 hover:text-slate-600"
         >
           ×
         </button>
@@ -202,7 +202,7 @@ export function RemoteSelect<T>({
       {open && (
         <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
           <ul id={listId} role="listbox" className="max-h-60 overflow-y-auto">
-            {loading && <li className="px-3 py-2 text-sm text-slate-400">Aranıyor…</li>}
+            {loading && <li className="px-3 py-2 text-sm text-slate-500">Aranıyor…</li>}
             {!loading && error && <li className="px-3 py-2 text-sm text-red-600">{error}</li>}
             {!loading && !error && options.length === 0 && (
               <li className="px-3 py-2 text-sm text-slate-500">{emptyMessage}</li>
@@ -224,7 +224,7 @@ export function RemoteSelect<T>({
                   }`}
                 >
                   {opt.label}
-                  {opt.hint && <span className="ml-2 text-xs text-slate-400">{opt.hint}</span>}
+                  {opt.hint && <span className="ml-2 text-xs text-slate-500">{opt.hint}</span>}
                 </li>
               ))}
           </ul>

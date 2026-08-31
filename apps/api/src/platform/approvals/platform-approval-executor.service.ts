@@ -808,6 +808,9 @@ export class PlatformApprovalExecutorService {
     }
     if (payload.resetTwoFactor) {
       data.twoFactorSecret = null;
+      // Tekrar oynatma sayacı da sıfırlanır: yeni 2FA kurulumu yeni adımlarla
+      // başlar, eski sayaç yeni kurulumu bloklamasın (İ-01).
+      data.lastTotpCounter = null;
       done.push("2FA kaydı sıfırlandı");
     }
     if (done.length === 0) {

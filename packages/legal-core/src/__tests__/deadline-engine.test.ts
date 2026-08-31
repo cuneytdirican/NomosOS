@@ -761,7 +761,8 @@ describe("sistem kural seti", () => {
   it("kural sayısı beklenen değerdedir ve anahtarlar tekildir", () => {
     // Eşik, set büyüklüğüne SABİTLENMİŞTİR: eski `>= 12` eşiği 18 kurallık bir
     // sette kural silinmesini yakalamıyordu (denetim bulgusu 15).
-    expect(SYSTEM_DEADLINE_RULES).toHaveLength(22);
+    // F2 A4: 22 → 29 (İİK m.89 üçlüsü, İİK m.33, İİK m.363, HMK m.394, HMK m.317/2).
+    expect(SYSTEM_DEADLINE_RULES).toHaveLength(29);
     expect(new Set(SYSTEM_DEADLINE_RULE_KEYS).size).toBe(SYSTEM_DEADLINE_RULES.length);
   });
 
@@ -825,6 +826,16 @@ describe("sistem kural seti", () => {
       ["IYUK_VERGI_DAVA_ACMA", 30, "GUN", "İYUK m.7/1 — 30 gün"],
       ["TUKETICI_HAKEM_ITIRAZ", 15, "GUN", "6502 sayılı TKHK m.70/3 — 15 gün"],
       ["IS_ISE_IADE", 2, "HAFTA", "4857 sayılı İş K. m.20 — 2 hafta"],
+      // ── F2 A4 eklemeleri ──────────────────────────────────────────────────
+      // İİK m.89 ÜÇ ayrı muhataba üç ayrı süre üretir; m.89'un tek kurala
+      // indirgenmesi dosyanın muhatabına göre yanlış hesap demekti.
+      ["IIK_HACIZ_IHBARNAMESI_BORCLU", 7, "GUN", "İİK m.89/1 — 7 gün"],
+      ["IIK_HACIZ_IHBARNAMESI_UCUNCU_KISI", 7, "GUN", "İİK m.89/2 — 7 gün"],
+      ["IIK_HACIZ_IHBARNAMESI_ALACAKLI_ITIRAZ", 15, "GUN", "İİK m.89/son — 15 gün"],
+      ["IIK_ICRANIN_GERI_BIRAKILMASI", 7, "GUN", "İİK m.33/2 — 7 gün"],
+      ["IIK_ISTINAF", 10, "GUN", "İİK m.363 — 10 gün"],
+      ["HMK_IHTIYATI_TEDBIRE_ITIRAZ", 1, "HAFTA", "HMK m.394 — 1 hafta"],
+      ["HMK_BASIT_YARGILAMA_CEVAP", 2, "HAFTA", "HMK m.317/2 — 2 hafta"],
     ];
     expect(beklenen).toHaveLength(SYSTEM_DEADLINE_RULES.length);
     for (const [key, value, unit, basis] of beklenen) {
@@ -847,6 +858,13 @@ describe("sistem kural seti", () => {
       "IIK_SIKAYET",
       "IIK_ISTIHKAK_ITIRAZ",
       "IS_ISE_IADE",
+      // F2 A4: yeni İİK kuralları da uzamaya tabi değildir (İİK m.19'da
+      // adli tatil uzaması öngörülmemiştir).
+      "IIK_HACIZ_IHBARNAMESI_BORCLU",
+      "IIK_HACIZ_IHBARNAMESI_UCUNCU_KISI",
+      "IIK_HACIZ_IHBARNAMESI_ALACAKLI_ITIRAZ",
+      "IIK_ICRANIN_GERI_BIRAKILMASI",
+      "IIK_ISTINAF",
     ]) {
       expect(getSystemRule(key).judicialRecessApplies).toBe(false);
     }

@@ -168,7 +168,7 @@ export function ReportToolbar({
               />
               Önceki dönemle karşılaştır
               {prev && (
-                <span className="text-slate-400">
+                <span className="text-slate-500">
                   ({periodLabel(prev.from, prev.to)})
                 </span>
               )}

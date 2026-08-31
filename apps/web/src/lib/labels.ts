@@ -1698,6 +1698,18 @@ export const SIGNER_ROLES = [
   "DIGER",
 ] as const;
 
+/**
+ * Büro KULLANICI rollerinin Türkçe etiketleri (İ-20): düzen kenarı ve kullanıcı
+ * listeleri ham enum (`ADMIN`, `STAJYER`…) basmamalı — ekran metni Türkçedir.
+ */
+export const USER_ROLE_LABELS: Record<string, string> = {
+  ADMIN: "Yönetici",
+  PARTNER: "Ortak",
+  AVUKAT: "Avukat",
+  STAJYER: "Stajyer",
+  SEKRETER: "Sekreter",
+};
+
 export const SIGNER_ROLE_LABELS: Record<string, string> = {
   MUVEKKIL: "Müvekkil",
   AVUKAT: "Avukat",

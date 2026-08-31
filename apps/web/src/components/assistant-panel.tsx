@@ -299,11 +299,11 @@ export function AssistantPanel({
           + Yeni Sohbet
         </Button>
         <div className="rounded-xl border border-slate-200 bg-white">
-          <p className="border-b border-slate-100 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <p className="border-b border-slate-100 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             Oturumlar
           </p>
           {sessions.length === 0 ? (
-            <p className="px-3 py-3 text-xs text-slate-400">
+            <p className="px-3 py-3 text-xs text-slate-500">
               Henüz oturum yok. İlk sorunuz yeni bir oturum açar.
             </p>
           ) : (
@@ -320,7 +320,7 @@ export function AssistantPanel({
                     }`}
                   >
                     <span className="line-clamp-2">{s.title}</span>
-                    <span className="mt-0.5 block text-[10px] text-slate-400">
+                    <span className="mt-0.5 block text-[10px] text-slate-500">
                       {fmtDateTime(s.updatedAt ?? s.createdAt)}
                     </span>
                   </button>
@@ -332,7 +332,7 @@ export function AssistantPanel({
 
         {/* Yan eylemler */}
         <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             AI Eylemleri
           </p>
           <Button
@@ -420,7 +420,7 @@ export function AssistantPanel({
                     )}
 
                     {m.role === "assistant" && (
-                      <p className="mt-1.5 border-t border-slate-100 pt-1 text-[11px] text-slate-400">
+                      <p className="mt-1.5 border-t border-slate-100 pt-1 text-[11px] text-slate-500">
                         {m.model ? `Model: ${m.model} · ` : ""}Bu çıktı bir öneridir.
                       </p>
                     )}
@@ -535,7 +535,7 @@ function CitationList({ citations, caseId }: { citations: Citation[]; caseId: st
         </p>
       ) : (
         <div className="mt-3 border-t border-slate-100 pt-2">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             Kaynaklar (doğrulandı)
           </p>
           <ol className="mt-1.5 space-y-1.5">
@@ -548,7 +548,7 @@ function CitationList({ citations, caseId }: { citations: Citation[]; caseId: st
                   <span className="font-medium">
                     [{i + 1}] {label}
                   </span>
-                  {c.page ? <span className="text-slate-400"> · s.{c.page}</span> : null}
+                  {c.page ? <span className="text-slate-500"> · s.{c.page}</span> : null}
                   {quote && (
                     <span className="mt-0.5 block italic text-slate-500">
                       “{quote.length > 220 ? `${quote.slice(0, 220)}…` : quote}”
@@ -663,7 +663,7 @@ function AnalysisReportCard({ report }: { report: AnalysisReport }) {
     <Card
       title="Tam Dosya Analizi"
       action={
-        <span className="text-[11px] text-slate-400">
+        <span className="text-[11px] text-slate-500">
           {report.model ? `${report.model} · ` : ""}
           {fmtDateTime(report.createdAt)}
         </span>

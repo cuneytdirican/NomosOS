@@ -241,7 +241,7 @@ export function TaskDetailModal({
                 {logs.map((log) => (
                   <li key={log.id} className="relative">
                     <span className="absolute -left-[26px] top-1.5 h-2.5 w-2.5 rounded-full bg-slate-900" />
-                    <p className="text-xs text-slate-400">{fmtDateTime(log.createdAt)}</p>
+                    <p className="text-xs text-slate-500">{fmtDateTime(log.createdAt)}</p>
                     <p className="text-sm text-slate-900">
                       {log.fromStatus
                         ? `${labelOf(TASK_STATUS_LABELS, log.fromStatus)} → `

@@ -197,6 +197,8 @@ export const AI_ROUTES = {
   providerTest: (id: string) => `/ai/providers/${id}/test`,
   taskRoutes: "/ai/task-routes",
   chat: "/ai/chat",
+  /** F2 · E1 — ajan koşusu iz görünümü. */
+  agentRuns: "/ai/agent-runs",
 } as const;
 
 export const ASSISTANT_ROUTES = {

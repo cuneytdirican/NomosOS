@@ -136,7 +136,7 @@ export function EnforcementCopilot({
           }
           action={
             result.model ? (
-              <span className="text-[11px] text-slate-400">Model: {result.model}</span>
+              <span className="text-[11px] text-slate-500">Model: {result.model}</span>
             ) : undefined
           }
         >
@@ -197,7 +197,7 @@ export function EnforcementCopilot({
 
           {/* Kaynak gösterme zorunlu — kaynağı olmayan çıktı işaretlenir. */}
           <div className="mt-4 border-t border-slate-100 pt-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Kaynaklar
             </p>
             {sources.length === 0 ? (
@@ -214,7 +214,7 @@ export function EnforcementCopilot({
                         {s.kind ?? "KAYIT"}
                       </Badge>
                       <span className="font-medium text-slate-800">{s.label ?? s.refId ?? "—"}</span>
-                      {s.date && <span className="text-slate-400">{fmtDate(s.date)}</span>}
+                      {s.date && <span className="text-slate-500">{fmtDate(s.date)}</span>}
                       {s.verified === false && (
                         <span className="text-[11px] font-medium text-amber-700">
                           TEYİT EDİLMEDİ
@@ -258,14 +258,14 @@ function ScoreBlock({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className="text-3xl font-bold tabular-nums text-slate-900">{score.score}</span>
-          <span className="text-sm text-slate-400">/ 100</span>
+          <span className="text-sm text-slate-500">/ 100</span>
           <Badge tone={tone}>{labelOf(SCORE_BAND_LABELS, score.band)} ihtimal</Badge>
           {score.stale && (
             <Badge tone="yellow">Skor güncel değil — yeni işlem girildi</Badge>
           )}
         </div>
         {score.computedAt && (
-          <span className="text-[11px] text-slate-400">
+          <span className="text-[11px] text-slate-500">
             Hesaplama: {fmtDateTime(score.computedAt)}
           </span>
         )}
@@ -285,7 +285,7 @@ function ScoreBlock({
       </p>
 
       <div className="mt-4">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
           Kural sinyalleri (skorun kaynağı)
         </p>
         {signals.length === 0 ? (

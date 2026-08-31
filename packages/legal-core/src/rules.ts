@@ -300,6 +300,113 @@ export const SYSTEM_DEADLINE_RULES: SystemDeadlineRule[] = [
     procedureCode: "IYUK",
   },
   {
+    // EKLENDİ (F2 · A4 — İİK m.89 üçlüsünün 1. ayağı): haciz ihbarnamesinin
+    // BORÇLUYA tebliği. Tek "m.89" kuralı üç AYRI muhatap ve üç AYRI süre
+    // üretir; 7/7/15 günün tek kuralda toplanması her dosyada yanlış hesap demekti.
+    key: "IIK_HACIZ_IHBARNAMESI_BORCLU",
+    name: "Haciz ihbarnamesi — borçluya ödeme süresi",
+    description:
+      "Borçlunun üçüncü kişideki alacağına/bedelindeki borcuna haciz konulduğunda, haciz ihbarnamesinin " +
+      "BORÇLUYA tebliğinden itibaren borcun ödenmesi süresi. ÜÇÜNCÜ KİŞİYE ve ALACAKLIYA tebliğler " +
+      "AYRI kurallardır («Haciz ihbarnamesi — üçüncü kişi» / «Haciz ihbarnamesi — alacaklının itirazı»).",
+    durationValue: 7,
+    durationUnit: "GUN",
+    legalBasis: "İİK m.89/1 — 7 gün",
+    caseTypes: ["ICRA"],
+    judicialRecessApplies: false,
+    procedureCode: "IIK",
+  },
+  {
+    // EKLENDİ (F2 · A4 — İİK m.89 üçlüsünün 2. ayağı): haciz ihbarnamesinin
+    // ÜÇÜNCÜ KİŞİYE tebliği. Sükût hâlinde para borçlu namına icra dairesine
+    // yatırılır; hak kaybı sessizce oluşur — süre kaçırma riski en yüksek
+    // kural budur.
+    key: "IIK_HACIZ_IHBARNAMESI_UCUNCU_KISI",
+    name: "Haciz ihbarnamesi — üçüncü kişinin beyanı",
+    description:
+      "Haciz ihbarnamesinin ÜÇÜNCÜ KİŞİYE tebliğinden itibaren, borcu/icra olunan parayı icra dairesine " +
+      "yatırma veya borçlu olmadığını bildirme süresi. Süresinde ne ödeme ne bildirme yapılırsa parayı " +
+      "borçluya ödemek zorunda kalınır.",
+    durationValue: 7,
+    durationUnit: "GUN",
+    legalBasis: "İİK m.89/2 — 7 gün",
+    caseTypes: ["ICRA"],
+    judicialRecessApplies: false,
+    procedureCode: "IIK",
+  },
+  {
+    // EKLENDİ (F2 · A4 — İİK m.89 üçlüsünün 3. ayağı): üçüncü kişinin "borçlu
+    // değilim" bildirimi üzerine ALACAKLININ itirazı. Sükût hâlde haciz kalkar
+    // ve alacaklının takibi boşa düşer.
+    key: "IIK_HACIZ_IHBARNAMESI_ALACAKLI_ITIRAZ",
+    name: "Haciz ihbarnamesi — alacaklının itirazı",
+    description:
+      "Üçüncü kişinin borçlu olmadığını bildirmesinin alacaklıya tebliğinden itibaren, alacaklının " +
+      "itirazı (menfi tespit/re'sen haciz talebi) süresi. Süresi içinde itiraz edilmezse haciz kalkar.",
+    durationValue: 15,
+    durationUnit: "GUN",
+    legalBasis: "İİK m.89/son — 15 gün",
+    caseTypes: ["ICRA"],
+    judicialRecessApplies: false,
+    procedureCode: "IIK",
+  },
+  {
+    // EKLENDİ (F2 · A4): İİK m.33 icranın geri bırakılması şikâyeti.
+    key: "IIK_ICRANIN_GERI_BIRAKILMASI",
+    name: "İcranın geri bırakılması istemi (şikâyet) süresi",
+    description:
+      "İcrai faaliyete karşı menfaatı haleldar olan kişinin, keyfiyeti öğrenmesi veya ihtilafın vukuu " +
+      "tarihinden itibaren icra mahkemesine şikâyet süresi.",
+    durationValue: 7,
+    durationUnit: "GUN",
+    legalBasis: "İİK m.33/2 — 7 gün",
+    caseTypes: ["ICRA"],
+    judicialRecessApplies: false,
+    procedureCode: "IIK",
+  },
+  {
+    // EKLENDİ (F2 · A4): icra mahkemesi kararına istinaf. Modül 04 seed
+    // tablosunda vaat edilmişti, kural setinde yoktu.
+    key: "IIK_ISTINAF",
+    name: "İcra mahkemesi kararına istinaf süresi",
+    description: "İcra mahkemesinin nihai kararının tebliğinden itibaren istinaf kanun yoluna başvuru süresi.",
+    durationValue: 10,
+    durationUnit: "GUN",
+    legalBasis: "İİK m.363 — 10 gün",
+    caseTypes: ["ICRA"],
+    judicialRecessApplies: false,
+    procedureCode: "IIK",
+  },
+  {
+    // EKLENDİ (F2 · A4): HMK m.394 ihtiyati tedbire itiraz.
+    key: "HMK_IHTIYATI_TEDBIRE_ITIRAZ",
+    name: "İhtiyati tedbir kararına itiraz süresi",
+    description:
+      "İhtiyati tedbir kararının verildiği hususun muhakemesi görülürken, tedbire karşı itiraz süresi. " +
+      "İtiraz tedbirin icrasını kendiliğinden durdurmaz.",
+    durationValue: 1,
+    durationUnit: "HAFTA",
+    legalBasis: "HMK m.394 — 1 hafta",
+    caseTypes: ["DAVA"],
+    judicialRecessApplies: true,
+    procedureCode: "HMK",
+  },
+  {
+    // EKLENDİ (F2 · A4): HMK m.317/2 basit yargılama usulünde cevap dilekçesi.
+    key: "HMK_BASIT_YARGILAMA_CEVAP",
+    name: "Basit yargılama usulünde cevap dilekçesi süresi",
+    description:
+      "Basit yargılama usulüne tabi davalarda, dava dilekçesinin tebliğinden itibaren cevap dilekçesi " +
+      "verme süresi. Olağan usuldeki 2 hafta ile AYNI uzunlukta ama AYRI usul kuralıdır; katalog " +
+      "usulü ayırt eder.",
+    durationValue: 2,
+    durationUnit: "HAFTA",
+    legalBasis: "HMK m.317/2 — 2 hafta",
+    caseTypes: ["DAVA"],
+    judicialRecessApplies: true,
+    procedureCode: "HMK",
+  },
+  {
     key: "IS_ISE_IADE",
     name: "İşe iade — arabuluculuk son tutanağı sonrası dava süresi",
     description:
@@ -325,21 +432,16 @@ const RULE_BY_KEY = new Map<string, SystemDeadlineRule>(
 );
 
 /**
- * Faz 1'de kapsam dışı bırakılan, ancak süre kaçırma riski taşıdığı için
- * Faz 2'de eklenmesi gereken kurallar (denetim bulgusu 13):
- *   - İİK m.89 haciz ihbarnameleri (7 / 7 / 15 gün)
- *   - İİK m.33 icranın geri bırakılması (7 gün)
- *   - İİK m.169/a
- *   - HMK m.394 ihtiyati tedbire itiraz (1 hafta)
- *   - HMK m.317/2 basit yargılamada cevap (2 hafta)
- *   - Islaha karşı beyan (mahkemece takdiren verilen süre — sabit değil)
+ * Kural setine eklenmesi planlanan, F2 A4 dışında kalan kurallar.
+ * A4 (İİK m.89 üçlüsü, İİK m.33, İİK m.363, HMK m.394, HMK m.317/2) KAPANDI;
+ * anahtarları hiçbir zaman yeniden kullanılmamak üzere buradan çıkarıldı.
+ * Kalan adaylar ve eklenememe gerekçeleri:
+ *   - İİK m.169/a — kambiyo takibinde itiraz zaten m.168/5 kuralında (5 gün);
+ *     m.169/a'nın getirdiği AYRI sürecin (itirazla birlikte tebliğ şartı)
+ *     sabit süreli modeli yoktur,manuel süre olarak girilir.
+ *   - Islaha karşı beyan (HMK) — mahkemece takdiren verilir; sabit süre yok.
  */
-export const PLANNED_RULE_KEYS: readonly string[] = [
-  "IIK_HACIZ_IHBARNAMESI",
-  "IIK_ICRANIN_GERI_BIRAKILMASI",
-  "HMK_IHTIYATI_TEDBIRE_ITIRAZ",
-  "HMK_BASIT_YARGILAMA_CEVAP",
-];
+export const PLANNED_RULE_KEYS: readonly string[] = [];
 
 /** Anahtara göre sistem kuralını bulur; yoksa `undefined`. */
 export function findSystemRule(key: string): SystemDeadlineRule | undefined {

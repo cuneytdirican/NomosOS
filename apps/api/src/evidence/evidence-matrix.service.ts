@@ -12,9 +12,19 @@
  *    `ClaimEvidenceLink`. Reddedilen delil matristen SİLİNMEZ; bağı görünür
  *    kalır ama ispat gücü hesabına KATILMAZ (iş kuralı 7).
  *
- *  • DESTEKSİZ İDDİA: `side = BIZ`, `status ≠ CURUTULDU` ve hiç etkin bağı
- *    olmayan iddia. Karşı tarafın iddiaları bu hesaba girmez — onların
- *    ispatsızlığı bizim riskimiz değildir.
+ *  • YÖN (F2 · E6 — denetim bulgusu Ö-30 kullanım ayağı): bağın `linkType`'ı
+ *    hesaba girer. Yalnızca `SUPPORTS` bağları iddiayı TAŞIR; `CONTRADICTS`
+ *    bağı delili bağlar ama destek SAYMAZ, `BELIRSIZ` de saymaz. Yönü yok
+ *    sayan eski hesap, yalnızca ÇÜRÜTEN delil bağı olan bir iddiayı
+ *    "desteklenmiş" gösteriyordu (Modül 14 KK3 yanlış sonuç).
+ *
+ *  • DESTEKSİZ İDDİA: `side = BIZ`, `status ≠ CURUTULDU` ve hiç etkin
+ *    `SUPPORTS` bağı olmayan iddia. Karşı tarafın iddiaları bu hesaba girmez —
+ *    onların ispatsızlığı bizim riskimiz değildir.
+ *
+ *  • ÇÜRÜTÜLEN İDDİA: etkin `CONTRADICTS` bağı olan BİZ iddiası. "Destekli ama
+ *    içinde çürüten delil de var" ile "yalnızca çürüten deli var" ayrık
+ *    raporlanır; ikincisi desteksizden de kötüdür.
  *
  *  • ZAYIF DESTEKLENEN İDDİA: desteksiz değil ama ya en güçlü bağı ≤2 ya da
  *    TEK bağı var ve gücü ≤3. Eşikler aşağıdaki sabitlerdedir.
@@ -59,6 +69,8 @@ export interface MatrixRow {
     title: string;
     type: string;
     evidenceStatus: string;
+    /** Bağın YÖNÜ: SUPPORTS · CONTRADICTS · BELIRSIZ (F2 · E6). */
+    linkType: string;
     strength: number | null;
     note: string | null;
     /** REDdedilen delil: bağ görünür, ispat gücüne katılmaz. */
@@ -69,10 +81,15 @@ export interface MatrixRow {
     witnessName: string | null;
   }[];
   legalBases: { id: string; reference: string; caseLawId: string | null; note: string | null }[];
+  /** Yalnızca etkin SUPPORTS bağları (destek gücü hesabına giren). */
   supportingCount: number;
+  /** Etkin CONTRADICTS bağı sayısı. */
+  contradictingCount: number;
   strongestStrength: number | null;
   strongestEvidenceId: string | null;
   unsupported: boolean;
+  /** BİZ iddiasında etkin CONTRADICTS bağı var (F2 · E6). */
+  contradicted: boolean;
   weaklySupported: boolean;
   onlyPlannedSupport: boolean;
 }
@@ -102,13 +119,17 @@ export class EvidenceMatrixService {
       computedBy: "deterministik matris hesabı (AI kullanılmaz)",
       definitions: {
         unsupported:
-          "side=BIZ, status≠CURUTULDU ve REDdedilmemiş hiçbir delil bağı olmayan iddia.",
+          "side=BIZ, status≠CURUTULDU ve REDdedilmemiş hiçbir SUPPORTS bağı olmayan iddia.",
+        contradicted:
+          "BİZ iddiasında en az bir REDdedilmemiş CONTRADICTS bağı olan iddia (F2 · E6).",
         weaklySupported:
           `En güçlü destek ≤${WEAK_STRENGTH_MAX}, ya da tek destek var ve gücü ≤${SINGLE_LINK_WEAK_MAX}.`,
         onlyPlannedSupport:
           "İddiayı yalnızca PLANLANAN (henüz toplanmamış) deliller taşıyor.",
         rejectedEvidence:
           "RED durumundaki delilin bağı görünür kalır ama ispat gücü hesabına katılmaz.",
+        linkTypes:
+          "SUPPORTS bağı iddiayı taşır; CONTRADICTS bağı taşımaz ve iddiayı çürütülmüş işaretler; BELIRSIZ bağı taşımaz.",
       },
       summary: computed.summary,
       rows: computed.rows,
@@ -140,26 +161,32 @@ export class EvidenceMatrixService {
 
     const rows: MatrixRow[] = claims.map((claim, index) => {
       const ref = `[İDDİA-${index + 1}]`;
+      // ETKİN bağlar: delili RED edilmemiş tüm bağlar (yön farkı gözetmeksizin).
       const counted = claim.evidenceLinks.filter((l) => l.evidence.status !== "RED");
+      // DESTEK yalnızca SUPPORTS yönünden gelir (F2 · E6 — Ö-30 kullanım ayağı).
+      const supporting = counted.filter((l) => l.linkType === "SUPPORTS");
+      const contradicting = counted.filter((l) => l.linkType === "CONTRADICTS");
 
-      const strengths = counted.map((l) => l.strength ?? DEFAULT_STRENGTH);
+      const strengths = supporting.map((l) => l.strength ?? DEFAULT_STRENGTH);
       const strongestStrength = strengths.length ? Math.max(...strengths) : null;
       const strongestLink =
         strongestStrength === null
           ? null
-          : (counted.find((l) => (l.strength ?? DEFAULT_STRENGTH) === strongestStrength) ?? null);
+          : (supporting.find((l) => (l.strength ?? DEFAULT_STRENGTH) === strongestStrength) ?? null);
 
       const unsupported =
-        claim.side === "BIZ" && claim.status !== "CURUTULDU" && counted.length === 0;
+        claim.side === "BIZ" && claim.status !== "CURUTULDU" && supporting.length === 0;
+
+      const contradicted = claim.side === "BIZ" && contradicting.length > 0;
 
       const weaklySupported =
         !unsupported &&
-        counted.length > 0 &&
+        supporting.length > 0 &&
         ((strongestStrength ?? 0) <= WEAK_STRENGTH_MAX ||
-          (counted.length === 1 && (strongestStrength ?? 0) <= SINGLE_LINK_WEAK_MAX));
+          (supporting.length === 1 && (strongestStrength ?? 0) <= SINGLE_LINK_WEAK_MAX));
 
       const onlyPlannedSupport =
-        counted.length > 0 && counted.every((l) => l.evidence.status === "PLANLANAN");
+        supporting.length > 0 && supporting.every((l) => l.evidence.status === "PLANLANAN");
 
       return {
         claimId: claim.id,
@@ -176,6 +203,7 @@ export class EvidenceMatrixService {
             title: link.evidence.title,
             type: link.evidence.type,
             evidenceStatus: link.evidence.status,
+            linkType: link.linkType,
             strength: link.strength,
             note: link.note,
             counted: link.evidence.status !== "RED",
@@ -190,10 +218,12 @@ export class EvidenceMatrixService {
           caseLawId: b.caseLawId,
           note: b.note,
         })),
-        supportingCount: counted.length,
+        supportingCount: supporting.length,
+        contradictingCount: contradicting.length,
         strongestStrength,
         strongestEvidenceId: strongestLink?.evidenceId ?? null,
         unsupported,
+        contradicted,
         weaklySupported,
         onlyPlannedSupport,
       };
@@ -222,6 +252,7 @@ export class EvidenceMatrixService {
         ourClaims: ourRows.length,
         opposingClaims: rows.length - ourRows.length,
         unsupportedCount: rows.filter((r) => r.unsupported).length,
+        contradictedCount: rows.filter((r) => r.contradicted).length,
         weaklySupportedCount: rows.filter((r) => r.weaklySupported).length,
         onlyPlannedSupportCount: rows.filter((r) => r.onlyPlannedSupport).length,
         totalEvidence: allEvidence.length,

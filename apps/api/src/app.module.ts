@@ -19,6 +19,7 @@ import { StorageModule } from "./storage/storage.module";
 import { PipelineModule } from "./pipeline/pipeline.module";
 import { DocumentsModule } from "./documents/documents.module";
 import { CaselawModule } from "./caselaw/caselaw.module";
+import { AgentsModule } from "./agents/agents.module";
 import { PetitionsModule } from "./petitions/petitions.module";
 import { AssistantModule } from "./assistant/assistant.module";
 import { EnforcementModule } from "./enforcement/enforcement.module";
@@ -115,6 +116,9 @@ function requireJwtSecret(config: ConfigService): string {
     CaselawModule,
     PetitionsModule,
     AssistantModule,
+    // F2 · E1 — ajan izi. @Global'dir: AiRunnerService ve AssistantLlmService
+    // AgentRunService'i modül import etmeden alır; her LLM çağrısı izler.
+    AgentsModule,
     // --- Faz 3 modülleri ---
     // İcra (Modül 05). CaselawModule'den SONRA: ortak BYO-LLM koşu
     // yürütücüsünü (AiRunnerService) oradan alır.

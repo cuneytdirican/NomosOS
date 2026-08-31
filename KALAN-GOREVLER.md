@@ -15,13 +15,52 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 31 Ağustos 2026, 17:10
+# 🔖 KALDIĞIM YER — 31 Ağustos 2026, 20:10
 
-> **KAPATICILAR TURU TAMAMLANDI.** Denetim raporunun "Üretim öncesi kalan
-> kapatıcılar" listesindeki 1, 2, 3 (kısmen), 4, 5 numaralı maddeler ve İ-27
-> kapandı. Bu bölümün altındaki ayrıntıya bakmadan şunu bil: **kalan tek iş
-> Aşama 9 (kapanış raporu) ve 6. madde (backlog vaatlerinin arayüz/pazarlama
-> metninden çıkarılması — ürün kararı gerektirir).**
+> **F2 TUR 1 İLK OTURUM BİTTİ.** `docs/faz2/` planına göre T1 kapsamından
+> A0 · A2 · A4 · B2(DOCX+UDF kesiti) · E1 · E2 · E6 + A5/F1/F7 kesitleri KAPANDI.
+> Durum ve kanıtlar: `docs/faz2/epics/00-durum-kaydi.md`.
+
+## Bu oturumda yapılanlar (F2 · T1)
+
+1. **A4** — 7 yeni süre kuralı (İİK m.89 ÜÇLÜSÜ 7/7/15 gün, İİK m.33, İİK m.363,
+   HMK m.394, HMK m.317/2); kural seti 22 → **29**; pazarlama sayısı düzeltildi (18→29).
+2. **E6** — delil bağı YÖNÜ kullanıma girdi: SUPPORTS taşır, CONTRADICTS taşımayıp
+   iddiayı ÇÜRÜTÜLMÜŞ işaretler, BELIRSIZ taşımaz. Arayüzde yön seçici + ✕/?/● hücre göstergesi.
+   İstemcinin uydurma uç çağrıları (`/claims/:id/evidence-links`) gerçek uçlara bağlandı.
+3. **E2** — gece risk işi (`risk-nightly`, cron 02:30): aktif dosyaların deterministik
+   tabanı tazelenir (AI ÇAĞRILMAZ, önceki AI düzeltmesi korunur, `computedBy: null`) +
+   kiracı günlük `DashboardSnapshot` (migration `20260913090000`).
+4. **B2 ilk kesit** — DOCX (`word/document.xml`) ve UDF (`readUdf` + `rawText`) metin
+   çıkarma; jszip bağımlılığı eklendi. OCR hâlâ YOK (vaat kısıtı sürer).
+5. **E1** — ajan gözlemlenebilirliği: `AgentDefinition`/`AgentRun` (migration
+   `20260914090000`), 17 ajanlık katalog (her görev tipinin bir sahibi),
+   iki LLM yürütücüsü üç durumla izler, `GET /ai/agent-runs` iz görünümü,
+   KVKK özet sözleşmesi (tam metin ASLA yazılmaz).
+6. **A5/F1/F7 kesitleri** — İ-01 (TOTP tekrar oynatma, `lastTotpCounter`),
+   İ-02 (bcrypt 12 panel+portal), İ-19 (Gemini anahtarı başlıkta), İ-25 (demo
+   formu hız sınırı), İ-26 (`tabPanelProps`), İ-20 (Türkçe rol etiketi),
+   lint 10 uyarı → **0**.
+
+## Doğrulama
+
+- `pnpm build` 12/12 ✅ · `pnpm typecheck` 20/20 ✅ · `pnpm lint` **0 hata / 0 uyarı** ✅
+- **931 test geçiyor** (api 609 · web 51 · legal-core 79 · legal-ai 76 · udf 44 ·
+  e-signature 37 · uyap 35)
+- Migration 18 → **21** (`20260912090000` İ-01, `20260913090000` E2, `20260914090000` E1);
+  **sonraki: `20260915090000_…`**
+
+## Sıradaki iş (F2 T1 kalanı)
+
+1. **A1 (L-65)** — KVKK veri özne hakları: İLK İŞ politika matrisi (Avukatlık K. m.39
+   saklama ↔ append-only iz ↔ imha çelişkisi), sonra `POST /tenants/:id/export` +
+   müvekkil bazlı dışa aktarma + `PoaScopeItem`'ı JSON'dan entity'ye terfi.
+2. **B1 (L-55)** — asenkron iş altyapısı: BullMQ worker + DLQ + kısmi başarısızlık.
+3. **A3a** — UETS tedarik/PTT yazılı görüşü (kod değil süreç — gün 1'den gecikmede).
+4. **B2 ikinci kesit** — OCR (ürün kararı: kendi barındırılan OCR; doğruluk kapısı zorunlu).
+5. E6 kalanı — `Evidence.offeredBy` + KK6 (422 kapısı).
+
+## Anlık durum (önceki turların özeti)
 
 ## Bu turda yapılanlar
 

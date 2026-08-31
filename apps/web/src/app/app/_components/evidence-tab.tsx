@@ -70,7 +70,12 @@ import { useAiCall } from "../_lib/use-ai-call";
 
 type Notify = (text: string, tone?: "success" | "error" | "info") => void;
 
-const LINK_STRENGTHS = ["DUSUK", "ORTA", "YUKSEK"] as const;
+/** Bağ yönünün hücre/ipucu etiketi (F2 · E6). */
+const LINK_TYPE_LABELS: Record<string, string> = {
+  SUPPORTS: "Destekliyor",
+  CONTRADICTS: "Çürütüyor",
+  BELIRSIZ: "Yön belirsiz",
+};
 
 export function EvidenceTab({ caseId, onNotify }: { caseId: string; onNotify: Notify }) {
   const [claims, setClaims] = useState<Claim[]>([]);
@@ -141,7 +146,8 @@ export function EvidenceTab({ caseId, onNotify }: { caseId: string; onNotify: No
     }
     if (!window.confirm("İddia ile delil arasındaki bağ kaldırılsın mı?")) return;
     try {
-      await unlinkClaimEvidence(claimId, link.id);
+      // Silme ucu evidenceId ile adreslenir (DELETE /claims/:id/evidence/:evidenceId).
+      await unlinkClaimEvidence(claimId, evidenceId);
       onNotify("Bağ kaldırıldı.", "info");
       await load();
     } catch (err) {
@@ -154,7 +160,9 @@ export function EvidenceTab({ caseId, onNotify }: { caseId: string; onNotify: No
       if (s.claimId && s.evidenceId) {
         await linkClaimEvidence(s.claimId, {
           evidenceId: s.evidenceId,
-          strength: typeof s.strength === "string" ? s.strength : undefined,
+          // Sunucu şeması 1-5 tamsayı ister (z.number().int()); öneri metni
+          // değil sayı taşınır.
+          strength: typeof s.strength === "number" ? s.strength : undefined,
           note: s.reason ?? undefined,
         });
         onNotify("İddia–delil bağı kuruldu.", "success");
@@ -273,6 +281,9 @@ export function EvidenceTab({ caseId, onNotify }: { caseId: string; onNotify: No
                       {evidences.map((e) => {
                         const link = matrix.linkIndex.get(`${c.id}::${e.id}`);
                         const label = strengthLabel(link?.strength ?? null);
+                        // YÖN göstergesi (F2 · E6): çürütme desteğe katılmaz,
+                        // hücrede ayrı işaretle görünür.
+                        const direction = link?.linkType ?? "SUPPORTS";
                         return (
                           <td
                             key={e.id}
@@ -283,7 +294,7 @@ export function EvidenceTab({ caseId, onNotify }: { caseId: string; onNotify: No
                               onClick={() => void toggleLink(c.id, e.id)}
                               title={
                                 link
-                                  ? `Bağlı${label ? ` · ${label}` : ""}${link.note ? ` · ${link.note}` : ""} — kaldırmak için tıklayın`
+                                  ? `${LINK_TYPE_LABELS[direction] ?? direction}${label ? ` · ${label}` : ""}${link.note ? ` · ${link.note}` : ""} — kaldırmak için tıklayın`
                                   : "Bağ kurmak için tıklayın"
                               }
                               aria-label={
@@ -293,16 +304,26 @@ export function EvidenceTab({ caseId, onNotify }: { caseId: string; onNotify: No
                               }
                               className={`mx-auto flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-semibold transition-colors ${
                                 link
-                                  ? "border-transparent text-white"
+                                  ? direction === "CONTRADICTS"
+                                    ? "border-transparent bg-red-600 text-white"
+                                    : direction === "BELIRSIZ"
+                                      ? "border-transparent bg-slate-500 text-white"
+                                      : "border-transparent text-white"
                                   : "border-dashed border-slate-300 text-slate-300 hover:border-slate-500 hover:text-slate-500"
                               }`}
                               style={
-                                link
+                                link && direction === "SUPPORTS"
                                   ? { backgroundColor: strengthColor(link.strength) }
                                   : undefined
                               }
                             >
-                              {link ? strengthMark(link.strength) : "+"}
+                              {link
+                                ? direction === "CONTRADICTS"
+                                  ? "✕"
+                                  : direction === "BELIRSIZ"
+                                    ? "?"
+                                    : strengthMark(link.strength)
+                                : "+"}
                             </button>
                           </td>
                         );
@@ -312,7 +333,7 @@ export function EvidenceTab({ caseId, onNotify }: { caseId: string; onNotify: No
                 })}
               </tbody>
             </table>
-            <p className="mt-3 text-[11px] text-slate-400">
+            <p className="mt-3 text-[11px] text-slate-500">
               Hücreye tıklayarak bağ kurun veya kaldırın. Renk bağın gücünü gösterir:
               <span className="ml-2 inline-flex items-center gap-1">
                 <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-600" /> güçlü
@@ -648,7 +669,7 @@ function ClaimDetail({
       </div>
 
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
           Hukuki dayanaklar
         </p>
         {bases.length === 0 ? (
@@ -681,7 +702,7 @@ function ClaimDetail({
           Dayanak Ekle
         </Button>
       </form>
-      <p className="text-[11px] text-slate-400">
+      <p className="text-[11px] text-slate-500">
         Elle girilen künyeler teyit edilmemiştir; dilekçeye aktarmadan önce İçtihat
         modülünden doğrulayın.
       </p>
@@ -902,14 +923,19 @@ function LinkModal({
   onClose: () => void;
   onSaved: () => Promise<void> | void;
 }) {
-  const [strength, setStrength] = useState<string>("ORTA");
+  // Güç 1-5 tamsayıdır (sunucu şeması z.number().int()). Eskiden "ORTA" gibi
+  // metin gönderiliyordu — sunucu 422 döndürürdü.
+  const [strength, setStrength] = useState(3);
+  // Bağın YÖNÜ (F2 · E6): CONTRADICTS, matriste desteğe KATILMAZ.
+  const [linkType, setLinkType] = useState<"SUPPORTS" | "CONTRADICTS" | "BELIRSIZ">("SUPPORTS");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!target) return;
-    setStrength("ORTA");
+    setStrength(3);
+    setLinkType("SUPPORTS");
     setNote("");
     setError(null);
   }, [target]);
@@ -927,6 +953,7 @@ function LinkModal({
       await linkClaimEvidence(target.claimId, {
         evidenceId: target.evidenceId,
         strength,
+        linkType,
         note: note.trim() || undefined,
       });
       await onSaved();
@@ -948,13 +975,31 @@ function LinkModal({
             <strong>Delil:</strong> {evidence?.title ?? "—"}
           </p>
         </div>
-        <Field label="Bağın gücü" hint="Bu delil iddiayı ne kadar güçlü ispat ediyor?">
-          <Select value={strength} onChange={(e) => setStrength(e.target.value)}>
-            {LINK_STRENGTHS.map((s) => (
-              <option key={s} value={s}>
-                {strengthLabel(s)}
-              </option>
-            ))}
+        <Field
+          label="Bağın yönü"
+          hint="Bu delil iddiayı destekliyor mu, çürütüyor mu? Çürütme matris desteğe KATILMAZ — risk görünür kalır."
+        >
+          <Select
+            value={linkType}
+            onChange={(e) =>
+              setLinkType(e.target.value as "SUPPORTS" | "CONTRADICTS" | "BELIRSIZ")
+            }
+          >
+            <option value="SUPPORTS">Destekliyor (SUPPORTS)</option>
+            <option value="CONTRADICTS">Çürütüyor (CONTRADICTS)</option>
+            <option value="BELIRSIZ">Yön belirsiz (BELIRSIZ)</option>
+          </Select>
+        </Field>
+        <Field label="Bağın gücü" hint="Bu delil iddiayı ne kadar güçlü ispat ediyor? (1-5)">
+          <Select
+            value={String(strength)}
+            onChange={(e) => setStrength(Number(e.target.value))}
+          >
+            <option value="1">1 — çok zayıf</option>
+            <option value="2">2 — zayıf</option>
+            <option value="3">3 — orta</option>
+            <option value="4">4 — güçlü</option>
+            <option value="5">5 — çok güçlü</option>
           </Select>
         </Field>
         <Field label="Not">

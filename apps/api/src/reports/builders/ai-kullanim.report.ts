@@ -28,7 +28,7 @@ import {
   truncationWarning,
 } from "../report-helpers";
 import type { PrismaService } from "../../prisma/prisma.service";
-import type { ReportBody, ReportBuilder, ReportCell, ReportPeriod } from "../report-types";
+import type { ReportBody, ReportBuilder, ReportPeriod } from "../report-types";
 
 interface MatrixRow {
   tasktype: string;

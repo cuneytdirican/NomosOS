@@ -24,6 +24,40 @@ import { NextResponse } from "next/server";
 /** Statik üretimde değil, istek anında çalışır. */
 export const dynamic = "force-dynamic";
 
+/* ------------------------------------------------------------------ *
+ * HIZ SINIRI (denetim bulgusu İ-25)
+ *
+ * Form kimlik istemez (kimlikli uçlara hız sınırı koyan LoginThrottleGuard
+ * burada devrede değildir); sınır olmazsa tek bir betik webhook'u doldurur
+ * ve satış ekibi gerçek talepleri sahte talepler içinde kaybeder.
+ *
+ * Süreç-içi sayaç: yığın tek kapsayıcıda koşar (docker-compose.test.yml).
+ * Çok örnekli dağıtımda her örnek kendi kovasını sayar — o durumda sayaç
+ * Redis'e taşınır (API'deki common/rate-limit deseni).
+ * ------------------------------------------------------------------ */
+const RATE_LIMIT_MAX = 3;
+const RATE_LIMIT_WINDOW_MS = 10 * 60_000;
+
+const hits = new Map<string, number[]>();
+
+function rateLimited(ip: string): boolean {
+  const now = Date.now();
+  const recent = (hits.get(ip) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+  if (recent.length >= RATE_LIMIT_MAX) {
+    hits.set(ip, recent);
+    return true;
+  }
+  recent.push(now);
+  hits.set(ip, recent);
+  // Harita sınırsız büyümesin: penceresi kapanmış anahtarları düşür.
+  if (hits.size > 5000) {
+    for (const [key, times] of hits) {
+      if (times.every((t) => now - t >= RATE_LIMIT_WINDOW_MS)) hits.delete(key);
+    }
+  }
+  return false;
+}
+
 interface DemoRequestBody {
   fullName?: unknown;
   barAssociation?: unknown;
@@ -39,6 +73,23 @@ function text(value: unknown, max: number): string {
 }
 
 export async function POST(request: Request) {
+  // HIZ SINIRI en başta: gövdeyi okumadan reddet (İ-25).
+  const ip =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip") ||
+    "bilinmeyen";
+  if (rateLimited(ip)) {
+    return NextResponse.json(
+      {
+        ok: false,
+        hata:
+          "Kısa sürede çok fazla talep gönderildi. Lütfen 10 dakika sonra tekrar deneyin " +
+          "veya doğrudan info@nomosos.example adresine yazın.",
+      },
+      { status: 429 },
+    );
+  }
+
   let body: DemoRequestBody;
   try {
     body = (await request.json()) as DemoRequestBody;

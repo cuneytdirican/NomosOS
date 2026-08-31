@@ -135,7 +135,7 @@ export function CommScopeTab({
       />
 
       {!canCompose && (
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-slate-500">
           Bu dosyanın müvekkili okunamadığı için yeni mesaj oluşturulamıyor; İletişim
           Merkezi&apos;nden gönderebilirsiniz.
         </p>

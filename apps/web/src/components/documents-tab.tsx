@@ -279,7 +279,7 @@ export function DocumentsTab({
           fill="none"
           stroke="currentColor"
           strokeWidth="1.5"
-          className="mx-auto h-9 w-9 text-slate-400"
+          className="mx-auto h-9 w-9 text-slate-500"
           aria-hidden="true"
         >
           <path
@@ -299,8 +299,14 @@ export function DocumentsTab({
           </button>
         </p>
         <p className="mt-1 text-xs text-slate-500">
-          PDF, UDF, Word, görüntü ve e-posta dosyaları · Yükleme sonrası belge otomatik
+          PDF, UDF, Word, düz metin ve görüntü dosyaları · Yükleme sonrası belge otomatik
           sınıflandırılır, metni çıkarılır ve aksiyon önerileri üretilir.
+        </p>
+        <p className="mx-auto mt-2 max-w-xl text-[11px] leading-4 text-slate-500">
+          Metin çıkarma; metin katmanı olan PDF, Word (DOCX), UDF ve düz metin
+          dosyalarında yapılır. Taranmış görüntü ve metin katmansız PDF&apos;lerde
+          metin çıkarma yapılamaz (OCR henüz yok) — belge arşivlenir, aksiyon
+          önerisi üretilmez.
         </p>
         <input
           ref={inputRef}

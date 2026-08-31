@@ -243,7 +243,7 @@ export default function OnerilerPage() {
                 : "Bu süzgeçte kayıt yok."
             }
           />
-          <p className="mt-3 text-center text-xs text-slate-400">
+          <p className="mt-3 text-center text-xs text-slate-500">
             <Link href="/app/dosyalar" className="underline hover:text-amber-600">
               Dosyalara gidin
             </Link>{" "}

@@ -65,7 +65,7 @@ export default function GirisPage() {
               Nomos<span className="text-amber-400">OS</span>
             </span>
           </Link>
-          <p className="mt-2 text-sm text-slate-400">Hukuk büronuzun işletim sistemine giriş yapın</p>
+          <p className="mt-2 text-sm text-slate-500">Hukuk büronuzun işletim sistemine giriş yapın</p>
         </div>
 
         <form

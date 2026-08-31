@@ -70,9 +70,9 @@ export const FAZ4_ROUTES = {
   // Delil (Modül 14)
   claims: (caseId: string) => `/cases/${caseId}/claims`,
   claim: (claimId: string) => `/claims/${claimId}`,
-  claimEvidenceLinks: (claimId: string) => `/claims/${claimId}/evidence-links`,
-  claimEvidenceLink: (claimId: string, linkId: string) =>
-    `/claims/${claimId}/evidence-links/${linkId}`,
+  claimEvidenceLinks: (claimId: string) => `/claims/${claimId}/evidence`,
+  claimEvidenceLink: (claimId: string, evidenceId: string) =>
+    `/claims/${claimId}/evidence/${evidenceId}`,
   claimLegalBasis: (claimId: string) => `/claims/${claimId}/legal-basis`,
   evidenceList: (caseId: string) => `/cases/${caseId}/evidence`,
   evidence: (evidenceId: string) => `/evidence/${evidenceId}`,
@@ -583,16 +583,26 @@ export function createEvidence(
 
 export function linkClaimEvidence(
   claimId: string,
-  body: { evidenceId: string; strength?: string; note?: string },
+  body: {
+    evidenceId: string;
+    /** 1-5 arası tamsayı — sunucu şeması z.number().int() ister. */
+    strength?: number;
+    /** Bağın YÖNÜ (F2 · E6): SUPPORTS · CONTRADICTS · BELIRSIZ. */
+    linkType?: string;
+    note?: string;
+  },
 ): Promise<ClaimEvidenceLink> {
-  return api<ClaimEvidenceLink>(FAZ4_ROUTES.claimEvidenceLinks(claimId), {
+  // Uç sözleşmesi: evidenceId YOLDA taşınır (POST /claims/:id/evidence/:evidenceId),
+  // gövdede yalnız strength/linkType/note var.
+  const { evidenceId, ...rest } = body;
+  return api<ClaimEvidenceLink>(FAZ4_ROUTES.claimEvidenceLink(claimId, evidenceId), {
     method: "POST",
-    body,
+    body: rest,
   });
 }
 
-export function unlinkClaimEvidence(claimId: string, linkId: string): Promise<unknown> {
-  return api<unknown>(FAZ4_ROUTES.claimEvidenceLink(claimId, linkId), { method: "DELETE" });
+export function unlinkClaimEvidence(claimId: string, evidenceId: string): Promise<unknown> {
+  return api<unknown>(FAZ4_ROUTES.claimEvidenceLink(claimId, evidenceId), { method: "DELETE" });
 }
 
 export function addLegalBasis(

@@ -177,7 +177,7 @@ export default function ReportsPage() {
                         ? ` · ${periodLabel(s.params.from, s.params.to)}`
                         : ""}
                     </p>
-                    <p className="mt-0.5 text-[11px] text-slate-400">
+                    <p className="mt-0.5 text-[11px] text-slate-500">
                       {s.createdByName ? `${s.createdByName} oluşturdu` : "Oluşturan bilinmiyor"}
                       {s.createdAt ? ` · ${fmtDate(s.createdAt)}` : ""}
                       {" · sonuç saklanmaz, açılışta yeniden hesaplanır"}
@@ -229,7 +229,7 @@ export default function ReportsPage() {
       ) : (
         groups.map(([category, items]) => (
           <section key={category}>
-            <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">
+            <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-500">
               {category}
             </h2>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -283,7 +283,7 @@ function CatalogCard({ item }: { item: ReportCatalogItem }) {
         {item.aiTaskType && <Badge tone="gold">AI yorumu</Badge>}
       </div>
       {item.scopeNote && (
-        <p className="mt-3 border-t border-slate-100 pt-2 text-[11px] leading-4 text-slate-400">
+        <p className="mt-3 border-t border-slate-100 pt-2 text-[11px] leading-4 text-slate-500">
           {item.scopeNote}
         </p>
       )}

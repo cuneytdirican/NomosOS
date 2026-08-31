@@ -92,7 +92,7 @@ export default function FaturaDetayPage({ params }: { params: Promise<{ id: stri
   }, [load]);
 
   const lines = linesOf(invoice);
-  const payments = invoice?.payments ?? [];
+  const payments = useMemo(() => invoice?.payments ?? [], [invoice]);
   const currency = invoice?.currency ?? "TRY";
 
   /**
@@ -186,14 +186,14 @@ export default function FaturaDetayPage({ params }: { params: Promise<{ id: stri
               )}
               {invoice.client?.taxNumber ? ` · VKN ${invoice.client.taxNumber}` : ""}
             </p>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-xs text-slate-500">
               Düzenleme: {fmtDate(invoice.issueDate)}
               {invoice.dueDate ? ` · Vade: ${fmtDate(invoice.dueDate)}` : ""}
               {invoice.eInvoiceUuid ? ` · UUID: ${invoice.eInvoiceUuid}` : ""}
             </p>
           </div>
           <div className="text-right">
-            <p className="text-xs uppercase tracking-wide text-slate-400">Genel Toplam</p>
+            <p className="text-xs uppercase tracking-wide text-slate-500">Genel Toplam</p>
             <p className="mt-1 text-2xl font-bold tabular-nums">
               {fmtAmount(invoice.total, currency)}
             </p>
@@ -266,7 +266,7 @@ export default function FaturaDetayPage({ params }: { params: Promise<{ id: stri
                 : "Sunucu bir açıklama döndürmedi.")}
           </p>
           {sendResult.adapter && (
-            <p className="mt-1 text-[11px] text-slate-400">Adaptör: {sendResult.adapter}</p>
+            <p className="mt-1 text-[11px] text-slate-500">Adaptör: {sendResult.adapter}</p>
           )}
           {sendResult.warnings?.map((w, i) => (
             <p key={i} className="mt-1 text-[11px] text-amber-800">
@@ -303,7 +303,7 @@ export default function FaturaDetayPage({ params }: { params: Promise<{ id: stri
                           {labelOf(INVOICE_LINE_SOURCE_LABELS, l.sourceType)}
                         </Badge>
                       ) : (
-                        <span className="text-xs text-slate-400">—</span>
+                        <span className="text-xs text-slate-500">—</span>
                       )}
                     </td>
                     <td className="py-3 pr-4 text-right tabular-nums text-slate-600">
@@ -357,7 +357,7 @@ export default function FaturaDetayPage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
 
-        <p className="mt-4 text-[11px] leading-5 text-slate-400">
+        <p className="mt-4 text-[11px] leading-5 text-slate-500">
           Ara toplam, KDV ve genel toplam sunucuda hesaplanır ve burada olduğu gibi gösterilir.
           &quot;Kalan&quot; sunucudan gelmediğinde tamsayı kuruş aritmetiğiyle türetilir ve bu
           durumda ayrıca işaretlenir.
@@ -395,7 +395,7 @@ export default function FaturaDetayPage({ params }: { params: Promise<{ id: stri
             ))}
           </ul>
         )}
-        <p className="mt-4 text-[11px] leading-5 text-slate-400">
+        <p className="mt-4 text-[11px] leading-5 text-slate-500">
           Her ödeme aynı işlemde bir TAHSILAT finans hareketi üretir; toplam ödemeler genel
           toplama ulaştığında fatura durumunu sunucu ÖDENDİ yapar.
         </p>

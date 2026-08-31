@@ -42,6 +42,8 @@ export const JOB_KEYS = {
   CREDIT_PERIOD_RENEWAL: "credit-period-renewal-daily",
   /** denetim bulgusu Ö-29 — %80 kredi uyarısı. Saatlik: 402 sürpriz olmamalı. */
   CREDIT_LOW_WARNING: "credit-low-warning-hourly",
+  /** F2 · E2 — gece risk tazeleme + panel fotoğrafı. */
+  RISK_NIGHTLY: "risk-nightly",
 } as const;
 
 export type JobKey = (typeof JOB_KEYS)[keyof typeof JOB_KEYS];

@@ -27,6 +27,7 @@ import { guardOutput, type DroppedFinding, type ExtractedCitation } from "@nomos
 import type { TypeOf, ZodTypeAny } from "zod";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
+import { AgentRunService } from "../agents/agent-run.service";
 import { assertAiPolicyAllows } from "../common/ai-policy";
 import { creditRunContext } from "../credits/credit-context";
 import { providerUnreachable } from "../common/errors";
@@ -102,6 +103,7 @@ export class AssistantLlmService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly agentRuns: AgentRunService,
   ) {}
 
   /** DB kaydını @nomosos/ai için çözülmüş yapılandırmaya çevirir. */
@@ -271,12 +273,44 @@ export class AssistantLlmService {
         temperature: 0.2,
       });
     } catch (err) {
+      // F2 · E1: sağlayıcı arızası iz bırakır.
+      await this.agentRuns.record({
+        tenantId: user.tenantId,
+        userId: user.userId,
+        taskType: logTaskType,
+        status: "BASARISIZ",
+        model,
+        providerType: config.type,
+        durationMs: Date.now() - startedAt,
+        piiMasked: gated.piiMasked,
+        outboundTexts: options.messages.map((m) => m.content),
+        errorMessage: (err as Error).message,
+      });
       // Ham sağlayıcı gövdesi sızdırılmaz; korelasyon kimliği ile günlüğe yazılır.
       throw providerUnreachable(this.logger, err);
     }
     const durationMs = Date.now() - startedAt;
 
     const guarded = guardOutput(schema, result.content, { findingPaths });
+
+    // F2 · E1: guard reddi ve başarılı koşu — iz durumu ayrım kuralı için
+    // AiRunnerService ile aynı üç durum kümesini kullanır.
+    await this.agentRuns.record({
+      tenantId: user.tenantId,
+      userId: user.userId,
+      taskType: logTaskType,
+      status: guarded.ok ? "BASARILI" : "REDDEDILDI",
+      model,
+      providerType: config.type,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      durationMs,
+      piiMasked: gated.piiMasked,
+      outboundTexts: options.messages.map((m) => m.content),
+      rejectionDetail: guarded.ok
+        ? undefined
+        : guarded.issues.map((i) => (i.path ? `${i.path}: ${i.message}` : i.message)).join(" · "),
+    });
 
     const usageLog = await this.prisma.client.aiUsageLog.create({
       data: {

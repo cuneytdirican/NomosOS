@@ -215,7 +215,7 @@ function OverallCard({
         <div className="flex items-center gap-5">
           <span className="text-4xl leading-none">{RISK_BAND_DOTS[band] ?? "⚪"}</span>
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
               Genel Risk
             </p>
             <p className="mt-1 text-5xl font-bold leading-none">{score.score}</p>
@@ -290,7 +290,7 @@ function DimensionCard({
         {overrideReason && <Badge tone="gold">Elle düzeltildi</Badge>}
       </div>
 
-      <p className="mt-2 text-[11px] leading-4 text-slate-400">
+      <p className="mt-2 text-[11px] leading-4 text-slate-500">
         {RISK_DIMENSION_HINTS[dimension]}
       </p>
 
@@ -373,7 +373,7 @@ function SignalPanel({ score, dark = false }: { score: RiskScore; dark?: boolean
             Kural sinyalleri (deterministik taban)
           </p>
           {ruleSignals.length === 0 ? (
-            <p className={`mt-1 text-xs ${dark ? "text-slate-400" : "text-slate-500"}`}>
+            <p className={`mt-1 text-xs ${dark ? "text-slate-500" : "text-slate-500"}`}>
               Kayıtlı kural sinyali yok.
             </p>
           ) : (
@@ -412,7 +412,7 @@ function SignalPanel({ score, dark = false }: { score: RiskScore; dark?: boolean
               </p>
             ))}
             {score.model && (
-              <p className={`mt-1 text-[11px] ${dark ? "text-slate-400" : "text-amber-700"}`}>
+              <p className={`mt-1 text-[11px] ${dark ? "text-slate-500" : "text-amber-700"}`}>
                 Model: {score.model}
               </p>
             )}
@@ -425,7 +425,7 @@ function SignalPanel({ score, dark = false }: { score: RiskScore; dark?: boolean
         )}
 
         {score.computedAt && (
-          <p className={`text-[11px] ${dark ? "text-slate-400" : "text-slate-400"}`}>
+          <p className={`text-[11px] ${dark ? "text-slate-500" : "text-slate-500"}`}>
             Hesap zamanı: {fmtDateTime(score.computedAt)}
           </p>
         )}

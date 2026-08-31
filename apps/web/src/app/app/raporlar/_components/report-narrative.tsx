@@ -75,7 +75,7 @@ export function NarrativePanel({
           {busy ? "Yorumlanıyor…" : narrative ? "Yeniden yorumla" : "AI ile yorumla"}
         </Button>
         <CreditBadge taskType={taskType} costs={costs} />
-        <span className="text-[11px] text-slate-400">
+        <span className="text-[11px] text-slate-500">
           Kredi yalnızca bu düğmeye bastığınızda tüketilir.
         </span>
       </div>
@@ -92,7 +92,7 @@ export function NarrativePanel({
           <p className="whitespace-pre-wrap text-sm leading-6 text-slate-800">{narrative.text}</p>
           {narrative.basedOn.length > 0 && (
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                 Yorumun dayandığı ölçüler
               </p>
               <p className="mt-1 text-xs text-slate-600">
@@ -101,7 +101,7 @@ export function NarrativePanel({
             </div>
           )}
           {narrative.model && (
-            <p className="text-[11px] text-slate-400">Model: {narrative.model}</p>
+            <p className="text-[11px] text-slate-500">Model: {narrative.model}</p>
           )}
         </div>
       )}

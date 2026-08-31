@@ -40,7 +40,7 @@ export function BalanceCard({
         <h2 className="text-sm font-semibold text-slate-900">
           Bakiye
           {balance?.asOf && (
-            <span className="ml-2 text-xs font-normal text-slate-400">
+            <span className="ml-2 text-xs font-normal text-slate-500">
               {fmtDate(balance.asOf)} itibarıyla
             </span>
           )}
@@ -139,7 +139,7 @@ export function BalanceCard({
               </div>
             )}
 
-            <p className="mt-4 text-[11px] leading-5 text-slate-400">
+            <p className="mt-4 text-[11px] leading-5 text-slate-500">
               Mahsup sırası masraf → faiz → asıl alacaktır ve değiştirilemez. Bu tutarların
               tamamı sunucuda hesaplanır; arayüz yalnızca gösterir.
               {balance.legalBasis ? ` Dayanak: ${balance.legalBasis}` : ""}

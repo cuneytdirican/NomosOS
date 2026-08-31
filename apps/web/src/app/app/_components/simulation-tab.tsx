@@ -213,7 +213,7 @@ export function SimulationTab({
           >
             {runAi.busy ? "Çalıştırılıyor…" : "Simülasyonu Çalıştır"}
           </Button>
-          <p className="text-[11px] text-slate-400">
+          <p className="text-[11px] text-slate-500">
             Koşular değiştirilemez; her çalıştırma yeni bir kayıt üretir.
           </p>
         </div>
@@ -329,7 +329,7 @@ function RunResult({ run }: { run: SimulationRun }) {
       <div className="space-y-4">
         <SimulationBanner />
 
-        <p className="text-[11px] text-slate-400">
+        <p className="text-[11px] text-slate-500">
           {run.model ? `Model: ${run.model}` : "Model bilgisi yok"}
           {typeof run.durationMs === "number"
             ? ` · Süre: ${(run.durationMs / 1000).toFixed(1)} sn`
@@ -496,7 +496,7 @@ function RunComparison({ a, b }: { a: SimulationRun | null; b: SimulationRun | n
   return (
     <div className="mt-4 space-y-3">
       <SimulationBanner />
-      <p className="text-[11px] text-slate-400">
+      <p className="text-[11px] text-slate-500">
         Eşleştirme bulgu başlığına göre yapılır; yeniden ifade edilmiş bir bulgu
         &quot;yeni&quot; görünebilir.
       </p>

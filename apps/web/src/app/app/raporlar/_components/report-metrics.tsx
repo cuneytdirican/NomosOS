@@ -55,13 +55,13 @@ function MetricCard({ metric }: { metric: ReportMetric }) {
           }
         />
         <span
-          className="text-[10px] uppercase tracking-wide text-slate-400"
+          className="text-[10px] uppercase tracking-wide text-slate-500"
           title={`Bu ölçüde ${METRIC_DIRECTION_LABELS[metric.direction].toLocaleLowerCase("tr-TR")}.`}
         >
           {METRIC_DIRECTION_LABELS[metric.direction]}
         </span>
       </div>
-      {metric.hint && <p className="mt-2 text-[11px] leading-4 text-slate-400">{metric.hint}</p>}
+      {metric.hint && <p className="mt-2 text-[11px] leading-4 text-slate-500">{metric.hint}</p>}
     </div>
   );
 }

@@ -569,7 +569,7 @@ export function ComposeMessageModal({
         {/* Taslak kaynağı — yalnız kayıt oluşmadan önce */}
         {!draft && (
           <div className="rounded-lg border border-slate-200 p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Taslağın kaynağı
             </p>
             <div className="mt-2 flex flex-wrap gap-3">
@@ -610,7 +610,7 @@ export function ComposeMessageModal({
                   </Select>
                 </Field>
                 {channelTemplates.length === 0 && (
-                  <p className="mt-1 text-[11px] text-slate-400">
+                  <p className="mt-1 text-[11px] text-slate-500">
                     Bu kanal için şablon yok. “Elle yaz” ya da “AI ile yaz” seçin.
                   </p>
                 )}
@@ -641,7 +641,7 @@ export function ComposeMessageModal({
                   <CreditBadge taskType="MESSAGE_DRAFT" costs={costs} />
                 </Button>
                 {!caseId && (
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-[11px] text-slate-500">
                     Dosya seçilmeden AI taslağı üretilmez: bağlamsız özet uydurmaya davettir.
                   </p>
                 )}

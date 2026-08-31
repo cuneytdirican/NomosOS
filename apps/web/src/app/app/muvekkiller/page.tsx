@@ -201,7 +201,7 @@ export default function MuvekkillerPage() {
                         {c.name}
                       </Link>
                       {c.referenceCode && (
-                        <span className="ml-2 text-xs text-slate-400">{c.referenceCode}</span>
+                        <span className="ml-2 text-xs text-slate-500">{c.referenceCode}</span>
                       )}
                     </td>
                     <td className="py-3 pr-4">

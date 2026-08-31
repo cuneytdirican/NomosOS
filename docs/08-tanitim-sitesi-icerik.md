@@ -112,7 +112,7 @@ Tek sayfa (uzun kaydırmalı) + ayrı sayfalar:
 > **Birincil düğme:** Demo Talep Edin  **İkincil:** Özellikleri İnceleyin
 >
 > **Güven şeridi (küçük punto, altın ayraçla):**
-> Deterministik süre hesabı · KVKK uyumlu veri mimarisi · Kendi LLM'inizi bağlayın · UYAP entegrasyonu
+> Deterministik süre hesabı · KVKK uyumlu veri mimarisi · Kendi LLM'inizi bağlayın · İçtihat atıf teyidi
 
 Görsel: panel ekran görüntüsü (yaklaşan süreler + bugünün duruşmaları), hafif çerçeveli,
 kağıt zemine oturmuş.
@@ -154,9 +154,9 @@ kağıt zemine oturmuş.
 | **İcra Takibi** | Takip talebinden tahsilata bütün aşamalar, borçlu malvarlığı kaydı, faiz ve bakiye hesabı, İcra Copilot analizleri. |
 | **Finans** | Tahakkuk, tahsilat, avans, masraf ve harç takibi. Müvekkil bazlı alacak durumu ve yaşlandırma tablosu. |
 | **Faturalama** | Ücret sözleşmeleri, zaman kaydı, zaman kayıtlarından fatura üretimi, e-Fatura/e-Arşiv altyapısı. |
-| **Dilekçe Stüdyosu** | Dosya bilgilerinden bölüm bölüm dilekçe taslağı. UDF formatında dışa aktarım. Atıflar doğrulanmadan "hazır" olmaz. |
-| **İçtihat Araştırma** | Karar arama, özetleme ve dosyaya emsal olarak bağlama. Her atıf kayıt üzerinden doğrulanır. |
-| **UYAP Köprüsü** | Tarayıcı eklentisiyle dosya, safahat ve evrak aktarımı. UYAP'ın yerine geçmez; üzerine bir operasyon katmanı kurar. |
+| **Dilekçe Stüdyosu** | Dosya bilgilerinden bölüm bölüm dilekçe taslağı. UDF formatında dışa aktarım. İçtihat atıfları kayıt üzerinden doğrulanmadan "hazır" olmaz; mevzuat atıfları tanınır ama doğrulanmaz. |
+| **İçtihat Araştırma** | Karar arama, özetleme ve dosyaya emsal olarak bağlama. Her içtihat atfı kayıt üzerinden doğrulanır. |
+| **UYAP Köprüsü (geliştirme aşamasında)** | Tarayıcı eklentisiyle dosya, safahat ve evrak aktarımı hedefleniyor. UYAP'ın yerine geçmez; üzerine bir operasyon katmanı kurar. |
 
 ### 3.4 Öne çıkan: Süre Motoru
 
@@ -186,7 +186,7 @@ SON GÜN                   01.09.2026 Salı
 
 Altına küçük not: *Hesabın her adımı görünür. Neye güvendiğinizi bilirsiniz.*
 
-Ayrıca: 18 hazır süre kuralı — HMK, İİK, CMK, İYUK, TKHK ve İş Kanunu hükümleriyle;
+Ayrıca: 29 hazır süre kuralı — HMK, İİK, CMK, İYUK, TKHK ve İş Kanunu hükümleriyle;
 büroya özel kural tanımlanabilir.
 
 ### 3.5 Öne çıkan: Belge → Aksiyon Hattı
@@ -199,9 +199,10 @@ büroya özel kural tanımlanabilir.
 Akış görseli (dikey adımlar, altın çizgiyle bağlı):
 
 ```
-Evrak sisteme girer  (UYAP eklentisi veya yükleme)
+Evrak sisteme girer  (yükleme; UYAP eklentisi: geliştirme aşamasında)
         ↓
-Metin çıkarılır ve sınıflandırılır  (ara karar · bilirkişi raporu · tebligat …)
+Metin çıkarılır ve sınıflandırılır  (ara karar · bilirkişi raporu · tebligat …
+        — metin katmanı olan belgelerde)
         ↓
 İlgili dosyayla eşleştirilir
         ↓
@@ -239,9 +240,10 @@ Dört kart:
 > **Halüsinasyon şeridi (altın çerçeveli kutu):**
 > **Uydurma içtihat sorunu.**
 > Yapay zekâ modelleri, var olmayan Yargıtay kararlarını gerçekmiş gibi üretebilir.
-> NomosOS'ta bir dilekçedeki her atıf, kayıt üzerinden doğrulanır — modele "bu karar var
-> mı" diye sorulmaz, kayıtta aranır. **Doğrulanmamış atıf içeren bir dilekçe "hazır"
-> durumuna geçemez.**
+> NomosOS'ta bir dilekçedeki her İÇTİHAT künyesi, kayıt üzerinden doğrulanır — modele "bu karar var
+> mı" diye sorulmaz, kayıtta aranır. Mevzuat atıfları tanınır ancak doğrulanmaz; madde numarasını
+> yürürlükteki metinden siz teyit edersiniz. **Doğrulanmamış içtihat atfı içeren bir dilekçe
+> "hazır" durumuna geçemez.**
 
 ### 3.7 Kendi Yapay Zekânızı Bağlayın
 
@@ -268,16 +270,17 @@ Kendi özel sunucunuz**
 
 ### 3.8 UYAP Köprüsü
 
-> **Üst etiket:** ENTEGRASYON
+> **Üst etiket:** ENTEGRASYON · GELİŞTİRME AŞAMASINDA
 > **Başlık:** UYAP'ın yerine geçmez. Üzerine bir katman kurar.
 >
-> Tarayıcı eklentisi, kendi UYAP oturumunuz üzerinden çalışır. Dosya listesi, safahat,
-> duruşma bilgileri ve evraklar NomosOS'a aktarılır; gelen her evrak otomatik aksiyon
-> hattına girer.
+> Hedef: kendi UYAP oturumunuz üzerinden çalışan bir tarayıcı eklentisiyle dosya listesi,
+> safahat, duruşma bilgileri ve evrakların NomosOS'a aktarılması ve gelen her evrakın
+> otomatik aksiyon hattına girmesi. Eklentinin istemci tarafı yazıldı; senkronizasyon ve
+> aktarım altyapısı geliştirme aşamasındadır — kullanıma açıldığında duyurulacaktır.
 >
-> Hazırladığınız dilekçeyi UDF formatında dışa aktarır, UYAP ekranını sizin için
-> doldurur — ancak **e-imzanızı siz atar, gönderimi siz onaylarsınız.** Sistem sizin
-> adınıza hiçbir evrak göndermez.
+> Hazırladığınız dilekçeyi UDF formatında dışa aktarır; UYAP ekranına aktarım hedefi
+> eklentiyle birlikte gelecek — ancak **e-imzanızı siz atarsınız, gönderimi siz
+> onaylarsınız.** Sistem sizin adınıza hiçbir evrak göndermez.
 
 Küçük not: *UYAP oturum ve e-imza bilgileriniz NomosOS'a hiçbir şekilde aktarılmaz.*
 
@@ -333,7 +336,7 @@ Bölümler:
 > tüketir. Her işlemin kaç kredi olduğunu, işlemi başlatmadan önce görürsünüz.
 >
 > **Kredi tüketmeyen işlemler:** süre hesabı, belge sınıflandırma, evrakın dosyaya
-> bağlanması, atıf doğrulama ve dosya/müvekkil/duruşma yönetiminin tamamı.
+> bağlanması, içtihat atıf teyidi ve dosya/müvekkil/duruşma yönetiminin tamamı.
 >
 > **Krediniz biterse ne olur?** Dosya yönetimi, süreler, duruşmalar ve belge işleme
 > çalışmaya devam eder; yalnızca kredili yapay zekâ işlemleri durur. Ek kredi

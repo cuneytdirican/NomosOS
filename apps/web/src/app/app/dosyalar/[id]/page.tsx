@@ -402,7 +402,7 @@ export default function DosyaDetayPage({ params }: { params: Promise<{ id: strin
               </Button>
             </div>
           </div>
-          <div className="space-y-1 text-right text-xs text-slate-400">
+          <div className="space-y-1 text-right text-xs text-slate-500">
             <p>Açılış: {fmtDate(detail.openedAt)}</p>
             {detail.responsibleUser?.fullName && <p>Sorumlu: {detail.responsibleUser.fullName}</p>}
             {(nextHearing?.date ?? detail.nextHearingAt) && (
@@ -660,7 +660,7 @@ export default function DosyaDetayPage({ params }: { params: Promise<{ id: strin
                           <p className="mt-0.5 text-xs text-slate-500">Dayanak: {d.legalBasis}</p>
                         )}
                         {(d.triggerDate || d.serviceMethod) && (
-                          <p className="mt-0.5 text-[11px] text-slate-400">
+                          <p className="mt-0.5 text-[11px] text-slate-500">
                             {d.triggerDate ? `Tetik: ${fmtDate(d.triggerDate)}` : ""}
                             {d.serviceMethod
                               ? ` · ${labelOf(SERVICE_METHOD_LABELS, d.serviceMethod)}`
@@ -983,7 +983,7 @@ function TimelineList({ events }: { events: TimelineEvent[] }) {
       {events.map((ev) => (
         <li key={ev.id} className="relative">
           <span className="absolute -left-[26px] top-1.5 h-2.5 w-2.5 rounded-full bg-amber-500" />
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             {fmtDate(ev.date)}
             {ev.source ? ` · ${ev.source}` : ""}
             {ev.user?.fullName ? ` · ${ev.user.fullName}` : ""}
@@ -1118,7 +1118,7 @@ function DecisionForm({ caseId, onSaved }: { caseId: string; onSaved: () => Prom
         <Button type="submit" disabled={saving || !summary.trim()} className="w-full">
           {saving ? "Kaydediliyor…" : "Kararı Kaydet"}
         </Button>
-        <p className="text-[11px] leading-5 text-slate-400">
+        <p className="text-[11px] leading-5 text-slate-500">
           Karar kaydı süre motorunun tetikleyicisidir; kararı ekledikten sonra Süreler sekmesinden
           ilgili kanun yolu süresini oluşturun.
         </p>

@@ -125,7 +125,7 @@ export function MonthlySummaryCard() {
           </div>
         ))}
       </div>
-      <p className="mt-3 text-[11px] leading-5 text-slate-400">
+      <p className="mt-3 text-[11px] leading-5 text-slate-500">
         {period ? `${periodLabel(period.from, period.to)} · ` : ""}
         Rakamlar deterministik olarak veritabanından hesaplanır. Fark rengi metriğin
         &quot;iyi yönüne&quot; göredir: her artış olumlu sayılmaz.
@@ -216,7 +216,7 @@ export function NotificationsSummaryCard() {
           );
         })}
       </ul>
-      <p className="mt-3 text-[11px] leading-5 text-slate-400">
+      <p className="mt-3 text-[11px] leading-5 text-slate-500">
         Tümünü üst çubuktaki zil simgesinden görebilirsiniz. Bildirimi okundu işaretlemek
         kaynak kaydı (süre, görev, fatura) <strong>kapatmaz</strong>.
       </p>

@@ -138,7 +138,7 @@ export default function FinansPage() {
 
 
   const currency = report?.currency ?? "TRY";
-  const aging = report?.aging ?? [];
+  const aging = useMemo(() => report?.aging ?? [], [report]);
   const topDebtors = report?.topDebtors ?? [];
 
   /** Yaşlandırma çubuğu ORANI — yalnız görselleştirme (tutar sunucudan). */
@@ -266,7 +266,7 @@ export default function FinansPage() {
                           <span className="text-sm font-medium text-slate-700">
                             {b.label ?? labelOf(AGING_BUCKET_LABELS, key)}
                             {typeof b.count === "number" && (
-                              <span className="ml-2 text-xs text-slate-400">
+                              <span className="ml-2 text-xs text-slate-500">
                                 {b.count} kayıt
                               </span>
                             )}
@@ -281,7 +281,7 @@ export default function FinansPage() {
                       </div>
                     );
                   })}
-                  <p className="pt-2 text-[11px] leading-5 text-slate-400">
+                  <p className="pt-2 text-[11px] leading-5 text-slate-500">
                     Kova tutarları sunucudan gelir; çubuk genişlikleri yalnızca görsel orandır.
                     90 günü aşan alacaklar tahsilat riskini yükseltir.
                   </p>
@@ -401,9 +401,9 @@ export default function FinansPage() {
                           Faturaya işlendi →
                         </Link>
                       ) : e.isBillable === false ? (
-                        <span className="text-xs text-slate-400">Yansıtılmaz</span>
+                        <span className="text-xs text-slate-500">Yansıtılmaz</span>
                       ) : (
-                        <span className="text-xs text-slate-400">Faturalanmadı</span>
+                        <span className="text-xs text-slate-500">Faturalanmadı</span>
                       )}
                     </td>
                   </tr>

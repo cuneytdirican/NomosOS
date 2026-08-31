@@ -288,7 +288,7 @@ export function StrategyTab({
                   {isRiskRing ? (
                     <RiskRing score={overall} onGoToRisk={onGoToRisk} />
                   ) : ringNodes.length === 0 ? (
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-slate-500">
                       Bu halkada düğüm yok
                       {strategy ? " — veri yetersiz ya da henüz girilmedi." : "."}
                     </p>
@@ -364,7 +364,7 @@ export function StrategyTab({
                           v{v.versionNo}
                         </Badge>
                         <span className="text-slate-600">{fmtDateTime(v.createdAt)}</span>
-                        {v.model && <span className="text-slate-400">· {v.model}</span>}
+                        {v.model && <span className="text-slate-500">· {v.model}</span>}
                       </span>
                     }
                   >
@@ -411,7 +411,7 @@ function RiskRing({
 }) {
   if (!score) {
     return (
-      <p className="text-xs text-slate-400">
+      <p className="text-xs text-slate-500">
         Genel risk skoru henüz hesaplanmadı. Risk sekmesinden yeniden hesaplatabilirsiniz.
       </p>
     );

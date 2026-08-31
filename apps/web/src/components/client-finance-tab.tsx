@@ -122,7 +122,7 @@ export function ClientFinanceTab({ clientId }: { clientId: string }) {
           <StatCard label="Masraf" value={fmtAmount(f?.expenses, currency)} tone="slate" />
           <StatCard label="Avans Bakiyesi" value={fmtAmount(f?.advance, currency)} tone="slate" />
         </div>
-        <p className="mt-4 text-[11px] leading-5 text-slate-400">
+        <p className="mt-4 text-[11px] leading-5 text-slate-500">
           Bakiye formülü deterministiktir ve sunucuda uygulanır: tahakkuklar − tahsilatlar −
           avans mahsupları. AI hiçbir zaman bakiye hesaplamaz. Bir kart &quot;—&quot; gösteriyorsa
           sunucu o alanı döndürmemiştir.
@@ -197,7 +197,7 @@ export function ClientFinanceTab({ clientId }: { clientId: string }) {
                           Faturalandı →
                         </Link>
                       ) : (
-                        <span className="text-xs text-slate-400">
+                        <span className="text-xs text-slate-500">
                           {e.isBillable === false ? "Yansıtılmaz" : "Faturalanmadı"}
                         </span>
                       )}

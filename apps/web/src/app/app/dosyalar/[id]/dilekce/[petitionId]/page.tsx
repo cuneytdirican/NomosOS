@@ -545,7 +545,7 @@ export default function DilekceStudyoPage({
               </div>
             }
           >
-            {s.hint && <p className="mb-2 text-xs text-slate-400">{s.hint}</p>}
+            {s.hint && <p className="mb-2 text-xs text-slate-500">{s.hint}</p>}
             <Textarea
               rows={Math.min(20, Math.max(4, sectionBody(s).split("\n").length + 2))}
               value={sectionBody(s)}
@@ -553,7 +553,7 @@ export default function DilekceStudyoPage({
               placeholder={`${s.title} bölümünü buraya yazın veya AI ile üretin…`}
               className="font-serif leading-7"
             />
-            <p className="mt-1 text-right text-[11px] text-slate-400">
+            <p className="mt-1 text-right text-[11px] text-slate-500">
               {sectionBody(s).length.toLocaleString("tr-TR")} karakter
             </p>
           </Card>
@@ -574,7 +574,7 @@ export default function DilekceStudyoPage({
         <Button variant="secondary" disabled={!dirty} onClick={() => void load(false)}>
           Değişiklikleri geri al
         </Button>
-        <span className="ml-auto text-[11px] text-slate-400">
+        <span className="ml-auto text-[11px] text-slate-500">
           Sürümler değiştirilemez — her kayıt yeni bir sürüm numarası üretir.
         </span>
       </div>
@@ -667,7 +667,7 @@ export default function DilekceStudyoPage({
                         </Badge>
                       )}
                     </p>
-                    <span className="text-xs text-slate-400">{fmtDateTime(v.createdAt)}</span>
+                    <span className="text-xs text-slate-500">{fmtDateTime(v.createdAt)}</span>
                   </div>
                   {v.note && <p className="mt-1 text-xs text-slate-600">{v.note}</p>}
                   <Button

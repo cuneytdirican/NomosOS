@@ -220,7 +220,7 @@ export default function DurusmalarPage() {
               <section key={day}>
                 <h3 className="mb-3 border-b border-slate-100 pb-2 text-sm font-semibold text-slate-900">
                   {fmtDayHeading(items[0].date)}
-                  <span className="ml-2 text-xs font-normal text-slate-400">
+                  <span className="ml-2 text-xs font-normal text-slate-500">
                     {items.length} duruşma
                   </span>
                 </h3>
@@ -236,7 +236,7 @@ export default function DurusmalarPage() {
                             <p className="text-base font-bold leading-none text-amber-400">
                               {fmtTime(h.date)}
                             </p>
-                            <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-400">
+                            <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-500">
                               {labelOf(HEARING_TYPE_LABELS, h.type)}
                             </p>
                           </div>

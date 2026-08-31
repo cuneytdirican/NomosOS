@@ -374,7 +374,7 @@ export default function AiSaglayiciPage() {
                     <tr key={taskType} className="hover:bg-slate-50">
                       <td className="py-2.5 pr-4">
                         <p className="font-medium text-slate-900">{AI_TASK_TYPE_LABELS[taskType]}</p>
-                        <p className="text-[11px] text-slate-400">{taskType}</p>
+                        <p className="text-[11px] text-slate-500">{taskType}</p>
                       </td>
                       <td className="py-2.5 pr-4">
                         <div className="w-56">

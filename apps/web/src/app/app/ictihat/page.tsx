@@ -179,7 +179,7 @@ export default function IctihatPage() {
             <Button type="button" variant="secondary" onClick={() => setManualOpen(true)}>
               + Elle Karar Ekle
             </Button>
-            <span className="ml-auto text-xs text-slate-400">
+            <span className="ml-auto text-xs text-slate-500">
               Aktif mod: {mode === "AI" ? "AI (anlamsal)" : "Klasik (kelime)"}
             </span>
           </div>
@@ -282,7 +282,7 @@ function CaseLawCard({ doc, onAttach }: { doc: CaseLawDoc; onAttach: () => void 
           </p>
         </div>
         {typeof doc.score === "number" && (
-          <span className="text-xs text-slate-400">İlgi: {(doc.score * 100).toFixed(0)}%</span>
+          <span className="text-xs text-slate-500">İlgi: {(doc.score * 100).toFixed(0)}%</span>
         )}
       </div>
 
@@ -296,7 +296,7 @@ function CaseLawCard({ doc, onAttach }: { doc: CaseLawDoc; onAttach: () => void 
         {doc.summary ? (
           <p className="text-sm leading-6 text-slate-700">{doc.summary}</p>
         ) : (
-          <p className="text-xs text-slate-400">Özet yok.</p>
+          <p className="text-xs text-slate-500">Özet yok.</p>
         )}
         {doc.relevanceNote && (
           <p className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
@@ -583,7 +583,7 @@ function ManualCaseLawModal({
           </Button>
         </div>
       </form>
-      <p className="mt-3 text-[11px] text-slate-400">
+      <p className="mt-3 text-[11px] text-slate-500">
         Dosyaya bağlamak için kaydettikten sonra sonuç kartındaki{" "}
         <Link href="/app/ictihat" className="underline">
           “Dosyaya emsal olarak ekle”

@@ -67,6 +67,13 @@ görev zinciri (sorumlu → kontrol → onay) uçtan uca; rol bazlı yetki testl
 
 ## Faz 2 — AI Katmanı + UYAP
 
+> **DURUM NOTU (derin denetim, 31.08.2026):** Faz 2'nin çıkış kriterlerinin tamamı
+> karşılanmadı — **UYAP extension'ın ARKA UCU yazılmadı** (spec'in tanımladığı 6 uç yok;
+> yalnızca eklentinin istemci tarafı var). UYAP entegrasyonu bu yüzden "çalışan özellik"
+> değil, **geliştirme aşamasında**dır ve pazarlama/arayüz metinlerinde böyle anılır
+> (denetim bulgusu Ö-26). Faz 2'nin kalan çıkış kriterleri: UYAP'tan aktarılan evrakın
+> otomatik sınıflanıp dosyaya bağlanması.
+
 **Hedef**: "AI-Native" iddiasının karşılanması; benchmark ürünle özellik paritesi + aşma.
 
 Kapsanan modüller: AI Dosya Asistanı (`24`), Dilekçe Üretimi (`22`),

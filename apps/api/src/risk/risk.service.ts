@@ -51,7 +51,6 @@ import {
   applyAiAdjustment,
   BAND_LABELS,
   BAND_THRESHOLDS,
-  bandOf,
   computeAllDimensions,
   computeGenel,
   DIMENSION_LABELS,
@@ -800,7 +799,11 @@ export class RiskService {
   // Anlık görüntü
   // ================================================================== //
 
-  private async loadSnapshot(tenantId: string, caseId: string): Promise<RiskCaseSnapshot> {
+  /**
+   * Görünüm public'e alındı (F2 · E2): gece risk işi (`RiskNightlyService`) aynı
+   * anlık görüntüyü KOPYALAMADAN kullanır — iki farklı "doğru" olmaz.
+   */
+  async loadSnapshot(tenantId: string, caseId: string): Promise<RiskCaseSnapshot> {
     const kase = await this.prisma.client.case.findFirst({
       where: { id: caseId, tenantId },
       include: {

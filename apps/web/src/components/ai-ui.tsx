@@ -101,7 +101,7 @@ export function SourceQuote({
   return (
     <blockquote className="mt-2 border-l-4 border-slate-300 bg-slate-50 py-2 pl-3 pr-2 text-xs italic leading-5 text-slate-600">
       “{quote.trim()}”
-      {source && <footer className="mt-1 not-italic text-[11px] text-slate-400">{source}</footer>}
+      {source && <footer className="mt-1 not-italic text-[11px] text-slate-500">{source}</footer>}
     </blockquote>
   );
 }
@@ -112,7 +112,7 @@ export function ReasoningBlock({ text }: { text: string | null | undefined }) {
   if (!text) return null;
   return (
     <div className="mt-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
         AI&apos;ın gerekçesi
       </p>
       <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-slate-700">{text}</p>

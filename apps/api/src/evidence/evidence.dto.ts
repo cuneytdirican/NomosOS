@@ -23,6 +23,8 @@ export const EVIDENCE_TYPES = [
   "DIGER",
 ] as const;
 export const EVIDENCE_STATUSES = ["PLANLANAN", "TOPLANDI", "SUNULDU", "KABUL", "RED"] as const;
+/** Bağın YÖNÜ — Prisma `EvidenceLinkType` enum'unun birebir kopyası (F2 · E6). */
+export const EVIDENCE_LINK_TYPES = ["SUPPORTS", "CONTRADICTS", "BELIRSIZ"] as const;
 
 /** BELGE benzeri tipler: `documentId` beklenir (uyarı üretilir, engel değil). */
 export const DOCUMENT_BACKED_TYPES = ["BELGE", "FOTOGRAF", "VIDEO", "SES"] as const;
@@ -112,6 +114,13 @@ export const linkEvidenceSchema = z.object({
    * yazılan değer avukatın onayladığı değerdir.
    */
   strength: z.number().int().min(1, "Destek gücü 1-5 arasında olmalıdır.").max(5).optional(),
+  /**
+   * Bağın YÖNÜ (F2 · E6): delil iddiayı DESTEKLER mi ÇÜRÜTÜR mü? Varsayılan
+   * SUPPORTS — yön belirtilmeden kurulan tüm bağlar "destekliyor" kurulmuştu.
+   */
+  linkType: z.enum(EVIDENCE_LINK_TYPES, {
+    errorMap: () => ({ message: "Bağ yönü SUPPORTS, CONTRADICTS veya BELIRSIZ olmalıdır." }),
+  }).optional(),
   note: nullableText(1000, "Not"),
 });
 export type LinkEvidenceInput = z.infer<typeof linkEvidenceSchema>;

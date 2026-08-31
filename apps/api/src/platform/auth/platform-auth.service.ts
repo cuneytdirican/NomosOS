@@ -33,8 +33,17 @@ import type {
 } from "../platform.types";
 import type { AdminRole } from "../platform-permissions";
 import type { PlatformLoginInput, TwoFactorVerifyInput } from "./platform-auth.schemas";
+import { isFreshTotp, nextStoredCounter, totpCounterAt } from "./totp-replay";
 
-/** TOTP ayarları — 30 saniyelik pencere, ±1 adım tolerans (saat kayması). */
+/**
+ * TOTP ayarları — 30 saniyelik adım, ±1 adım tolerans (saat kayması).
+ *
+ * TEKRAR OYNATMA (denetim bulgusu İ-01): window'lu doğrulama tek başına aynı
+ * kodu pencere boyunca tekrar kabul eder; `lastTotpCounter` (veritabanı) +
+ * `totp-replay.ts` ile kullanılan adım bir kez kabul edilir. Bu yüzden
+ * doğrulama her yerde `verifyTotpFresh` üzerinden yapılır — çıplak
+ * `authenticator.verify` çağrılmaz.
+ */
 authenticator.options = { window: 1 };
 
 const TOTP_ISSUER = "NomosOS Platform";
@@ -202,17 +211,24 @@ export class PlatformAuthService {
         );
       }
       const secret = this.decrypt(user.twoFactorSecret);
-      if (!authenticator.verify({ token: input.code, secret })) {
+      const fresh = this.verifyTotpFresh(user, input.code, secret);
+      if (!fresh.ok) {
         const locked = await this.registerFailure(
           user.id,
           user.role as AdminRole,
           ip,
-          "parola değiştirmede hatalı TOTP kodu"
+          fresh.replay ? "parola değiştirmede TOTP kodu TEKRAR kullanıldı" : "parola değiştirmede hatalı TOTP kodu"
         );
         throw new UnauthorizedException(
-          locked ? this.lockMessage() : "Doğrulama kodu hatalı."
+          locked
+            ? this.lockMessage()
+            : fresh.replay
+              ? "Bu doğrulama kodu zaten kullanılmış. Yeni kodu bekleyip tekrar deneyin."
+              : "Doğrulama kodu hatalı."
         );
       }
+      // Kullanılan adımı hemen sakla: aynı kod ikinci kez geçemez.
+      await this.markTotpUsed(user.id, fresh.counter, user.lastTotpCounter);
     }
 
     if (await bcrypt.compare(input.newPassword, user.passwordHash)) {
@@ -222,7 +238,9 @@ export class PlatformAuthService {
     await this.prisma.client.platformUser.update({
       where: { id: user.id },
       data: {
-        passwordHash: await bcrypt.hash(input.newPassword, 10),
+        // 12: üç kimlik alanında aynı maliyet (denetim bulgusu İ-02). 10 ile
+        // üretilmiş eski karmalar doğrulanmaya devam eder (maliyet karmanın içindedir).
+        passwordHash: await bcrypt.hash(input.newPassword, 12),
         tokenVersion: { increment: 1 },
         failedAttempts: 0,
         lockedUntil: null,
@@ -397,15 +415,20 @@ export class PlatformAuthService {
         );
       }
       const secret = this.decrypt(challenge.enc);
-      if (!authenticator.verify({ token: input.code, secret })) {
+      const fresh = this.verifyTotpFresh(user, input.code, secret);
+      if (!fresh.ok) {
         const locked = await this.registerFailure(
           user.id,
           user.role as AdminRole,
           ip,
-          "kurulum kodu hatalı"
+          fresh.replay ? "kurulumda TOTP kodu TEKRAR kullanıldı" : "kurulum kodu hatalı"
         );
         throw new UnauthorizedException(
-          locked ? this.lockMessage() : "Doğrulama kodu hatalı. Lütfen tekrar deneyin."
+          locked
+            ? this.lockMessage()
+            : fresh.replay
+              ? "Bu doğrulama kodu zaten kullanılmış. Yeni kodu bekleyip tekrar deneyin."
+              : "Doğrulama kodu hatalı. Lütfen tekrar deneyin."
         );
       }
       await clearChallenge(challenge.jti);
@@ -413,6 +436,9 @@ export class PlatformAuthService {
         where: { id: user.id },
         data: {
           twoFactorSecret: encryptSecret(secret, platform2faEncryptionKey()),
+          // Kurulum anında kullanılan adım da tüketilir: aynı kodla giriş
+          // yapılamaz (İ-01).
+          lastTotpCounter: nextStoredCounter(fresh.counter, user.lastTotpCounter),
           failedAttempts: 0,
           lockedUntil: null,
         },
@@ -432,19 +458,25 @@ export class PlatformAuthService {
       throw new BadRequestException("Bu hesapta iki adımlı doğrulama kurulu değil.");
     }
     const secret = this.decrypt(user.twoFactorSecret);
-    if (!authenticator.verify({ token: input.code, secret })) {
+    const fresh = this.verifyTotpFresh(user, input.code, secret);
+    if (!fresh.ok) {
       const locked = await this.registerFailure(
         user.id,
         user.role as AdminRole,
         ip,
-        "hatalı TOTP kodu"
+        fresh.replay ? "girişte TOTP kodu TEKRAR kullanıldı" : "hatalı TOTP kodu"
       );
       throw new UnauthorizedException(
-        locked ? this.lockMessage() : "Doğrulama kodu hatalı. Lütfen tekrar deneyin."
+        locked
+          ? this.lockMessage()
+          : fresh.replay
+            ? "Bu doğrulama kodu zaten kullanılmış. Yeni kodu bekleyip tekrar deneyin."
+            : "Doğrulama kodu hatalı. Lütfen tekrar deneyin."
       );
     }
     await clearChallenge(challenge.jti);
     await this.clearFailures(user.id);
+    await this.markTotpUsed(user.id, fresh.counter, user.lastTotpCounter);
     return this.issueSession(user.id, user.email, user.fullName, user.role as AdminRole, true, ip);
   }
 
@@ -607,6 +639,38 @@ export class PlatformAuthService {
     await this.prisma.client.platformUser.updateMany({
       where: { id, OR: [{ failedAttempts: { gt: 0 } }, { lockedUntil: { not: null } }] },
       data: { failedAttempts: 0, lockedUntil: null },
+    });
+  }
+
+  /**
+   * TOTP'yi TEKRAR OYNATMA KONTROLÜYLE doğrular (denetim bulgusu İ-01).
+   *
+   * - `ok: false, replay: false` → kod yanlış.
+   * - `ok: false, replay: true` → kod doğru ama ADIMI ZATEN KULLANILMIŞ.
+   * - `ok: true` → kabul; `counter` saklanmalı.
+   */
+  private verifyTotpFresh(
+    user: { lastTotpCounter: number | null },
+    token: string,
+    secret: string
+  ): { ok: true; counter: number } | { ok: false; replay: boolean } {
+    // checkDelta: null = kod yanlış; sayı = doğrulanan adımın deltası (±window).
+    const delta = authenticator.checkDelta(token, secret);
+    if (delta === null) return { ok: false, replay: false };
+    const counter = totpCounterAt(delta, Date.now());
+    if (!isFreshTotp(counter, user.lastTotpCounter)) return { ok: false, replay: true };
+    return { ok: true, counter };
+  }
+
+  /** Kullanılan adımı kalıcı sayaca yazar — asla geriye düşürmez. */
+  private async markTotpUsed(
+    userId: string,
+    counter: number,
+    lastUsed: number | null
+  ): Promise<void> {
+    await this.prisma.client.platformUser.update({
+      where: { id: userId },
+      data: { lastTotpCounter: nextStoredCounter(counter, lastUsed) },
     });
   }
 

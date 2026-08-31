@@ -290,7 +290,7 @@ export default function IcraListPage() {
                             </span>
                           </span>
                         ) : (
-                          <span className="text-xs text-slate-400">Hesaplanmadı</span>
+                          <span className="text-xs text-slate-500">Hesaplanmadı</span>
                         )}
                       </td>
                     </tr>
@@ -309,7 +309,7 @@ export default function IcraListPage() {
             onPageChange={setPage}
           />
 
-          <p className="mt-4 text-[11px] leading-5 text-slate-400">
+          <p className="mt-4 text-[11px] leading-5 text-slate-500">
             Tahsil edilen ve kalan tutarlar sunucudaki deterministik bakiye hesabından gelir
             (mahsup sırası: masraf → faiz → asıl alacak). Boş görünen hücre, sunucunun o dosya
             için henüz bakiye döndürmediği anlamına gelir.

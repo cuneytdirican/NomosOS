@@ -199,7 +199,7 @@ export default function IcraDetayPage({ params }: { params: Promise<{ id: string
               {file.case?.client?.name ? `Alacaklı: ${file.case.client.name}` : "Alacaklı: —"}
               {file.debtorInfo ? ` · Borçlu: ${file.debtorInfo}` : ""}
             </p>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-xs text-slate-500">
               Takip talebi: {fmtDate(file.requestDate)}
               {file.paymentOrderServedAt
                 ? ` · Ödeme emri tebliği: ${fmtDate(file.paymentOrderServedAt)}`
@@ -721,7 +721,7 @@ function AssetsTab({
         </div>
       )}
 
-      <p className="mt-4 text-[11px] leading-5 text-slate-400">
+      <p className="mt-4 text-[11px] leading-5 text-slate-500">
         Tahmini değer bir tespit notudur; takip bakiyesine dâhil edilmez. Satış geliri ancak
         Tahsilatlar sekmesine kaydedildiğinde bakiyeye yansır.
       </p>
@@ -887,7 +887,7 @@ function CollectionsTab({
         </ul>
       )}
 
-      <p className="mt-4 text-[11px] leading-5 text-slate-400">
+      <p className="mt-4 text-[11px] leading-5 text-slate-500">
         Her tahsilat aynı işlemde bir finans hareketi (TAHSILAT) üretir ve müvekkil bakiyesine
         yansır. Toplamlar burada değil sunucuda hesaplanır; kayıttan sonra Bakiye kartı yeniden
         okunur.

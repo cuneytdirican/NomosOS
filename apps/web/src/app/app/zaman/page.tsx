@@ -241,7 +241,7 @@ export default function ZamanPage() {
                     <span className="text-sm text-slate-800">{u.name}</span>
                     <span className="text-sm font-semibold tabular-nums text-slate-900">
                       {fmtMinutes(u.minutes)}
-                      <span className="ml-2 text-xs font-normal text-slate-400">
+                      <span className="ml-2 text-xs font-normal text-slate-500">
                         {minutesToHoursLabel(u.minutes)} sa
                       </span>
                     </span>
@@ -327,7 +327,7 @@ export default function ZamanPage() {
                 })}
               </div>
             )}
-            <p className="mt-4 text-[11px] leading-5 text-slate-400">
+            <p className="mt-4 text-[11px] leading-5 text-slate-500">
               Süreler tamsayı dakika olarak saklanır; saat karşılığı yalnızca gösterim içindir.
               Fatura satırındaki saat × tarife hesabı sunucuda yapılır.
             </p>
@@ -436,7 +436,7 @@ function QuickEntryForm({
               {fmtMinutes(m)}
             </button>
           ))}
-          <span className="self-center text-xs text-slate-400">
+          <span className="self-center text-xs text-slate-500">
             = {minutesToHoursLabel(Number.parseInt(minutes, 10) || 0)} sa
           </span>
         </div>

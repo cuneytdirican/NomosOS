@@ -215,7 +215,7 @@ komutlar birebir çalıştırılabilir.
 | `MASTER_ENCRYPTION_KEY` | AI sağlayıcı API anahtarlarını AES-256-GCM ile şifreler. **64 hane hex** | `openssl rand -hex 32` | **§3.3'e bakın — en ağır kayıp senaryosu** |
 | `S3_ENDPOINT` · `S3_ACCESS_KEY` · `S3_SECRET_KEY` · `S3_BUCKET` · `S3_REGION` | Belge deposu | Depo sağlayıcısından | `S3_ENDPOINT` tanımsızsa API yine açılır; belge yükleme hata döner, dilekçe dışa aktarımı base64 gövdeye (INLINE) düşer. MinIO'da `S3_REGION` anlamsızdır; AWS'de gerçek bölge yazılmalıdır |
 | `PLATFORM_REQUIRE_2FA` | Platform panelinde TOTP zorunluluğu | `true` | `NODE_ENV=production` iken `true` değilse **uygulama AÇILMAZ** (`assertTwoFactorPolicy`, `main.ts`). Bu yorum değil kod zorlamasıdır |
-| `WEB_ORIGIN` | CORS beyaz listesi (virgüllü) | `https://app.buro.com,https://admin.buro.local` | **⚠ `.env.example`'da YOKTUR** (⛔ EKSİK). Tanımsızsa varsayılan `http://localhost:3000`'dir → üretimde tarayıcı istekleri CORS'a takılır |
+| `WEB_ORIGIN` | CORS beyaz listesi (virgüllü) | `https://app.buro.com,https://admin.buro.local` | Tanımsızsa varsayılan `http://localhost:3000`'dir → üretimde tarayıcı istekleri CORS'a takılır. `.env.example`'da artık yer alıyor (kısa süre önce eklendi; EKSİK işaretlemesi kalktı) |
 
 ### 3.2 Önerilen / duruma bağlı
 

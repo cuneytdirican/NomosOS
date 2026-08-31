@@ -492,7 +492,7 @@ function CreatePoaModal({
               <p className="text-xs font-medium text-slate-600">
                 Özel yetkiler — vekaletnamede AÇIKÇA yazan maddeleri işaretleyin
               </p>
-              <p className="mt-1 text-[11px] leading-5 text-slate-400">
+              <p className="mt-1 text-[11px] leading-5 text-slate-500">
                 Bu yetkiler açıkça verilmedikçe kullanılamaz. İşaretlenmeyen madde
                 &quot;vekaletnamede yok&quot; olarak kaydedilir ve kapsam analizi eksik yetkileri
                 buna göre gerekçelendirir.
@@ -581,7 +581,7 @@ function ScopeCheckbox({
       <span className="min-w-0">
         {def.label}
         {def.legalBasis && (
-          <span className="ml-1 text-[10px] text-slate-400">({def.legalBasis})</span>
+          <span className="ml-1 text-[10px] text-slate-500">({def.legalBasis})</span>
         )}
       </span>
     </label>
@@ -720,9 +720,9 @@ function ScopeCheckCard({
             {labelOf(POA_VERDICT_LABELS, result.verdict)}
           </Badge>
           {result.checkedAt && (
-            <span className="text-[11px] text-slate-400">{fmtDateTime(result.checkedAt)}</span>
+            <span className="text-[11px] text-slate-500">{fmtDateTime(result.checkedAt)}</span>
           )}
-          {result.model && <span className="text-[11px] text-slate-400">Model: {result.model}</span>}
+          {result.model && <span className="text-[11px] text-slate-500">Model: {result.model}</span>}
         </div>
 
         {/*
@@ -783,7 +783,7 @@ function ScopeCheckCard({
 
         {result.aiCommentary && (
           <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Değerlendirme
             </p>
             <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-slate-700">
@@ -827,7 +827,7 @@ function ScopeCheckCard({
                     <p className="mt-1 text-[11px] leading-5 text-slate-500">{d.reasonLabel}</p>
                   )}
                   {d.quote && (
-                    <p className="mt-1 text-[11px] italic leading-5 text-slate-400">
+                    <p className="mt-1 text-[11px] italic leading-5 text-slate-500">
                       Modelin verdiği alıntı: “{d.quote}”
                     </p>
                   )}

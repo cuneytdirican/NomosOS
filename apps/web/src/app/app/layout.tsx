@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { clearToken, getStoredUser, getToken, type StoredUser } from "@/lib/api";
 import { countPendingProposals } from "@/lib/faz2";
+import { USER_ROLE_LABELS } from "@/lib/labels";
 // Modül 26 — üst çubuktaki kredi göstergesi ve %80 uyarı şeridi.
 import { CreditErrorAlert, CreditMeter, CreditWarningBanner, useWallet } from "@/components/credits";
 // Faz 6 — üst çubuktaki bildirim zili (tüm /app sayfalarında).
@@ -415,7 +416,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <NotificationBell />
           <div className="text-right">
             <p className="text-sm font-medium text-slate-900">{user?.fullName ?? user?.email ?? "Kullanıcı"}</p>
-            {user?.role && <p className="text-xs text-slate-500">{user.role}</p>}
+            {/* İ-20: ham enum basılmaz — Türkçe rol etiketi (biçim: "Avukat"). */}
+            {user?.role && (
+              <p className="text-xs text-slate-500">{USER_ROLE_LABELS[user.role] ?? "Kullanıcı"}</p>
+            )}
           </div>
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-amber-400">
             {(user?.fullName ?? user?.email ?? "?").charAt(0).toUpperCase()}
