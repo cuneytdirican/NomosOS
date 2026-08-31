@@ -15,13 +15,36 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 31 Ağustos 2026, 21:45
+# 🔖 KALDIĞIM YER — 31 Ağustos 2026, 22:30
 
-> **F2 TUR 1 İKİNCİ OTURUM BİTTİ.** E6'nın offeredBy/KK6 ayağı, A1'in politika
-> matrisi + müvekkil dışa aktarması, B1'in ilk kesiti (asenkron kuyruk + DLQ)
-> kapandı; yeni özellikler arayüze taşındı (ajan izleri paneli, "kim sundu"
-> seçicisi, KVKK indirme düğmesi). Otonom kararların tam listesi:
-> `docs/faz2/epics/00-durum-kaydi.md`.
+> **F2 DERİN DENETİMİ BİTTİ** (`docs/DENETIM-RAPORU-F2.md`): 8 alan denetçisi
+> ~787 dosyanın TAMAMINI okudu; 2 KRİTİK · 40 ÖNEMLİ · 66 İYİLEŞTİRME bulgusu
+> üretildi; 14 bulgu adversarial olarak yeniden okunarak doğrulandı.
+> **SIRADAKİ İŞ: DÜZELTME TURU** (raporun "Sıradaki Adımlar" bölümündeki öncelikle).
+
+## Denetim sonuç özeti
+
+- **F2-K-01** — admin panelinde 2FA'lı giriş tamamlanamıyor (istemci `totp`'yi login
+  gövdesine gönderiyor; sunucu `challengeToken` + `POST /auth/2fa/verify` sözleşmesi
+  istiyor) — **ÜRETİMDE PANEL GİRİŞİ YOK**; ilk düzeltme bu.
+- **F2-K-02** — UYAP eklentisinin arka ucu hâlâ yok (belgeli B4 kalemidir) ama eklenti
+  popup'ı "backend hazır değil" durumu göstermiyor.
+- Öne çıkan ÖNEMLİ: admin ayar sayfası yanlış uca gidiyor (PUT /settings vs
+  /settings/:key — hiçbir ayar kaydedilmiyor), denetim izi personel alanları düz
+  bekleniyor/sunucu iç içe döndürüyor, panel kullanıcı bcrypt'i hâlâ 10, /ai/chat
+  guard+ajan izi taşımıyor, vade günü "kaçırılmış" sayılıyor (risk off-by-one),
+  azil istisnası süresi dolmuş vekaletnameyi "aktif" sayıyor, KVKK export manifesti
+  kapsam beyanıyla çelişiyor, e-Fatura satıcı VKN'si gönderilmiyor, iletişim AI
+  önerisi KVKK onay çıkmazında, tabPanelProps hiç kullanılmıyor.
+
+## Düzeltme turu önceliği (rapordan)
+
+1. Sözleşme hizalamaları (küçük, hızlı): K-01, Ö-01, Ö-31, Ö-32, Ö-28, Ö-24, Ö-23, K-02 popup durumu.
+2. Hukuki doğruluk: Ö-13 (off-by-one), Ö-05 (azil), Ö-04 (dayanak görünürlüğü), Ö-08 (duruşma), Ö-14 (para birimi).
+3. Sözleşme genişletmeleri: Ö-11/12, Ö-15, Ö-16/17, Ö-33 (jobs sayfası), Ö-25.
+4. İyileştirmeler: test/CI çıtaları önce (İ-07, İ-62, İ-66), kalan 63 madde kademeli.
+
+## Anlık durum (önceki turların özeti)
 
 ## Bu oturumda yapılanlar
 
