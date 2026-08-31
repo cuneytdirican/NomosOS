@@ -298,6 +298,129 @@ export class ClientsService {
     return client;
   }
 
+  /* ================================================================== *
+   * KVKK m.11 — VERİ ÖZNE ERİŞİM HAKKI: TAM DIŞA AKTARMA (F2 · A1)
+   *
+   * Politika matrisi (docs/kvkk-politika-matrisi.md) K1-K7 satırları:
+   * müvekkil talebi gelince bu büronun MÜVEKKİL HAKKINDA tuttuğu TÜM
+   * veriler TEK yanıtla, makine-okunur JSON olarak verilir. Veri özne
+   * talebe yanıt olarak kullanılır; başlatan AVUKATTIR (veri özne kendisi
+   * portal hesabıyla gelmez — portal evreni yalnız yayınlanmış içerikleri
+   * görür).
+   *
+   * NELER GİRER: kimlik (ham TCKN DAHİL — erişim hakkı kapsamında), ilgili
+   * kişiler, dosyalar ve durumları, süreler, duruşmalar, görevler, notlar,
+   * kararlar, belge LİSTESİ (yalnızca üstveri — belge içerikleri ayrıca
+   * indirilebilir), faturalar, ödemeler, vekaletler, iletişim kayıtları.
+   * NELER GİRMEZ: RAG öbekleri (yeniden üretilebilir), denetim izleri
+   * (başkasının eylem kaydı, ayrı kategori K8), başka müvekkillerin verisi.
+   * ================================================================== */
+
+  /** GET /clients/:id/export — müvekkil bazlı KVKK dışa aktarma. */
+  async exportClientData(user: AuthUser, clientId: string) {
+    // Rol kapısı: talep fiilen avukatça yönetilir; veri özne yanıtı avukat
+    // üzerinden döner (TBB üsul ilkesi — vekil, müvekkilin verisini alır).
+    assertRole(user, ROLE_SETS.ONAY, "müvekkil veri dışa aktarma");
+
+    const client = await this.prisma.client.client.findFirst({
+      where: { id: clientId, tenantId: user.tenantId },
+      include: { contacts: true },
+    });
+    if (!client) {
+      throw new NotFoundException("Müvekkil bulunamadı.");
+    }
+
+    const tenantId = user.tenantId;
+    const [cases, invoices, payments, poas, messages] = await Promise.all([
+      this.prisma.client.case.findMany({
+        where: { tenantId, clientId },
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          fileNumber: true,
+          title: true,
+          type: true,
+          status: true,
+          courtName: true,
+          subject: true,
+          openedAt: true,
+          closedAt: true,
+          createdAt: true,
+          deadlines: {
+            select: { title: true, dueDate: true, status: true, source: true },
+          },
+          hearings: { select: { date: true, status: true, note: true } },
+          tasks: { select: { title: true, status: true, dueDate: true } },
+          notes: { select: { content: true, createdAt: true } },
+          decisions: { select: { type: true, outcome: true, date: true, summary: true } },
+          documents: {
+            select: { id: true, name: true, class: true, mimeType: true, sizeBytes: true, createdAt: true },
+          },
+        },
+      }),
+      this.prisma.client.invoice.findMany({
+        where: { tenantId, clientId },
+        orderBy: { issueDate: "asc" },
+        select: { invoiceNo: true, status: true, issueDate: true, dueDate: true, total: true, currency: true },
+      }),
+      this.prisma.client.payment.findMany({
+        where: { tenantId, clientId },
+        orderBy: { date: "asc" },
+        select: { amount: true, currency: true, date: true, method: true, reference: true, note: true },
+      }),
+      this.prisma.client.powerOfAttorney.findMany({
+        where: { tenantId, clientId },
+        orderBy: { issuedAt: "asc" },
+        select: { number: true, scope: true, issuedAt: true, expiresAt: true, revokedAt: true, type: true },
+      }),
+      this.prisma.client.outboundMessage.findMany({
+        where: { tenantId, clientId },
+        orderBy: { createdAt: "asc" },
+        select: { channel: true, subject: true, finalBody: true, status: true, createdAt: true },
+      }),
+    ]);
+
+    const caseIds = cases.map((c) => c.id);
+    const inbound =
+      caseIds.length > 0
+        ? await this.prisma.client.inboundMessage.findMany({
+            where: { tenantId, caseId: { in: caseIds } },
+            orderBy: { receivedAt: "asc" },
+            select: { channel: true, fromRef: true, subject: true, body: true, receivedAt: true },
+          })
+        : [];
+
+    await this.audit.log({
+      tenantId,
+      userId: user.userId,
+      action: "CLIENT_DATA_EXPORT",
+      entity: "Client",
+      entityId: client.id,
+      detail: `KVKK m.11 erişim hakkı yanıtı — ${cases.length} dosya, ${invoices.length} fatura`,
+    });
+
+    return {
+      // KVKK manifesto: veri özne yanıtı makine-okunur ve eksizsizdir.
+      manifest: {
+        amac: "KVKK m.11 — veri sahibinin erişim hakkı kapsamında tam dışa aktarma",
+        uretimZamani: new Date().toISOString(),
+        buroVeriKategorileri: ["K1", "K2", "K3", "K4", "K5-ustveri", "K6", "K7"],
+        kapsamDisi: [
+          "RAG öbekleri (yeniden üretilebilir)",
+          "denetim izleri (K8 — eylem kaydı)",
+        ],
+        politikaMatrisi: "docs/kvkk-politika-matrisi.md",
+      },
+      musteri: client,
+      dosyalar: cases,
+      faturalar: invoices,
+      odemeler: payments,
+      vekaletler: poas,
+      gidenMesajlar: messages,
+      gelenMesajlar: inbound,
+    };
+  }
+
   private async requireContact(tenantId: string, clientId: string, contactId: string) {
     await this.requireClient(tenantId, clientId);
     const contact = await this.prisma.client.clientContact.findFirst({

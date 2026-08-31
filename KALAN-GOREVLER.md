@@ -15,11 +15,55 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 31 Ağustos 2026, 20:10
+# 🔖 KALDIĞIM YER — 31 Ağustos 2026, 21:45
 
-> **F2 TUR 1 İLK OTURUM BİTTİ.** `docs/faz2/` planına göre T1 kapsamından
-> A0 · A2 · A4 · B2(DOCX+UDF kesiti) · E1 · E2 · E6 + A5/F1/F7 kesitleri KAPANDI.
-> Durum ve kanıtlar: `docs/faz2/epics/00-durum-kaydi.md`.
+> **F2 TUR 1 İKİNCİ OTURUM BİTTİ.** E6'nın offeredBy/KK6 ayağı, A1'in politika
+> matrisi + müvekkil dışa aktarması, B1'in ilk kesiti (asenkron kuyruk + DLQ)
+> kapandı; yeni özellikler arayüze taşındı (ajan izleri paneli, "kim sundu"
+> seçicisi, KVKK indirme düğmesi). Otonom kararların tam listesi:
+> `docs/faz2/epics/00-durum-kaydi.md`.
+
+## Bu oturumda yapılanlar
+
+1. **E6 kalanı** — `Evidence.offeredBy` (BIZ/KARSI_TARAF/ORTAK, migration
+   `20260915090000`): BİZ delilinin BİZ iddiasına CONTRADICTS bağı 422 (KK6);
+   arayüzde "Kim sundu?" seçicisi + envanterde taraf rozeti.
+2. **A1 politika matrisi** — `docs/kvkk-politika-matrisi.md`: 9 veri kategorisi
+   (şemadan türetilmiş) × 9 kural kümesi; Avukatlık K. m.39 ↔ KVKK m.7
+   çelişkisinin çözümü; yeniden açılma tetikleyicileri.
+3. **A1 müvekkil dışa aktarma** — `GET /clients/:id/export` (K1-K7 tek JSON,
+   rol kapısı + denetim izi) + arayüzde indirme düğmesi.
+4. **B1 ilk kesit** — `PipelineQueueService` (BullMQ): 3 deneme üstel geri
+   çekilme, DLQ (takılan koşum BASARISIZ'a çekilir), **yumuşak düşüş**
+   (Redis yoksa senkron — belge yükleme Redise sert bağımlı DEĞİL).
+   Yükleme ve reprocess yollarının ikisi kuyruğa girdi; arayüzde "Kuyruğa
+   alındı" durumu.
+5. **Web** — Ayarlar → AI Kullanımı'nda **ajan koşu izleri paneli** (durum
+   süzgeci, model, süre, PII maskesi); "KUYRUKTA" durum etiketi.
+6. **Kararlar** — B2 OCR: kendi barındırılan tesseract.js (şartname B2
+   dosyasında, bulut REDDEDİLDİ); PoaScopeItem terfisi ve POST /tenants
+   expand-contract planıyla sonraki keside; A3a UETS: PTT süreci tarafımızda
+   başlatılamıyor, izleme dosyasında.
+
+## Doğrulama
+
+- `pnpm build` 12/12 ✅ · `pnpm typecheck` 20/20 ✅ · `pnpm lint` 0/0 ✅
+- **947 test** (api 622 · web 51 · legal-core 79 · legal-ai 76 · udf 44 ·
+  e-signature 37 · uyap 35)
+- Migration 21 → **22** (`20260915090000_f2_e6_delil_taraf`);
+  **sonraki: `20260916090000_…`**
+
+## Sıradaki iş
+
+1. **B2 OCR kesiti** — karar verildi, şartname hazır (tesseract.js + paketli
+   dil verisi + %90 güven kapısı + kuyrukta ücretsiz).
+2. **A1 PoaScopeItem** terfisi (expand-contract, üç servis).
+3. **A1 POST /tenants** + hard-purge → soft-delete dönüşümü (dört-gözle).
+4. **B1 kalanı** — toplu yeniden deneme ucu, korpus ingest ve UYAP senkronun
+   kuyruğa bağlanması.
+5. **A3a UETS** — PTT yazılı görüş talebi (dış takvim).
+
+## Anlık durum (önceki turların özeti)
 
 ## Bu oturumda yapılanlar (F2 · T1)
 

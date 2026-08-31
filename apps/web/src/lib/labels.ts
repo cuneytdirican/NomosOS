@@ -237,6 +237,8 @@ export const PIPELINE_STATUS_LABELS: Record<string, string> = {
   TAMAM: "Analiz tamamlandı",
   BASARISIZ: "Analiz başarısız",
   KISMI: "Kısmen tamamlandı",
+  /** Yükleme anındaki kuyruk yanıtı (F2 · B1) — kalıcı durum değildir. */
+  KUYRUKTA: "Kuyruğa alındı — analiz arka planda çalışacak",
 };
 
 export const PIPELINE_STATUS_TONES: Record<string, BadgeTone> = {
@@ -245,6 +247,7 @@ export const PIPELINE_STATUS_TONES: Record<string, BadgeTone> = {
   TAMAM: "green",
   BASARISIZ: "red",
   KISMI: "yellow",
+  KUYRUKTA: "blue",
 };
 
 export const PROPOSAL_TYPES = [

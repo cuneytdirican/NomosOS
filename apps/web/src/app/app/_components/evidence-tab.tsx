@@ -77,6 +77,19 @@ const LINK_TYPE_LABELS: Record<string, string> = {
   BELIRSIZ: "Yön belirsiz",
 };
 
+/** Delili KİM sundu (F2 · E6 / KK6) — envanter sütunu etiketleri. */
+const EVIDENCE_SIDE_LABELS: Record<string, string> = {
+  BIZ: "Biz",
+  KARSI_TARAF: "Karşı taraf",
+  ORTAK: "Mahkeme/Ortak",
+};
+
+const EVIDENCE_SIDE_TONES: Record<string, "blue" | "red" | "gray"> = {
+  BIZ: "blue",
+  KARSI_TARAF: "red",
+  ORTAK: "gray",
+};
+
 export function EvidenceTab({ caseId, onNotify }: { caseId: string; onNotify: Notify }) {
   const [claims, setClaims] = useState<Claim[]>([]);
   const [evidences, setEvidences] = useState<Evidence[]>([]);
@@ -498,6 +511,7 @@ export function EvidenceTab({ caseId, onNotify }: { caseId: string; onNotify: No
                 <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
                   <th className="py-2 pr-4 font-medium">Delil</th>
                   <th className="py-2 pr-4 font-medium">Tür</th>
+                  <th className="py-2 pr-4 font-medium">Kim sundu</th>
                   <th className="py-2 pr-4 font-medium">Durum</th>
                   <th className="py-2 pr-4 font-medium">Elde edilme</th>
                   <th className="py-2 font-medium">Bağlı iddia</th>
@@ -522,6 +536,15 @@ export function EvidenceTab({ caseId, onNotify }: { caseId: string; onNotify: No
                       <td className="py-3 pr-4 text-slate-600">
                         {EVIDENCE_TYPE_ICONS[e.type] ?? "📎"}{" "}
                         {labelOf(EVIDENCE_TYPE_LABELS, e.type)}
+                      </td>
+                      <td className="py-3 pr-4">
+                        {e.offeredBy ? (
+                          <Badge tone={EVIDENCE_SIDE_TONES[e.offeredBy] ?? "gray"}>
+                            {labelOf(EVIDENCE_SIDE_LABELS, e.offeredBy)}
+                          </Badge>
+                        ) : (
+                          <Badge tone="gray">Belirtilmedi</Badge>
+                        )}
                       </td>
                       <td className="py-3 pr-4">
                         <Badge tone={EVIDENCE_STATUS_TONES[e.status] ?? "gray"}>
@@ -802,6 +825,7 @@ function EvidenceModal({
     witnessName: "",
     obtainedAt: "",
     status: "PLANLANAN",
+    offeredBy: "",
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -815,6 +839,7 @@ function EvidenceModal({
       witnessName: "",
       obtainedAt: "",
       status: "PLANLANAN",
+      offeredBy: "",
     });
     setError(null);
   }, [open]);
@@ -831,6 +856,7 @@ function EvidenceModal({
         witnessName: form.witnessName.trim() || undefined,
         obtainedAt: form.obtainedAt ? new Date(form.obtainedAt).toISOString() : undefined,
         status: form.status,
+        offeredBy: form.offeredBy || undefined,
       });
       await onSaved();
     } catch (err) {
@@ -866,6 +892,20 @@ function EvidenceModal({
             </Select>
           </Field>
         </div>
+        <Field
+          label="Delili kim sundu?"
+          hint="Bizim sunduğumuz delil, kendi iddiamızı çürütüyor olarak bağlanamaz (matris tutarlılık kuralı)."
+        >
+          <Select
+            value={form.offeredBy}
+            onChange={(e) => setForm({ ...form, offeredBy: e.target.value })}
+          >
+            <option value="">Belirtilmedi</option>
+            <option value="BIZ">Biz (dava dosyamızda)</option>
+            <option value="KARSI_TARAF">Karşı taraf</option>
+            <option value="ORTAK">Mahkeme / bilirkişi / ortak</option>
+          </Select>
+        </Field>
         <Field label="Delil adı">
           <Input
             value={form.title}

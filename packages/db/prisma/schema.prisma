@@ -2311,6 +2311,19 @@ enum EvidenceStatus {
 }
 
 /// Delil — matrisin sütunu.
+/// Delilin KİM TARAFINDAN sunulduğu (F2 · E6 kalanı — Modül 14 KK6).
+///
+/// `offeredBy` olmadan "kendi sunduğumuz delil kendi iddiamızı çürütüyor"
+/// tutarsızlığı (KK6) YAPISAL olarak yakalanamıyordu.
+enum EvidenceSide {
+  /// Delili BİZ sunduk (dava dosyamızda yer alıyor).
+  BIZ
+  /// Delili KARŞI TARAF sundu.
+  KARSI_TARAF
+  /// Delil mahkemece/bilirkişince dosyaya girdi ya da taraf belirsiz.
+  ORTAK
+}
+
 model Evidence {
   id          String         @id @default(uuid())
   tenantId    String
@@ -2325,6 +2338,10 @@ model Evidence {
   witnessName String? // TANIK tipinde
   obtainedAt  DateTime?
   status      EvidenceStatus @default(PLANLANAN)
+  /// Delili KİM sundu (F2 · E6): BİZ sunduğumuz delili kendi iddiamıza
+  /// ÇÜRÜTÜCÜ bağlamayız — KK6 kapısı bunu 422 ile reddeder.
+  /// null = eski kayıt; eski deliller "bizim dosyamızda" varsayılır.
+  offeredBy   EvidenceSide?
   createdBy   String // User id
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt

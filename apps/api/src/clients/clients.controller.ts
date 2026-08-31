@@ -62,6 +62,18 @@ export class ClientsController {
     return this.clientsService.listContacts(user.tenantId, id);
   }
 
+  /**
+   * KVKK m.11 — müvekkil bazlı TAM dışa aktarma (F2 · A1).
+   *
+   * Veri özne talebine yanıt olarak avukat başlatır; rol kapısı ve denetim
+   * kaydı serviste (bkz. `exportClientData`). Politika matrisi:
+   * docs/kvkk-politika-matrisi.md.
+   */
+  @Get(":id/export")
+  exportData(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.clientsService.exportClientData(user, id);
+  }
+
   @Post(":id/contacts")
   createContact(
     @CurrentUser() user: AuthUser,

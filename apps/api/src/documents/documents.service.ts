@@ -13,6 +13,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { StorageService } from "../storage/storage.service";
 import { PipelineService } from "../pipeline/pipeline.service";
+import { PipelineQueueService } from "../pipeline/pipeline-queue.service";
 import { CLASS_SOURCE } from "../pipeline/pipeline.types";
 import type { AuthUser } from "../common/types";
 import { assertRole, ROLE_SETS } from "../common/roles";
@@ -57,7 +58,9 @@ export class DocumentsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly storage: StorageService,
-    private readonly pipeline: PipelineService
+    private readonly pipeline: PipelineService,
+    // F2 · B1: asenkron kuyruk (Redis yoksa yumuşak düşüş yukarıda).
+    private readonly pipelineQueue: PipelineQueueService
   ) {}
 
   /* ------------------------------------------------------------------ *
@@ -192,19 +195,30 @@ export class DocumentsService {
       detail: `${document.name} (${file.mimetype}, ${file.size} bayt)`,
     });
 
-    // OTOMATİK AKSİYON HATTI — Faz 2'de senkron. Hattın hatası yüklemeyi
-    // BOZMAZ: belge güvenle saklanmıştır, koşum kaydından yeniden oynatılabilir.
+    // OTOMATİK AKSİYON HATTI — F2 · B1'den itibaren ASYNKRON KUYRUKTA.
+    // Kuyruk (Redis + BullMQ) ayakta değilse veya yazım düşerse SENKRON
+    // düşülür: belge yükleme Redise SERT bağımlı hale gelmez. Hattın hatası
+    // yüklemeyi BOZMAZ: belge güvenle saklanmıştır, koşum kaydından izlenir.
     let pipeline: { runId: string | null; status: string; proposalCount: number } | null = {
       runId: null,
       status: "BASARISIZ",
       proposalCount: 0,
     };
     try {
-      pipeline = await this.pipeline.run({
+      const enqueued = await this.pipelineQueue.enqueue({
         tenantId: user.tenantId,
         userId: user.userId,
         documentId: document.id,
       });
+      if (enqueued.queued) {
+        pipeline = { runId: null, status: "KUYRUKTA", proposalCount: 0 };
+      } else {
+        pipeline = await this.pipeline.run({
+          tenantId: user.tenantId,
+          userId: user.userId,
+          documentId: document.id,
+        });
+      }
     } catch (err) {
       this.logger.warn(`Belge hattı koşulamadı (${document.id}): ${(err as Error).message}`);
     }
@@ -501,11 +515,19 @@ export class DocumentsService {
     assertRole(user, ROLE_SETS.HUKUKI, "belge hattını yeniden çalıştırma");
     const existing = await this.requireDocument(user.tenantId, id);
 
-    const pipeline = await this.pipeline.run({
+    // F2 · B1: yeniden oynatma da kuyruğa girer; kuyruk kapalıysa senkron.
+    const enqueued = await this.pipelineQueue.enqueue({
       tenantId: user.tenantId,
       userId: user.userId,
       documentId: id,
     });
+    const pipeline = enqueued.queued
+      ? { runId: null as string | null, status: "KUYRUKTA", proposalCount: 0 }
+      : await this.pipeline.run({
+          tenantId: user.tenantId,
+          userId: user.userId,
+          documentId: id,
+        });
 
     await this.audit.log({
       tenantId: user.tenantId,
@@ -513,7 +535,9 @@ export class DocumentsService {
       action: "DOCUMENT_PIPELINE_REPLAY",
       entity: "Document",
       entityId: id,
-      detail: `${existing.name} — koşum ${pipeline.runId ?? "-"} (${pipeline.status})`,
+      detail: `${existing.name} — ${
+        enqueued.queued ? `kuyruğa alındı (${enqueued.jobId ?? "-"})` : `koşum ${pipeline.runId ?? "-"} (${pipeline.status})`
+      }`,
     });
     return pipeline;
   }

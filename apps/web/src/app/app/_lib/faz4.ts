@@ -576,6 +576,8 @@ export function createEvidence(
     documentId?: string;
     obtainedAt?: string;
     status?: string;
+    /** Delili kim sundu (F2 · E6): BIZ · KARSI_TARAF · ORTAK. */
+    offeredBy?: string;
   },
 ): Promise<Evidence> {
   return api<Evidence>(FAZ4_ROUTES.evidenceList(caseId), { method: "POST", body });

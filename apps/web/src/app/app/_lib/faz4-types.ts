@@ -272,6 +272,8 @@ export interface Evidence {
   witnessName?: string | null;
   obtainedAt?: string | null;
   status: EvidenceStatus | string;
+  /** Delili kim sundu (F2 · E6): "BIZ" | "KARSI_TARAF" | "ORTAK" | null. */
+  offeredBy?: string | null;
   createdAt?: string;
   claimLinks?: ClaimEvidenceLink[];
 }

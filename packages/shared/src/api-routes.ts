@@ -109,6 +109,8 @@ export const CLIENTS_ROUTES = {
   create: "/clients",
   detail: (id: string) => `/clients/${id}`,
   tckn: (id: string) => `/clients/${id}/tckn`,
+  /** KVKK m.11 — müvekkil bazlı tam dışa aktarma (F2 · A1). */
+  export: (id: string) => `/clients/${id}/export`,
   contacts: (id: string) => `/clients/${id}/contacts`,
   contact: (id: string, contactId: string) => `/clients/${id}/contacts/${contactId}`,
 } as const;

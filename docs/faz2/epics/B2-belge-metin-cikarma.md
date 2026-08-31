@@ -106,6 +106,26 @@ tespiti çalışır, öneriler onay kuyruğuna düşer. Yükleme ekranı kısıt
 |---|---|---|---|
 | S1 | OCR kendi barındırılan motor mu, kiracı bazlı bulut mu? | Ürün + Hukuk | OCR kesiti açılamaz; Ö-24 vaat kısıtı sürer |
 
+## Ürün Kararı (otonom, 31.08.2026): OCR
+
+**Karar: KENDİ BARINDIRILAN OCR.** Bulut OCR ASLA kullanılmaz — belge içeriği
+taranmış evraktır; vekâlet konusu dava içeriğini üçüncü taraf bulut hizmetine
+göndermek hem KVKK hem meslek sırrı (Avukatlık K. m.36) açısından savunulamaz.
+
+Teknik seçim (uygulama kesitinin şartnamesı):
+1. **Motor:** `tesseract.js` (WASM, süreç içinde — dış ağ çağrısı YOK).
+2. **Dil verisi:** Türkçe `traineddata` İMAJA PAKETLENİR; çalışma zamanında
+   CDN'den indirilmez (varsayılan `langPath` engellenir — veri yerleşikliği).
+3. **Doğruluk kapısı:** doğrulanabilir sayfa başına en az %90 karakter güveni
+   altındaki sayfa "okunamadı" sayılır — düşük güvenli metin uydurma metinden
+   farksızdır; KURAL DEĞİŞMEZ: metin uydurulmaz.
+4. **Maliyet:** OCR işi B1 kuyruğunda koşar (bloklayan CPU işi), krediye
+   bağlanmaz (belge hattı ücretsizdir — ürün kararı).
+5. **Vaat:** motor canlıya alınana kadar arayüz/pazarlama "taranmış evrak
+   yükleyin sistem okur" DEMEZ (Ö-24 kısıtı sürer; yükleme ekranı notu).
+
+Bu karar verildi; uygulama bir sonraki kesittir.
+
 ## Vaat Kısıtı
 
 > **Bu epic kapanana kadar arayüzde ve tanıtım sitesinde SÖYLENEMEZ:**

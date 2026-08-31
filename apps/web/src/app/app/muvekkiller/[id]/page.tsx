@@ -147,6 +147,38 @@ export default function MuvekkilDetayPage({ params }: { params: Promise<{ id: st
     }
   }, [id, revealedTckn]);
 
+  /**
+   * KVKK m.11 — tam veri dışa aktarma (F2 · A1). Sunucu TÜM kategorileri
+   * (K1-K7) tek JSON'da toplar; indirme denetim kaydına yazılır. Dosya
+   * tarayıcıda kaydedilir (JSON, makine-okunur — veri özne talebine ek olarak
+   * iletilir).
+   */
+  const [exporting, setExporting] = useState(false);
+  const exportClientData = useCallback(async () => {
+    setExporting(true);
+    try {
+      const res = await api<Record<string, unknown>>(`/clients/${id}/export`);
+      const blob = new Blob([JSON.stringify(res, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const safeName = (client?.name ?? "mustery").replace(/[\\/:*?"<>|]/g, "_");
+      a.download = `kvkk-aktarma-${safeName}-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      push("KVKK veri dışa aktarma indirildi (denetim kaydına yazıldı).", "success");
+    } catch (err) {
+      push(
+        err instanceof ApiError ? err.message : "Dışa aktarma başarısız.",
+        "error",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [id, client?.name, push]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -278,6 +310,21 @@ export default function MuvekkilDetayPage({ params }: { params: Promise<{ id: st
           tone="gold"
           hint="Bakiye sunucuda deterministik hesaplanır"
         />
+      </div>
+
+      {/* KVKK m.11 — veri özne erişim hakkı: tam dışa aktarma (F2 · A1).
+          Rol kapısı sunucudadır (ADMIN/PARTNER); her indirme denetim kaydına
+          yazılır. Politika matrisi: docs/kvkk-politika-matrisi.md */}
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => void exportClientData()}
+          disabled={exporting}
+          className="text-xs font-medium text-slate-500 underline decoration-dotted hover:text-slate-800 disabled:opacity-50"
+          title="Müvekkil hakkında büronun tuttuğu tüm veriyi KVKK m.11 kapsamında JSON olarak indirir. İndirme denetim kaydına yazılır."
+        >
+          {exporting ? "Hazırlanıyor…" : "KVKK veri dışa aktarma (JSON)"}
+        </button>
       </div>
 
       <Tabs tabs={TABS} active={tab} onChange={setTab} ariaLabel="Müvekkil sekmeleri" />

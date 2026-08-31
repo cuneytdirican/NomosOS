@@ -192,6 +192,7 @@ export class EvidenceService {
         witnessName: input.witnessName ?? null,
         obtainedAt: input.obtainedAt ?? null,
         status: input.status ?? "PLANLANAN",
+        offeredBy: input.offeredBy ?? null,
         createdBy: user.userId,
       },
     });
@@ -240,6 +241,7 @@ export class EvidenceService {
         ...(input.witnessName !== undefined ? { witnessName: input.witnessName ?? null } : {}),
         ...(input.obtainedAt !== undefined ? { obtainedAt: input.obtainedAt ?? null } : {}),
         ...(input.status !== undefined ? { status: input.status } : {}),
+        ...(input.offeredBy !== undefined ? { offeredBy: input.offeredBy ?? null } : {}),
       },
     });
 
@@ -296,6 +298,24 @@ export class EvidenceService {
     if (claim.caseId !== evidence.caseId) {
       throw new UnprocessableEntityException(
         "İddia ile delil aynı dosyaya ait değil; farklı dosyaların kayıtları bağlanamaz.",
+      );
+    }
+
+    // KK6 KAPISI (F2 · E6, Modül 14): BİZ iddiamızı, BİZİM sunduğumuz bir
+    // delil ÇÜRÜTEMİZ. Bu bağlantı mantıksal çelişkidir — kendi lehimize
+    // sunacağımız delili kendi iddiamıza karşı kullanmıyoruz; karşı tarafın
+    // çürütmesi zaten KARSI_TARAF işaretli deliller üzerinden kurulur.
+    // Kapı yalnız BİZ iddiası + BİZ delili + CONTRADICTS üçlüsünde kapanır:
+    // karşı taraf delilinin BİZ iddiasını çürütmesi NORMALDİR (matrisin işi),
+    // tarafı işaretlenmemiş (null) eski deliller de esnek kalır.
+    if (
+      claim.side === "BIZ" &&
+      (input.linkType ?? "SUPPORTS") === "CONTRADICTS" &&
+      evidence.offeredBy === "BIZ"
+    ) {
+      throw new UnprocessableEntityException(
+        "Bu delil BİZ tarafının sunduğu olarak işaretli; kendi iddiamızı çürüttüğü bağlanamaz. " +
+        "Delil tarafını kontrol edin: delil karşı tarafa aitse offeredBy=KARSI_TARAF yapın.",
       );
     }
 

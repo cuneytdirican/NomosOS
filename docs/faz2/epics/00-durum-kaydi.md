@@ -1,4 +1,4 @@
-# F2 Durum Kaydı — 31 Ağustos 2026 (Tur 1, ilk oturum)
+# F2 Durum Kaydı — 31 Ağustos 2026 (Tur 1, ikinci oturum)
 
 > Bu dosya, tam epic dosyası yazılmayan ancak KAPANMIŞ kesitlerin kaydıdır.
 > Her satır kanıtını (test dosyası, commit) taşır. Tam epic dosyaları:
@@ -6,7 +6,26 @@
 > [E2](E2-gece-risk-skorlama.md) · [B2](B2-belge-metin-cikarma.md) ·
 > [E1](E1-ajan-gozlemlenebilirlik.md)
 
-## Kapanan kesitler
+## İkinci oturumda kapananlar (otonom kararlar)
+
+| Epic | Kesit | Kanıt (test) | Not |
+|---|---|---|---|
+| E6 kalanı | `Evidence.offeredBy` (BIZ/KARSI_TARAF/ORTAK) + **KK6 422 kapısı** + arayüzde "Kim sundu" seçicisi ve taraf rozeti | `evidence-matrix.test.ts` (13) | Migration `20260915090000_f2_e6_delil_tarf` |
+| A1 | **Politika matrisi** (şema-güdümlü, 9 kategori × 9 kural kümesi; Avukatlık K. m.39 ↔ KVKK m.7 çelişkisinin çözümü) | `docs/kvkk-politika-matrisi.md` | A1'in "ilk task kod değil" gereğinin karşılığı |
+| A1 | **Müvekkil bazlı tam dışa aktarma**: `GET /clients/:id/export` (K1-K7 tek JSON; rol kapısı + denetim izi) + arayüzde indirme düğmesi | tip denetimi + canlı duman (aşağıda) | KVKK m.11 erişim hakkı yanıtı |
+| B1 ilk kesit | **Asenkron belge hattı**: BullMQ kuyruğu + 3 deneme üstel geri çekilme + DLQ (takılan koşum BASARISIZ'a çekilir) + **yumuşak düşüş** (Redis yoksa senkron — yükleme Redise sert bağımlı değil) | `pipeline-queue.test.ts` (8) | Yükleme VE reprocess yollarının ikisi de kuyruğa gider |
+| Web | **Ajan koşu izleri paneli** (Ayarlar → AI Kullanımı): ajan, görev, durum, süre, model, PII maskesi; durum süzgeci | Web build + canlı 200 | E1'in "iz görünümü" çıkış kriteri |
+
+## İkinci oturumda verilen otonom kararlar (uygulama bekleyen)
+
+| Karar | İçerik | Nereye |
+|---|---|---|
+| **B2 OCR** | Kendi barındırılan OCR (tesseract.js, imaja paketli dil verisi, %90 güven kapısı, kuyrukta, ücretsiz); bulut OCR REDDEDİLDİ | [B2 dosyasında şartname](B2-belge-metin-cikarma.md) |
+| **A1 PoaScopeItem** | JSON→entity terfisi ertelendi; expand-contract planı: (1) entity + geri-doldurma göçü, (2) çift yazım, (3) okuma yollarının geçişi, (4) JSON'un düşürülmesi. Üç servisi (poa/poa-scope/poa-warnings) birden değiştirmek tek oturumda kalite riski taşıdığı için bilinçli olarak sonraki tura bırakıldı | Sonraki kesit |
+| **A1 POST /tenants + hard-purge→soft-delete** | Platform kiracı oluşturma ve `DELETE /tenants/:id`'nin Modül 25 "soft-delete + anonimleştirme kuyruğu"na dönüşümü A1'in kalan ayağı — platform onay akışıyla (dört-göz) birlikte tasarlanmalı | Sonraki kesit |
+| **A3a UETS** | Tedarik süreç izleme dosyası: PTT'ye yazılı görüş talebi gönderilmedi — bu tarafınca başlatılamaz (takvim üçüncü tarafta); istek şablonu hazırlanmalı | Süreç (kod değil) |
+
+## Kapanan kesitler (birinci oturum)
 
 | Epic | Kesit | Kanıt (test) | Not |
 |---|---|---|---|
@@ -32,8 +51,9 @@
 
 | Epic | Açık iş | Engel |
 |---|---|---|
-| A1 | KVKK veri özne hakları: politika matrisi, `POST /tenants/:id/export`, müvekkil bazlı dışa aktarma, `PoaScopeItem` entity'ye terfi | L(65) — politika matrisi ilk iş |
-| B1 | BullMQ asenkron altyapı (DLQ, geri basınç, kısmi başarısızlık) | L(55) |
-| B2 | OCR kesiti | Ürün kararı S1 (kendi barındırılan OCR) |
+| A1 | `PoaScopeItem` JSON→entity terfisi (expand-contract planı yukarıda) | M — üç servisin birden geçişi |
+| A1 | `POST /tenants` (platform kiracı oluşturma) + `DELETE /tenants/:id`'nin soft-delete + anonimleştirme kuyruğuna dönüşümü | M — dört-göz onay akışıyla tasarlanmalı |
+| B1 | Kuyruk kalanı: toplu yeniden deneme ucu, geri basınç, korpus ingest ve UYAP senkronun kuyruğa bağlanması | L |
+| B2 | OCR uygulama kesiti (karar verildi, şartname B2 dosyasında) | M — tesseract.js + paketli dil verisi |
 | A3a | UETS tedarik + PTT yazılı görüşü | Takvim bizde değil — GÜN 1 başlamalı |
 | E3/E4/E5, B3–B6, C1–C5, D1–D6, F2–F6 | Yol haritası tur dağılımına göre | T1'den sonra |

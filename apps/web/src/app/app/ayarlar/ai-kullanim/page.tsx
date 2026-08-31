@@ -541,6 +541,9 @@ export default function AiKullanimPage() {
         )}
       </Card>
 
+      {/* ---------------- Ajan koşu izleri (F2 · E1) ---------------- */}
+      <AgentRunsCard />
+
       {/* ---------------- Satın alma onayı ---------------- */}
       <Modal
         open={buyKey !== null}
@@ -591,5 +594,171 @@ function Header() {
         işlemler aşağıdaki fiyat listesinde yeşil işaretlidir.
       </p>
     </header>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * AJAN KOŞU İZLERİ (F2 · E1 — GET /ai/agent-runs)
+ *
+ * "Hangi ajan ne zaman ne yaptı" sorusunun görünümü. İçerik DEĞİL ÖZET
+ * saklanır (KVKK): girdi özeti maskelenmiş kısa alıntı taşır, tam metin
+ * hiçbir koşulda kayda girmez. Rol kapısı yoktur — iz KİRACININDIR.
+ * ------------------------------------------------------------------ */
+
+interface AgentRunRow {
+  id: string;
+  agentKey: string;
+  taskType: string;
+  status: string;
+  model: string | null;
+  providerType: string | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  durationMs: number | null;
+  piiMasked: boolean;
+  errorMessage: string | null;
+  createdAt: string;
+}
+
+const AGENT_RUN_STATUS: Record<string, { label: string; tone: "green" | "red" | "gray" }> = {
+  BASARILI: { label: "Başarılı", tone: "green" },
+  BASARISIZ: { label: "Sağlayıcı arızası", tone: "red" },
+  REDDEDILDI: { label: "Çıktı reddedildi", tone: "gray" },
+};
+
+const AGENT_LABELS: Record<string, string> = {
+  DOSYA_ASISTANI: "Dosya Asistanı",
+  BELGE_HATTI: "Belge → Aksiyon Hattı",
+  DURUSMA_HAZIRLIK: "Duruşma Hazırlığı",
+  ICRA_COPILOT: "İcra Copilot",
+  DILEKCE_STUDYO: "Dilekçe Stüdyosu",
+  ICTIHAT_ARASTIRMA: "İçtihat Araştırma",
+  MUVEKKIL_ILETISIM: "Müvekkil İletişimi",
+  CAKISMA_KONTROL: "Çıkar Çatışması Kontrolü",
+  Vekaletname: "Vekaletname Kapsam Analizi",
+  VEKALETNAME: "Vekaletname Kapsam Analizi",
+  BILIRKISI: "Bilirkişi Karşılaştırma",
+  DELIL_MATRIS: "Delil Matrisi",
+  STRATEJI_SIMULASYON: "Strateji ve Simülasyon",
+  RISK_DEGERLENDIRME: "Risk Değerlendirmesi",
+  FINANS_OZET: "Müvekkil Finans Özeti",
+  SOZLESME_INCELEME: "Sözleşme İnceleme",
+  RAPOR_YORUM: "Rapor Yorumu",
+  GENEL: "Genel",
+};
+
+function AgentRunsCard() {
+  const [rows, setRows] = useState<AgentRunRow[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { api } = await import("@/lib/api");
+      const res = await api<{ rows: AgentRunRow[]; total: number }>(
+        `/ai/agent-runs?take=25${statusFilter ? `&status=${statusFilter}` : ""}`,
+      );
+      setRows(res.rows);
+      setTotal(res.total);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ajan izleri yüklenemedi.");
+    } finally {
+      setLoading(false);
+    }
+  }, [statusFilter]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return (
+    <Card
+      title="Ajan koşu izleri"
+      action={
+        <div className="flex items-center gap-2">
+          <select
+            aria-label="İz durumu süz"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="rounded border border-slate-300 px-2 py-1 text-xs"
+          >
+            <option value="">Tümü</option>
+            <option value="BASARILI">Başarılı</option>
+            <option value="BASARISIZ">Sağlayıcı arızası</option>
+            <option value="REDDEDILDI">Çıktı reddedildi</option>
+          </select>
+          <span className="text-xs text-slate-500">{total} kayıt</span>
+        </div>
+      }
+    >
+      <p className="-mx-5 -mt-5 mb-4 border-b border-slate-100 px-5 py-2.5 text-xs text-slate-500">
+        Her AI çağrısının izi: ajan, görev, süre ve durum. Girdi yalnız{" "}
+        <strong>maskelenmiş özet</strong> olarak kaydedilir — belge ve yazışma
+        metinleri izlere yazılmaz (KVKK).
+      </p>
+      {loading ? (
+        <p className="py-6 text-center text-sm text-slate-500">Yükleniyor…</p>
+      ) : error ? (
+        <ErrorBox message={error} />
+      ) : !rows || rows.length === 0 ? (
+        <EmptyState message="Henüz ajan koşusu kaydı yok. Bir AI işlemi başlattığınızda izler burada listelenir." />
+      ) : (
+        <div className="-mx-5 -mb-5 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-5 py-2 font-medium">Ajan</th>
+                <th className="px-5 py-2 font-medium">Durum</th>
+                <th className="px-5 py-2 font-medium">Model</th>
+                <th className="px-5 py-2 text-right font-medium">Süre</th>
+                <th className="px-5 py-2 font-medium">PII maskesi</th>
+                <th className="px-5 py-2 font-medium">Zaman</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.map((r) => {
+                const st = AGENT_RUN_STATUS[r.status] ?? { label: r.status, tone: "gray" as const };
+                return (
+                  <tr key={r.id}>
+                    <td className="px-5 py-2">
+                      <p className="font-medium text-slate-800">
+                        {AGENT_LABELS[r.agentKey] ?? r.agentKey}
+                      </p>
+                      <p className="font-mono text-[11px] text-slate-500">{r.taskType}</p>
+                    </td>
+                    <td className="px-5 py-2">
+                      <Badge tone={st.tone}>{st.label}</Badge>
+                      {r.errorMessage && (
+                        <p className="mt-0.5 max-w-xs truncate text-[11px] text-slate-500" title={r.errorMessage}>
+                          {r.errorMessage}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-5 py-2 font-mono text-[11px] text-slate-600">
+                      {r.model ?? "—"}
+                    </td>
+                    <td className="px-5 py-2 text-right tabular-nums text-slate-600">
+                      {r.durationMs === null ? "—" : `${(r.durationMs / 1000).toFixed(1)} sn`}
+                    </td>
+                    <td className="px-5 py-2">
+                      <Badge tone={r.piiMasked ? "blue" : "gray"}>
+                        {r.piiMasked ? "maskeli gönderim" : "maske gerekmedi"}
+                      </Badge>
+                    </td>
+                    <td className="px-5 py-2 text-xs text-slate-500">
+                      {new Date(r.createdAt).toLocaleString("tr-TR")}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
   );
 }

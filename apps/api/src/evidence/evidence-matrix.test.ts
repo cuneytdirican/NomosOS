@@ -10,6 +10,7 @@
  * iddiayı çürütülmüş işaretler, BELIRSIZ taşımaz.
  */
 
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { EvidenceMatrixService } from "./evidence-matrix.service";
 
@@ -151,18 +152,56 @@ describe("E6: bağ yönü matris hesabına girer (Ö-30 kullanım ayağı)", () 
 });
 
 describe("E6: bağ kurma yolu yönü kayda yazıyor", () => {
-  it("linkEvidence linkType alanını kalıcılaştırıyor (kaynak taahhüdü)", async () => {
-    const fs = await import("node:fs");
-    const src = fs.readFileSync(`${process.cwd()}/src/evidence/evidence.service.ts`, "utf-8");
+  it("linkEvidence linkType alanını kalıcılaştırıyor (kaynak taahhüdü)", () => {
+    const src = readFileSync(`${process.cwd()}/src/evidence/evidence.service.ts`, "utf-8");
     expect(src).toContain('linkType: input.linkType ?? "SUPPORTS"');
     expect(src).toContain("yön=${input.linkType ??");
   });
 
-  it("tanım sözlüğü çürütülen ve yön açıklamalarını taşıyor", async () => {
-    const fs = await import("node:fs");
-    const src = fs.readFileSync(`${process.cwd()}/src/evidence/evidence-matrix.service.ts`, "utf-8");
+  it("tanım sözlüğü çürütülen ve yön açıklamalarını taşıyor", () => {
+    const src = readFileSync(`${process.cwd()}/src/evidence/evidence-matrix.service.ts`, "utf-8");
     expect(src).toContain("contradicted:");
     expect(src).toContain("linkTypes:");
     expect(src).toContain("CONTRADICTS bağı taşımaz");
+  });
+});
+
+describe("E6/KK6: delil tarafı (offeredBy) ve tutarlılık kapısı", () => {
+  // readFileSync zaten dosya başında içe aktarıldı; require kullanılmaz.
+  const service = readFileSync(`${process.cwd()}/src/evidence/evidence.service.ts`, "utf-8");
+  const dto = readFileSync(`${process.cwd()}/src/evidence/evidence.dto.ts`, "utf-8");
+
+  it("KK6: BİZ iddiası + BİZ delili + CONTRADICTS → 422 reddi kodda var", () => {
+    expect(service).toContain('claim.side === "BIZ"');
+    expect(service).toContain('(input.linkType ?? "SUPPORTS") === "CONTRADICTS"');
+    expect(service).toContain('evidence.offeredBy === "BIZ"');
+    expect(service).toContain("UnprocessableEntityException");
+  });
+
+  it("KK6 yalnız üçlü BİRLİKTE kapanır — karşı taraf delili çürütebilir", () => {
+    // Kapı BİZ delilini hedefler; KARSI_TARAF/null delilin çürütme bağı serbesttir.
+    expect(service).toContain("evidence.offeredBy === \"BIZ\"");
+    expect(service).not.toContain('evidence.offeredBy === "KARSI_TARAF")');
+  });
+
+  it("offeredBy hem oluşturmada hem güncellemede kabul edilir", () => {
+    expect(service).toContain("offeredBy: input.offeredBy ?? null");
+    expect(service).toContain("{ offeredBy: input.offeredBy ?? null }");
+    expect(dto).toContain("offeredBy: z.enum(EVIDENCE_SIDES");
+  });
+
+  it("EVIDENCE_SIDES kataloğu Prisma enum'uyla birebir", () => {
+    expect(dto).toContain(
+      'export const EVIDENCE_SIDES = ["BIZ", "KARSI_TARAF", "ORTAK"] as const;',
+    );
+  });
+
+  it("şema: Evidence.offeredBy nullable — göç eski kayıtlara varsayım basmaz", () => {
+    const schema = readFileSync(
+      `${process.cwd()}/../../packages/db/prisma/schema.prisma`,
+      "utf-8",
+    );
+    expect(schema).toMatch(/offeredBy\s+EvidenceSide\?/);
+    expect(schema).toContain("enum EvidenceSide");
   });
 });

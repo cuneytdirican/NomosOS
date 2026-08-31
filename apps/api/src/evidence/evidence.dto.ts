@@ -25,6 +25,8 @@ export const EVIDENCE_TYPES = [
 export const EVIDENCE_STATUSES = ["PLANLANAN", "TOPLANDI", "SUNULDU", "KABUL", "RED"] as const;
 /** Bağın YÖNÜ — Prisma `EvidenceLinkType` enum'unun birebir kopyası (F2 · E6). */
 export const EVIDENCE_LINK_TYPES = ["SUPPORTS", "CONTRADICTS", "BELIRSIZ"] as const;
+/** Delilin KİM TARAFINDAN sunulduğu — Prisma `EvidenceSide` (F2 · E6 / KK6). */
+export const EVIDENCE_SIDES = ["BIZ", "KARSI_TARAF", "ORTAK"] as const;
 
 /** BELGE benzeri tipler: `documentId` beklenir (uyarı üretilir, engel değil). */
 export const DOCUMENT_BACKED_TYPES = ["BELGE", "FOTOGRAF", "VIDEO", "SES"] as const;
@@ -76,6 +78,12 @@ export const createEvidenceSchema = z
     witnessName: nullableText(200, "Tanık adı"),
     obtainedAt: nullableDate("Elde edilme tarihi"),
     status: z.enum(EVIDENCE_STATUSES).optional(),
+    /** Delili KİM sundu (F2 · E6/KK6): verilmezse null kalır (taraf belirsiz). */
+    offeredBy: z.enum(EVIDENCE_SIDES, {
+      errorMap: () => ({
+        message: `Delil tarafı şunlardan biri olmalıdır: ${EVIDENCE_SIDES.join(", ")}`,
+      }),
+    }).optional(),
   })
   .superRefine((value, ctx) => {
     /**
@@ -102,6 +110,8 @@ export const updateEvidenceSchema = z
     witnessName: nullableText(200, "Tanık adı"),
     obtainedAt: nullableDate("Elde edilme tarihi"),
     status: z.enum(EVIDENCE_STATUSES).optional(),
+    /** Taraf güncellenebilir (F2 · E6): null = taraf işaretini kaldır. */
+    offeredBy: z.enum(EVIDENCE_SIDES).nullish(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "Güncellenecek en az bir alan gerekir." });
 export type UpdateEvidenceInput = z.infer<typeof updateEvidenceSchema>;
