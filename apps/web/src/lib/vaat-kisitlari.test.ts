@@ -94,3 +94,66 @@ describe("Ö-24: OCR yok — metin katmanı kısıtı görünür", () => {
     expect(codeOnly(CONTENT)).toContain("metin katmanı olan belgelerde");
   });
 });
+
+/* ------------------------------------------------------------------ *
+ * F2 YENİ ÖZELLİKLERİN PAZARLAMA KARŞILIĞI — eklenen her özellik
+ * tanıtım sitesinde anlatılmalı (E1/E2/E6/A1/B2 karşılıkları).
+ * ------------------------------------------------------------------ */
+
+describe("F2 özellikleri tanıtım sitesinde anlatılıyor", () => {
+  it("Delil Matrisi kartı: bağ yönü + KK6 tutarlılık kuralı", () => {
+    expect(codeOnly(CONTENT)).toContain('"Delil Matrisi"');
+    expect(codeOnly(CONTENT)).toContain("destekler mi, çürütür mü");
+    expect(codeOnly(CONTENT)).toContain("tutarlılık kuralı");
+    // Birebir: docs/08 tablosunda da var.
+    expect(MARKETING_DOC).toContain("**Delil Matrisi**");
+  });
+
+  it("Risk Değerlendirmesi kartı: deterministik taban + gece tazeleme", () => {
+    expect(codeOnly(CONTENT)).toContain('"Risk Değerlendirmesi"');
+    expect(codeOnly(CONTENT)).toContain("deterministik risk skoru");
+    expect(codeOnly(CONTENT)).toContain("her gece otomatik tazelenir");
+    expect(MARKETING_DOC).toContain("**Risk Değerlendirmesi**");
+  });
+
+  it("modül kart sayısı 14 — yeni kartlar eklendi", () => {
+    const titles = (CONTENT.match(/title: "([^"]+)",\n {6}text:/g) ?? []).length;
+    expect(titles).toBeGreaterThanOrEqual(14);
+    expect(MARKETING_DOC).toContain("Modüller (14 kart)");
+  });
+
+  it("DOCX/UDF desteği belge hattı adımında sayılıyor (B2)", () => {
+    expect(codeOnly(CONTENT)).toContain("PDF, Word (DOCX), UDF ve düz metin");
+  });
+
+  it("güvenlik sayfasında ajan izleri anlatılıyor — yalnız maskeli özet (E1)", () => {
+    expect(codeOnly(CONTENT)).toContain('"ai-cagri-izleri"');
+    expect(codeOnly(CONTENT)).toContain("maskelenmiş kısa özet");
+    // KVKK sözleşmesi: izlerde TAM METİN yok iddiası metinle eşleşiyor.
+    expect(codeOnly(CONTENT)).toContain("belge veya yazışma metni saklanmaz");
+  });
+
+  it("güvenlik sayfasında KVKK m.11 dışa aktarma anlatılıyor (A1)", () => {
+    expect(codeOnly(CONTENT)).toContain('"veri-ozne-haklari"');
+    expect(codeOnly(CONTENT)).toContain("KVKK m.11");
+    expect(codeOnly(CONTENT)).toContain("Her dışa aktarma denetim izine yazılır");
+  });
+
+  it("SSS'de ajan izleri ve müvekkil veri dışa aktarma soruları var", () => {
+    expect(codeOnly(CONTENT)).toContain("Yapay zekânın ne yaptığını görebilir miyiz?");
+    expect(codeOnly(CONTENT)).toContain("Müvekkil verilerini talep üzerine alabilir miyiz?");
+  });
+});
+
+describe("F2-Ö-28: 429 mesajı ölü adres göstermez", () => {
+  it("demo-talebi 429 metni gerçek demo hattını verir", () => {
+    const route = read("src", "app", "api", "demo-talebi", "route.ts");
+    expect(route).toContain("demo@nomosos.com");
+    expect(route).not.toContain("nomosos.example");
+  });
+
+  it("demo gündemi UYAP'ı kurulmuş özellik gibi anlatmıyor (İ-54)", () => {
+    expect(codeOnly(CONTENT)).toContain("UYAP eklentisi ve veri aktarım yol haritası");
+    expect(codeOnly(CONTENT)).not.toContain("aktarımının nasıl kurulduğu");
+  });
+});

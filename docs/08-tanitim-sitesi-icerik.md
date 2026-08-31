@@ -138,7 +138,7 @@ kağıt zemine oturmuş.
 2. **Dağınık bilgi** — "Müvekkil aradığında 15 dakika dosya incelemek zorunda kalıyorsunuz."
 3. **Görünmeyen tahsilat** — "Hangi müvekkilden ne kadar alacağınız var, tek ekranda görünmüyor."
 
-### 3.3 Modüller (12 kart)
+### 3.3 Modüller (14 kart)
 
 > **Üst etiket:** MODÜLLER
 > **Başlık:** Büronun tamamı, tek sistemde.
@@ -156,6 +156,8 @@ kağıt zemine oturmuş.
 | **Faturalama** | Ücret sözleşmeleri, zaman kaydı, zaman kayıtlarından fatura üretimi, e-Fatura/e-Arşiv altyapısı. |
 | **Dilekçe Stüdyosu** | Dosya bilgilerinden bölüm bölüm dilekçe taslağı. UDF formatında dışa aktarım. İçtihat atıfları kayıt üzerinden doğrulanmadan "hazır" olmaz; mevzuat atıfları tanınır ama doğrulanmaz. |
 | **İçtihat Araştırma** | Karar arama, özetleme ve dosyaya emsal olarak bağlama. Her içtihat atfı kayıt üzerinden doğrulanır. |
+| **Delil Matrisi** | İddia × delil matrisi: her bağın yönü (destekler mi, çürütür mü) ve gücü kayda geçer. Bizim sunduğumuz delili kendi iddiamıza çürütücü olarak bağlamazsınız — tutarlılık kuralı. |
+| **Risk Değerlendirmesi** | Yedi boyutta deterministik risk skoru; yapay zekâ katkısı sınırlı ve her zaman görünür. Skorların kural tabanı her gece otomatik tazelenir. |
 | **UYAP Köprüsü (geliştirme aşamasında)** | Tarayıcı eklentisiyle dosya, safahat ve evrak aktarımı hedefleniyor. UYAP'ın yerine geçmez; üzerine bir operasyon katmanı kurar. |
 
 ### 3.4 Öne çıkan: Süre Motoru
@@ -202,7 +204,7 @@ Akış görseli (dikey adımlar, altın çizgiyle bağlı):
 Evrak sisteme girer  (yükleme; UYAP eklentisi: geliştirme aşamasında)
         ↓
 Metin çıkarılır ve sınıflandırılır  (ara karar · bilirkişi raporu · tebligat …
-        — metin katmanı olan belgelerde)
+        PDF, Word (DOCX), UDF ve düz metin — metin katmanı olan belgelerde)
         ↓
 İlgili dosyayla eşleştirilir
         ↓
@@ -303,9 +305,16 @@ Bölümler:
    işleyendir; sözleşme setine veri işleme protokolü dahildir.
 4. **Denetim izi** — Kim, hangi kayda, ne zaman erişti; hangi veri hangi yapay zekâ
    sağlayıcısına gitti — tamamı kayıt altındadır.
-5. **Erişim yetkileri** — Partner, avukat, stajyer ve sekreter rolleri için ayrı yetki
+5. **Yapay zekâ çağrı izleri** — Her yapay zekâ çağrısının izi tutulur: hangi ajan, hangi
+   görev, hangi model, ne kadar sürdü ve hangi durumla döndü. İzlerde belge veya yazışma
+   metni saklanmaz; girdiler yalnız **kişisel verileri maskelenmiş kısa özet** olarak kayda girer.
+6. **Veri özne hakları: dışa aktarma** — Bir müvekkilin büronuzda tuttuğunuz tüm verisi,
+   KVKK m.11 erişim hakkı kapsamında makine-okunur tek dosyada dışa aktarılır: kimlik,
+   dosyalar, süreler, duruşmalar, belge listesi, faturalar, ödemeler, vekâletler ve
+   iletişim kayıtları. **Her dışa aktarma denetim izine yazılır.**
+7. **Erişim yetkileri** — Partner, avukat, stajyer ve sekreter rolleri için ayrı yetki
    düzeyleri; yetkiler sunucu tarafında uygulanır.
-6. **Destek erişimi** — NomosOS ekibi verilerinize erişemez. Zorunlu bir destek talebinde
+8. **Destek erişimi** — NomosOS ekibi verilerinize erişemez. Zorunlu bir destek talebinde
    erişim; gerekçeli, süreli (en fazla 24 saat), kişisel verileri maskeli ve iki tarafta
    da kayıtlıdır. Sizin adınıza sisteme girme (impersonation) özelliği **yoktur.**
 
@@ -355,26 +364,33 @@ Alt not: *Fiyatlar için demo talebi oluşturun; büronuzun büyüklüğüne gö
 2. **Yapay zekâ müvekkil verilerimizi öğrenir mi?** — Hayır. Verileriniz model eğitiminde
    kullanılmaz. Yapay zekâya gönderilen metinlerde kişisel veriler tespit edilip
    maskelenir ve gönderim onayınıza sunulur.
-3. **Kendi yapay zekâ aboneliğimizi kullanabilir miyiz?** — Evet. Anthropic, OpenAI,
+3. **Yapay zekânın ne yaptığını görebilir miyiz?** — Evet. Her yapay zekâ çağrısının izi
+   kayıt altındadır: hangi ajan, hangi görev, hangi model, ne kadar sürdü ve hangi
+   durumla döndü. İzlerde belge veya yazışma metni saklanmaz; girdiler yalnız maskelenmiş
+   kısa özet olarak kayda girer.
+4. **Müvekkil verilerini talep üzerine alabilir miyiz?** — Evet. Bir müvekkilin tüm verisi,
+   KVKK m.11 erişim hakkı kapsamında makine-okunur tek dosyada dışa aktarılır ve her
+   dışa aktarma denetim izine yazılır.
+5. **Kendi yapay zekâ aboneliğimizi kullanabilir miyiz?** — Evet. Anthropic, OpenAI,
    Gemini, OpenAI uyumlu servisler, Ollama ile yerel model veya kendi özel sunucunuz
    desteklenir. Bu durumda kullanım sınırı uygulanmaz ve aboneliğinizde indirim yapılır.
-4. **Süreleri sistem mi hesaplıyor? Güvenilir mi?** — Süre hesabı yapay zekâ ile değil,
+6. **Süreleri sistem mi hesaplıyor? Güvenilir mi?** — Süre hesabı yapay zekâ ile değil,
    mevzuat hükümleri, tebligat yöntemi ve resmî/adli tatil takvimi kullanılarak
    deterministik olarak yapılır. Hesabın her adımı gösterilir. Nihai kontrol ve
    sorumluluk avukata aittir.
-5. **UYAP entegrasyonu nasıl çalışıyor?** — Tarayıcı eklentisi, sizin kendi UYAP
+7. **UYAP entegrasyonu nasıl çalışıyor?** — Tarayıcı eklentisi, sizin kendi UYAP
    oturumunuz üzerinden çalışır. UYAP şifreniz veya e-imzanız NomosOS'a aktarılmaz.
    Sistem sizin adınıza evrak göndermez.
-6. **Yapay zekânın ürettiği dilekçeye güvenebilir miyim?** — Üretilen her metin bir
+8. **Yapay zekânın ürettiği dilekçeye güvenebilir miyim?** — Üretilen her metin bir
    taslaktır ve avukat denetiminden geçmelidir. Atıf yapılan içtihatlar kayıt üzerinden
    doğrulanır; doğrulanmamış atıf içeren dilekçe "hazır" durumuna geçemez.
-7. **Mevcut dosyalarımızı aktarabilir miyiz?** — Evet. UYAP eklentisiyle dosya, safahat
+9. **Mevcut dosyalarımızı aktarabilir miyiz?** — Evet. UYAP eklentisiyle dosya, safahat
    ve evrak aktarımı yapılır; ayrıca toplu veri aktarımı için destek sağlanır.
-8. **Ekibimizin farklı yetkileri olabilir mi?** — Evet. Partner, avukat, stajyer ve
-   sekreter rolleri için ayrı yetki düzeyleri tanımlıdır ve sunucu tarafında uygulanır.
-9. **İnternet olmadan çalışır mı?** — NomosOS bulut tabanlıdır. Kurumsal planda büro
-   içi kurulum seçeneği değerlendirilir.
-10. **Sözleşmeyi istediğimiz zaman sonlandırabilir miyiz?** — Evet. Sonlandırma
+10. **Ekibimizin farklı yetkileri olabilir mi?** — Evet. Partner, avukat, stajyer ve
+    sekreter rolleri için ayrı yetki düzeyleri tanımlıdır ve sunucu tarafında uygulanır.
+11. **İnternet olmadan çalışır mı?** — NomosOS bulut tabanlıdır. Kurumsal planda büro
+    içi kurulum seçeneği değerlendirilir.
+12. **Sözleşmeyi istediğimiz zaman sonlandırabilir miyiz?** — Evet. Sonlandırma
     durumunda bütün dosya ve belge verileriniz standart biçimde dışa aktarılır.
 
 ### 3.12 Kapanış / Demo

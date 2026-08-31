@@ -84,7 +84,9 @@ export async function POST(request: Request) {
         ok: false,
         hata:
           "Kısa sürede çok fazla talep gönderildi. Lütfen 10 dakika sonra tekrar deneyin " +
-          "veya doğrudan info@nomosos.example adresine yazın.",
+          // Gerçek demo hattı (content.ts demo.fallback.mailTo ile aynı adres) —
+          // ölü adres göstermek hız sınırına takılan kullanıcıyı çıkmaza sokar (F2-Ö-28).
+          "veya doğrudan demo@nomosos.com adresine yazın.",
       },
       { status: 429 },
     );

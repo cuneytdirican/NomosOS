@@ -166,6 +166,14 @@ export const modules = {
       text: "Karar arama, özetleme ve dosyaya emsal olarak bağlama. Her içtihat atfı kayıt üzerinden doğrulanır.",
     },
     {
+      title: "Delil Matrisi",
+      text: "İddia × delil matrisi: her bağın yönü (destekler mi, çürütür mü) ve gücü kayda geçer. Bizim sunduğumuz delili kendi iddiamıza çürütücü olarak bağlamazsınız — tutarlılık kuralı.",
+    },
+    {
+      title: "Risk Değerlendirmesi",
+      text: "Yedi boyutta deterministik risk skoru; yapay zekâ katkısı sınırlı ve her zaman görünür. Skorların kural tabanı her gece otomatik tazelenir.",
+    },
+    {
       title: "UYAP Köprüsü (geliştirme aşamasında)",
       text: "Tarayıcı eklentisiyle dosya, safahat ve evrak aktarımı hedefleniyor. UYAP'ın yerine geçmez; üzerine bir operasyon katmanı kurar.",
     },
@@ -220,7 +228,8 @@ export const pipeline = {
     { title: "Evrak sisteme girer", detail: "yükleme (UYAP eklentisi: geliştirme aşamasında)" },
     {
       title: "Metin çıkarılır ve sınıflandırılır",
-      detail: "ara karar · bilirkişi raporu · tebligat … (metin katmanı olan belgelerde)",
+      detail:
+        "ara karar · bilirkişi raporu · tebligat … PDF, Word (DOCX), UDF ve düz metin (metin katmanı olan belgelerde)",
     },
     { title: "İlgili dosyayla eşleştirilir", detail: "" },
     { title: "Süre başlatan olaylar tespit edilir", detail: "kural motoru hesaplar" },
@@ -348,6 +357,14 @@ export const faq = {
       a: "Hayır. Verileriniz model eğitiminde kullanılmaz. Yapay zekâya gönderilen metinlerde kişisel veriler tespit edilip maskelenir ve gönderim onayınıza sunulur.",
     },
     {
+      q: "Yapay zekânın ne yaptığını görebilir miyiz?",
+      a: "Evet. Her yapay zekâ çağrısının izi kayıt altındadır: hangi ajan, hangi görev, hangi model, ne kadar sürdü ve hangi durumla döndü. İzlerde belge veya yazışma metni saklanmaz; girdiler yalnız maskelenmiş kısa özet olarak kayda girer.",
+    },
+    {
+      q: "Müvekkil verilerini talep üzerine alabilir miyiz?",
+      a: "Evet. Bir müvekkilin tüm verisi, KVKK m.11 erişim hakkı kapsamında makine-okunur tek dosyada dışa aktarılır ve her dışa aktarma denetim izine yazılır.",
+    },
+    {
       q: "Kendi yapay zekâ aboneliğimizi kullanabilir miyiz?",
       a: "Evet. Anthropic, OpenAI, Gemini, OpenAI uyumlu servisler, Ollama ile yerel model veya kendi özel sunucunuz desteklenir. Bu durumda kullanım sınırı uygulanmaz ve aboneliğinizde indirim yapılır.",
     },
@@ -471,6 +488,18 @@ export const security = {
       title: "Denetim izi",
       text: "Kim, hangi kayda, ne zaman erişti; hangi veri hangi yapay zekâ sağlayıcısına gitti — tamamı kayıt altındadır.",
       strong: "",
+    },
+    {
+      id: "ai-cagri-izleri",
+      title: "Yapay zekâ çağrı izleri",
+      text: "Her yapay zekâ çağrısının izi tutulur: hangi ajan, hangi görev, hangi model, ne kadar sürdü ve hangi durumla döndü. İzlerde belge veya yazışma metni saklanmaz; girdiler yalnız kişisel verileri maskelenmiş kısa özet olarak kayda girer.",
+      strong: "kişisel verileri maskelenmiş kısa özet olarak kayda girer.",
+    },
+    {
+      id: "veri-ozne-haklari",
+      title: "Veri özne hakları: dışa aktarma",
+      text: "Bir müvekkilin büronuzda tuttuğunuz tüm verisi, KVKK m.11 erişim hakkı kapsamında makine-okunur tek dosyada dışa aktarılır: kimlik, dosyalar, süreler, duruşmalar, belge listesi, faturalar, ödemeler, vekâletler ve iletişim kayıtları. Her dışa aktarma denetim izine yazılır.",
+      strong: "Her dışa aktarma denetim izine yazılır.",
     },
     {
       id: "erisim-yetkileri",
@@ -630,7 +659,7 @@ export const demo = {
     title: "Demoda ne konuşuyoruz?",
     items: [
       "Büronuzun dosya yapısı ve mevcut süre takibi düzeni",
-      "UYAP eklentisiyle veri aktarımının nasıl kurulduğu",
+      "UYAP eklentisi ve veri aktarım yol haritası",
       "Yapay zekâ sağlayıcısı tercihi: bulut, yerel model veya kendi sunucunuz",
       "Ekip rolleri, onay akışı ve yetki düzeyleri",
     ],
