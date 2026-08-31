@@ -1,0 +1,134 @@
+name: Güvenlik
+
+# NomosOS güvenlik hattı. Üç bağımsız iş:
+#   1. bagimlilik-denetimi  → pnpm audit (raporlar, hattı KIRMAZ)
+#   2. sir-taramasi         → depoya sızmış sır arar (bulgu varsa BAŞARISIZ)
+#   3. codeql               → statik kod analizi (javascript-typescript)
+#
+# Hukuk bürosu verisi KVKK kapsamında yüksek hassasiyetlidir; sır sızıntısı
+# tüm kiracıların LLM sağlayıcı anahtarlarını ve belge deposunu etkileyebilir.
+# Bu yüzden sır taraması bilinçli olarak "engelleyici"dir.
+
+on:
+  schedule:
+    # Her pazartesi 04:00 UTC (Türkiye saatiyle 07:00)
+    - cron: '0 4 * * 1'
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: guvenlik-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  bagimlilik-denetimi:
+    name: Bağımlılık denetimi (pnpm audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Depoyu çek
+        uses: actions/checkout@v4
+
+      - name: pnpm 9 kurulumu
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Node 22 kurulumu ve pnpm store önbelleği
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Bağımlılıkları kur (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: pnpm audit --audit-level=high (raporlar, kırmaz)
+        id: audit
+        run: |
+          set -uo pipefail
+          set +e
+          pnpm audit --audit-level=high > "$RUNNER_TEMP/audit.txt" 2>&1
+          kod=$?
+          pnpm audit --audit-level=high --json > "$RUNNER_TEMP/audit.json" 2>/dev/null
+          set -e
+
+          cat "$RUNNER_TEMP/audit.txt"
+
+          sayilar="$(node -e '
+            const fs = require("fs");
+            try {
+              const j = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/audit.json", "utf8"));
+              const v = (j.metadata && j.metadata.vulnerabilities) || {};
+              const p = (k) => v[k] || 0;
+              console.log(`kritik=${p("critical")} yuksek=${p("high")} orta=${p("moderate")} dusuk=${p("low")}`);
+            } catch (e) {
+              console.log("kritik=? yuksek=? orta=? dusuk=? (JSON ayrıştırılamadı)");
+            }
+          ' 2>/dev/null || echo "kritik=? yuksek=? orta=? dusuk=?")"
+
+          {
+            echo "## Bağımlılık denetimi (pnpm audit)"
+            echo ""
+            echo "Eşik: **high**. Bu iş bilinçli olarak hattı kırmaz; bulguları raporlar."
+            echo ""
+            echo "**Özet:** \`$sayilar\`"
+            echo ""
+            echo "<details><summary>pnpm audit çıktısı</summary>"
+            echo ""
+            echo '```'
+            head -c 60000 "$RUNNER_TEMP/audit.txt"
+            echo '```'
+            echo ""
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$kod" -ne 0 ]; then
+            echo "::warning::pnpm audit 'high' veya üzeri açık bildirdi ($sayilar). Yükseltme veya gerekçeli istisna gerekir."
+          else
+            echo "high ve üzeri seviyede açık bulunmadı."
+          fi
+          exit 0
+
+  # ---------------------------------------------------------------------------
+  sir-taramasi:
+    name: Sır taraması (engelleyici)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Depoyu çek
+        uses: actions/checkout@v4
+
+      - name: Çalışma ağacında sır ara
+        run: bash .github/scripts/scan-secrets.sh
+
+  # ---------------------------------------------------------------------------
+  codeql:
+    name: CodeQL analizi (javascript-typescript)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    steps:
+      - name: Depoyu çek
+        uses: actions/checkout@v4
+
+      - name: CodeQL başlat
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          config-file: ./.github/codeql/codeql-config.yml
+          queries: security-and-quality
+
+      - name: CodeQL analizini çalıştır
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:javascript-typescript'

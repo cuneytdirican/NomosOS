@@ -1,0 +1,372 @@
+name: CI
+
+# NomosOS sürekli entegrasyon hattı.
+# Her push ve her PR'da: bağımlılık kurulumu → derleme → tip denetimi → testler
+# → migration bütünlüğü (boş PostgreSQL'e uygulama + şema/migration ayrışması).
+#
+# Buradaki tüm gizli görünümlü değerler CI'ya ÖZEL, atılabilir sahte değerlerdir;
+# üretimde kullanılmazlar ve depoda gerçek bir sır bulunmaz.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  CI: 'true'
+  FORCE_COLOR: '0'
+  NEXT_TELEMETRY_DISABLED: '1'
+  TURBO_TELEMETRY_DISABLED: '1'
+  DO_NOT_TRACK: '1'
+
+  # --- Servis konteynerindeki PostgreSQL ---
+  DATABASE_URL: 'postgresql://nomosos:nomosos@localhost:5432/nomosos_ci'
+  # prisma migrate diff --from-migrations için gereken boş gölge veritabanı.
+  SHADOW_DATABASE_URL: 'postgresql://nomosos:nomosos@localhost:5432/nomosos_ci_shadow'
+  # Gölge veritabanını oluşturmak için bağlanılan yönetim veritabanı.
+  ADMIN_DATABASE_URL: 'postgresql://nomosos:nomosos@localhost:5432/postgres'
+
+  # --- Uygulama derlemesinin beklediği değişkenler (hepsi sahte/CI'ya özel) ---
+  API_PORT: '3001'
+  # JWT_SECRET en az 32 karakter olmalı, yoksa uygulama açılmaz.
+  JWT_SECRET: 'ci-ortami-icin-atilabilir-sahte-jwt-anahtari-0123456789'
+  # 32 baytlık hex; gerçek anahtar DEĞİLDİR, yalnızca biçim doğrulaması içindir.
+  MASTER_ENCRYPTION_KEY: '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff'
+  NEXT_PUBLIC_API_URL: 'http://localhost:3001'
+  NEXT_PUBLIC_ADMIN_API_URL: 'http://localhost:3001'
+  S3_BUCKET: 'nomosos-belgeler'
+  S3_REGION: 'us-east-1'
+
+jobs:
+  dogrula:
+    name: Derle · Tip denetle · Test et · Migration bütünlüğü
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: nomosos
+          POSTGRES_PASSWORD: nomosos
+          POSTGRES_DB: nomosos_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U nomosos -d nomosos_ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    steps:
+      - name: Depoyu çek
+        uses: actions/checkout@v4
+        with:
+          # Migration sıralama kontrolü, PR'ın taban dalıyla karşılaştırma yapar.
+          fetch-depth: 0
+
+      - name: pnpm 9 kurulumu (package.json packageManager alanından)
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Node 22 kurulumu ve pnpm store önbelleği
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: pnpm store yolunu ve sürümleri raporla
+        run: |
+          echo "node    : $(node --version)"
+          echo "pnpm    : $(pnpm --version)"
+          echo "store   : $(pnpm store path)"
+
+      - name: Bağımlılıkları kur (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: PostgreSQL hazır olana kadar bekle
+        run: |
+          for i in $(seq 1 30); do
+            if pg_isready -h localhost -p 5432 -U nomosos -d nomosos_ci >/dev/null 2>&1; then
+              echo "PostgreSQL hazır (deneme $i)."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::PostgreSQL servis konteyneri 60 saniyede hazır olmadı."
+          exit 1
+
+      - name: Gölge veritabanını oluştur (migrate diff için)
+        run: |
+          psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -c "DROP DATABASE IF EXISTS nomosos_ci_shadow;" \
+            -c "CREATE DATABASE nomosos_ci_shadow OWNER nomosos;"
+          echo "nomosos_ci_shadow oluşturuldu."
+
+      - name: Derle (pnpm build)
+        id: derleme
+        run: |
+          set -o pipefail
+          pnpm build 2>&1 | tee "$RUNNER_TEMP/build.log"
+
+      - name: Tip denetimi (pnpm typecheck)
+        run: |
+          set -o pipefail
+          pnpm typecheck 2>&1 | tee "$RUNNER_TEMP/typecheck.log"
+
+      - name: Testler (pnpm -r test)
+        id: testler
+        run: |
+          set -o pipefail
+          pnpm -r test 2>&1 | tee "$RUNNER_TEMP/test.log"
+
+      - name: Migration'ları boş veritabanına uygula (pnpm db:deploy)
+        run: |
+          set -o pipefail
+          pnpm db:deploy 2>&1 | tee "$RUNNER_TEMP/deploy.log"
+
+      - name: Migration durumu (prisma migrate status)
+        run: |
+          set -o pipefail
+          pnpm --filter @nomosos/db exec prisma migrate status 2>&1 | tee "$RUNNER_TEMP/status.log"
+
+      - name: Şema/migration ayrışması (drift) kontrolü
+        run: |
+          set -o pipefail
+          set +e
+          pnpm --filter @nomosos/db exec prisma migrate diff \
+            --from-migrations ./prisma/migrations \
+            --to-schema-datamodel ./prisma/schema.prisma \
+            --shadow-database-url "$SHADOW_DATABASE_URL" \
+            --script \
+            --exit-code > "$RUNNER_TEMP/drift.sql" 2> "$RUNNER_TEMP/drift.err"
+          kod=$?
+          set -e
+
+          case "$kod" in
+            0)
+              echo "Ayrışma yok: migration'lar schema.prisma ile birebir örtüşüyor."
+              ;;
+            2)
+              echo "::error::Şema ile migration'lar AYRIŞMIŞ (drift). schema.prisma değişmiş ama migration eklenmemiş görünüyor."
+              echo "--- Eksik olan SQL (migration'a dönüştürülmesi gereken fark) ---"
+              cat "$RUNNER_TEMP/drift.sql"
+              echo "---------------------------------------------------------------"
+              echo "Düzeltmek için: pnpm db:migrate  (yeni migration üretir ve commit edilir)"
+              exit 1
+              ;;
+            *)
+              echo "::error::prisma migrate diff çalıştırılamadı (çıkış kodu $kod)."
+              cat "$RUNNER_TEMP/drift.err"
+              exit 1
+              ;;
+          esac
+
+      - name: Migration klasör hijyeni ve sıralaması
+        run: |
+          set -euo pipefail
+          KOK="packages/db/prisma/migrations"
+          hata=0
+          onceki=""
+
+          if [ ! -d "$KOK" ]; then
+            echo "::error::$KOK bulunamadı."
+            exit 1
+          fi
+
+          klasorler="$(cd "$KOK" && find . -maxdepth 1 -mindepth 1 -type d -printf '%f\n' | LC_ALL=C sort)"
+
+          if [ -z "$klasorler" ]; then
+            echo "::error::Hiç migration klasörü yok."
+            exit 1
+          fi
+
+          while IFS= read -r d; do
+            [ -z "$d" ] && continue
+
+            if ! printf '%s' "$d" | grep -qE '^[0-9]{14}_[A-Za-z0-9_]+$'; then
+              echo "::error file=$KOK/$d::Migration klasör adı <14 haneli zaman damgası>_<ad> biçiminde değil: $d"
+              hata=1
+              continue
+            fi
+
+            if [ ! -f "$KOK/$d/migration.sql" ]; then
+              echo "::error file=$KOK/$d::migration.sql dosyası yok."
+              hata=1
+            fi
+
+            damga="${d%%_*}"
+            if [ -n "$onceki" ] && [ "$damga" = "$onceki" ]; then
+              echo "::error file=$KOK/$d::Yinelenen zaman damgası: $damga (uygulama sırası belirsizleşir)."
+              hata=1
+            fi
+            onceki="$damga"
+          done <<< "$klasorler"
+
+          # Diskteki migration kümesi ile veritabanına uygulanan küme birebir aynı olmalı.
+          uygulanan="$(psql "$DATABASE_URL" -At -v ON_ERROR_STOP=1 \
+            -c "SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL ORDER BY migration_name;")"
+
+          if [ "$uygulanan" != "$klasorler" ]; then
+            echo "::error::Uygulanan migration kümesi diskteki klasörlerle örtüşmüyor."
+            echo "--- Diskte ---"; printf '%s\n' "$klasorler"
+            echo "--- Uygulanan ---"; printf '%s\n' "$uygulanan"
+            hata=1
+          fi
+
+          if [ "$hata" -ne 0 ]; then
+            exit 1
+          fi
+          echo "Migration klasörleri düzgün, sıralama benzersiz ve uygulanan küme birebir örtüşüyor."
+
+      - name: Yeni migration'lar taban dalın SONRASINA yerleşiyor mu (PR)
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          KOK="packages/db/prisma/migrations"
+          taban="${{ github.base_ref }}"
+
+          if ! git fetch --no-tags --quiet origin "+refs/heads/${taban}:refs/remotes/origin/${taban}"; then
+            echo "::warning::Taban dal (${taban}) çekilemedi; sıralama karşılaştırması atlandı."
+            exit 0
+          fi
+
+          tabandakiler="$(git ls-tree -d --name-only "origin/${taban}" "$KOK/" 2>/dev/null | sed "s#^$KOK/##" | LC_ALL=C sort || true)"
+          buradakiler="$(cd "$KOK" && find . -maxdepth 1 -mindepth 1 -type d -printf '%f\n' | LC_ALL=C sort)"
+
+          if [ -z "$tabandakiler" ]; then
+            echo "Taban dalda migration yok; karşılaştırılacak bir şey yok."
+            exit 0
+          fi
+
+          taban_en_son="$(printf '%s\n' "$tabandakiler" | tail -n 1)"
+          yeniler="$(comm -13 <(printf '%s\n' "$tabandakiler") <(printf '%s\n' "$buradakiler"))"
+
+          if [ -z "$yeniler" ]; then
+            echo "Bu PR yeni migration eklemiyor."
+            exit 0
+          fi
+
+          hata=0
+          while IFS= read -r y; do
+            [ -z "$y" ] && continue
+            if [ "$y" \< "$taban_en_son" ] || [ "$y" = "$taban_en_son" ]; then
+              echo "::error file=$KOK/$y::Yeni migration ($y) taban daldaki son migration'dan ($taban_en_son) ÖNCE sıralanıyor. Zaman damgası ileri alınmalı, aksi hâlde tazelenen ortamlarda farklı sırayla uygulanır."
+              hata=1
+            else
+              echo "OK: $y  >  $taban_en_son"
+            fi
+          done <<< "$yeniler"
+
+          # Taban dalda var olan bir migration bu dalda değiştirilmiş mi?
+          degisenler="$(git diff --name-only "origin/${taban}...HEAD" -- "$KOK/" || true)"
+          while IFS= read -r yol; do
+            [ -z "$yol" ] && continue
+            ad="$(printf '%s' "$yol" | sed "s#^$KOK/##" | cut -d/ -f1)"
+            if printf '%s\n' "$tabandakiler" | grep -qx "$ad"; then
+              echo "::error file=$yol::Zaten yayımlanmış bir migration ($ad) değiştirilmiş. Uygulanmış migration'lar değiştirilemez; yeni bir migration eklenmelidir."
+              hata=1
+            fi
+          done <<< "$degisenler"
+
+          [ "$hata" -eq 0 ] || exit 1
+
+      - name: İş özetini yaz
+        if: always()
+        run: |
+          set -uo pipefail
+          temiz() { sed -r 's/\x1b\[[0-9;]*[A-Za-z]//g' "$1" 2>/dev/null || true; }
+
+          {
+            echo "## NomosOS CI özeti"
+            echo ""
+            echo "| Aşama | Sonuç |"
+            echo "| --- | --- |"
+            echo "| Derleme (\`pnpm build\`) | ${{ steps.derleme.outcome || 'çalışmadı' }} |"
+            echo "| Testler (\`pnpm -r test\`) | ${{ steps.testler.outcome || 'çalışmadı' }} |"
+            echo "| İşin genel durumu | ${{ job.status }} |"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          {
+            echo "### Test sonuçları"
+            echo ""
+            if [ -f "$RUNNER_TEMP/test.log" ]; then
+              ozet="$(temiz "$RUNNER_TEMP/test.log" | grep -E '^[[:space:]]*(Test Files|Tests|Duration|Start at)[[:space:]]+' || true)"
+              if [ -n "$ozet" ]; then
+                echo '```'
+                printf '%s\n' "$ozet"
+                echo '```'
+              else
+                echo "Vitest özeti ayrıştırılamadı; son 40 satır:"
+                echo '```'
+                temiz "$RUNNER_TEMP/test.log" | tail -n 40
+                echo '```'
+              fi
+              basarisiz="$(temiz "$RUNNER_TEMP/test.log" | grep -E '(FAIL|✗|×)' | head -n 30 || true)"
+              if [ -n "$basarisiz" ]; then
+                echo ""
+                echo "<details><summary>Başarısız testler</summary>"
+                echo ""
+                echo '```'
+                printf '%s\n' "$basarisiz"
+                echo '```'
+                echo ""
+                echo "</details>"
+              fi
+            else
+              echo "_Test adımı çalışmadı._"
+            fi
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          {
+            echo "### Derleme çıktıları"
+            echo ""
+            if [ -f "$RUNNER_TEMP/build.log" ]; then
+              echo '```'
+              temiz "$RUNNER_TEMP/build.log" | grep -E 'Tasks:|Cached:|Time:|Successful' | tail -n 10
+              echo '```'
+            fi
+            echo ""
+            echo "| Paket | Çıktı | Boyut |"
+            echo "| --- | --- | --- |"
+            for d in packages/*/dist apps/*/dist apps/*/.next apps/uyap-extension/dist; do
+              if [ -d "$d" ]; then
+                boyut="$(du -sh "$d" 2>/dev/null | cut -f1)"
+                paket="$(printf '%s' "$d" | cut -d/ -f1-2)"
+                cikti="$(basename "$d")"
+                echo "| \`$paket\` | \`$cikti\` | ${boyut:-?} |"
+              fi
+            done | LC_ALL=C sort -u
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          {
+            echo "### Migration bütünlüğü"
+            echo ""
+            if [ -f "$RUNNER_TEMP/status.log" ]; then
+              echo '```'
+              temiz "$RUNNER_TEMP/status.log" | tail -n 20
+              echo '```'
+            else
+              echo "_Migration adımları çalışmadı._"
+            fi
+            if [ -s "$RUNNER_TEMP/drift.sql" ]; then
+              echo ""
+              echo "> Şema ile migration'lar arasında fark bulundu:"
+              echo ""
+              echo '```sql'
+              head -n 100 "$RUNNER_TEMP/drift.sql"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
