@@ -20,6 +20,8 @@ duruşma, süre, görev, icra ve finans yönetimini tek platformda toplayan, üz
 | [docs/06-yol-haritasi.md](docs/06-yol-haritasi.md) | Faz 0-6 geliştirme sırası ve çıkış kriterleri |
 | [docs/07-arayuz-ve-pazarlama-sitesi.md](docs/07-arayuz-ve-pazarlama-sitesi.md) | UI tasarım sistemi + tanıtım sitesi spec'i |
 | [docs/08-tanitim-sitesi-icerik.md](docs/08-tanitim-sitesi-icerik.md) | Tanıtım sitesi: hukuk estetiği tasarım dili + birebir Türkçe metin |
+| [docs/test-ortami.md](docs/test-ortami.md) | **Test ortamı: adresler, giriş bilgileri, Docker ile çalıştırma, denenecekler** |
+| [docs/uretim-dagitimi.md](docs/uretim-dagitimi.md) | Üretim dağıtımı: topolojiler, sırlar, yedekleme, KVKK yükümlülükleri |
 | [docs/moduller/](docs/moduller/) | 26 modülün ayrıntılı spesifikasyonu (25: platform yönetim paneli, 26: AI kota/kredi sistemi) |
 | [docs/99-kaynak-gereksinimler.md](docs/99-kaynak-gereksinimler.md) | Kaynak gereksinim analizi (tüm spec'lerin dayanağı) |
 
@@ -55,8 +57,15 @@ pnpm db:seed
 pnpm dev
 ```
 
-Giriş bilgileri (seed): `partner@demo.nomosos.local` / `Demo1234!`
-(veya `avukat@demo.nomosos.local` / `Demo1234!`)
+Giriş bilgileri (seed) — **tüm demo hesapların parolası `Demo1234!`**:
+
+| Uygulama | Adres | Hesap |
+|---|---|---|
+| Büro paneli | :3000/giris | `partner@` · `avukat@` · `sekreter@` · `stajyer@demo.nomosos.local` |
+| Platform paneli | :3002/giris | `superadmin@nomosos.local` · `analist@nomosos.local` (salt-okur) |
+| Müvekkil portalı | :3003/giris | `portal@demo.nomosos.local` |
+
+Ayrıntı, denenecek davranışlar ve bilinen sınırlar: **[docs/test-ortami.md](docs/test-ortami.md)**
 
 ### AI'ı denemek
 
