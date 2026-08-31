@@ -37,6 +37,7 @@ import { paged, resolvePage } from "../common/pagination";
 import type { AuthUser } from "../common/types";
 import { StrategyService } from "../strategy/strategy.service";
 import type { RunSimulationInput } from "./simulation.dto";
+import { DROP_REASON_LABELS, filterByVerbatimQuote } from "../common/ai/quote-guard";
 import {
   SIMULATION_MODES,
   SIMULATION_MODE_KEYS,
@@ -144,6 +145,34 @@ export class SimulationService {
     });
     const durationMs = Date.now() - startedAt;
 
+    /**
+     * ALINTI DOĞRULAMA KAPISI — KARSI_DILEKCE_ZAYIFLIK (denetim bulgusu Ö-20).
+     *
+     * `weaknesses[].quote` ŞEMADA ZORUNLUDUR (`z.string().min(1)`) ve prompt
+     * "metinde geçmeyen bir cümleyi alıntılamak en ağır hatadır" der — ama
+     * hiçbir yerde DOĞRULANMIYORDU. Model karşı dilekçede bulunmayan bir
+     * "çelişki alıntısı" ürettiğinde, avukat replik dilekçesinde o cümleyi
+     * karşı tarafa atfediyordu.
+     *
+     * `filterByVerbatimQuote` bu depoda zaten yazılıydı ama `simulation/`
+     * altında sıfır kez çağrılıyordu. Arama, modelin GÖRDÜĞÜ metinde
+     * (`documentText` — maskeliyse maskeli hâlinde) yapılır.
+     */
+    let quoteDropped: ReturnType<typeof filterByVerbatimQuote>["dropped"] = [];
+    if (spec.mode === "KARSI_DILEKCE_ZAYIFLIK" && documentText) {
+      const data = run.data as { weaknesses?: Array<{ quote?: string; weaknessType?: string }> };
+      if (Array.isArray(data.weaknesses)) {
+        const gate = filterByVerbatimQuote(
+          data.weaknesses,
+          documentText,
+          (w) => w.quote,
+          (w, i) => `${w.weaknessType ?? "Zayıflık"} #${i + 1}`,
+        );
+        data.weaknesses = gate.kept;
+        quoteDropped = gate.dropped;
+      }
+    }
+
     // ---- Atıf doğrulama — kayıt üzerinden --------------------------------
     const rawCitations = run.citations.map((c) => c.raw);
     const verification =
@@ -177,6 +206,14 @@ export class SimulationService {
     const output = {
       result: run.data,
       droppedFindings: run.droppedFindings,
+      /**
+       * Ö-20: belgede birebir bulunamayan alıntıya dayandığı için ELENEN
+       * bulgular. Sessizce atılmaz — avukat neyin elendiğini görmelidir.
+       */
+      droppedQuotes: quoteDropped.map((d) => ({
+        ...d,
+        reasonLabel: DROP_REASON_LABELS[d.reason],
+      })),
       citationVerification: {
         method: "Kayıt üzerinden deterministik arama (CitationVerifyService)",
         summary: verification.summary,

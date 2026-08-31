@@ -90,9 +90,11 @@ export class OfficeQueryService {
       schema: OfficeQueryPlanSchema,
       // Plan bir "bulgu" değildir; kaynaksız eleme uygulanmaz.
       findingPaths: [],
-      // Soru metni de KVKK taramasından geçer (runTask içinde); onay bayrağı yok,
-      // çünkü büro sorgusunda kişisel veri içeren serbest metin beklenmez.
-      piiApproved: false,
+      // Soru metni KVKK taramasından geçer (runTask içinde). Onay bayrağı artık
+      // ÇAĞIRANDAN gelir (İ-18): sabit `false` geçilince, sorusunda TCKN geçen
+      // kullanıcı 409 alıyor ve 409'un istediği onayı verebileceği hiçbir yol
+      // bulunmuyordu — uç kalıcı olarak kırılıyordu.
+      piiApproved: input.piiApproved,
       maxTokens: 1024,
       auditDetail: "veriMinimizasyonu=satirVerisiGonderilmedi",
     });

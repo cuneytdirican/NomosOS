@@ -26,6 +26,7 @@ import { isExternalDestination, scanPii, summarizeFindings } from "@nomosos/ai";
 import {
   buildCaseContext,
   buildPetitionDraftMessages,
+  detectUnstructuredCitationSignals,
   extractPrecedentPlaceholders,
   PetitionDraftOutputSchema,
   type CaseContextDocument,
@@ -288,7 +289,9 @@ export class PetitionsService {
       .map((c) => c.raw)
       .filter((raw) => !verifiedRaws.has(raw.trim()));
 
-    const gate = evaluateReadyGate(verification as GateCitation[]);
+    const gate = evaluateReadyGate(verification as GateCitation[], {
+      unstructuredSignals: current ? detectUnstructuredCitationSignals(current.plainText) : [],
+    });
 
     return {
       id: petition.id,
@@ -393,7 +396,9 @@ export class PetitionsService {
       throw new BadRequestException("Dilekçenin henüz bir sürümü yok.");
     }
     const report = await this.runVerification(user, petition.id, current);
-    const gate = evaluateReadyGate(this.toGateCitations(report));
+    const gate = evaluateReadyGate(this.toGateCitations(report), {
+      unstructuredSignals: detectUnstructuredCitationSignals(current.plainText),
+    });
     return { petitionId: id, versionId: current.id, ...report, readyGate: gate };
   }
 
@@ -444,6 +449,8 @@ export class PetitionsService {
       const report = await this.runVerification(user, petition.id, current);
       gate = evaluateReadyGate(this.toGateCitations(report), {
         declaredStatutes: input.confirmedStatuteCitations,
+        // K-10: künyesiz mahkeme atfı da bloklar (gerçek fail-closed).
+        unstructuredSignals: detectUnstructuredCitationSignals(current.plainText),
       });
 
       if (!gate.ok) {
@@ -552,7 +559,9 @@ export class PetitionsService {
     );
     await this.markStale(petition, "AI taslağı üretildi");
     const verification = await this.runVerification(user, petition.id, version);
-    const gate = evaluateReadyGate(this.toGateCitations(verification));
+    const gate = evaluateReadyGate(this.toGateCitations(verification), {
+      unstructuredSignals: detectUnstructuredCitationSignals(version.plainText),
+    });
 
     return {
       petitionId: petition.id,
@@ -662,7 +671,9 @@ export class PetitionsService {
       warnings: run.data.warnings,
       unchangedSectionKeys: sections.filter((s) => s.key !== key).map((s) => s.key),
       verification,
-      readyGate: evaluateReadyGate(this.toGateCitations(verification)),
+      readyGate: evaluateReadyGate(this.toGateCitations(verification), {
+        unstructuredSignals: detectUnstructuredCitationSignals(version.plainText),
+      }),
       advisory: run.advisory,
       model: run.model,
     };
@@ -716,6 +727,10 @@ export class PetitionsService {
       // Avukatın HAZIR geçişinde yaptığı mevzuat beyanı denetim kaydındadır;
       // dışa aktarımda beyan yeniden istenir ki "beyansız" bir yol kalmasın.
       declaredStatutes: input.confirmedStatuteCitations,
+      // K-10: ikinci kapı da künyesiz mahkeme atfını bloklar. Eskiden
+      // `citationsInText.length > 0` koşulu sağlanamadığı için bu kapı hiç
+      // tetiklenmiyor ve uydurma künyeli UDF üretilebiliyordu.
+      unstructuredSignals: detectUnstructuredCitationSignals(current.plainText),
     });
     if (!exportGate.ok) {
       throw new UnprocessableEntityException({
@@ -969,7 +984,9 @@ export class PetitionsService {
 
     const petition = await this.prisma.client.petition.findUnique({ where: { id: petitionId } });
     if (petition && (petition.status === "TASLAK" || petition.status === "TEYIT_EDILIYOR")) {
-      const gate = evaluateReadyGate(this.toGateCitations(report));
+      const gate = evaluateReadyGate(this.toGateCitations(report), {
+        unstructuredSignals: detectUnstructuredCitationSignals(version.plainText),
+      });
       // Mevzuat beyanı olmadan TEYIT_EDILDI verilmez; kapı zaten mevzuatı bloklar.
       const nextStatus: PetitionStatus = gate.ok ? "TEYIT_EDILDI" : "TEYIT_EDILIYOR";
       if (nextStatus !== petition.status) {

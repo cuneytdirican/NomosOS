@@ -271,17 +271,35 @@ export class InvoicesService {
       );
     }
 
-    // Saat ücreti çözümü (sözleşmeden) — dosya bazında önbelleklenir.
+    /**
+     * SAAT ÜCRETİ, KAYDIN KENDİ TARİHİNE GÖRE ÇÖZÜLÜR (denetim bulgusu Ö-15).
+     *
+     * Eskiden referans tarih `input.issueDate ?? new Date()` — yani FATURANIN
+     * DÜZENLEME TARİHİ — idi ve önbellek anahtarı tarih içermiyordu. Sonucu:
+     *   Sözleşme A: 5.000 TL/saat (01.01–30.06.2026)
+     *   Sözleşme B: 8.000 TL/saat (01.07.2026'dan itibaren)
+     *   Mart 2026'da girilmiş 10 saat, 15.08.2026 tarihli faturaya alınır
+     *   → 80.000,00 TL + KDV kesilir; DOĞRUSU 50.000,00 TL'dir.
+     * Müvekkile fazla fatura kesiliyordu.
+     *
+     * Kârlılık raporu bu işi ZATEN DOĞRU yapıyordu (`karlilik.report.ts`:
+     * `fa2."startDate" <= t."date" AND (fa2."endDate" IS NULL OR fa2."endDate" >= t."date")`),
+     * yani iki modül aynı emeği farklı ücretle değerliyordu.
+     *
+     * `FeeAgreementsService.resolveBillingTerms` `referenceDate` parametresini
+     * zaten alıyordu; çağıran yanlış tarihi geçiyordu. Önbellek anahtarına da
+     * tarih eklendi — aksi hâlde ilk kaydın ücreti sonrakilere yapışırdı.
+     */
     const termsCache = new Map<string, Awaited<ReturnType<FeeAgreementsService["resolveBillingTerms"]>>>();
-    const resolveTerms = async (caseId: string | null) => {
-      const key = caseId ?? "__NULL__";
+    const resolveTerms = async (caseId: string | null, referenceDate: Date) => {
+      const key = `${caseId ?? "__NULL__"}|${referenceDate.toISOString().slice(0, 10)}`;
       const cached = termsCache.get(key);
       if (cached) return cached;
       const resolved = await this.agreements.resolveBillingTerms(
         user.tenantId,
         input.clientId,
         caseId,
-        input.issueDate ?? new Date(),
+        referenceDate,
       );
       termsCache.set(key, resolved);
       return resolved;
@@ -304,7 +322,8 @@ export class InvoicesService {
     const currencies = new Map<string, string[]>();
 
     for (const entry of candidates) {
-      const terms = await resolveTerms(entry.caseId);
+      // Ö-15: referans, faturanın tarihi DEĞİL, ÇALIŞMANIN yapıldığı tarihtir.
+      const terms = await resolveTerms(entry.caseId, entry.date);
       const rate = entry.hourlyRate ? dec(entry.hourlyRate) : terms.hourlyRate;
       const caseLabel = entry.case ? (entry.case.fileNumber ?? entry.case.title) : "Dosyasız çalışma";
 
@@ -846,14 +865,21 @@ export class InvoicesService {
   ): Promise<{ status: InvoiceStatus; paid: Prisma.Decimal; remaining: Prisma.Decimal; overpaid: Prisma.Decimal; total: Prisma.Decimal }> {
     const invoice = await tx.invoice.findUnique({
       where: { id: invoiceId },
-      select: { id: true, tenantId: true, status: true, total: true },
+      select: { id: true, tenantId: true, status: true, total: true, currency: true },
     });
     if (!invoice || invoice.tenantId !== tenantId) {
       throw new NotFoundException("Fatura bulunamadı.");
     }
 
+    // PARA BİRİMİ SÜZGECİ (denetim bulgusu Ö-14).
+    //
+    // Eskiden faturaya bağlı TÜM tahsilatlar para birimi ayrılmadan toplanıyordu.
+    // `Payment.currency` kolonu artık var; toplama yalnız FATURANIN para
+    // birimindeki tahsilatlar girer. `payments.service.ts` zaten uyuşmazlığı
+    // 400 ile reddediyor, ama bu ikinci kapıdır: geçmişten kalan ya da başka bir
+    // yoldan yazılmış uyumsuz bir satır faturayı "ÖDENDİ" yapamaz.
     const agg = await tx.payment.aggregate({
-      where: { invoiceId, tenantId },
+      where: { invoiceId, tenantId, currency: invoice.currency },
       _sum: { amount: true },
     });
     const paid = fromSum(agg._sum.amount);

@@ -154,10 +154,29 @@ export class PortalAuthService {
     // tarayıcıya doğrudan bilgi verirdi.
     if (!matched || !matched.isActive || !matched.client.isActive) {
       this.lockout.recordFailure(narrowKey);
-      // KALICI SAYAÇ: her aday HESABIN KENDİ satırında sayılır. Anahtar artık
-      // paylaşılan bir dizge değil, kaydın kimliğidir — kiracılar arası yan
-      // etki yapısal olarak imkânsızdır.
-      await this.recordAccountFailures(candidates);
+      // KALICI SAYAÇ YALNIZ PAROLASI EŞLEŞEN ADAYA YAZILIR (denetim bulgusu Ö-03).
+      //
+      // Eskiden `recordAccountFailures(candidates)` çağrılıyordu ve yorumu
+      // "kiracılar arası yan etki yapısal olarak imkânsızdır" diyordu — kod tam
+      // tersini yapıyordu. `login` adayları e-postayla, `tenantId` süzgeci
+      // OLMADAN çekiyor (arayüz `tenantId` hiç göndermiyor); yanlış parolayla
+      // yapılan her deneme, o e-postanın kayıtlı olduğu HER BÜRODAKİ hesabın
+      // sayacını artırıyordu. İki büronun portalında hesabı olan bir mali
+      // müşavir, A'da 20 hatalı denemeyle B'deki hesabını da kilitliyordu.
+      //
+      // Artık: parola eşleşmişse (hesap pasif / müvekkil pasif dalı) yalnız O
+      // kayda yazılır. Parola hiçbir adayla eşleşmediyse hiçbir kalıcı sayaç
+      // yazılmaz; kaba kuvvete karşı savunma dar (IP ∧ e-posta) sayaçtır —
+      // saldırganın başka kiracıdaki bir hesabı kilitleyebilmesi, o hesabın
+      // parolasını zaten bilmesini gerektirir ki bu senaryoda kilit anlamsızdır.
+      //
+      // TEK ADAY İSTİSNASI: e-posta yalnız BİR kayıtla eşleşiyorsa belirsizlik
+      // yoktur ve kalıcı sayaç yazılır. Bu, hesap kilidinin asıl amacını
+      // (dağıtık kaba kuvvet) korur — vakaların ezici çoğunluğu budur — ve yan
+      // etki üretebilecek tek durum olan ÇOK ADAYLI hâli dışarıda bırakır.
+      await this.recordAccountFailures(
+        matched ? [matched] : candidates.length === 1 ? candidates : [],
+      );
       if (matched) {
         await this.audit.log({
           tenantId: matched.tenantId,
@@ -407,7 +426,21 @@ export class PortalAuthService {
         "Bağlantı ulaşmazsa avukatınızla görüşün.",
     };
 
-    const user = await this.prisma.client.portalUser.findFirst({
+    // DETERMİNİSTİK SEÇİM (denetim bulgusu Ö-04).
+    //
+    // Eskiden `findFirst` `orderBy` OLMADAN çağrılıyordu; aynı e-posta birden
+    // çok kiracıda kayıtlıysa (`@@unique([tenantId,email])` buna izin verir)
+    // hangi hesabın parolasının sıfırlanacağı veritabanının döndürme sırasına
+    // kalıyordu. Kullanıcı Büro B'de sıfırlama isteyip A'daki parolası
+    // değişebiliyor, `resetPassword` `sessionsValidFrom`'u tazelediği için
+    // A'daki açık oturumları da sessizce düşüyordu — üstelik yanıt bilinçli
+    // olarak jenerik olduğu için hiçbir geri bildirim yoktu.
+    //
+    // Aynı dosyadaki `login()` zaten `orderBy: { createdAt: "asc" }` taşıyor;
+    // ikisi artık AYNI hesabı seçer. Belirsizlik varsa (birden çok kiracı) ve
+    // istemci `tenantId` göndermediyse hiçbir işlem yapılmaz — yanlış hesabın
+    // parolasını sıfırlamaktansa jenerik yanıt döndürmek doğrudur.
+    const matches = await this.prisma.client.portalUser.findMany({
       where: {
         email: input.email,
         isActive: true,
@@ -415,7 +448,17 @@ export class PortalAuthService {
         client: { isActive: true },
       },
       select: { id: true, tenantId: true, clientId: true, email: true },
+      orderBy: { createdAt: "asc" },
+      take: MAX_LOGIN_CANDIDATES,
     });
+    if (matches.length > 1) {
+      this.logger.warn(
+        `Parola sıfırlama isteği birden çok kiracıda eşleşti (${matches.length}); ` +
+          "tenantId belirtilmediği için işlem yapılmadı.",
+      );
+      return genericResponse;
+    }
+    const user = matches[0];
     if (!user) return genericResponse;
 
     const raw = newPortalToken();

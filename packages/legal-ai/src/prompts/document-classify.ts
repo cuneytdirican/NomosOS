@@ -2,7 +2,7 @@
 
 import { DOCUMENT_CLASSES } from "@nomosos/shared";
 import type { LlmMessage, PromptSpec } from "../types";
-import { buildMessages } from "./system-core";
+import { buildMessages, wrapUntrusted } from "./system-core";
 
 /** Taksonomi maddelerinin prompta yazılan Türkçe açıklamaları. */
 export const DOCUMENT_CLASS_HINTS: Record<(typeof DOCUMENT_CLASSES)[number], string> = {
@@ -82,6 +82,9 @@ export function buildDocumentClassifyMessages(input: DocumentClassifyPromptInput
   if (input.caseContextText) {
     parts.push(`DOSYA BAĞLAMI (yalnızca eşleştirme için):\n${input.caseContextText}`);
   }
-  parts.push(`BELGE METNİ:\n${input.documentText}`);
+  // O-18: belge metni GUVENILMEYEN VERIDIR ve sabit ayracla sarilir.
+  // Ayrac dizgesi girdiden temizlenir; aksi halde belgeye kendi kapanis
+  // ayracini yazan bir saldirgan "veri" bolgesinden cikabilirdi.
+  parts.push(wrapUntrusted("BELGE METNI", input.documentText));
   return buildMessages(documentClassifyPrompt, parts.join("\n\n"));
 }

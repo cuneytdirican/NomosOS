@@ -12,12 +12,18 @@ import {
   decideAutoLink,
   extractCaseNumbers,
   normalizeCaseNumber,
+  courtAppearsInText,
   normalizeForCompare,
   partyAppearsInText,
   rankCandidates,
   type CaseMatchCandidate,
 } from "./case-match";
 import { templateForRequestedDocument, templatesForClass } from "./task-templates";
+import {
+  DROP_REASON_LABELS,
+  filterByVerbatimQuote,
+  quoteAppearsIn,
+} from "../common/ai/quote-guard";
 import {
   CLASS_SOURCE,
   CLASSIFY_CONFIDENCE_THRESHOLD,
@@ -383,9 +389,25 @@ export class PipelineService {
     };
 
     // (a) Esas numarası — en güçlü sinyal.
-    const numbers = new Set(extractCaseNumbers(text));
-    const suggested = normalizeCaseNumber(ctx.classification?.suggestedCaseNumber);
-    if (suggested) numbers.add(suggested);
+    //
+    // AI'IN ESAS NO İPUCU ARAMA KÜMESİNE EKLENMEZ (denetim bulgusu Ö-19).
+    //
+    // Eskiden `numbers.add(suggested)` yazılıydı: model, belge metninde HİÇ
+    // GEÇMEYEN bir esas numarası uydurup arama kümesini genişletebiliyordu —
+    // yani halüsinasyon, hangi dosyaların aday olacağını belirliyordu. İpucu
+    // artık yalnızca DOĞRULAMA sinyali olarak kullanılır: metinden çıkarılmış
+    // bir numarayla ÖRTÜŞÜYORSA güveni destekler, tek başına aday üretemez.
+    const textNumbers = new Set(extractCaseNumbers(text));
+    const suggestedRaw = normalizeCaseNumber(ctx.classification?.suggestedCaseNumber);
+    // İpucu yalnız metinde de geçiyorsa "doğrulanmış" sayılır.
+    const suggested = suggestedRaw && textNumbers.has(suggestedRaw) ? suggestedRaw : undefined;
+    if (suggestedRaw && !suggested) {
+      ctx.warnings.push(
+        `Belge sınıflandırması "${suggestedRaw}" esas numarasını önerdi, ancak bu numara belge ` +
+          "metninde bulunamadı; dosya eşleştirmesinde KULLANILMADI (uydurma esas no koruması).",
+      );
+    }
+    const numbers = textNumbers;
 
     if (numbers.size > 0) {
       const matches = await this.prisma.client.case.findMany({
@@ -417,14 +439,44 @@ export class PipelineService {
         // Artık taban güven 0.85'tir (otomatik bağlama eşiği 0.90'ın altında);
         // otomatik bağlama için mahkeme adı ya da AI'ın esas no ipucu gibi
         // İKİNCİ BİR SİNYAL gerekir.
+        //
+        // AI TÜREVLİ SİNYALLER OTOMATİK BAĞLAMA EŞİĞİNİ AŞAMAZ (Ö-19).
+        //
+        // Eskiden `courtScore >= 0.5` güveni doğrudan **0.97**'ye çıkarıyordu ve
+        // `decideAutoLink` 0.90 eşiğini geçtiği için belge AVUKAT ONAYI OLMADAN
+        // bağlanıyordu. Sinyalin girdisi `ctx.classification.courtName`, yani
+        // AI ÇIKTISIDIR ve `output.confidence` eşiğine tabi DEĞİLDİR (o eşik
+        // yalnız `class` alanına uygulanır).
+        //
+        // Aritmetik ölçüldü (`courtSimilarity`, 3 harften kısa jetonlar elenir):
+        //   "İstanbul 5. Asliye TİCARET Mahkemesi" ↔ "İstanbul 5. Asliye HUKUK Mahkemesi"
+        //   ortak {istanbul, asliye, mahkemesi} = 3, min(4,4) = 4 → 0.75 ≥ 0.5
+        // Yani AYRI İKİ MAHKEME 0.97 güvenle eşleşiyor, belge yanlış dosyaya
+        // bağlanıyor ve DEADLINE_DETECT o yanlış bağlamda koşuyordu.
+        //
+        // Artık: metin türevli sinyaller (esas no eşleşmesi) otomatik bağlayabilir;
+        // AI türevli sinyaller güveni yalnız AUTO_LINK_THRESHOLD'ün ALTINDA bir
+        // tavana (0.89) kadar yükseltir — sonuç avukat onayına düşer.
+        const AI_SIGNAL_CEILING = 0.89;
         let confidence = 0.85;
         const reasons = [`Esas numarası eşleşti (${found.fileNumber})`];
-        if (courtScore >= 0.5) {
+
+        // ÖNCE DETERMİNİSTİK SİNYAL: dosyanın kayıtlı mahkeme adı belge
+        // METNİNDE geçiyor mu? Geçiyorsa kanıt metinden gelir ve otomatik
+        // bağlamaya yeter. AI'ın `courtName` tahmini yalnız YEDEKTİR ve
+        // tavanı eşiğin altındadır.
+        if (courtAppearsInText(found.courtName, normalizeForCompare(text))) {
           confidence = 0.97;
-          reasons.push("mahkeme adı da örtüşüyor");
+          reasons.push("dosyanın mahkeme adı belge metninde birebir geçiyor");
+        } else if (courtScore >= 0.5) {
+          confidence = Math.min(AI_SIGNAL_CEILING, 0.97);
+          reasons.push(
+            `mahkeme adı AI sınıflandırmasıyla örtüşüyor (benzerlik ${courtScore.toFixed(2)}); ` +
+              "bu sinyal AI çıktısından geldiği için otomatik bağlamaya YETMEZ, öneri olarak sunulur",
+          );
         }
         if (suggested && found.fileNumber === suggested) {
-          confidence = Math.min(0.99, confidence + 0.05);
+          confidence = Math.min(AI_SIGNAL_CEILING, confidence + 0.05);
           reasons.push("belge sınıflandırması aynı esas numarasını gösteriyor");
         }
         if (duplicateNumber) {
@@ -531,7 +583,20 @@ export class PipelineService {
     ctx.findings = extractFindings(ctx.text);
 
     // Duruşma tarihi değişikliği — yalnızca kaynak alıntısı olan tarihler.
-    const hearing = findHearingDate(ctx.classification?.extractedDates ?? []);
+    // Ö-20: DOCUMENT_CLASSIFY'ın `extractedDates[]` alıntıları da doğrulanır.
+    // `findHearingDate` "yalnızca kaynak alıntısı olan tarihler" diyordu; ama
+    // alıntının DOLU olması, belgede GERÇEKTEN geçmesi demek değildi.
+    const hearingCandidate = findHearingDate(ctx.classification?.extractedDates ?? []);
+    const hearing =
+      hearingCandidate?.quote && !quoteAppearsIn(hearingCandidate.quote, ctx.text)
+        ? undefined
+        : hearingCandidate;
+    if (hearingCandidate && !hearing) {
+      ctx.warnings.push(
+        `Duruşma tarihi önerisi ELENDİ: modelin verdiği alıntı («${hearingCandidate.quote?.slice(0, 80)}») ` +
+          "belge metninde birebir bulunamadı (uydurma alıntı koruması).",
+      );
+    }
     if (hearing?.isoDate && ctx.caseId) {
       ctx.findings.push(hearing);
       ctx.proposals.push({
@@ -586,13 +651,15 @@ export class PipelineService {
         })
       : null;
 
+    // Modelin GÖRDÜĞÜ metin — alıntı doğrulaması bu dilimde yapılır (Ö-20).
+    const promptText = ctx.text.slice(0, MAX_PROMPT_TEXT_CHARS);
     const result = await this.agents.run<DeadlineDetectOutput>({
       agentKey: "DEADLINE_DETECTOR",
       tenantId: ctx.tenantId,
       userId: ctx.userId,
       context: {
         documentTitle: ctx.documentName,
-        documentText: ctx.text.slice(0, MAX_PROMPT_TEXT_CHARS),
+        documentText: promptText,
         documentClass: cls,
         caseType: relatedCase?.type,
         notifiedAt: findNotifiedAt(ctx.classification?.extractedDates ?? []),
@@ -612,7 +679,40 @@ export class PipelineService {
       };
     }
 
-    ctx.detections = [...result.data.detections];
+    /**
+     * ALINTI DOĞRULAMA KAPISI (denetim bulgusu Ö-20).
+     *
+     * `output-guard.hasSource` alanın DOLU olup olmadığına bakar, DOĞRU olup
+     * olmadığına bakamaz. İkinci kapı olan `filterByVerbatimQuote` bu depoda
+     * ZATEN YAZILIYDI (Türkçe tipografi normalizasyonu ve birim testi dahil) ve
+     * üç modülden çağrılıyordu — ama `pipeline/` ve `simulation/` altında SIFIR
+     * kez. Oysa buradaki senaryo en keskini:
+     *
+     *   model `{"eventDate":"2026-08-12","sourceQuote":"Bilirkişi raporu
+     *   12.08.2026 tarihinde tebliğ edilmiş olmakla"}` üretir; bu cümle belgede
+     *   YOKTUR, gerçek tarih 22.08'dir. Alıntı `DocumentActionProposal.sourceQuote`a
+     *   yazılır ve avukata "Belgeden alıntı: «…»" diye gösterilir. Avukat
+     *   ALINTIYI GÖRDÜĞÜ İÇİN onaylar; deterministik motor 12.08'den hesaplar ve
+     *   DOĞRU ÇALIŞARAK YANLIŞ son günü üretir.
+     *
+     * Arama, modelin GÖRDÜĞÜ metinde yapılır (maskeliyse maskeli hâlinde):
+     * `promptText` tam olarak prompta giden dilimdir.
+     */
+    const quoteGate = filterByVerbatimQuote(
+      result.data.detections,
+      promptText,
+      (d) => d.sourceQuote,
+      (d, i) => d.eventDescription || `Süre tespiti #${i + 1}`,
+    );
+    if (quoteGate.dropped.length > 0) {
+      ctx.warnings.push(
+        `${quoteGate.dropped.length} süre tespiti, belgede birebir bulunamayan bir alıntıya ` +
+          "dayandığı için ELENDİ (uydurma alıntı koruması). Elenen tespitler: " +
+          quoteGate.dropped.map((d) => `«${d.label}» — ${DROP_REASON_LABELS[d.reason]}`).join(" | "),
+      );
+    }
+
+    ctx.detections = [...quoteGate.kept];
     if (ctx.detections.length === 0) {
       return {
         status: "TAMAM",

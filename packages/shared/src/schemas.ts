@@ -19,11 +19,42 @@ export function isValidTckn(value: string): boolean {
   return d10 === d[9] && d11 === d[10];
 }
 
+/**
+ * KİRACI (BÜRO) GİRİŞİ — denetim bulgusu Ö-07.
+ *
+ * E-posta NORMALİZE EDİLİR: `.trim().toLowerCase()`. Eskiden ham geçiyordu ve
+ * `auth.service.ts` `findUnique({ where: { email } })` ile birebir eşleşme
+ * arıyordu. Canlı ölçüm:
+ *     partner@demo.nomosos.local  -> 200
+ *     Partner@Demo.Nomosos.Local  -> 401 "E-posta veya şifre hatalı."
+ * Diğer iki kimlik alanı (platform, portal) BU İŞİ ZATEN DOĞRU YAPIYORDU
+ * (`.trim().toLowerCase().max(200)`); yalnız büro tarafı geride kalmıştı.
+ * Parola değiştirme ucu da olmadığı için (K-03) bu, çözümsüz bir destek
+ * döngüsüne dönüşüyordu.
+ *
+ * PAROLA ÜST SINIRI: bcrypt 72 baytın ötesini yok sayar; üst sınırsız alan,
+ * her istekte pahalı bir karma hesabı tetikleyen ucuz bir DoS yüzeyidir.
+ */
 export const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
+  email: z.string().trim().toLowerCase().max(200).email(),
+  password: z.string().min(8).max(200),
 });
 export type LoginInput = z.infer<typeof loginSchema>;
+
+/** POST /auth/change-password — kendi parolasını değiştirme (K-03). */
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Mevcut parolanızı girin.").max(200),
+    newPassword: z
+      .string()
+      .min(10, "Yeni parola en az 10 karakter olmalıdır.")
+      .max(200, "Yeni parola en fazla 200 karakter olabilir."),
+  })
+  .refine((v) => v.currentPassword !== v.newPassword, {
+    message: "Yeni parola mevcut parolayla aynı olamaz.",
+    path: ["newPassword"],
+  });
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 
 export const createClientSchema = z.object({
   type: z.enum(CLIENT_TYPES),

@@ -120,7 +120,12 @@ export class PaymentsService {
      * GÜNCEL bakiyeyi okur.
      */
     const result = await this.prisma.client.$transaction(async (tx) => {
-      let currency = "TRY";
+      // Ö-14: para birimi artık KAYDIN KENDİ ALANIDIR. Serbest tahsilatta
+      // çağıranın belirttiği değer, belirtmediyse TRY kullanılır; faturaya bağlı
+      // tahsilatta faturanınki ESAS ALINIR ve çağıran farklı bir değer
+      // gönderdiyse istek reddedilir (sessizce ezmek, para birimini yanlış
+      // kaydetmenin en sinsi yoludur).
+      let currency = input.currency ?? "TRY";
       if (input.invoiceId) {
         // Fatura satırını kilitle — bakiye okuması bu kilidin arkasında yapılır.
         await tx.$executeRaw`SELECT id FROM "Invoice" WHERE id = ${input.invoiceId} AND "tenantId" = ${user.tenantId} FOR UPDATE`;
@@ -140,6 +145,13 @@ export class PaymentsService {
         }
         if (invoice.status === "IPTAL") {
           throw new ConflictException("İptal edilmiş faturaya tahsilat kaydedilemez.");
+        }
+        if (input.currency && input.currency !== invoice.currency) {
+          throw new BadRequestException(
+            `Tahsilatın para birimi (${input.currency}) faturanın para biriminden ` +
+              `(${invoice.currency}) farklı. Kur çevrimi yapılmaz; ya tutarı fatura para ` +
+              "biriminde girin ya da bu tahsilatı faturaya bağlamadan serbest tahsilat olarak kaydedin.",
+          );
         }
         currency = invoice.currency;
 
@@ -171,6 +183,7 @@ export class PaymentsService {
           invoiceId: input.invoiceId ?? null,
           clientId: input.clientId,
           amount,
+          currency,
           date: input.date,
           method: input.method as PaymentMethod,
           reference: input.reference ?? null,
@@ -187,7 +200,9 @@ export class PaymentsService {
           clientId: input.clientId,
           type: "TAHSILAT",
           amount,
-          currency: payment.invoice?.currency ?? currency,
+          // Ö-14: artık kaydın kendi para birimi kullanılır; `payment.invoice`
+          // yoksa koşulsuz "TRY" varsayımına düşülmez.
+          currency: payment.currency,
           date: input.date,
           description:
             `${AUTO_COLLECTION_MARKER}:${payment.id} ` +
@@ -297,7 +312,11 @@ export class PaymentsService {
           }
         : null,
       amount: moneyOut(p.amount),
-      amountFormatted: formatMoneyTr(p.amount, p.invoice?.currency ?? "TRY"),
+      // Ö-14: biçimlendirme kaydın KENDİ para birimini kullanır. Eskiden
+      // `p.invoice?.currency ?? "TRY"` yazılıydı ve faturasız her tahsilat
+      // "5.000,00 TL" diye görünüyordu — tutar EUR olsa bile.
+      currency: p.currency,
+      amountFormatted: formatMoneyTr(p.amount, p.currency),
       date: p.date,
       method: p.method,
       reference: p.reference,

@@ -423,7 +423,7 @@ export class PoaService {
           ? "Süre dolumu"
           : "Azil";
 
-    await this.prisma.client.$transaction(async (tx) => {
+    const suspended = await this.prisma.client.$transaction(async (tx) => {
       await tx.powerOfAttorney.update({
         where: { id },
         data: {
@@ -432,6 +432,36 @@ export class PoaService {
           isActive: false,
         },
       });
+
+      // AZİL/İSTİFA PORTAL ERİŞİMİNİ AYNI İŞLEMDE KESER (denetim bulgusu K-12).
+      //
+      // Eskiden bu transaction yalnız vekaletname satırını ve safahat kaydını
+      // yazıyordu. Vekalet ilişkisi biten müvekkil, `PortalPublication`
+      // allow-list'indeki tüm dosya, belge, duruşma ve faturayı SÜRESİZ görmeye
+      // devam ediyordu; mevcut token'ı da 8 saat daha geçerliydi. Meslek sırrı
+      // açısından savunulamaz.
+      //
+      // `sessionsValidFrom` tazelenmesi, `isActive:false` bayrağının ~anında
+      // etkili olmasını da garantiler: `portal-jwt.guard.ts` damgadan eski
+      // token'ı reddeder, önbelleğe bakmaz.
+      //
+      // Diğer aktif bir vekaletname VARSA erişim kesilmez: müvekkille ilişki
+      // sürüyordur; kesilen yalnız bu vekaletnamedir.
+      const otherActive = await tx.powerOfAttorney.count({
+        where: {
+          tenantId: user.tenantId,
+          clientId: existing.clientId,
+          isActive: true,
+          NOT: { id },
+        },
+      });
+      const portalResult =
+        otherActive > 0
+          ? { count: 0 }
+          : await tx.portalUser.updateMany({
+              where: { tenantId: user.tenantId, clientId: existing.clientId, isActive: true },
+              data: { isActive: false, sessionsValidFrom: new Date() },
+            });
 
       if (affected.length > 0) {
         await tx.timelineEvent.createMany({
@@ -448,6 +478,8 @@ export class PoaService {
           })),
         });
       }
+
+      return portalResult.count;
     });
 
     await this.audit.log({
@@ -458,8 +490,20 @@ export class PoaService {
       entityId: id,
       detail:
         `tip=${input.terminationType} tarih=${formatTrDate(revokedAt)} ` +
-        `etkilenen_dosya=${affected.length} gerekçe=${input.reason}`,
+        `etkilenen_dosya=${affected.length} portal_askiya_alinan=${suspended} ` +
+        `gerekçe=${input.reason}`,
     });
+
+    if (suspended > 0) {
+      await this.audit.log({
+        tenantId: user.tenantId,
+        userId: user.userId,
+        action: "PORTAL_ACCESS_SUSPENDED_BY_POA_REVOKE",
+        entity: "Client",
+        entityId: existing.clientId,
+        detail: `${suspended} portal hesabı pasifleştirildi ve oturumları düşürüldü (vekalet sonlandı).`,
+      });
+    }
 
     return {
       ...(await this.detail(user, id)),
@@ -467,8 +511,12 @@ export class PoaService {
         type: input.terminationType,
         revokedAt,
         affectedCases: affected,
+        suspendedPortalUsers: suspended,
         note:
           "Vekaletname pasifleştirildi ve etkilenen açık dosyalara safahat kaydı düşüldü. " +
+          (suspended > 0
+            ? `Müvekkilin ${suspended} portal hesabının erişimi kesildi ve açık oturumları düşürüldü. `
+            : "Müvekkilin başka geçerli bir vekaletnamesi bulunduğu için portal erişimi korundu. ") +
           "Sonlandırma kayıtları GERİ ALINAMAZ; hatalı giriş yeni kayıtla düzeltilir.",
       },
     };

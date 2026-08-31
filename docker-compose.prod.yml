@@ -322,7 +322,17 @@ services:
       # tavanı düşünülerek ölçülendirildi.
       - /tmp:size=512m,mode=1777
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3001/api/v1/health | grep -q '\"ok\"' || exit 1"]
+      # LIVENESS UCU — hiçbir iş kuralına tabi değildir (denetim bulgusu K-02).
+      #
+      # Eskiden `/api/v1/health` kullanılıyordu ve bakım tam kilidi açıldığında
+      # o uç da 503 dönüyordu: konteyner `unhealthy` oluyor, `depends_on:
+      # service_healthy` taşıyan `web` ve `admin` bir daha ayağa kalkmıyor,
+      # kilidi kapatabilecek TEK arayüz (admin paneli) kayboluyordu. Kurtarma
+      # yalnız doğrudan `psql` müdahalesiydi.
+      #
+      # `/api/v1/health/live` yalnızca "süreç ayakta mı" der; bakım kilidi,
+      # abonelik durumu ve kimlik onu etkilemez.
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3001/api/v1/health/live | grep -q '\"ok\"' || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5

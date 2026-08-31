@@ -53,6 +53,37 @@ export function courtSimilarity(a: string | undefined, b: string | undefined): n
   return common / Math.min(tokensA.size, tokensB.size);
 }
 
+/**
+ * MAHKEME ADI BELGE METNİNDE GERÇEKTEN GEÇİYOR MU? (denetim bulgusu Ö-19)
+ *
+ * `courtSimilarity(ctx.classification?.courtName, …)` AI ÇIKTISINI girdi alıyordu
+ * ve `output.confidence` eşiğine tabi değildi; skor ≥ 0.5 olduğunda güven
+ * doğrudan 0.97'ye çıkıp otomatik bağlamayı tetikliyordu. Aritmetik ölçüldü:
+ *
+ *   "İstanbul 5. Asliye TİCARET Mahkemesi" ↔ "İstanbul 5. Asliye HUKUK Mahkemesi"
+ *   ortak {istanbul, asliye, mahkemesi} = 3, min(4,4) = 4 → 0.75
+ *
+ * Yani AYRI İKİ MAHKEME "örtüşüyor" sayılıyordu.
+ *
+ * Bu fonksiyon aynı kararı DETERMİNİSTİK olarak verir: dosyanın kayıtlı mahkeme
+ * adının anlamlı jetonlarının TAMAMI belge metninde geçiyor mu? Geçiyorsa sinyal
+ * metinden gelir (AI'dan değil) ve otomatik bağlamaya yetecek kadar güvenilirdir.
+ *
+ * Ayırt edici jeton ("ticaret" ↔ "hukuk") metinde yoksa `false` döner — tam da
+ * yukarıdaki yanlış eşleşmeyi kesen kural budur.
+ */
+export function courtAppearsInText(
+  courtName: string | undefined | null,
+  normalizedText: string,
+): boolean {
+  if (!courtName) return false;
+  const tokens = normalizeForCompare(courtName)
+    .split(" ")
+    .filter((t) => t.length > 2);
+  if (tokens.length === 0) return false;
+  return tokens.every((token) => normalizedText.includes(token));
+}
+
 /** Taraf adı belge metninde geçiyor mu? (tek harflik gürültü elenir) */
 export function partyAppearsInText(partyName: string, normalizedText: string): boolean {
   const normalized = normalizeForCompare(partyName);

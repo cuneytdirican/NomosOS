@@ -291,6 +291,23 @@ export const createPaymentSchema = z.object({
   amount: positiveMoney("Tahsilat tutarı"),
   date: z.coerce.date({ invalid_type_error: "Tahsilat tarihi geçerli olmalıdır." }),
   method: z.enum(PAYMENT_METHODS, { errorMap: () => ({ message: "Geçersiz ödeme yöntemi." }) }),
+  /**
+   * TAHSİLATIN PARA BİRİMİ (denetim bulgusu Ö-14).
+   *
+   * Faturaya bağlı tahsilatta gönderilirse faturanınkiyle EŞLEŞMESİ zorunludur
+   * (uyuşmazsa 400); gönderilmezse faturanınki kullanılır. Serbest tahsilatta
+   * varsayılan TRY'dir — ama artık ÖRTÜK değil, açıkça kaydedilen bir değerdir.
+   *
+   * Eskiden `Payment` modelinde bu kolon YOKTU ve servis faturasız tahsilatı
+   * koşulsuz "TRY" sayıyordu: EUR sözleşmeli müvekkilden alınan 5.000 EUR,
+   * TRY alacağını 5.000 azaltıyor, EUR bakiyesini hiç düşürmüyordu.
+   */
+  currency: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z]{3}$/, "Para birimi üç harfli ISO kodu olmalıdır (TRY, USD, EUR).")
+    .optional(),
   reference: nullableText(120, "Dekont/işlem referansı"),
   note: nullableText(1000, "Not"),
   /** Fazla ödemeyi bilerek kabul etmek için. */

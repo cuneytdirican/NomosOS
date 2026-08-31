@@ -52,16 +52,90 @@ export function scanPii(text: string): PiiScanResult {
       findings.push({ kind, value, start: match.index, end: match.index + value.length });
     }
   }
-  findings.sort((a, b) => a.start - b.start);
+  // Önce başlangıca, eşitlikte UZUN olana öncelik ver: "05551234567@ornek.com"
+  // hem TELEFON hem EPOSTA kalıbına uyar; kapsayan bulgu kazanmalıdır.
+  findings.sort((a, b) => a.start - b.start || b.end - a.end);
 
-  // Çakışmayan bulguları sondan başa maskele (indeksler kaymasın)
+  // ÇAKIŞMA ELEME (denetim bulgusu İ-17).
+  //
+  // Eskiden çakışan bulgular üst üste maskeleniyordu ve maske ETİKETİ bozuluyordu:
+  //   "İletişim: 05551234567@ornek.com" → "İletişim: [TELEFON-MASKELİ]KELİ]"
+  // Sızıntı yoktu (kalan metin de maskenin altındaydı) ama çekirdek promptun 6.
+  // kuralı maske etiketlerinin BOZULMADAN korunmasını istiyor; bozuk etiket
+  // modelin maskeyi tanımasını engeller. Artık çakışan bulgu ELENİR; eleneni
+  // kapsayan bulgu zaten maskelemektedir.
+  const kept: PiiFinding[] = [];
+  let coveredUntil = -1;
+  for (const finding of findings) {
+    if (finding.start < coveredUntil) continue; // önceki bulgunun içinde kalıyor
+    kept.push(finding);
+    coveredUntil = Math.max(coveredUntil, finding.end);
+  }
+
+  // Sondan başa maskele (indeksler kaymasın)
   let maskedText = text;
-  for (let i = findings.length - 1; i >= 0; i--) {
-    const f = findings[i];
+  for (let i = kept.length - 1; i >= 0; i--) {
+    const f = kept[i];
     maskedText = maskedText.slice(0, f.start) + MASK_LABEL[f.kind] + maskedText.slice(f.end);
   }
 
-  return { findings, maskedText, hasPii: findings.length > 0 };
+  return { findings: kept, maskedText, hasPii: kept.length > 0 };
+}
+
+/* -------------------------------------------------------------------------- *
+ * Sözlük tabanlı ad/unvan maskeleme (denetim bulgusu Ö-22)
+ * -------------------------------------------------------------------------- */
+
+/**
+ * Kaçırılan bir metin parçasını regex için güvenli hâle getirir.
+ */
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export interface DictionaryMaskResult {
+  maskedText: string;
+  /** Metinde gerçekten bulunup maskelenen terim sayısı. */
+  replaced: number;
+}
+
+/**
+ * SÖZLÜK TABANLI MASKELEME — ad, unvan ve dosya künyesi için.
+ *
+ * `scanPii` yalnız TCKN/IBAN/telefon/e-posta kalıplarını tanır; KVKK m.3
+ * anlamında kişisel veri olan AD-SOYAD ve ŞİRKET UNVANI hiçbir kalıba girmez.
+ * Regex ile ad tespiti (NER) güvenilir değildir — ama dosya bağlamını KURAN
+ * taraf zaten adları elinde tutar: müvekkil adı, taraf adları, karşı vekil.
+ * Bu fonksiyon o BİLİNEN terimleri deterministik olarak değiştirir.
+ *
+ * Kurallar:
+ * - Terimler UZUNDAN KISAYA uygulanır ("Ahmet Yılmaz Ltd. Şti." önce, "Ahmet"
+ *   sonra) — aksi hâlde kısa terim uzun terimin içini delerdi.
+ * - Zaten yerleştirilmiş maske etiketleri korunur (etiket içinde arama yapılmaz;
+ *   etiketler `[...]` biçimindedir ve terimler harf/rakamla başlar).
+ * - 3 karakterden kısa terimler yok sayılır (yanlış pozitif üretir).
+ */
+export function maskTerms(
+  text: string,
+  terms: ReadonlyArray<{ value: string; label: string }>,
+): DictionaryMaskResult {
+  let out = text;
+  let replaced = 0;
+  const ordered = [...terms]
+    .filter((t) => t.value && t.value.trim().length >= 3)
+    .sort((a, b) => b.value.trim().length - a.value.trim().length);
+
+  for (const term of ordered) {
+    const needle = term.value.trim();
+    const regex = new RegExp(escapeRegExp(needle), "gi");
+    let hit = false;
+    out = out.replace(regex, () => {
+      hit = true;
+      return term.label;
+    });
+    if (hit) replaced += 1;
+  }
+  return { maskedText: out, replaced };
 }
 
 /**

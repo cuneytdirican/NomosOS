@@ -22,6 +22,21 @@ export type PlatformLoginInput = z.infer<typeof platformLoginSchema>;
 export const twoFactorSetupSchema = z.object({
   /** Girişin ilk adımından dönen ara token (oturum yoksa zorunlu). */
   challengeToken: z.string().min(10).max(4000).optional(),
+  /**
+   * MEVCUT PAROLA — `challengeToken` yerine panel oturumuyla (Bearer) kurulum
+   * yapılıyorsa ZORUNLUDUR (denetim bulgusu Ö-01).
+   *
+   * Eskiden `bearerToken` dalı yalnız imza ve audience doğruluyordu; çalınmış
+   * bir panel token'ıyla `POST /auth/2fa/setup -d '{}'` çağrısı parola sorulmadan
+   * gizli anahtar döndürüyordu (canlı doğrulandı). Saldırgan kendi
+   * doğrulayıcısını kalıcılaştırdıktan sonra, meşru sahip parolasını bilse bile
+   * `changePassword` TOTP istediği için hesaba giremiyordu: ele geçirme süresi
+   * 8 saatten SÜRESİZE çıkıyordu.
+   *
+   * Tek koruma "hesapta zaten 2FA varsa reddet" idi ve tam da 2FA'sı olmayan
+   * hesaplarda — yani üretimdeki ilk açılışta hepsinde — devre dışıydı.
+   */
+  currentPassword: z.string().min(1).max(200).optional(),
 });
 export type TwoFactorSetupInput = z.infer<typeof twoFactorSetupSchema>;
 

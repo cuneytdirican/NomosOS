@@ -31,6 +31,7 @@ import {
   buildOpponentSimulationMessages,
   OpponentSimulationOutputSchema,
   SourceRefSchema,
+  wrapUntrusted,
   type LlmMessage,
   type PromptSpec,
 } from "@nomosos/legal-ai";
@@ -470,9 +471,11 @@ export const SIMULATION_MODES: Record<SimulationMode, SimulationModeSpec> = {
         briefWeaknessPrompt,
         [
           `İNCELENECEK BELGE: ${input.documentTitle ?? "(başlıksız)"}`,
-          "--- BELGE METNİ ---",
-          input.documentText ?? "(metin çıkarılamadı)",
-          "--- METİN SONU ---",
+          // Ö-18: karşı tarafın dilekçesi GÜVENİLMEYEN VERİDİR. Serbest bir
+          // başlık ("--- BELGE METNİ ---") güvenlik sınırı DEĞİLDİR; metnin
+          // kendisi de aynı satırı yazıp bölgeden çıkabilirdi. `wrapUntrusted`
+          // sabit ayracı kullanır ve ayraç dizgesini girdiden temizler.
+          wrapUntrusted("BELGE METNİ", input.documentText ?? "(metin çıkarılamadı)"),
           "",
           contextBlock(input),
         ].join("\n"),

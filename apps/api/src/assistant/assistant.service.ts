@@ -150,7 +150,11 @@ export class AssistantService {
     });
 
     // 4) KAYNAK KAPISI — modelin uydurduğu referanslar elenir.
-    const { sources, droppedCount } = this.verifyCitations(run.data.citations, retrieved.chunks);
+    const { sources, droppedCount } = this.verifyCitations(
+      run.data.citations,
+      retrieved.chunks,
+      context.built.text,
+    );
 
     // [DÜZELTME] KAYNAKLILIK ÖLÇÜSÜ YALNIZCA `verified === true` REFERANSLARDIR.
     //
@@ -376,7 +380,11 @@ export class AssistantService {
       policyOverrides: context.built.policyOverrides,
     });
 
-    const { sources } = this.verifyCitations(run.data.citations, retrieved.chunks);
+    const { sources } = this.verifyCitations(
+      run.data.citations,
+      retrieved.chunks,
+      context.built.text,
+    );
 
     const warnings: string[] = [];
     if (retrieved.notice) warnings.push(retrieved.notice);
@@ -699,7 +707,23 @@ export class AssistantService {
   private verifyCitations(
     citations: readonly ChatCitation[],
     chunks: readonly RetrievedChunk[],
+    /**
+     * Modele GERÇEKTEN verilmiş dosya künyesi metni (denetim bulgusu Ö-21).
+     *
+     * TIMELINE/DEADLINE künyeleri eskiden KOŞULSUZ `verified: true` alıyordu;
+     * yorumdaki "bağlam künyesinden gelir" bir VARSAYIMDI, hiçbir yerde
+     * doğrulanmıyordu. Retrieval boş döndüğünde model bağlamda olmayan bir
+     * cevap üretip `citations:[{"kind":"TIMELINE","refId":"2026-05-14"}]`
+     * eklerse: `verifiedSources.length === 1` → `noSource=false` → "teyitsizdir"
+     * uyarısı EKLENMEZ; `unverifiedSources` boş olduğu için "TEYİT EDİLMEDİ"
+     * şeridi de çıkmaz. Cevap avukata KAYNAKLI VE DOĞRULANMIŞ gibi sunulurdu.
+     *
+     * Aynı dosyadaki `[DÜZELTME]` yorumu bu sınıf hatanın CASELAW için bir kez
+     * yaşandığını anlatıyor; TIMELINE/DEADLINE aynı düzeltmenin dışında kalmıştı.
+     */
+    contextText: string,
   ): { sources: Array<ChatCitation & { chunkId?: string; verified: boolean }>; droppedCount: number } {
+    const normalizedContext = contextText.toLocaleLowerCase("tr-TR");
     const byDocument = new Map<string, RetrievedChunk>();
     const byLabel = new Map<string, RetrievedChunk>();
     for (const chunk of chunks) {
@@ -741,11 +765,21 @@ export class AssistantService {
         continue;
       }
 
-      // TIMELINE / DEADLINE bağlam künyesinden gelir; CASELAW / STATUTE teyide tabidir.
-      sources.push({
-        ...citation,
-        verified: citation.kind === "TIMELINE" || citation.kind === "DEADLINE",
-      });
+      // TIMELINE / DEADLINE: "bağlam künyesinden gelir" iddiası ARTIK DOĞRULANIR.
+      // Künyenin `refId`'si ya da etiketi, modele verilen bağlam metninde
+      // geçmiyorsa uydurulmuş demektir → `verified: false` (Ö-21).
+      if (citation.kind === "TIMELINE" || citation.kind === "DEADLINE") {
+        const refId = citation.refId?.toLocaleLowerCase("tr-TR").trim();
+        const label = citation.label?.toLocaleLowerCase("tr-TR").trim();
+        const inContext =
+          (refId !== undefined && refId.length >= 4 && normalizedContext.includes(refId)) ||
+          (label !== undefined && label.length >= 6 && normalizedContext.includes(label));
+        sources.push({ ...citation, verified: inContext });
+        continue;
+      }
+
+      // CASELAW / STATUTE deterministik teyide tabidir; burada doğrulanmış sayılmaz.
+      sources.push({ ...citation, verified: false });
     }
 
     return { sources, droppedCount };

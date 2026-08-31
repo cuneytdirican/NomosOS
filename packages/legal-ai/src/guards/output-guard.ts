@@ -119,13 +119,33 @@ function getArrayAtPath(root: unknown, path: string): { parent: Record<string, u
   return { parent: cur, key: last, array: arr };
 }
 
+/**
+ * Bir kaynak nesnesi ANLAMLI mı?
+ *
+ * Denetim bulgusu İ-16: `hasSource` yalnız DOLULUĞA bakıyordu ve
+ * `"sourceRefs":[{}]` "kaynaklı" sayılıyordu. `SourceRefSchema`'nın BEŞ ALANININ
+ * BEŞİ DE `.optional()` olduğu için boş nesne şemadan da geçiyordu; zincir
+ * tamdı. Kaynak zorunluluğu, "alan var" değil "alanda bir şey var" demektir.
+ */
+function isMeaningfulSourceEntry(entry: unknown): boolean {
+  if (typeof entry === "string") return entry.trim().length > 0;
+  if (!isPlainObject(entry)) return false;
+  return Object.values(entry).some((v) => {
+    if (typeof v === "string") return v.trim().length > 0;
+    if (typeof v === "number") return Number.isFinite(v);
+    if (Array.isArray(v)) return v.length > 0;
+    return isPlainObject(v) && Object.keys(v).length > 0;
+  });
+}
+
 function hasSource(item: unknown, sourceFields: readonly string[]): boolean {
   if (!isPlainObject(item)) return false;
   for (const field of sourceFields) {
     const value = item[field];
     if (typeof value === "string" && value.trim().length > 0) return true;
-    if (Array.isArray(value) && value.length > 0) return true;
-    if (isPlainObject(value) && Object.keys(value).length > 0) return true;
+    // İ-16: dizinin DOLU olması yetmez; en az bir elemanın ANLAMLI olması gerekir.
+    if (Array.isArray(value) && value.some(isMeaningfulSourceEntry)) return true;
+    if (isPlainObject(value) && isMeaningfulSourceEntry(value)) return true;
   }
   return false;
 }

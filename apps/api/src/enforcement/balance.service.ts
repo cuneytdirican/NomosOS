@@ -47,7 +47,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@nomosos/db";
 import { PrismaService } from "../prisma/prisma.service";
-import { formatTrDate, startOfDay } from "../common/dates";
+import { formatTrDate, startOfDay, trCalendarDay } from "../common/dates";
 
 const ZERO = new Prisma.Decimal(0);
 const DAYS_IN_YEAR = new Prisma.Decimal(365);
@@ -199,7 +199,22 @@ export class EnforcementBalanceService {
       }),
     ]);
 
-    const asOf = startOfDay(asOfParam ?? new Date());
+    /**
+     * "BUGÜN" TÜRKİYE TAKVİMİNDEDİR (denetim bulgusu Ö-17).
+     *
+     * Eskiden `startOfDay(new Date())` yazılıydı — yani UTC takvim günü.
+     * TR saatiyle 00:00–02:59 arasında UTC günü BİR GERİDEDİR: aynı dosya için
+     * saat 01:30'da sorulan bakiye ile 04:00'te sorulan bakiye BİR GÜN farklı
+     * faiz taşır. Canlı doğrulanan dosyada matrah 337.489,04 TL, oran %48 →
+     * günlük 443,85 TL fark. İcra dairesine bildirilecek bakiye, sorgunun
+     * SAATİNE bağlı olamaz.
+     *
+     * `trCalendarDay` bu iş için (`common/dates.ts`) yazılmış ve gerekçesi
+     * kutu içinde anlatılmıştı; zamanlayıcıda kullanılıyor, para hesabında
+     * kullanılmıyordu. Kullanıcının verdiği `asOf` parametresi zaten bir takvim
+     * günüdür; yalnız "şimdi" varsayılanı TR'ye çevrilir.
+     */
+    const asOf = asOfParam ? startOfDay(asOfParam) : trCalendarDay(new Date());
     const startDateSource: "ALAN" | "TAKIP_TALEBI_VARSAYILANI" = file.interestStartDate
       ? "ALAN"
       : "TAKIP_TALEBI_VARSAYILANI";

@@ -31,6 +31,7 @@ import { assertAiPolicyAllows } from "../common/ai-policy";
 import { creditRunContext } from "../credits/credit-context";
 import { providerUnreachable } from "../common/errors";
 import type { AuthUser } from "../common/types";
+import { readProviderHeaders } from "../common/provider-headers";
 
 function safeJsonParse<T>(value: string | null): T | undefined {
   if (!value) return undefined;
@@ -110,7 +111,7 @@ export class AssistantLlmService {
       apiKey: config.encryptedApiKey ? decryptSecret(config.encryptedApiKey) : undefined,
       baseUrl: config.baseUrl ?? undefined,
       defaultModel: config.defaultModel,
-      headers: safeJsonParse<Record<string, string>>(config.headersJson),
+      headers: readProviderHeaders(config.headersJson),
       mapping: safeJsonParse<CustomMapping>(config.mappingJson),
     };
   }

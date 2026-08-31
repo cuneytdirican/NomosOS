@@ -70,6 +70,20 @@ import type { ReportBody, ReportBuilder, ReportCell } from "../report-types";
 
 type Breakdown = "DOSYA" | "MUVEKKIL";
 
+/**
+ * SÜRE DEĞERİNİN PARA BİRİMİ (denetim bulgusu K-06).
+ *
+ * `TimeEntry` modelinde `currency` alanı YOKTUR — yalnız `hourlyRate` vardır ve
+ * bu oran büronun taban para biriminde tutulur. Süre değeri bu yüzden satırın
+ * para birimine bağlanamaz; kendi sabit para birimiyle etiketlenir.
+ *
+ * Şemaya `TimeEntry.currency` eklendiğinde bu sabit kaldırılıp değer kayıttan
+ * okunmalıdır; o güne kadar en dürüst davranış, süre değerini AYRI bir para
+ * birimi sütunuyla göstermek ve karşılaştırılamayan satırlarda `fark`ı boş
+ * bırakmaktır.
+ */
+const TIME_VALUE_CURRENCY = "TRY";
+
 interface FinanceRow {
   groupId: string;
   groupName: string;
@@ -242,8 +256,24 @@ export const karlilikReport: ReportBuilder = async (ctx): Promise<ReportBody> =>
     }
   }
 
-  let totalAccrued = new Prisma.Decimal(0);
-  let totalExpenses = new Prisma.Decimal(0);
+  /**
+   * PARA BİRİMİ BAŞINA KOVA (denetim bulgusu K-06).
+   *
+   * Eskiden `totalAccrued`/`totalExpenses` tek bir Decimal'di ve `r.currency`'ye
+   * BAKMADAN birikiyordu; sonuç `primaryCurrency` etiketiyle basılıyordu. 40.000
+   * EUR + 4.230 TRY toplanıp "35.770,00 TRY" diye gösteriliyordu. Kur çevrimi
+   * yapılamaz (şemada kur alanı yok) — o hâlde toplanamaz da.
+   */
+  const byCurrency = new Map<string, { accrued: Prisma.Decimal; expenses: Prisma.Decimal }>();
+  const addTo = (currency: string, accrued: Prisma.Decimal, expenses: Prisma.Decimal) => {
+    const bucket = byCurrency.get(currency) ?? {
+      accrued: new Prisma.Decimal(0),
+      expenses: new Prisma.Decimal(0),
+    };
+    bucket.accrued = bucket.accrued.plus(accrued);
+    bucket.expenses = bucket.expenses.plus(expenses);
+    byCurrency.set(currency, bucket);
+  };
   let totalMinutes = 0;
   let minutesWithoutRate = 0;
   const currencies = new Set<string>();
@@ -282,6 +312,20 @@ export const karlilikReport: ReportBuilder = async (ctx): Promise<ReportBody> =>
     const timeValue = time ? decOf(time.value) : null;
     const noRate = intOf(time?.minuteswithoutrate);
 
+    // SÜRE DEĞERİ SATIRIN PARA BİRİMİNDE DEĞİLDİR (denetim bulgusu K-06).
+    //
+    // `TimeEntry`de `currency` alanı yoktur; `hourlyRate` büronun taban para
+    // biriminde tutulur (TIME_VALUE_CURRENCY). Eskiden `sureDegeri` ve `fark`
+    // sütunları `currencyKey: "paraBirimi"` taşıyordu, yani satırın para birimi
+    // EUR ise arayüz TRY cinsinden bir tutarı "46.125,00 EUR" diye basıyordu.
+    // Toplam kartları için dürüst bir uyarı vardı; SATIR ETİKETİNİ hiçbir uyarı
+    // kapsamıyordu — bulgunun keskin kısmı orasıydı.
+    //
+    // Artık süre sütunları KENDİ para birimi sütununa (`sureParaBirimi`) bağlıdır
+    // ve `fark` yalnız satır para birimi süre para birimiyle AYNI olduğunda
+    // hesaplanır; farklıysa `null` döner (iki para birimini çıkarmak anlamsızdır).
+    const comparable = currency === null || currency === TIME_VALUE_CURRENCY;
+
     return {
       ad: groupName,
       alt: subName,
@@ -294,8 +338,9 @@ export const karlilikReport: ReportBuilder = async (ctx): Promise<ReportBody> =>
       // dakikayı iki satırda göstermek okuyucuya 1.200 dakika saydırırdı.
       calismaDakika: time ? minutes : null,
       calismaSaat: time ? minutesToHoursNumber(minutes) : null,
+      sureParaBirimi: timeValue === null ? null : TIME_VALUE_CURRENCY,
       sureDegeri: timeValue === null ? null : moneyOut(timeValue),
-      fark: timeValue === null ? null : moneyOut(gross.minus(timeValue)),
+      fark: timeValue === null || !comparable ? null : moneyOut(gross.minus(timeValue)),
       // TEK DECIMAL İŞLEMİ: `tahakkuk × 60 / dakika`. Eskiden `dakika / 60`
       // JS float'ı Decimal'e sarılıyordu (denetim bulgusu 16); 100 dakika için
       // 1.6666666666666667 üretip "hepsi Decimal, float YOK" sözleşmesini
@@ -312,8 +357,7 @@ export const karlilikReport: ReportBuilder = async (ctx): Promise<ReportBody> =>
   const rows: Record<string, ReportCell>[] = financeRows.map((r) => {
     const accrued = decOf(r.accrued);
     const expenses = decOf(r.expenses);
-    totalAccrued = totalAccrued.plus(accrued);
-    totalExpenses = totalExpenses.plus(expenses);
+    addTo(r.currency, accrued, expenses);
     currencies.add(r.currency);
     return buildRow(r.groupId, r.groupName, r.subName, r.currency, accrued, expenses);
   });
@@ -371,8 +415,16 @@ export const karlilikReport: ReportBuilder = async (ctx): Promise<ReportBody> =>
         { key: "brutKatki", label: "Brüt katkı", type: "money", currencyKey: "paraBirimi" },
         { key: "calismaDakika", label: "Kayıtlı süre (dk)", type: "minutes" },
         { key: "calismaSaat", label: "Kayıtlı süre (saat)", type: "number" },
-        { key: "sureDegeri", label: "Süre değeri", type: "money", currencyKey: "paraBirimi" },
-        { key: "fark", label: "Brüt katkı − süre değeri", type: "money", currencyKey: "paraBirimi" },
+        // K-06: süre sütunları SATIRIN para birimine değil, süre değerinin
+        // kendi para birimine bağlıdır.
+        { key: "sureParaBirimi", label: "Süre para birimi", type: "text" },
+        { key: "sureDegeri", label: "Süre değeri", type: "money", currencyKey: "sureParaBirimi" },
+        {
+          key: "fark",
+          label: "Brüt katkı − süre değeri",
+          type: "money",
+          currencyKey: "sureParaBirimi",
+        },
         { key: "efektifSaatlik", label: "Efektif saatlik tahakkuk", type: "money", currencyKey: "paraBirimi" },
         { key: "ucretsizDakika", label: "Ücretsiz dakika (oran yok)", type: "minutes" },
       ],
@@ -381,34 +433,66 @@ export const karlilikReport: ReportBuilder = async (ctx): Promise<ReportBody> =>
     params.limit,
   );
 
-  const primaryCurrency = currencies.has("TRY") || currencies.size === 0 ? "TRY" : [...currencies].sort()[0];
+  // TOPLAM KARTLARI YALNIZ TEK BİR PARA BİRİMİNİ RAPORLAR (denetim bulgusu K-06).
+  //
+  // Diğer para birimleri ayrı bir tabloda listelenir; toplanmaz, çevrilmez.
+  const primaryCurrency =
+    currencies.has(TIME_VALUE_CURRENCY) || currencies.size === 0
+      ? TIME_VALUE_CURRENCY
+      : [...currencies].sort()[0];
+  const primaryBucket = byCurrency.get(primaryCurrency) ?? {
+    accrued: new Prisma.Decimal(0),
+    expenses: new Prisma.Decimal(0),
+  };
+  const totalAccrued = primaryBucket.accrued;
+  const totalExpenses = primaryBucket.expenses;
   const totalGross = totalAccrued.minus(totalExpenses);
 
+  // Süre değeri TIME_VALUE_CURRENCY cinsindedir; `fark` ölçüsü yalnız
+  // `primaryCurrency` onunla aynı olduğunda anlamlıdır.
+  const timeComparable = primaryCurrency === TIME_VALUE_CURRENCY;
+
   const metrics = [
-    moneyMetric("tahakkuk", "Toplam tahakkuk", totalAccrued, undefined, primaryCurrency, {
+    moneyMetric("tahakkuk", `Toplam tahakkuk (${primaryCurrency})`, totalAccrued, undefined, primaryCurrency, {
       higherIsBetter: true,
+      definition: `Yalnızca ${primaryCurrency} hareketleri. Diğer para birimleri ayrı tabloda listelenir; toplanmaz.`,
     }),
-    moneyMetric("masraf", "Toplam masraf + harç", totalExpenses, undefined, primaryCurrency, {
+    moneyMetric("masraf", `Toplam masraf + harç (${primaryCurrency})`, totalExpenses, undefined, primaryCurrency, {
       higherIsBetter: false,
+      definition: `Yalnızca ${primaryCurrency} hareketleri.`,
     }),
-    moneyMetric("brutKatki", "Toplam brüt katkı", totalGross, undefined, primaryCurrency, {
+    moneyMetric("brutKatki", `Toplam brüt katkı (${primaryCurrency})`, totalGross, undefined, primaryCurrency, {
       higherIsBetter: true,
-      definition: "Tahakkuk − (masraf + harç). Genel gider ve personel maliyeti içermez.",
+      definition:
+        `Tahakkuk − (masraf + harç), yalnız ${primaryCurrency}. ` +
+        "Genel gider ve personel maliyeti içermez.",
     }),
-    moneyMetric("sureDegeri", "Kayıtlı sürenin değeri", totalTimeValue, undefined, primaryCurrency, {
-      definition: "Σ(dakika × saatlik ücret) / 60. Saatlik ücreti bilinmeyen dakikalar HARİÇTİR.",
-    }),
+    moneyMetric(
+      "sureDegeri",
+      `Kayıtlı sürenin değeri (${TIME_VALUE_CURRENCY})`,
+      totalTimeValue,
+      undefined,
+      TIME_VALUE_CURRENCY,
+      {
+        definition:
+          "Σ(dakika × saatlik ücret) / 60. Saatlik ücreti bilinmeyen dakikalar HARİÇTİR. " +
+          `Zaman kaydında para birimi alanı olmadığı için değer daima ${TIME_VALUE_CURRENCY} kabul edilir.`,
+      },
+    ),
+    // `fark` yalnız iki taraf AYNI para biriminde olduğunda hesaplanır.
     moneyMetric(
       "fark",
       "Brüt katkı − süre değeri",
-      totalGross.minus(totalTimeValue),
+      timeComparable ? totalGross.minus(totalTimeValue) : new Prisma.Decimal(0),
       undefined,
-      primaryCurrency,
+      TIME_VALUE_CURRENCY,
       {
         higherIsBetter: true,
-        definition:
-          "Pozitif: tahakkuk, harcanan sürenin ücret karşılığından fazla. Negatif: dosyaya " +
-          "kayıtlı süre, tahakkuk edilen ücretin üzerinde.",
+        definition: timeComparable
+          ? "Pozitif: tahakkuk, harcanan sürenin ücret karşılığından fazla. Negatif: dosyaya " +
+            "kayıtlı süre, tahakkuk edilen ücretin üzerinde."
+          : `HESAPLANMADI: raporun baskın para birimi ${primaryCurrency}, süre değeri ise ` +
+            `${TIME_VALUE_CURRENCY} cinsindendir. Kur çevrimi yapılmadığı için bu iki tutar çıkarılamaz.`,
       },
     ),
     countMetric("calismaDakika", "Toplam kayıtlı süre (dk)", totalMinutes, undefined),
@@ -452,9 +536,21 @@ export const karlilikReport: ReportBuilder = async (ctx): Promise<ReportBody> =>
     );
   }
   if (currencies.size > 1) {
+    // K-06 SONRASI METİN: toplamlar artık "yan yana toplamıyor"; tek para
+    // biriminde raporlanıyor. Uyarı bu yüzden yeniden yazıldı — eski metin
+    // düzeltilmiş davranışı yanlış anlatırdı.
+    const others = [...currencies].filter((c) => c !== primaryCurrency).sort();
     warnings.push(
-      `Rapor ${currencies.size} para birimi içeriyor (${[...currencies].sort().join(", ")}); ` +
-        "toplam ölçüler farklı para birimlerini yan yana toplar. Kur çevrimi yapılmaz.",
+      `Rapor ${currencies.size} para birimi içeriyor (${[...currencies].sort().join(", ")}). ` +
+        `TOPLAM KARTLARI YALNIZ ${primaryCurrency} hareketlerini gösterir; ` +
+        `${others.join(", ")} tutarları toplama GİRMEZ ve "Diğer para birimleri" tablosunda ` +
+        "ayrı listelenir. Kur çevrimi yapılmaz.",
+    );
+  }
+  if (!timeComparable) {
+    warnings.push(
+      `Süre değeri ${TIME_VALUE_CURRENCY} cinsindendir; raporun baskın para birimi ` +
+        `${primaryCurrency} olduğu için "Brüt katkı − süre değeri" ölçüsü HESAPLANMADI.`,
     );
   }
   if (repeatedCurrencyRows > 0) {
@@ -488,5 +584,38 @@ export const karlilikReport: ReportBuilder = async (ctx): Promise<ReportBody> =>
     );
   }
 
-  return { metrics, tables: [table], warnings };
+  // K-06: TOPLANMAYAN para birimleri ayrı bir tabloda görünür. Sayı kaybolmaz,
+  // ama yanlış etiketle de toplanmaz. `buro-ozet.report.ts:199-230` ile aynı desen.
+  const currencyRows = [...byCurrency.entries()]
+    .sort(([a], [b]) => (a === primaryCurrency ? -1 : b === primaryCurrency ? 1 : a.localeCompare(b)))
+    .map(([currency, bucket]) => ({
+      paraBirimi: currency,
+      tahakkuk: moneyOut(bucket.accrued),
+      masraf: moneyOut(bucket.expenses),
+      brutKatki: moneyOut(bucket.accrued.minus(bucket.expenses)),
+      toplamaGirdi: currency === primaryCurrency ? "Evet" : "Hayır",
+    }));
+
+  const currencyTable = finishTable(
+    {
+      key: "paraBirimleri",
+      title: "Para birimi bazında toplam",
+      definition:
+        "Her para birimi AYRI toplanır; kur çevrimi yapılmaz ve farklı para birimleri " +
+        "birbirine EKLENMEZ. Yukarıdaki toplam kartları yalnızca " +
+        `${primaryCurrency} satırını gösterir.`,
+      columns: [
+        { key: "paraBirimi", label: "Para birimi", type: "text" },
+        { key: "tahakkuk", label: "Tahakkuk", type: "money", currencyKey: "paraBirimi" },
+        { key: "masraf", label: "Masraf + harç", type: "money", currencyKey: "paraBirimi" },
+        { key: "brutKatki", label: "Brüt katkı", type: "money", currencyKey: "paraBirimi" },
+        { key: "toplamaGirdi", label: "Toplam kartlarına girdi mi", type: "text" },
+      ],
+    },
+    currencyRows,
+    // Para birimi sayısı doğal olarak küçüktür; kırpma uygulanmaz.
+    Math.max(currencyRows.length, 1),
+  );
+
+  return { metrics, tables: [table, currencyTable], warnings };
 };

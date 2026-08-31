@@ -36,6 +36,8 @@ import type { ReportBody, ReportBuilder, ReportCell } from "../report-types";
 
 interface StageRow {
   stage: string;
+  /** Ö-11: grup anahtarının parçası — farklı para birimleri toplanmaz. */
+  paraBirimi: string;
   dosya: number;
   anapara: Prisma.Decimal | null;
   tahsil: Prisma.Decimal | null;
@@ -65,8 +67,23 @@ export const icraTahsilatReport: ReportBuilder = async (ctx): Promise<ReportBody
   const end = params.period.endExclusive;
 
   const [stageRows, periodCollections, durationRows, fileRows, currencyRows] = await Promise.all([
+    // DÖNEM SÜZGECİ (denetim bulgusu Ö-11).
+    //
+    // Beş sorgunun DÖRDÜ yalnız `ef."tenantId" = …` taşıyordu; dönem parametresi
+    // hiç uygulanmıyordu. Canlı ölçüm: `?donem=GECEN_YIL` (2025) →
+    // `dosyaSayisi=1, anapara=347500.00, tahsil=42000.00`; oysa dosya 03.06.2026
+    // açılmış ve tahsilat 12.08.2026 tarihliydi. Doğrusu 0/0'dır.
+    //
+    // "Dönem sonu fotoğrafı" ifadesi gerçekte "BUGÜN" demekti. Artık gerçekten
+    // dönem sonudur: dönem BİTMEDEN açılmış dosyalar ve dönem BİTMEDEN yapılmış
+    // tahsilatlar sayılır.
     db.$queryRaw<StageRow[]>`
       SELECT ef.stage::text        AS stage,
+             -- O-11 kuyrugu: para birimi GRUP ANAHTARINA girer. Eskiden yalniz
+             -- asamaya gore gruplaniyor ve farkli para birimlerindeki asil
+             -- alacaklar tek sutunda TOPLANIYORDU; sutunda currencyKey de yoktu,
+             -- yani okuyucu hepsini TL saniyordu.
+             ef.currency           AS "paraBirimi",
              COUNT(*)::int         AS dosya,
              SUM(ef."principalAmount") AS anapara,
              COALESCE(SUM(col.total), 0) AS tahsil
@@ -75,10 +92,12 @@ export const icraTahsilatReport: ReportBuilder = async (ctx): Promise<ReportBody
           SELECT SUM(c.amount) AS total
             FROM "CollectionRecord" c
            WHERE c."enforcementFileId" = ef.id
+             AND c."date" < ${end}
         ) col ON TRUE
        WHERE ef."tenantId" = ${tenantId}
-       GROUP BY ef.stage
-       ORDER BY 2 DESC
+         AND ef."requestDate" < ${end}
+       GROUP BY ef.stage, ef.currency
+       ORDER BY 3 DESC
     `,
     db.collectionRecord.groupBy({
       by: ["method"],
@@ -96,8 +115,10 @@ export const icraTahsilatReport: ReportBuilder = async (ctx): Promise<ReportBody
           SELECT MIN(c."date") AS first_col
             FROM "CollectionRecord" c
            WHERE c."enforcementFileId" = ef.id
+             AND c."date" < ${end}
         ) fc ON TRUE
        WHERE ef."tenantId" = ${tenantId}
+         AND ef."requestDate" < ${end}
          AND fc.first_col IS NOT NULL
     `,
     db.$queryRaw<FileRow[]>`
@@ -121,8 +142,10 @@ export const icraTahsilatReport: ReportBuilder = async (ctx): Promise<ReportBody
           SELECT SUM(cr.amount) AS total, MIN(cr."date") AS first_col
             FROM "CollectionRecord" cr
            WHERE cr."enforcementFileId" = ef.id
+             AND cr."date" < ${end}
         ) col ON TRUE
        WHERE ef."tenantId" = ${tenantId}
+         AND ef."requestDate" < ${end}
        ORDER BY (ef."principalAmount" - COALESCE(col.total, 0)) DESC
        -- limit + 1: fazladan gelen satir "sinira dayanildi" kanitidir. Eski
        -- min(limit, 1000) sessizce kirpiyor, finishTable elindeki kisa
@@ -131,15 +154,12 @@ export const icraTahsilatReport: ReportBuilder = async (ctx): Promise<ReportBody
     `,
     db.enforcementFile.groupBy({
       by: ["currency"],
-      where: { tenantId },
+      where: { tenantId, requestDate: { lt: end } },
       _count: { _all: true },
     }),
   ]);
 
   const totalFiles = stageRows.reduce((sum, r) => sum + intOf(r.dosya), 0);
-  const totalPrincipal = stageRows.reduce((sum, r) => sum.plus(decOf(r.anapara)), new Prisma.Decimal(0));
-  const totalCollected = stageRows.reduce((sum, r) => sum.plus(decOf(r.tahsil)), new Prisma.Decimal(0));
-  const totalRemaining = totalPrincipal.minus(totalCollected);
 
   const periodCollected = periodCollections.reduce(
     (sum, r) => sum.plus(decOf(r._sum.amount)),
@@ -153,21 +173,41 @@ export const icraTahsilatReport: ReportBuilder = async (ctx): Promise<ReportBody
   const primaryCurrency =
     currencyRows.find((r) => r.currency === "TRY")?.currency ?? currencyRows[0]?.currency ?? "TRY";
 
+  // TOPLAM ÖLÇÜLERİ YALNIZ TEK PARA BİRİMİNİ KAPSAR (Ö-11 kuyruğu).
+  //
+  // Eskiden tüm aşama satırları para birimine bakılmadan toplanıyor ve sonuç
+  // `primaryCurrency` etiketiyle basılıyordu. Kur çevrimi yapılmayan bir sistemde
+  // bu toplam anlamsızdır; diğer para birimleri aşama tablosunda satır satır
+  // görünür ve uyarıyla bildirilir.
+  const primaryStageRows = stageRows.filter((r) => r.paraBirimi === primaryCurrency);
+  const totalPrincipal = primaryStageRows.reduce(
+    (sum, r) => sum.plus(decOf(r.anapara)),
+    new Prisma.Decimal(0),
+  );
+  const totalCollected = primaryStageRows.reduce(
+    (sum, r) => sum.plus(decOf(r.tahsil)),
+    new Prisma.Decimal(0),
+  );
+  const totalRemaining = totalPrincipal.minus(totalCollected);
+
   /* ── Aşama dağılımı ── */
   const stageTable = finishTable(
     {
       key: "asama",
       title: "Aşama dağılımı",
       definition:
-        "Dönem sonu fotoğrafı. Tahsilat sütunu dosyanın TÜM ZAMANLARDAKİ tahsilatıdır " +
-        "(dönem içi değil); kalan = asıl alacak − tahsilat, FAİZ VE MASRAF HARİÇ.",
+        "DÖNEM SONU FOTOĞRAFI: dönem bitmeden açılmış dosyalar ve dönem bitmeden " +
+        "yapılmış tahsilatlar. Tahsilat sütunu dönem içi DEĞİL, dönem sonuna kadarki " +
+        "KÜMÜLATİF tahsilattır; dönem içi tahsilat ayrı ölçüdedir (Ö-11). " +
+        "Kalan = asıl alacak − tahsilat, FAİZ VE MASRAF HARİÇ.",
       columns: [
         { key: "asama", label: "Aşama", type: "text" },
+        { key: "paraBirimi", label: "Para birimi", type: "text" },
         { key: "dosya", label: "Dosya", type: "number" },
         { key: "pay", label: "Pay (%)", type: "percent" },
-        { key: "anapara", label: "Asıl alacak", type: "money" },
-        { key: "tahsil", label: "Tahsil edilen", type: "money" },
-        { key: "kalan", label: "Kalan", type: "money" },
+        { key: "anapara", label: "Asıl alacak", type: "money", currencyKey: "paraBirimi" },
+        { key: "tahsil", label: "Tahsil edilen", type: "money", currencyKey: "paraBirimi" },
+        { key: "kalan", label: "Kalan", type: "money", currencyKey: "paraBirimi" },
         { key: "tahsilOrani", label: "Tahsil oranı (%)", type: "percent" },
       ],
     },
@@ -176,6 +216,7 @@ export const icraTahsilatReport: ReportBuilder = async (ctx): Promise<ReportBody
       const collected = decOf(r.tahsil);
       return {
         asama: r.stage,
+        paraBirimi: r.paraBirimi,
         dosya: intOf(r.dosya),
         pay: ratioPercent(intOf(r.dosya), totalFiles),
         anapara: moneyOut(principal),
@@ -299,9 +340,16 @@ export const icraTahsilatReport: ReportBuilder = async (ctx): Promise<ReportBody
     if (w) warnings.push(w);
   }
   if (currencyRows.length > 1) {
+    // Ö-11 sonrası: toplamlar artık "yan yana toplamıyor". Uyarı metni
+    // düzeltilmiş davranışı anlatacak biçimde yeniden yazıldı.
+    const others = currencyRows
+      .map((r) => r.currency)
+      .filter((c) => c !== primaryCurrency)
+      .sort();
     warnings.push(
-      `İcra dosyaları ${currencyRows.length} farklı para biriminde; toplam ölçüler farklı ` +
-        "para birimlerini yan yana toplar. Kur çevrimi yapılmaz.",
+      `İcra dosyaları ${currencyRows.length} farklı para biriminde. TOPLAM ÖLÇÜLER YALNIZ ` +
+        `${primaryCurrency} dosyalarını kapsar; ${others.join(", ")} tutarları toplama GİRMEZ ve ` +
+        "aşama tablosunda ayrı satırlar olarak görünür. Kur çevrimi yapılmaz.",
     );
   }
   if (avgDaysFileCount === 0) {

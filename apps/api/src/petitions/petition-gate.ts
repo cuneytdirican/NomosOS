@@ -18,6 +18,16 @@
  *     hangi mevzuat atıflarını yürürlükteki metinden teyit ettiğini tek tek
  *     bildirir; beyan AuditLog'a yazılır ve sorumluluk kayda geçer.
  *  4. TANINMAYAN BİÇİM — ayrıştırılamayan atıf da bloklar (fail-closed).
+ *  5. KÜNYESİZ MAHKEME ATFI — metinde "Yargıtay / Danıştay / AYM / HGK" geçtiği
+ *     hâlde o cümleden tek bir YAPILANDIRILMIŞ künye çıkarılamadıysa bloklar.
+ *
+ *     Denetim bulgusu K-10: 4 numaralı kural YAZILIYDI AMA UYGULANAMIYORDU.
+ *     `TANINMADI` türü ancak `extractCitations` bir şey ÇIKARABİLDİĞİNDE doğar;
+ *     çıkarıcı hiç görmediyse "tanınmayan biçim" kaydı hiç oluşmuyor,
+ *     `blocking=[]` kalıyor, kapı `ok:true` diyordu. "Yargıtay 9. HD'nin
+ *     2023/4512 E. sayılı kararı bu yöndedir" (uydurma) cümlesi kapıdan
+ *     GEÇİYOR ve dilekçe "teyit çalıştırıldı" damgasıyla UDF'e dönüşüyordu.
+ *     5. kural o boşluğu gerçek fail-closed hâline getirir.
  *
  * BAYAT TEYİT YASAĞI kapıda değil, veri modelinde çözülür: teyit sonuçları
  * CitationCheck'e dilekçe kimliğiyle değil SÜRÜM kimliğiyle yazılır. İçerik
@@ -63,7 +73,17 @@ export function citationKey(raw: string): string {
 
 export function evaluateReadyGate(
   citations: readonly GateCitation[],
-  options: { declaredStatutes?: readonly string[] } = {},
+  options: {
+    declaredStatutes?: readonly string[];
+    /**
+     * KÜNYESİZ MAHKEME ATFI SİNYALLERİ (kural 5).
+     *
+     * `detectUnstructuredCitationSignals(plainText)` çıktısı. Çağıran bunu
+     * geçmediğinde davranış eskisiyle aynıdır — ama geçmelidir: bu kapının
+     * fail-open olduğu tek delik buydu.
+     */
+    unstructuredSignals?: readonly { sentence: string; court: string }[];
+  } = {},
 ): ReadyGateResult {
   const declared = new Set((options.declaredStatutes ?? []).map(citationKey));
   const blocking: ReadyGateBlock[] = [];
@@ -131,6 +151,23 @@ export function evaluateReadyGate(
         remedy: "Gerçek kararı künyesiyle sisteme ekleyin veya atfı metinden çıkarın.",
       });
     }
+  }
+
+  // KURAL 5 — künyesiz mahkeme atfı (K-10). Bu blokların `override` yolu YOKTUR:
+  // avukat künyeyi standart biçime getirmeli ya da cümleyi metinden çıkarmalıdır.
+  for (const signal of options.unstructuredSignals ?? []) {
+    blocking.push({
+      raw: signal.sentence,
+      kind: "TANINMADI",
+      status: "BELIRSIZ",
+      reason:
+        `Metinde "${signal.court}" geçiyor ancak bu cümleden doğrulanabilir bir künye ` +
+        "çıkarılamadı. Künyesiz bir mahkeme atfı deterministik olarak teyit edilemez; " +
+        "doğrulanamayan atıf doğrulanmış sayılmaz.",
+      remedy:
+        'Künyeyi standart biçime getirin (örn. "Yargıtay 9. HD 2023/4512 E. 2023/9981 K." ' +
+        'ya da en azından "2023/4512 E."), veya atfı metinden çıkarın.',
+    });
   }
 
   const verified = citations.filter((c) => c.status === "DOGRULANDI" && !c.isDemo).length;

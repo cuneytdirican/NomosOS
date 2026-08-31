@@ -188,7 +188,22 @@ export class PortalAdminService {
 
     const updated = await this.prisma.client.portalUser.update({
       where: { id: record.id },
-      data: { isActive },
+      data: {
+        isActive,
+        // OTURUM DAMGASI HER İKİ YÖNDE DE TAZELENİR (denetim bulgusu Ö-05).
+        //
+        // Eskiden yalnız `isActive` yazılıyordu. `schema.prisma` yorumu
+        // "çıkış, parola sıfırlama VE HESABIN PASİFLEŞTİRİLMESİ bu damgayı
+        // tazeler" diyordu; üçüncüsü doğru değildi. Sonucu: işten ayrılan
+        // muhasebecinin hesabı kapatılıp iki saat sonra yeni muhasebeci için
+        // yeniden açıldığında, eskisinin tarayıcısındaki 8 saatlik token
+        // YENİDEN ÇALIŞIYORDU — `portal-jwt.guard.ts:140` kontrolü damga null
+        // olduğu için hiç devreye girmiyordu.
+        //
+        // Aktifleştirmede de tazelenir: hesap yeni bir kişiye devredilmiş
+        // olabilir ve devirden önceki hiçbir oturum devam etmemelidir.
+        sessionsValidFrom: new Date(),
+      },
       select: { id: true, email: true, fullName: true, isActive: true },
     });
 

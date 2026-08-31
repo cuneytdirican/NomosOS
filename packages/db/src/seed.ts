@@ -14,7 +14,8 @@ import { PrismaClient, Prisma } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 import {
   SYSTEM_DEADLINE_RULES,
-  TR_HOLIDAYS_2026,
+  SUPPORTED_HOLIDAY_YEARS,
+  TR_HOLIDAYS_BY_YEAR,
   expandJudicialRecess,
   parseDateOnly,
 } from "@nomosos/legal-core";
@@ -136,28 +137,39 @@ type HolidaySeed = {
  * SAYMAZ, yalnızca "işlemi 13.00'ten önce tamamlayınız" uyarısı üretir
  * (denetim bulgusu 1).
  */
-const OFFICIAL_HOLIDAYS_2026: HolidaySeed[] = TR_HOLIDAYS_2026.map((h) => ({
-  date: parseDateOnly(h.date),
-  name: h.name,
-  type: "RESMI_TATIL" as const,
-  isHalfDay: h.isHalfDay === true,
-  isApproximate: h.isApproximate === true,
-}));
+const OFFICIAL_HOLIDAYS: HolidaySeed[] = SUPPORTED_HOLIDAY_YEARS.flatMap((year) =>
+  (TR_HOLIDAYS_BY_YEAR[year] ?? []).map((h) => ({
+    date: parseDateOnly(h.date),
+    name: h.name,
+    type: "RESMI_TATIL" as const,
+    isHalfDay: h.isHalfDay === true,
+    isApproximate: h.isApproximate === true,
+  })),
+);
 
-/** Adli tatil: her yıl 20 Temmuz – 31 Ağustos (HMK m.102). */
-function judicialRecess2026(): HolidaySeed[] {
-  return expandJudicialRecess(2026).map((h) => ({
-    date: new Date(h.date),
-    name: h.name ?? "Adli tatil (20 Temmuz – 31 Ağustos)",
-    type: "ADLI_TATIL" as const,
-    isHalfDay: false,
-    isApproximate: false,
-  }));
+/**
+ * Adli tatil: her yıl 20 Temmuz – 31 Ağustos (HMK m.102).
+ *
+ * DESTEKLENEN HER YIL İÇİN YAZILIR (denetim bulgusu K-04). Eskiden yalnız 2026
+ * tohumlanıyordu; süre motorunun tatil penceresi TETİK YILINDAN açıldığı için
+ * 2027 tetikli her hesapta sorgu boş dönüyor ve resmî tatiller tamamen yok
+ * sayılıyordu.
+ */
+function judicialRecessDays(): HolidaySeed[] {
+  return SUPPORTED_HOLIDAY_YEARS.flatMap((year) =>
+    expandJudicialRecess(year).map((h) => ({
+      date: new Date(h.date),
+      name: h.name ?? "Adli tatil (20 Temmuz – 31 Ağustos)",
+      type: "ADLI_TATIL" as const,
+      isHalfDay: false,
+      isApproximate: false,
+    })),
+  );
 }
 
 async function seedHolidays(): Promise<{ official: number; recess: number }> {
-  const official = OFFICIAL_HOLIDAYS_2026;
-  const recess = judicialRecess2026();
+  const official = OFFICIAL_HOLIDAYS;
+  const recess = judicialRecessDays();
   for (const h of [...official, ...recess]) {
     await prisma.holiday.upsert({
       where: { date_type_name: { date: h.date, type: h.type, name: h.name } },

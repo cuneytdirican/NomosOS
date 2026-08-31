@@ -141,7 +141,7 @@ export class ExpertDeadlinesService {
         },
       },
       orderBy: { date: "asc" },
-      select: { date: true, type: true, name: true },
+      select: { date: true, type: true, name: true, isHalfDay: true, isApproximate: true },
     });
 
     const result = computeDeadline({

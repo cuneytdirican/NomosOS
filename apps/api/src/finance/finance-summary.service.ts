@@ -5,6 +5,7 @@ import type { AuthUser } from "../common/types";
 import { endOfDay, parseDateParam, startOfDay } from "../common/dates";
 import { assertFinanceAccess, FINANCE_ACCESS } from "./finance-access";
 import { dec, formatMoneyTr, fromSum, moneyOut } from "./money";
+import { agingBucketOf, agingReferenceDate, overdueDaysOf } from "./aging-rules";
 
 /**
  * Modül 08 — DETERMİNİSTİK FİNANS ÖZETLERİ.
@@ -43,7 +44,6 @@ import { dec, formatMoneyTr, fromSum, moneyOut } from "./money";
  */
 
 const ACCRUAL: FinancialEntryType[] = ["TAHAKKUK", "VEKALET_UCRETI", "DANISMANLIK"];
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /** Fatura bakiyesi olan (açık) fatura durumları. */
 const OPEN_INVOICE_STATUSES = ["GONDERILDI", "KISMI_ODENDI"] as const;
@@ -427,15 +427,11 @@ export class FinanceSummaryService {
       if (row.invoiceId) paidMap.set(row.invoiceId, fromSum(row._sum.amount));
     }
 
-    const today = startOfDay(new Date()).getTime();
+    const today = new Date();
     return invoices.map((inv) => {
       const paid = paidMap.get(inv.id) ?? new Prisma.Decimal(0);
       const remaining = dec(inv.total).minus(paid);
-      const referenceDate = inv.dueDate ?? inv.issueDate;
-      const overdueDays = Math.max(
-        0,
-        Math.floor((today - startOfDay(referenceDate).getTime()) / MS_PER_DAY),
-      );
+      const referenceDate = agingReferenceDate(inv);
       return {
         invoiceId: inv.id,
         clientId: inv.clientId,
@@ -445,7 +441,11 @@ export class FinanceSummaryService {
         remaining,
         dueDate: inv.dueDate,
         referenceDate,
-        overdueDays: inv.dueDate ? overdueDays : 0,
+        // K-05: hesap ARTIK ATILMIYOR. `overdueDays` işaretlidir; negatif değer
+        // "vadesi gelmemiş" demektir ve kova seçimi bunun üzerinden yapılır.
+        // Eskiden `inv.dueDate ? overdueDays : 0` yazılıyordu ve vadesiz açık
+        // fatura gecikme kolundan tamamen düşüyordu.
+        overdueDays: overdueDaysOf(referenceDate, today),
       };
     });
   }
@@ -471,11 +471,15 @@ export class FinanceSummaryService {
           count: 0,
         };
 
-      const notYetDue = b.dueDate !== null && b.dueDate.getTime() > startOfDay(new Date()).getTime();
-      if (notYetDue) bucket.notDue = bucket.notDue.plus(b.remaining);
-      else if (b.overdueDays <= 30) bucket.d0_30 = bucket.d0_30.plus(b.remaining);
-      else if (b.overdueDays <= 60) bucket.d31_60 = bucket.d31_60.plus(b.remaining);
-      else if (b.overdueDays <= 90) bucket.d61_90 = bucket.d61_90.plus(b.remaining);
+      // Kova kararı YALNIZCA işaretli `overdueDays`'e bakar (K-05). Eskiden
+      // `b.dueDate !== null && …` koşuluyla veriliyordu; vadesiz fatura ne
+      // "vadesi gelmemiş" sayılabiliyor ne de gecikme kovasına düşebiliyordu,
+      // sessizce "0-30"da kalıyordu.
+      const bucketKey = agingBucketOf(b.overdueDays);
+      if (bucketKey === "notDue") bucket.notDue = bucket.notDue.plus(b.remaining);
+      else if (bucketKey === "0-30") bucket.d0_30 = bucket.d0_30.plus(b.remaining);
+      else if (bucketKey === "31-60") bucket.d31_60 = bucket.d31_60.plus(b.remaining);
+      else if (bucketKey === "61-90") bucket.d61_90 = bucket.d61_90.plus(b.remaining);
       else bucket.d90plus = bucket.d90plus.plus(b.remaining);
 
       bucket.total = bucket.total.plus(b.remaining);

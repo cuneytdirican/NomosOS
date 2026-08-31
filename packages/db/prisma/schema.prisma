@@ -63,6 +63,29 @@ model User {
   role         UserRole
   barNumber    String? // Baro sicil no
   isActive     Boolean  @default(true)
+
+  /// ── HESAP KİLİDİ (KALICI) — denetim bulgusu K-03 ─────────────────────────
+  /// Üç kimlik alanının EN GENİŞ YETKİLİSİ, en korumasızıydı: `PlatformUser`
+  /// `tokenVersion/failedAttempts/lockedUntil` taşıyor, `PortalUser`
+  /// `failedAttempts/failureWindowEndsAt/lockedUntil/sessionsValidFrom`
+  /// taşıyordu; büronun TÜM verisine bakan avukat hesabında hiçbiri yoktu.
+  /// Tek koruma `LoginThrottleGuard`'ın SÜREÇ İÇİ `IP|e-posta` kovasıydı: 100
+  /// farklı çıkış IP'sinden dakikada 500 deneme yapılabiliyor, hesap hiç
+  /// kilitlenmiyor, süreç yeniden başlayınca sayaç sıfırlanıyordu.
+  failedAttempts      Int       @default(0)
+  /// Sayaç penceresinin bittiği an — bu andan sonra birikmemiş hatalar unutulur.
+  failureWindowEndsAt DateTime?
+  /// Kilidin bittiği an. null / geçmiş = kilit yok.
+  lockedUntil         DateTime?
+
+  /// ── OTURUM İPTALİ — denetim bulgusu K-03 / Ö-34 ──────────────────────────
+  /// Bu andan ÖNCE üretilmiş kiracı token'ları geçersizdir. Çıkış (logout),
+  /// parola değişimi, yönetici tarafından parola sıfırlama ve hesabın
+  /// pasifleştirilmesi bu damgayı tazeler. Sızmış bir parolayla açılmış oturum
+  /// artık ürün üzerinden kapatılabilir; eskiden tek çözüm `psql` ile elle
+  /// `passwordHash` yazmaktı ve o bile açık token'ı düşürmüyordu.
+  sessionsValidFrom DateTime?
+
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -1587,6 +1610,16 @@ model Payment {
   clientId  String
   client    Client        @relation(fields: [clientId], references: [id])
   amount    Decimal       @db.Decimal(18, 2)
+  /// Tahsilatın para birimi (denetim bulgusu Ö-14).
+  ///
+  /// Eskiden bu kolon YOKTU ve `payments.service.ts` faturasız tahsilatı
+  /// KOŞULSUZ "TRY" sayıyordu: EUR sözleşmeli müvekkilden alınan 5.000 EUR,
+  /// `FinancialEntry(TAHSILAT)` kaydına 5.000 TRY olarak düşüyor, TRY alacağını
+  /// 5.000 azaltıp müvekkilin EUR bakiyesini hiç düşürmüyordu.
+  ///
+  /// Faturaya bağlı tahsilatta fatura para birimiyle EŞLEŞMESİ zorunludur
+  /// (uyuşmazsa 400); serbest tahsilatta çağıran açıkça belirtir.
+  currency  String        @default("TRY")
   date      DateTime
   method    PaymentMethod
   reference String? // Dekont / işlem referansı
@@ -2196,6 +2229,22 @@ model Evidence {
   @@index([documentId])
 }
 
+/// Delil ile iddia arasındaki bağın YÖNÜ (denetim bulgusu Ö-30).
+///
+/// Modül 14'ün ana vaadi "karşı tarafın hangi delili hangi iddiamızı çürütüyor"
+/// sorusuna cevap vermektir; bu ayrım olmadan matris yalnız "ne kadar destekliyor"
+/// diyebiliyordu. KK3 ("hiç SUPPORTS bağı olmayan iddia unsupported=true") ve KK6
+/// (kendi sunduğumuz delil kendi iddiamızı CONTRADICTS ediyorsa 422) yapısal
+/// olarak uygulanamıyordu.
+enum EvidenceLinkType {
+  /// Delil iddiayı DESTEKLER.
+  SUPPORTS
+  /// Delil iddiayı ÇÜRÜTÜR.
+  CONTRADICTS
+  /// Delil iddiayla ilgilidir ama yönü belirsizdir (avukat henüz karar vermemiş).
+  BELIRSIZ
+}
+
 /// Matrisin HÜCRESİ: bu delil bu iddiayı ne kadar taşıyor.
 model ClaimEvidenceLink {
   id         String   @id @default(uuid())
@@ -2204,6 +2253,9 @@ model ClaimEvidenceLink {
   claim      Claim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
   evidenceId String
   evidence   Evidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  /// Bağın yönü. Varsayılan SUPPORTS: göç öncesindeki tüm satırlar "destekliyor"
+  /// anlamında kurulmuştu (o zaman başka bir seçenek yoktu).
+  linkType   EvidenceLinkType @default(SUPPORTS)
   /// Destek gücü 1-5 — AVUKAT değerlendirmesi (AI önerse de avukat onaylar).
   strength   Int?
   note       String?

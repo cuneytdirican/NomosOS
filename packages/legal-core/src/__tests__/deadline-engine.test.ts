@@ -624,15 +624,57 @@ describe("uyarılar", () => {
     expect(result.warnings.join(" ")).toContain("2429 sayılı Kanun m.2/A");
   });
 
-  it("tatil takvimi hiç verilmezse uyarır", () => {
+  /**
+   * DENETİM BULGUSU K-04 — DAVRANIŞ BİLEREK DEĞİŞTİ.
+   *
+   * Bu test eskiden hatayı SABİTLİYORDU: takvim boşken 23 Nisan'ın tatil
+   * SAYILMAMASINI doğru kabul ediyordu. Oysa çağıran takvimi tetik yılından
+   * sorguluyor ve veritabanında o yıl yoksa liste BOŞ dönüyor; yani "boş liste"
+   * çağıranın bilinçli tercihi değil, en sık karşılaşılan hâl. Canlı ölçümde
+   * HMK_ISTINAF / tebliğ 09.04.2027 için sistem 23.04.2027 (Ulusal Egemenlik
+   * Bayramı, adliye kapalı) diyordu; doğrusu 26.04.2027'dir ve istinaf süresi
+   * HAK DÜŞÜRÜCÜDÜR.
+   *
+   * Artık boş listede de SABİT TARİHLİ resmî tatiller otomatik katılır; uyarı
+   * bunu açıkça bildirir ve hicri takvime bağlı bayramların eksik olduğunu söyler.
+   */
+  it("tatil takvimi hiç verilmese bile sabit tarihli resmî tatilleri uygular ve bildirir", () => {
     const result = run({
       triggerDate: d("2026-04-16"),
       rule: { durationValue: 1, durationUnit: "HAFTA", legalBasis: "TEST m.1" },
       holidays: [],
     });
-    expect(result.warnings.join(" ")).toContain("Tatil takvimi verilmedi");
-    // Takvim yokken 23 Nisan (Perşembe) tatil sayılmaz.
-    expect(iso(result.dueDate)).toBe("2026-04-23");
+    const text = result.warnings.join(" ");
+    expect(text).toContain("Tatil takvimi hiç verilmedi");
+    expect(text).toContain("OTOMATİK KATILDI");
+    expect(text).toContain("dinî bayramlar");
+    // 23 Nisan (Perşembe) TATİLDİR; son gün bir sonraki iş gününe kayar.
+    expect(iso(result.dueDate)).toBe("2026-04-24");
+  });
+
+  /**
+   * K-04'ün canlı senaryosu — regresyon kilidi.
+   *
+   * Aynı kural, aynı tarih, aynı hedef yıl: sonucun listede alakasız bir 2026
+   * satırı bulunup bulunmamasına göre DEĞİŞMEMESİ gerekir. Eskiden değişiyordu.
+   */
+  it("2027 tetikli istinaf süresi, tatil listesi boş olsa da bayram gününe düşmez", () => {
+    const bos = run({
+      triggerDate: d("2027-04-09"),
+      serviceMethod: "ELDEN",
+      rule: { durationValue: 2, durationUnit: "HAFTA", legalBasis: "HMK m.345" },
+      holidays: [],
+    });
+    const tekSatir = run({
+      triggerDate: d("2027-04-09"),
+      serviceMethod: "ELDEN",
+      rule: { durationValue: 2, durationUnit: "HAFTA", legalBasis: "HMK m.345" },
+      holidays: [{ date: d("2026-01-01"), name: "Yılbaşı", type: "RESMI_TATIL" }],
+    });
+    // 23.04.2027 Cuma = Ulusal Egemenlik Bayramı → 26.04.2027 Pazartesi.
+    expect(iso(bos.dueDate)).toBe("2027-04-26");
+    expect(iso(tekSatir.dueDate)).toBe("2027-04-26");
+    expect(iso(bos.dueDate)).toBe(iso(tekSatir.dueDate));
   });
 
   it("son gün takvimi yüklü olmayan bir yıla taşarsa uyarır", () => {

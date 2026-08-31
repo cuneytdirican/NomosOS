@@ -23,70 +23,42 @@ import {
  * "İKİ AYRI SAYAÇ"). Dar ve sıkı olan IP ∧ e-posta sayacıdır.
  */
 
-/** Kalıcı sayaç alanlarının okunan hâli. */
-export interface AccountLockoutState {
-  failedAttempts: number;
-  failureWindowEndsAt: Date | null;
-  lockedUntil: Date | null;
-}
+export type { AccountLockoutState, AccountLockoutUpdate } from "../common/account-lockout";
+import {
+  CLEARED_LOCKOUT,
+  lockRemainingSeconds,
+  recordFailure,
+  type AccountLockoutState,
+  type AccountLockoutUpdate,
+  type LockoutPolicy,
+} from "../common/account-lockout";
 
-/** Yazılacak yeni hâl (Prisma `data` nesnesine birebir uyar). */
-export interface AccountLockoutUpdate {
-  failedAttempts: number;
-  failureWindowEndsAt: Date | null;
-  lockedUntil: Date | null;
-}
+/**
+ * PORTAL EŞİKLERİ. Karar mantığı `common/account-lockout.ts`tedir ve kiracı
+ * (avukat) tarafıyla PAYLAŞILIR — denetim bulgusu K-03: aynı korumanın büro
+ * hesaplarında hiç bulunmaması, mantığın portala gömülü olmasından geliyordu.
+ */
+export const PORTAL_LOCKOUT_POLICY: LockoutPolicy = {
+  maxFailedAttempts: PORTAL_ACCOUNT_MAX_FAILED_ATTEMPTS,
+  failureWindowMinutes: PORTAL_FAILURE_WINDOW_MINUTES,
+  lockoutMinutes: PORTAL_LOCKOUT_MINUTES,
+};
 
 /** Hesap kilitliyse kalan saniye, değilse 0. */
 export function accountLockRemainingSeconds(
   state: Pick<AccountLockoutState, "lockedUntil">,
   now: Date = new Date(),
 ): number {
-  const until = state.lockedUntil?.getTime() ?? 0;
-  if (until <= now.getTime()) return 0;
-  return Math.max(1, Math.ceil((until - now.getTime()) / 1000));
+  return lockRemainingSeconds(state, now);
 }
 
-/**
- * Başarısız denemeyi sayar ve eşiğe gelinirse kilidi kurar.
- *
- * Pencere dolmuşsa sayaç sıfırdan başlar: aylara yayılmış tek tük hatalar
- * birikip meşru kullanıcıyı kilitlemez.
- */
+/** Başarısız denemeyi sayar ve eşiğe gelinirse kilidi kurar. */
 export function recordAccountFailure(
   state: AccountLockoutState,
   now: Date = new Date(),
 ): AccountLockoutUpdate {
-  const windowMs = PORTAL_FAILURE_WINDOW_MINUTES * 60_000;
-  const windowOpen =
-    state.failureWindowEndsAt !== null && state.failureWindowEndsAt.getTime() > now.getTime();
-
-  const failures = windowOpen ? state.failedAttempts + 1 : 1;
-
-  if (failures >= PORTAL_ACCOUNT_MAX_FAILED_ATTEMPTS) {
-    const lockedUntil = new Date(now.getTime() + PORTAL_LOCKOUT_MINUTES * 60_000);
-    return {
-      // Sayaç sıfırlanır: kilit bittikten sonra kullanıcı temiz sayfayla başlar,
-      // ama yeni bir hata dizisi yine kilitler.
-      failedAttempts: 0,
-      failureWindowEndsAt: new Date(lockedUntil.getTime() + windowMs),
-      lockedUntil,
-    };
-  }
-
-  return {
-    failedAttempts: failures,
-    failureWindowEndsAt: windowOpen
-      ? state.failureWindowEndsAt
-      : new Date(now.getTime() + windowMs),
-    // Mevcut kilit korunur (kilitliyken zaten buraya gelinmez, ama hâli ezmeyiz).
-    lockedUntil: state.lockedUntil,
-  };
+  return recordFailure(state, PORTAL_LOCKOUT_POLICY, now);
 }
 
 /** Başarılı girişte / parola sıfırlamada sayacı ve kilidi temizleyen hâl. */
-export const CLEARED_ACCOUNT_LOCKOUT: AccountLockoutUpdate = {
-  failedAttempts: 0,
-  failureWindowEndsAt: null,
-  lockedUntil: null,
-};
+export const CLEARED_ACCOUNT_LOCKOUT: AccountLockoutUpdate = CLEARED_LOCKOUT;

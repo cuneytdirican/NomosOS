@@ -95,5 +95,14 @@ export const officeQuerySchema = z.object({
     .trim()
     .min(3, "Soru en az 3 karakter olmalıdır.")
     .max(1000, "Soru en fazla 1000 karakter olabilir."),
+  /**
+   * KVKK ONAYI (denetim bulgusu İ-18).
+   *
+   * Bu alan YOKTU ve servis `piiApproved: false` SABİTİNİ geçiyordu. Sorusunda
+   * geçerli bir TCKN geçen kullanıcı 409 alıyor, 409 gövdesi "piiApproved: true
+   * gönderin" diyordu — ama DTO böyle bir alanı reddediyordu. Uç kalıcı olarak
+   * KIRILIYORDU. Fail-closed olması doğrudur; ÇIKMAZ olması değil.
+   */
+  piiApproved: z.boolean().optional().default(false),
 });
 export type OfficeQueryInput = z.infer<typeof officeQuerySchema>;

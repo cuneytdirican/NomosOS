@@ -76,10 +76,23 @@ export type CreditGate =
 const TASK_COST_CACHE_TTL_MS = 60_000;
 
 /**
- * Sahipsiz rezervasyon eşiği. Tek bir sağlayıcı çağrısı bu süreden uzun sürmez;
- * daha eski bir rezervasyonun sahibi olan süreç artık yaşamıyordur.
+ * SAHİPSİZ REZERVASYON EŞİĞİ (denetim bulgusu Ö-13).
+ *
+ * Eski değer 15 dakikaydı ve sözleşmesi "tek bir LLM çağrısı 15 dakikadan uzun
+ * sürmez" diyordu. Bu KENDİ AYAR ÜST SINIRIYLA ÇELİŞİYORDU:
+ * `packages/ai/src/http.ts` `AI_TIMEOUT_MS` tavanı **600 saniyedir** ve
+ * `caselaw/ai-search` `summarizeTop=5` ile ARDIŞIK 6 çağrı yapar — 15 dakika
+ * rahatça aşılır. Aşıldığında süpürücü UÇUŞTAKİ rezervasyonu siliyor,
+ * kullanılabilir bakiye olduğundan fazla görünüyor ve ardışık mahsuplar bakiyeyi
+ * aşıyordu.
+ *
+ * Yeni eşik en kötü hâle bağlanır: tek çağrı üst sınırı (600 sn) × makul ardışık
+ * çağrı sayısı (8) + pay. Süpürücü artık "hâlâ koşan bir işi" kesmez; yalnız
+ * gerçekten ölmüş bir sürecin bıraktığı kilidi açar.
  */
-const STALE_RESERVATION_TTL_MS = 15 * 60_000;
+const MAX_AI_CALL_MS = 600_000;
+const MAX_SEQUENTIAL_AI_CALLS = 8;
+const STALE_RESERVATION_TTL_MS = MAX_AI_CALL_MS * MAX_SEQUENTIAL_AI_CALLS + 5 * 60_000;
 
 @Injectable()
 export class CreditService implements OnModuleInit {
@@ -446,7 +459,16 @@ export class CreditService implements OnModuleInit {
     return this.prisma.client.$executeRaw`
       UPDATE "CreditWallet"
       SET "reservedCredits" = "reservedCredits" + ${required},
-          "reservedSince" = COALESCE("reservedSince", NOW()),
+          -- O-13: damga EN SON rezervasyona gore tazelenir.
+          -- Eskiden COALESCE(reservedSince, NOW()) yazilidi: damga yalniz
+          -- 0-pozitif gecisinde konuyor, ESZAMANLI IKINCI rezervasyon onu
+          -- tazelemiyordu. Damga en ESKI acik rezervasyonu gosteriyor ve supurucu,
+          -- saniyeler once acilmis TAZE bir rezervasyonu da (sutunu toptan
+          -- sifirladigi icin) siliyordu. NOW() ters yonde risk tasir (en eski
+          -- rezervasyon gec supurulur) ama supurucunun YANLIS POZITIFI -- ucustaki
+          -- bir isin kredisini serbest birakip ayni krediyi iki kez harcatmak --
+          -- cok daha yikicidir. TTL de artik en kotu hale gore olculudur.
+          "reservedSince" = NOW(),
           "updatedAt" = NOW()
       WHERE "tenantId" = ${tenantId}
         AND ("includedCredits" - "includedConsumed") + "purchasedCredits" - "reservedCredits" >= ${required}
@@ -548,8 +570,12 @@ export class CreditService implements OnModuleInit {
           UPDATE "CreditWallet"
           SET "includedConsumed" = "includedConsumed"
                 + LEAST(${charged}::int, GREATEST(0, "includedCredits" - "includedConsumed")),
-              "purchasedCredits" = "purchasedCredits"
-                - (${charged}::int - LEAST(${charged}::int, GREATEST(0, "includedCredits" - "includedConsumed"))),
+              -- Ö-13 ASIMETRISI GIDERILDI: reservedCredits GREATEST(0, ...) ile
+              -- korunuyordu, purchasedCredits korunmuyordu ve NEGATIFE dusebiliyordu.
+              -- Kasitsiz bir asimetriydi: bakiye eksiye dustugunde reconcile()
+              -- sonradan tutarli:false raporluyor ama kredi zaten harcanmis oluyordu.
+              "purchasedCredits" = GREATEST(0, "purchasedCredits"
+                - (${charged}::int - LEAST(${charged}::int, GREATEST(0, "includedCredits" - "includedConsumed")))),
               "reservedCredits" = GREATEST(0, "reservedCredits" - ${ticket.reserved}::int),
               "reservedSince" = CASE
                 WHEN GREATEST(0, "reservedCredits" - ${ticket.reserved}::int) = 0 THEN NULL
@@ -598,11 +624,21 @@ export class CreditService implements OnModuleInit {
         // diğerlerine 0 — toplamları `CreditTransaction.amount` ile birebir
         // tutsun diye. Ücretsiz görevlerin çağrıları da 0 alır; maliyetleri
         // (`estimatedCost`) yine işlenir, iç muhasebe onları görmelidir.
+        //
+        // `updateMany` KULLANILIR, `update` DEĞİL (denetim bulgusu İ-13).
+        //
+        // `update`, satır bulunamazsa P2025 fırlatır ve bu döngü mahsup
+        // transaction'ının İÇİNDEDİR: bir `AiUsageLog` satırı bu arada silinirse
+        // (kiracı silme, veri temizliği, yarış) TÜM MAHSUP GERİ ALINIR ve
+        // gerçekten yapılmış bir LLM çağrısı ÜCRETSİZ kalırdı. Cüzdanın
+        // doğruluğu, bir yan kaydın varlığına bağlı olmamalıdır.
+        //
+        // `updateMany` eşleşme bulamazsa `{count: 0}` döner ve akış devam eder.
         for (let i = 0; i < calls.length; i += 1) {
           const id = calls[i].aiUsageLogId;
           if (!id) continue;
           const cost = costs[i];
-          await tx.aiUsageLog.update({
+          await tx.aiUsageLog.updateMany({
             where: { id },
             data: {
               creditsCharged: id === chargedLogId ? charged : 0,

@@ -35,6 +35,27 @@ export function encryptSecret(plaintext: string, keyHex?: string): string {
   return [iv.toString("base64"), authTag.toString("base64"), encrypted.toString("base64")].join(".");
 }
 
+/**
+ * Bir değer bu modülün ürettiği şifreli biçimde mi?
+ *
+ * GEÇİŞ İÇİN GEREKLİ: `AiProviderConfig.headersJson` eskiden DÜZ METİN
+ * saklanıyordu (denetim bulgusu K-08). Şifrelemeye geçildikten sonra veritabanında
+ * her iki biçimden kayıt bulunabilir; okuyucu hangisiyle karşılaştığını
+ * ayırt edebilmelidir. Biçim: base64(iv:12B).base64(tag:16B).base64(ct)
+ * — düz metin bir JSON gövdesi ("{...}") bu desene UYMAZ.
+ */
+export function isEncryptedSecret(stored: string | null | undefined): boolean {
+  if (!stored) return false;
+  const parts = stored.split(".");
+  if (parts.length !== 3) return false;
+  const b64 = /^[A-Za-z0-9+/]+={0,2}$/;
+  if (!parts.every((p) => p.length > 0 && b64.test(p))) return false;
+  // iv 12 bayt (base64 16 karakter), authTag 16 bayt (base64 24 karakter).
+  return (
+    Buffer.from(parts[0], "base64").length === 12 && Buffer.from(parts[1], "base64").length === 16
+  );
+}
+
 export function decryptSecret(stored: string, keyHex?: string): string {
   const [ivB64, tagB64, dataB64] = stored.split(".");
   if (!ivB64 || !tagB64 || !dataB64) {

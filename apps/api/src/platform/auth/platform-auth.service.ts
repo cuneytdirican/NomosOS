@@ -259,13 +259,44 @@ export class PlatformAuthService {
    * anahtar değişimi bir SUPER_ADMIN'in hesabı sıfırlamasını gerektirir
    * (çalınmış oturumla 2FA'nın sessizce değiştirilmesini engeller).
    */
-  async setup(params: { challengeToken?: string; bearerToken?: string }) {
-    const userId = await this.resolveSetupSubject(params);
+  async setup(params: {
+    challengeToken?: string;
+    bearerToken?: string;
+    currentPassword?: string;
+    ip?: string;
+  }) {
+    const { userId, via } = await this.resolveSetupSubject(params);
 
     const user = await this.prisma.client.platformUser.findUnique({ where: { id: userId } });
     if (!user || !user.isActive) {
       throw new UnauthorizedException("Panel hesabı bulunamadı veya pasif.");
     }
+
+    // OTURUMLA KURULUMDA PAROLA ZORUNLU (denetim bulgusu Ö-01).
+    //
+    // `challengeToken` dalında parola ZATEN girilmiştir (challenge yalnız
+    // başarılı `login`den sonra üretilir). `bearerToken` dalında ise eskiden
+    // hiçbir şey sorulmuyordu: çalınmış bir panel oturumu, hesabın 2FA'sını
+    // KENDİSİ kurup ele geçirmeyi kalıcı hâle getirebiliyordu.
+    if (via === "bearer") {
+      if (!params.currentPassword) {
+        throw new BadRequestException(
+          "Açık bir panel oturumuyla 2FA kurmak için mevcut parolanızı da göndermelisiniz " +
+            "(`currentPassword`). Bu adım, çalınmış bir oturumun hesaba kalıcı olarak " +
+            "yerleşmesini engeller.",
+        );
+      }
+      if (!(await bcrypt.compare(params.currentPassword, user.passwordHash))) {
+        const locked = await this.registerFailure(
+          user.id,
+          user.role as AdminRole,
+          params.ip ?? "-",
+          "2FA kurulumunda hatalı parola",
+        );
+        throw new UnauthorizedException(locked ? this.lockMessage() : "Mevcut parola hatalı.");
+      }
+    }
+
     if (user.twoFactorSecret) {
       throw new BadRequestException(
         "Bu hesapta iki adımlı doğrulama zaten kurulu. Yenilemek için bir SUPER_ADMIN'in " +
@@ -278,10 +309,26 @@ export class PlatformAuthService {
     const qrDataUrl = await QRCode.toDataURL(otpauthUrl);
 
     // Gizli anahtar DB'ye YAZILMAZ; şifreli olarak kurulum token'ına konur.
+    //
+    // ANAHTAR AYRIMI (denetim bulgusu K-01): burada `platform2faEncryptionKey()`
+    // KULLANILMAK ZORUNDADIR. Eskiden `encryptSecret(secret)` yazılıydı, yani
+    // anahtar MASTER_ENCRYPTION_KEY ile şifreleniyor ama `verify()` onu
+    // `this.decrypt()` → `decryptSecret(stored, platform2faEncryptionKey())` ile
+    // çözmeye çalışıyordu. İki anahtar farklı olduğu için (ikincisi birincinin
+    // HMAC türevidir) çözme DAİMA "Unsupported state or unable to authenticate
+    // data" ile başarısız oluyordu.
+    //
+    // Sonucu ölçüldü: kriptografik olarak DOĞRU üretilmiş bir TOTP kodu bile 401
+    // alıyordu; üretimde `PLATFORM_REQUIRE_2FA=true` zorunlu olduğu ve tohumdaki
+    // hiçbir panel hesabında 2FA kurulu olmadığı için PANEL ERİŞİMİ İLK ÜRETİM
+    // AÇILIŞINDA %100 KAPALIYDI ve tek kurtarma yolu doğrudan SQL müdahalesiydi.
+    // Kalıcılaştırma satırı (aşağıda `twoFactorSecret: encryptSecret(secret,
+    // platform2faEncryptionKey())`) doğru anahtarı geçiyordu; hata yalnız burada
+    // olduğu için fark edilmemişti.
     const setupToken = await this.signChallenge({
       sub: user.id,
       kind: "setup",
-      enc: encryptSecret(secret),
+      enc: encryptSecret(secret, platform2faEncryptionKey()),
     });
 
     await this.audit.log({
@@ -464,7 +511,7 @@ export class PlatformAuthService {
   private async resolveSetupSubject(params: {
     challengeToken?: string;
     bearerToken?: string;
-  }): Promise<string> {
+  }): Promise<{ userId: string; via: "challenge" | "bearer" }> {
     if (params.challengeToken) {
       try {
         const payload = await this.jwt.verifyAsync<PlatformChallengePayload>(
@@ -474,7 +521,7 @@ export class PlatformAuthService {
         if (payload.kind !== "setup") {
           throw new Error("kurulum token'ı değil");
         }
-        return payload.sub;
+        return { userId: payload.sub, via: "challenge" };
       } catch {
         throw new UnauthorizedException(
           "Kurulum oturumu geçersiz veya süresi dolmuş. Lütfen yeniden giriş yapın."
@@ -487,7 +534,7 @@ export class PlatformAuthService {
           secret: platformJwtSecret(),
           audience: PLATFORM_JWT_AUDIENCE,
         });
-        return payload.sub;
+        return { userId: payload.sub, via: "bearer" };
       } catch {
         throw new UnauthorizedException("Panel oturumu geçersiz. Lütfen tekrar giriş yapın.");
       }

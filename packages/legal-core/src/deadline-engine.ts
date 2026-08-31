@@ -538,12 +538,24 @@ function withFixedHolidaysForMissingYears(
   triggerDate: Date | string,
   rule: { durationValue: number; durationUnit: DurationUnit },
 ): { holidays: HolidayInput[]; autoFilledYears: number[] } {
-  if (supplied.length === 0) {
-    // Takvim hiç verilmediyse "yalnızca hafta sonu" davranışı korunur; bu,
-    // çağıranın bilinçli tercihidir ve ayrı bir uyarıyla bildirilir.
-    return { holidays: supplied, autoFilledYears: [] };
-  }
-
+  // ERKEN ÇIKIŞ KALDIRILDI (denetim bulgusu K-04).
+  //
+  // Eskiden `supplied.length === 0` iken bu fonksiyon hiçbir şey yapmadan
+  // dönüyordu: "takvim hiç verilmediyse çağıranın bilinçli tercihidir" varsayımı.
+  // Gerçekte çağıran takvimi TETİK YILINDAN itibaren sorguluyor
+  // (`deadlines.service.ts` `windowStart = 1 Ocak (tetik yılı)`); veritabanında
+  // yalnız 2026 kayıtlı olduğu için 2027 tetikli her hesapta sorgu BOŞ dönüyor
+  // ve savunma hiç devreye girmiyordu.
+  //
+  // Canlı ölçüm (HMK_ISTINAF, tebliğ 09.04.2027, ELDEN):
+  //   liste BOŞ                        => 2027-04-23 Cuma  ← Ulusal Egemenlik Bayramı
+  //   listede alakasız tek 2026 satırı => 2027-04-26 Pzt   ← DOĞRU
+  // Aynı kural, aynı tarih; sonuç yalnızca listenin boş olup olmamasına göre
+  // değişiyordu. İstinaf süresi HAK DÜŞÜRÜCÜDÜR.
+  //
+  // Artık boş liste de doldurulur. Dinî bayramlar hicri takvime bağlı olduğu
+  // için üretilemez; `collectWarnings` "takvim yüklü değil" uyarısını ve
+  // `autoFilledYears` bildirimini korur — yani sessiz bir düzeltme değildir.
   const knownYears = new Set<number>();
   for (const h of supplied) {
     const d = toUtcDate(h.date);
@@ -628,11 +640,19 @@ function collectWarnings(ctx: WarningContext): void {
   // 3) Son gün resmî tatil takvimi olmayan bir yıla mı taşıyor?
   const dueYear = dueDate.getUTCFullYear();
   if (holidayCount === 0) {
+    // K-04 SONRASI: takvim hiç verilmese bile sabit tarihli resmî tatiller
+    // otomatik katılır. Uyarı metni bu yüzden güncellendi — eski metin
+    // ("yalnızca hafta sonu kaydırması uygulandı") artık doğru değildir ve
+    // avukatı hesabın olduğundan zayıf olduğuna inandırırdı.
     warnings.push(
-      `Tatil takvimi verilmedi; hesapta yalnızca hafta sonu kaydırması uygulandı. ` +
-        `Resmî tatiller dikkate alınmamış olabilir.`,
+      `Tatil takvimi hiç verilmedi. Sabit tarihli resmî tatiller (1 Ocak, 23 Nisan, 1 Mayıs, ` +
+        `19 Mayıs, 15 Temmuz, 30 Ağustos, 28-29 Ekim) hesaba OTOMATİK KATILDI; ancak hicri ` +
+        `takvime bağlı dinî bayramlar (Ramazan/Kurban) ve adli tatil kayıtları EKSİKTİR. ` +
+        `Takvimi yükleyip hesabı yenileyiniz.`,
     );
-  } else if (ctx.autoFilledYears.includes(dueYear)) {
+  }
+  // `holidayCount === 0` dalı zaten aynı bilgiyi veriyor; iki uyarı basmayalım.
+  if (holidayCount > 0 && ctx.autoFilledYears.includes(dueYear)) {
     warnings.push(
       `${dueYear} yılı tatil takvimi yüklü değil. Sabit tarihli resmî tatiller (1 Ocak, ` +
         `23 Nisan, 1 Mayıs, 19 Mayıs, 15 Temmuz, 30 Ağustos, 28-29 Ekim) hesaba OTOMATİK ` +

@@ -11,7 +11,7 @@ import { SYSTEM_DEADLINE_RULES } from "@nomosos/legal-core";
 
 import type { LlmMessage, PromptSpec } from "../types";
 import { UNKNOWN_DEADLINE_RULE_KEY } from "../schemas";
-import { buildMessages } from "./system-core";
+import { buildMessages, wrapUntrusted } from "./system-core";
 
 /**
  * Kural anahtarı kataloğu prompt'a MOTORDAN türetilerek enjekte edilir
@@ -91,6 +91,9 @@ export function buildDeadlineDetectMessages(input: DeadlineDetectPromptInput): L
   if (input.documentClass) parts.push(`BELGE TÜRÜ: ${input.documentClass}`);
   if (input.caseType) parts.push(`DOSYA TİPİ: ${input.caseType}`);
   if (input.notifiedAt) parts.push(`SİSTEMDE KAYITLI TEBLİĞ TARİHİ: ${input.notifiedAt}`);
-  parts.push(`BELGE METNİ:\n${input.documentText}`);
+  // O-18: belge metni GUVENILMEYEN VERIDIR ve sabit ayracla sarilir.
+  // Ayrac dizgesi girdiden temizlenir; aksi halde belgeye kendi kapanis
+  // ayracini yazan bir saldirgan "veri" bolgesinden cikabilirdi.
+  parts.push(wrapUntrusted("BELGE METNI", input.documentText));
   return buildMessages(deadlineDetectPrompt, parts.join("\n"));
 }

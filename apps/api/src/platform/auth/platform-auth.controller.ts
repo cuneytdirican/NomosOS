@@ -69,6 +69,8 @@ export class PlatformAuthController {
     return this.auth.setup({
       challengeToken: body.challengeToken,
       bearerToken: header?.startsWith("Bearer ") ? header.slice(7) : undefined,
+      currentPassword: body.currentPassword,
+      ip: clientIp(request),
     });
   }
 

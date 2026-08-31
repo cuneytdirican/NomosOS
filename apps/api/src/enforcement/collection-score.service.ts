@@ -19,6 +19,7 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma, type ScoreBand } from "@nomosos/db";
 import { PrismaService } from "../prisma/prisma.service";
 import { EnforcementBalanceService } from "./balance.service";
+import { trCalendarDay } from "../common/dates";
 
 /** AI'nin taban skora uygulayabileceği azami düzeltme (puan). */
 export const MAX_AI_ADJUSTMENT = 15;
@@ -106,7 +107,10 @@ export class CollectionScoreService {
 
     const warnings: string[] = [];
     const signals: RuleSignal[] = [];
-    const now = new Date();
+    // Ö-17: gün sayımları TÜRKİYE takvim gününe göre yapılır. `new Date()` ile
+    // ölçülen "dosya yaşı" ve "hareketsizlik", TR 00:00–02:59 arasında UTC günü
+    // bir geride olduğu için sorgunun saatine göre bir gün oynuyordu.
+    const now = trCalendarDay(new Date());
     const totalDebt = new Prisma.Decimal(balance.totalDebt);
 
     // ---- 1) Tespit edilen malvarlığı / borç oranı (0-30 puan) -----------

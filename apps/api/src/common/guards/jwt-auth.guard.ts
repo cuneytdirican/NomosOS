@@ -18,7 +18,25 @@ const USER_CACHE_TTL_MS = 30_000;
 
 interface CachedUser {
   user: AuthUser;
+  /** Oturum iptal damgası — önbellekte de taşınır (bkz. `isRevoked`). */
+  sessionsValidFrom: Date | null;
   expiresAt: number;
+}
+
+const SESSION_REVOKED_MESSAGE =
+  "Oturumunuz sonlandırılmış (çıkış yapıldı veya parola değiştirildi). Lütfen tekrar giriş yapın.";
+
+/**
+ * Token, oturum iptal damgasından ÖNCE mi üretilmiş?
+ *
+ * JWT `iat` SANİYE hassasiyetindedir; damga milisaniye. Aynı saniye içinde
+ * üretilmiş bir token'ın yanlışlıkla iptal sayılmaması için damga saniyeye
+ * YUVARLANIR (aşağı) ve karşılaştırma `iat < damga` biçiminde yapılır.
+ */
+function isRevoked(payload: JwtPayload, sessionsValidFrom: Date | null): boolean {
+  if (!sessionsValidFrom) return false;
+  if (typeof payload.iat !== "number") return false;
+  return payload.iat < Math.floor(sessionsValidFrom.getTime() / 1000);
 }
 
 @Injectable()
@@ -80,6 +98,11 @@ export class JwtAuthGuard implements CanActivate {
       // Token'daki tenant, kayıtlı tenant ile uyuşmuyorsa oturum geçersizdir.
       if (cached.user.tenantId !== payload.tenantId) {
         this.cache.delete(payload.sub);
+      } else if (isRevoked(payload, cached.sessionsValidFrom)) {
+        // Önbellekten gelen damga da kontrol edilir; aksi hâlde çıkış yapan
+        // kullanıcının token'ı önbellek ömrü boyunca (30 sn) yaşamaya devam ederdi.
+        this.cache.delete(payload.sub);
+        throw new UnauthorizedException(SESSION_REVOKED_MESSAGE);
       } else {
         return cached.user;
       }
@@ -87,7 +110,13 @@ export class JwtAuthGuard implements CanActivate {
 
     const record = await this.prisma.client.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, tenantId: true, role: true, isActive: true },
+      select: {
+        id: true,
+        tenantId: true,
+        role: true,
+        isActive: true,
+        sessionsValidFrom: true,
+      },
     });
 
     if (!record || !record.isActive) {
@@ -100,12 +129,28 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException("Oturum geçersiz. Lütfen tekrar giriş yapın.");
     }
 
+    // OTURUM İPTALİ (denetim bulguları K-03 / Ö-34).
+    //
+    // `sessionsValidFrom` damgasından ÖNCE üretilmiş token'lar geçersizdir.
+    // Damgayı tazeleyenler: `POST /auth/logout`, `POST /auth/change-password`,
+    // yönetici tarafından parola sıfırlama ve hesabın pasifleştirilmesi.
+    // Bu olmadan çıkış düğmesi yalnızca istemcideki `localStorage`ı siliyordu ve
+    // token 12 saat daha geçerli kalıyordu.
+    if (isRevoked(payload, record.sessionsValidFrom)) {
+      this.cache.delete(payload.sub);
+      throw new UnauthorizedException(SESSION_REVOKED_MESSAGE);
+    }
+
     const user: AuthUser = {
       userId: record.id,
       tenantId: record.tenantId,
       role: record.role as AuthUser["role"],
     };
-    this.cache.set(payload.sub, { user, expiresAt: now + USER_CACHE_TTL_MS });
+    this.cache.set(payload.sub, {
+      user,
+      sessionsValidFrom: record.sessionsValidFrom,
+      expiresAt: now + USER_CACHE_TTL_MS,
+    });
     this.pruneCache(now);
     return user;
   }

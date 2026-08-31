@@ -12,6 +12,13 @@ export interface JwtPayload {
    * seçeneğiyle konur, gövdede elle yazılmaz.
    */
   aud?: string;
+  /**
+   * Token üretim anı (saniye). `jsonwebtoken` otomatik koyar.
+   *
+   * `JwtAuthGuard` bunu `User.sessionsValidFrom` ile karşılaştırıp oturum
+   * iptalini uygular (denetim bulguları K-03 / Ö-34).
+   */
+  iat?: number;
 }
 
 /** Guard'ın request.user'a koyduğu kimlik bilgisi. */

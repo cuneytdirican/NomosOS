@@ -16,6 +16,10 @@ import { assertRole, hasRole, ROLE_SETS } from "../common/roles";
 import { addDays, addYears, formatTrDate, parseDateParam, parseRangeEnd, startOfDay } from "../common/dates";
 import { normalizeQuery, paged, resolvePage } from "../common/pagination";
 import { touchCase } from "../common/case-denormals";
+import {
+  evaluateDeadlineStatusTransition,
+  TERMINAL_DEADLINE_STATUSES,
+} from "./deadline-status-policy";
 import type {
   ComputeDeadlineInput,
   CreateDeadlineInput,
@@ -24,8 +28,8 @@ import type {
   UpdateDeadlineStatusInput,
 } from "./deadlines.dto";
 
-/** Kapanmış sayılan durumlar — bunlardan çıkış yoktur. */
-const TERMINAL_STATUSES: DeadlineStatus[] = ["TAMAMLANDI", "IPTAL"];
+/** Kapanmış sayılan durumlar — tek kaynak `deadline-status-policy.ts`. */
+const TERMINAL_STATUSES = TERMINAL_DEADLINE_STATUSES;
 const OPEN_STATUSES: DbDeadlineStatus[] = ["BEKLIYOR", "ONAYLANDI"];
 
 const DEADLINE_INCLUDE = {
@@ -232,21 +236,21 @@ export class DeadlinesService {
     const from = existing.status as DeadlineStatus;
     const to = input.status as DeadlineStatus;
 
-    if (from === to) {
-      throw new BadRequestException(`«${existing.title}» süresi zaten ${to} durumunda.`);
-    }
-    if (TERMINAL_STATUSES.includes(from)) {
-      throw new BadRequestException(
-        `«${existing.title}» süresi ${from} durumundan ${to} durumuna geçirilemez; kapanmış süre yeniden açılamaz.`
-      );
-    }
-    if ((to === "ONAYLANDI" || to === "IPTAL") && !hasRole(user, ROLE_SETS.HUKUKI)) {
-      throw new ForbiddenException(
-        `Süre ${to === "ONAYLANDI" ? "onayı" : "iptali"} için avukat, ortak veya yönetici yetkisi gerekir.`
-      );
-    }
-    if (to === "TAMAMLANDI") {
-      assertRole(user, ROLE_SETS.OPERASYON, "süre kapatma");
+    // Geçiş kuralları SAF bir modülde durur ve birim testlidir
+    // (`deadline-status-policy.ts`). Denetim bulgusu K-13 — kaçırılmış sürenin
+    // ÇIKIŞI korumasızdı ve sekreter tek istekle risk sinyalini siliyordu —
+    // tam olarak kuralın servise gömülü ve testsiz olmasından hayatta kaldı.
+    const rejection = evaluateDeadlineStatusTransition({
+      from,
+      to,
+      role: user.role,
+      note: input.note,
+      title: existing.title,
+    });
+    if (rejection) {
+      throw rejection.kind === "YETKI"
+        ? new ForbiddenException(rejection.message)
+        : new BadRequestException(rejection.message);
     }
     // KACIRILDI hiçbir daldan geçmiyordu: her rol bir süreyi "kaçırıldı" olarak
     // kapatabiliyor, böylece panelin risk listesini ve dosya kapatma engelini
@@ -398,7 +402,7 @@ export class DeadlinesService {
     const holidays = await this.prisma.client.holiday.findMany({
       where: { date: { gte: windowStart, lte: windowEnd } },
       orderBy: { date: "asc" },
-      select: { date: true, type: true, name: true },
+      select: { date: true, type: true, name: true, isHalfDay: true, isApproximate: true },
     });
 
     // ADLİ TATİL REJİMİ KURALDAN GELİR, İSTEMCİDEN DEĞİL (denetim bulgusu 3).

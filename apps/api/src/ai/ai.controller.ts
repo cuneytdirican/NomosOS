@@ -52,7 +52,7 @@ export class AiController {
 
   @Get("providers")
   listProviders(@CurrentUser() user: AuthUser) {
-    return this.aiService.listProviders(user.tenantId);
+    return this.aiService.listProviders(user);
   }
 
   @Post("providers")
@@ -71,7 +71,7 @@ export class AiController {
   @Post("providers/:id/test")
   @HttpCode(200)
   testProvider(@CurrentUser() user: AuthUser, @Param("id") id: string) {
-    return this.aiService.testProvider(user.tenantId, id);
+    return this.aiService.testProvider(user, id);
   }
 
   @Get("task-routes")

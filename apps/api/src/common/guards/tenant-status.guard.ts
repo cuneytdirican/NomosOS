@@ -79,18 +79,42 @@ export class TenantStatusGuard implements CanActivate {
     // ve askıyı kaldıracak uçlar orada yaşar.
     if (request.path?.startsWith("/api/admin/")) return true;
 
-    const lock = await this.readMaintenance();
-    if (lock.fullLock) {
-      throw new ServiceUnavailableException(lock.message);
-    }
-
     // @Public() uçlar (giriş, sağlık) kimlik taşımaz; abonelik kontrolü
     // yapılacak bir kiracı da yoktur.
+    //
+    // ══════════════════════════════════════════════════════════════════════
+    // SIRA KRİTİKTİR (denetim bulgusu K-02): `isPublic` kontrolü BAKIM
+    // KİLİDİNDEN ÖNCE gelir.
+    //
+    // Eskiden kilit önce bakılıyordu ve `/api/v1/health` (@Public) de 503
+    // dönüyordu. Zinciri ölçüldü:
+    //   1. Kilit açılır → en geç 30 sn içinde /health 503;
+    //   2. `docker-compose.prod.yml` healthcheck'i `grep -q '"ok"'` yapıyor,
+    //      eşleşmiyor → 15 sn × 5 deneme → api konteyneri `unhealthy`;
+    //   3. `web` ve `admin` servisleri `depends_on: api: service_healthy`
+    //      taşıyor → bundan sonra herhangi bir yeniden başlatma veya düğüm
+    //      taşımasında ADMİN PANELİ HİÇ AYAĞA KALKMAZ;
+    //   4. Kilidi kapatabilecek tek arayüz kaybolur; kurtarma yalnız `psql`.
+    //
+    // Bu guard'ın kendi yorumu (yukarıda) bunun olmamasını taahhüt ediyordu:
+    // "kendi kilidine kilitlenen bir sistem kurtarılamaz". API katmanı sözü
+    // tutuyordu, dağıtım katmanı deliyordu. Artık söz gerçekten tutuluyor.
+    //
+    // Bakım kilidi zaten bir İŞ KURALIDIR: giriş ucunu ve sağlık ucunu kapatmak
+    // onun amacı değildir. Kilit altında `POST /auth/login` de açık kalır —
+    // kullanıcı giriş yapıp "sistem bakımda" mesajını ilk yazma denemesinde
+    // görür; kimlik doğrulayamadığı için hiçbir veriye erişemez.
+    // ══════════════════════════════════════════════════════════════════════
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
     if (isPublic) return true;
+
+    const lock = await this.readMaintenance();
+    if (lock.fullLock) {
+      throw new ServiceUnavailableException(lock.message);
+    }
 
     const user = request.user;
     if (!user?.tenantId) return true;

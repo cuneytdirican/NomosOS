@@ -192,20 +192,39 @@ export class ClientsService {
     assertRole(user, ROLE_SETS.OPERASYON, "müvekkil bilgisi güncelleme");
     const existing = await this.requireClient(user.tenantId, id);
 
-    const updated = await this.prisma.client.client.update({
-      where: { id: existing.id },
-      data: input as Prisma.ClientUncheckedUpdateInput,
-      select: CLIENT_PUBLIC_SELECT,
+    // MÜVEKKİL PASİFLEŞTİRİLİRSE PORTAL ERİŞİMİ DE KESİLİR (denetim bulgusu K-12).
+    //
+    // `Client.isActive=false` "bu müvekkille çalışmıyoruz" demektir; portal
+    // hesabı `PortalPublication` allow-list'indeki dosya, belge ve faturayı
+    // görmeye devam ederse bayrak anlamsız kalır. Aynı kanca `poa.revoke()`
+    // içinde de vardır — iki yol da erişim kesmelidir.
+    const deactivating = input.isActive === false && existing.isActive;
+
+    const { updated, suspendedPortalUsers } = await this.prisma.client.$transaction(async (tx) => {
+      const row = await tx.client.update({
+        where: { id: existing.id },
+        data: input as Prisma.ClientUncheckedUpdateInput,
+        select: CLIENT_PUBLIC_SELECT,
+      });
+      if (!deactivating) return { updated: row, suspendedPortalUsers: 0 };
+      const portal = await tx.portalUser.updateMany({
+        where: { tenantId: user.tenantId, clientId: existing.id, isActive: true },
+        data: { isActive: false, sessionsValidFrom: new Date() },
+      });
+      return { updated: row, suspendedPortalUsers: portal.count };
     });
+
     await this.audit.log({
       tenantId: user.tenantId,
       userId: user.userId,
       action: "CLIENT_UPDATE",
       entity: "Client",
       entityId: id,
-      detail: `${updated.name} — güncellenen alanlar: ${Object.keys(input).join(", ")}`,
+      detail:
+        `${updated.name} — güncellenen alanlar: ${Object.keys(input).join(", ")}` +
+        (suspendedPortalUsers > 0 ? ` · portal_askiya_alinan=${suspendedPortalUsers}` : ""),
     });
-    return maskClient(updated);
+    return { ...maskClient(updated), suspendedPortalUsers };
   }
 
   async listContacts(tenantId: string, clientId: string) {
@@ -275,7 +294,7 @@ export class ClientsService {
   private async requireClient(tenantId: string, id: string) {
     const client = await this.prisma.client.client.findFirst({
       where: { id, tenantId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, isActive: true },
     });
     if (!client) {
       throw new NotFoundException("Müvekkil bulunamadı.");

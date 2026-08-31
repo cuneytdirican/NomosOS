@@ -63,6 +63,8 @@ export {
   JUDICIAL_RECESS_START,
   SUPPORTED_HOLIDAY_YEARS,
   TR_HOLIDAYS_2026,
+  TR_HOLIDAYS_2027,
+  TR_HOLIDAYS_BY_YEAR,
   buildHolidayIndex,
   expandJudicialRecess,
   fixedOfficialHolidays,

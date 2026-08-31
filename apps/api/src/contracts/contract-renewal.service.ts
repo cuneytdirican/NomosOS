@@ -121,7 +121,7 @@ export class ContractRenewalService {
           },
         },
         orderBy: { date: "asc" },
-        select: { date: true, type: true, name: true },
+        select: { date: true, type: true, name: true, isHalfDay: true, isApproximate: true },
       }));
 
     const adjusted = previousWorkingDay(raw, holidays);
@@ -323,7 +323,7 @@ export class ContractRenewalService {
             },
           },
           orderBy: { date: "asc" },
-          select: { date: true, type: true, name: true },
+          select: { date: true, type: true, name: true, isHalfDay: true, isApproximate: true },
         })
       : [];
 

@@ -108,8 +108,67 @@ export const TR_HOLIDAYS_2026: TrHoliday[] = [
   { date: "2026-10-29", name: "Cumhuriyet Bayramı", type: "RESMI_TATIL" },
 ];
 
+/**
+ * 2027 yılı resmî tatilleri (denetim bulgusu K-04).
+ *
+ * NEDEN EKLENDİ: motorun tatil penceresi tetik yılından açılıyor
+ * (`deadlines.service.ts` `windowStart = 1 Ocak (tetik yılı)`); veritabanında
+ * yalnız 2026 varken 2027 tetikli her hesapta sorgu BOŞ dönüyor, savunma hiç
+ * devreye girmiyor ve motor "23.04.2027 Cuma" gibi adliyenin kapalı olduğu bir
+ * günü son gün olarak veriyordu. İstinaf süresi hak düşürücüdür.
+ *
+ * Motorun otomatik tamamlaması artık boş listede de çalışır, ama o yalnız SABİT
+ * TARİHLİ günleri kapsar; dinî bayramlar ve adli tatil takvimden gelmelidir.
+ *
+ * DİKKAT: dinî bayram tarihleri hicri takvime bağlıdır ve Diyanet ilanıyla
+ * kesinleşir. Aşağıdakiler ÖNGÖRÜLEN tarihlerdir; `isApproximate: true`
+ * taşıdıkları için motor bunlara denk gelen her hesapta `warnings[]` üretir ve
+ * avukattan teyit ister.
+ */
+export const TR_HOLIDAYS_2027: TrHoliday[] = [
+  { date: "2027-01-01", name: "Yılbaşı", type: "RESMI_TATIL" },
+  {
+    date: "2027-03-08",
+    name: `Ramazan Bayramı Arifesi ${HALF_DAY_HOLIDAY_MARKER} ${APPROXIMATE_HOLIDAY_MARKER}`,
+    type: "RESMI_TATIL",
+    isHalfDay: true,
+    isApproximate: true,
+  },
+  { date: "2027-03-09", name: `Ramazan Bayramı 1. gün ${APPROXIMATE_HOLIDAY_MARKER}`, type: "RESMI_TATIL", isApproximate: true },
+  { date: "2027-03-10", name: `Ramazan Bayramı 2. gün ${APPROXIMATE_HOLIDAY_MARKER}`, type: "RESMI_TATIL", isApproximate: true },
+  { date: "2027-03-11", name: `Ramazan Bayramı 3. gün ${APPROXIMATE_HOLIDAY_MARKER}`, type: "RESMI_TATIL", isApproximate: true },
+  { date: "2027-04-23", name: "Ulusal Egemenlik ve Çocuk Bayramı", type: "RESMI_TATIL" },
+  { date: "2027-05-01", name: "Emek ve Dayanışma Günü", type: "RESMI_TATIL" },
+  {
+    date: "2027-05-15",
+    name: `Kurban Bayramı Arifesi ${HALF_DAY_HOLIDAY_MARKER} ${APPROXIMATE_HOLIDAY_MARKER}`,
+    type: "RESMI_TATIL",
+    isHalfDay: true,
+    isApproximate: true,
+  },
+  { date: "2027-05-16", name: `Kurban Bayramı 1. gün ${APPROXIMATE_HOLIDAY_MARKER}`, type: "RESMI_TATIL", isApproximate: true },
+  { date: "2027-05-17", name: `Kurban Bayramı 2. gün ${APPROXIMATE_HOLIDAY_MARKER}`, type: "RESMI_TATIL", isApproximate: true },
+  { date: "2027-05-18", name: `Kurban Bayramı 3. gün ${APPROXIMATE_HOLIDAY_MARKER}`, type: "RESMI_TATIL", isApproximate: true },
+  { date: "2027-05-19", name: "Atatürk'ü Anma, Gençlik ve Spor Bayramı", type: "RESMI_TATIL" },
+  { date: "2027-07-15", name: "Demokrasi ve Millî Birlik Günü", type: "RESMI_TATIL" },
+  { date: "2027-08-30", name: "Zafer Bayramı", type: "RESMI_TATIL" },
+  {
+    date: "2027-10-28",
+    name: `Cumhuriyet Bayramı Arifesi ${HALF_DAY_HOLIDAY_MARKER}`,
+    type: "RESMI_TATIL",
+    isHalfDay: true,
+  },
+  { date: "2027-10-29", name: "Cumhuriyet Bayramı", type: "RESMI_TATIL" },
+];
+
+/** Yıl → takvim eşlemesi. Tohum ve zamanlayıcı buradan okur (tek kaynak). */
+export const TR_HOLIDAYS_BY_YEAR: Record<number, TrHoliday[]> = {
+  2026: TR_HOLIDAYS_2026,
+  2027: TR_HOLIDAYS_2027,
+};
+
 /** Takvimi elde bulunan yıllar. Diğer yıllarda motor `warnings[]` üretir. */
-export const SUPPORTED_HOLIDAY_YEARS: number[] = [2026];
+export const SUPPORTED_HOLIDAY_YEARS: number[] = [2026, 2027];
 
 /**
  * Herhangi bir yıl için **sabit tarihli** (kanunla belirli, hicri takvime bağlı

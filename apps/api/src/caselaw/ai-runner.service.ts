@@ -22,7 +22,14 @@
  * zorunluluğu, atıf disiplini) her çağrının başında durur.
  */
 
-import { BadGatewayException, BadRequestException, ConflictException, Injectable, Logger } from "@nestjs/common";
+import {
+  BadGatewayException,
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 import type { AiProviderConfig } from "@nomosos/db";
 import {
   createProvider,
@@ -44,6 +51,7 @@ import { assertAiPolicyAllows } from "../common/ai-policy";
 import { creditRunContext } from "../credits/credit-context";
 import { providerUnreachable } from "../common/errors";
 import type { AuthUser } from "../common/types";
+import { readProviderHeaders } from "../common/provider-headers";
 
 export interface AiRunInput<TSchema extends ZodTypeAny> {
   user: AuthUser;
@@ -257,6 +265,47 @@ export class AiRunnerService {
       : this.applyPiiGate(config.type, input.outboundTexts, input.piiApproved, config.baseUrl);
     const messages = input.buildMessages(gate.texts);
 
+    /**
+     * NİHAİ MESAJ DOĞRULAMA TARAMASI (denetim bulgusu Ö-23).
+     *
+     * `preScanned` "ben zaten taradım" der — ama TARANAN ŞEY `outboundTexts`tir,
+     * PROMPTA GİDEN ŞEY DEĞİL. `buildMessages` bir KAPANIŞTIR (closure) ve
+     * `outboundTexts` dışından istediği metni ekleyebilir. Okunan tek `preScanned`
+     * yolunda bile delik vardı:
+     *
+     *   outboundTexts: [ctx.contextText, noteGate.texts[0]],
+     *   preScanned:    { piiMasked: … },              // ← runner kapısı ATLANIR
+     *   buildMessages: ([contextText, styleNote]) => buildPetitionDraftMessages({
+     *     sectionSkeleton:    skeleton.map((s) => s.key),   // ← outboundTexts DIŞINDA
+     *     approvedPrecedents: ctx.precedents,               // ← outboundTexts DIŞINDA
+     *     caseContextText:    contextText,
+     *   })
+     *
+     * Bugün o iki alanda PII bulunma ihtimali düşüktür; tehlike SÖZLEŞMENİN
+     * ŞEKLİNDEDİR. Yarın `skeleton`a taraf adı eklenirse hiçbir kapı devreye
+     * girmez ve `AiUsageLog.piiMasked` yine doğru sanılırdı.
+     *
+     * Bu tarama MASKELEMEZ — maskeleme çağıranın sözleşmesidir. Yalnız DOĞRULAR:
+     * dış sağlayıcıya gidecek nihai metinde kalıp tabanlı bir kişisel veri
+     * kalmışsa çağrı YAPILMAZ ve hata fırlatılır. Sözleşme ihlali sessiz kalmaz.
+     */
+    if (input.preScanned && isExternalDestination(config.type, config.baseUrl)) {
+      const residual = messages.flatMap((m) => scanPii(m.content).findings);
+      if (residual.length > 0) {
+        this.logger.error(
+          `preScanned sözleşmesi ihlal edildi (${input.taskType}): nihai mesajlarda ` +
+            `${residual.length} maskelenmemiş kişisel veri bulundu.`,
+        );
+        throw new ServiceUnavailableException({
+          message:
+            "Dış sağlayıcıya gönderilecek metinde maskelenmemiş kişisel veri tespit edildiği için " +
+            "çağrı YAPILMADI (fail-closed KVKK kuralı). Bu bir yazılım hatasıdır; " +
+            "sistem yöneticinizle görüşün.",
+          findings: summarizeFindings(residual),
+        });
+      }
+    }
+
     const startedAt = Date.now();
     let result;
     try {
@@ -348,7 +397,7 @@ export class AiRunnerService {
       apiKey: config.encryptedApiKey ? decryptSecret(config.encryptedApiKey) : undefined,
       baseUrl: config.baseUrl ?? undefined,
       defaultModel: config.defaultModel,
-      headers: safeJsonParse<Record<string, string>>(config.headersJson),
+      headers: readProviderHeaders(config.headersJson),
       mapping: safeJsonParse<CustomMapping>(config.mappingJson),
     };
   }

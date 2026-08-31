@@ -21,6 +21,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { assertAiPolicyAllows, tenantAiPolicy } from "../common/ai-policy";
 import { sanitizeExternalError } from "../common/errors";
+import { readProviderHeaders } from "../common/provider-headers";
 
 /**
  * Belge hattının AI koşucusu.
@@ -336,7 +337,7 @@ function resolveConfig(config: AiProviderConfig): ResolvedProviderConfig {
     apiKey: config.encryptedApiKey ? decryptSecret(config.encryptedApiKey) : undefined,
     baseUrl: config.baseUrl ?? undefined,
     defaultModel: config.defaultModel,
-    headers: safeJsonParse<Record<string, string>>(config.headersJson),
+    headers: readProviderHeaders(config.headersJson),
     mapping: safeJsonParse<CustomMapping>(config.mappingJson),
   };
 }

@@ -29,6 +29,17 @@ const ENTRY_INCLUDE = {
 type EntryWithRelations = Prisma.FinancialEntryGetPayload<{ include: typeof ENTRY_INCLUDE }>;
 
 /**
+ * Aktif `$transaction` istemcisi.
+ *
+ * Ö-12: avans bakiyesi okuması, o bakiyeyi koruyan kilidin ARKASINDA yapılmak
+ * zorundadır; bu yüzden okuma fonksiyonları transaction istemcisini alabilmelidir.
+ */
+type FinanceTx = Omit<
+  Prisma.TransactionClient,
+  "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
+>;
+
+/**
  * Modül 08 — Finans hareketleri (FinancialEntry) CRUD'u.
  *
  * TASARIM NOTLARI
@@ -109,25 +120,54 @@ export class FinanceService {
     const amount = dec(input.amount);
     const date = input.date ?? new Date();
 
-    // Avanstan mahsup edilen masraf/harç → bakiye kontrolü (iş kuralı 3).
-    if (this.isAdvanceSettlement(input.type, input.isBillable)) {
-      await this.assertAdvanceCovers(user.tenantId, input.clientId, input.currency, amount, null);
-    }
+    /**
+     * AVANS BAKİYESİ KONTROLÜ YAZMA İŞLEMİYLE AYNI TRANSACTION'DADIR
+     * (denetim bulgusu Ö-12).
+     *
+     * Eskiden `assertAdvanceCovers` transaction'ın DIŞINDAYDI ve `create` ayrı,
+     * kilitsiz bir çağrıydı. İki eşzamanlı `POST /finance/entries` (MASRAF,
+     * 10.000,00) isteği AYNI 10.000 TL'lik bakiyeyi okuyor, ikisi de kapıdan
+     * geçiyor, ikisi de yazıyordu → avans bakiyesi −10.000,00 TL. İş kuralı 3
+     * ("bakiye eksiye düşemez") ihlal ediliyordu.
+     *
+     * Doğru desen AYNI DEPODA yazılıydı: `payments.service.ts:122-126`
+     * `$transaction` + `SELECT … FOR UPDATE`; oradaki yorum tam bu sınıf hatanın
+     * (denetim bulgusu 4) nasıl kapatıldığını anlatıyor. Finans tarafına
+     * uygulanmamıştı.
+     *
+     * KİLİT NESNESİ: müvekkil satırı. Avans bakiyesi `FinancialEntry`
+     * satırlarının toplamıdır; toplamı kilitlemenin yolu, o toplamı besleyen
+     * TÜM satırların sahibi olan `Client` satırını kilitlemektir. İkinci istek
+     * birincinin yazması bitene kadar bekler ve GÜNCEL bakiyeyi okur.
+     */
+    const created = await this.prisma.client.$transaction(async (tx) => {
+      if (this.isAdvanceSettlement(input.type, input.isBillable)) {
+        await tx.$executeRaw`SELECT id FROM "Client" WHERE id = ${input.clientId} AND "tenantId" = ${user.tenantId} FOR UPDATE`;
+        await this.assertAdvanceCovers(
+          tx,
+          user.tenantId,
+          input.clientId,
+          input.currency,
+          amount,
+          null,
+        );
+      }
 
-    const created = await this.prisma.client.financialEntry.create({
-      data: {
-        tenantId: user.tenantId,
-        clientId: input.clientId,
-        caseId: input.caseId ?? null,
-        type: input.type as FinancialEntryType,
-        amount,
-        currency: input.currency,
-        date,
-        description: input.description ?? null,
-        isBillable: input.isBillable,
-        vatRate: input.vatRate === null || input.vatRate === undefined ? null : dec(input.vatRate),
-      },
-      include: ENTRY_INCLUDE,
+      return tx.financialEntry.create({
+        data: {
+          tenantId: user.tenantId,
+          clientId: input.clientId,
+          caseId: input.caseId ?? null,
+          type: input.type as FinancialEntryType,
+          amount,
+          currency: input.currency,
+          date,
+          description: input.description ?? null,
+          isBillable: input.isBillable,
+          vatRate: input.vatRate === null || input.vatRate === undefined ? null : dec(input.vatRate),
+        },
+        include: ENTRY_INCLUDE,
+      });
     });
 
     await this.audit.log({
@@ -157,32 +197,31 @@ export class FinanceService {
     const nextCurrency = input.currency ?? existing.currency;
     const nextAmount = input.amount === undefined ? dec(existing.amount) : dec(input.amount);
 
-    if (this.isAdvanceSettlement(nextType, nextBillable)) {
-      // Kaydın kendisi bakiyeden düşülmüş sayıldığı için hesaptan HARİÇ tutulur.
-      await this.assertAdvanceCovers(
-        user.tenantId,
-        existing.clientId ?? "",
-        nextCurrency,
-        nextAmount,
-        existing.id,
-      );
-    }
+    // Ö-12: kontrol ve yazma AYNI transaction'da, müvekkil satırı kilitli.
+    const updated = await this.prisma.client.$transaction(async (tx) => {
+      if (this.isAdvanceSettlement(nextType, nextBillable)) {
+        const clientId = existing.clientId ?? "";
+        await tx.$executeRaw`SELECT id FROM "Client" WHERE id = ${clientId} AND "tenantId" = ${user.tenantId} FOR UPDATE`;
+        // Kaydın kendisi bakiyeden düşülmüş sayıldığı için hesaptan HARİÇ tutulur.
+        await this.assertAdvanceCovers(tx, user.tenantId, clientId, nextCurrency, nextAmount, existing.id);
+      }
 
-    const updated = await this.prisma.client.financialEntry.update({
-      where: { id },
-      data: {
-        ...(input.caseId !== undefined ? { caseId: input.caseId } : {}),
-        ...(input.type !== undefined ? { type: input.type as FinancialEntryType } : {}),
-        ...(input.amount !== undefined ? { amount: nextAmount } : {}),
-        ...(input.currency !== undefined ? { currency: input.currency } : {}),
-        ...(input.date !== undefined ? { date: input.date } : {}),
-        ...(input.description !== undefined ? { description: input.description } : {}),
-        ...(input.isBillable !== undefined ? { isBillable: input.isBillable } : {}),
-        ...(input.vatRate !== undefined
-          ? { vatRate: input.vatRate === null ? null : dec(input.vatRate) }
-          : {}),
-      },
-      include: ENTRY_INCLUDE,
+      return tx.financialEntry.update({
+        where: { id },
+        data: {
+          ...(input.caseId !== undefined ? { caseId: input.caseId } : {}),
+          ...(input.type !== undefined ? { type: input.type as FinancialEntryType } : {}),
+          ...(input.amount !== undefined ? { amount: nextAmount } : {}),
+          ...(input.currency !== undefined ? { currency: input.currency } : {}),
+          ...(input.date !== undefined ? { date: input.date } : {}),
+          ...(input.description !== undefined ? { description: input.description } : {}),
+          ...(input.isBillable !== undefined ? { isBillable: input.isBillable } : {}),
+          ...(input.vatRate !== undefined
+            ? { vatRate: input.vatRate === null ? null : dec(input.vatRate) }
+            : {}),
+        },
+        include: ENTRY_INCLUDE,
+      });
     });
 
     await this.audit.log({
@@ -303,13 +342,14 @@ export class FinanceService {
    * düşecekse istek 400 ile reddedilir ve kullanıcıya kalan avans bildirilir.
    */
   private async assertAdvanceCovers(
+    tx: FinanceTx,
     tenantId: string,
     clientId: string,
     currency: string,
     amount: Prisma.Decimal,
     excludeEntryId: string | null,
   ): Promise<void> {
-    const balance = await this.advanceBalance(tenantId, clientId, currency, excludeEntryId);
+    const balance = await this.advanceBalance(tenantId, clientId, currency, excludeEntryId, tx);
     if (balance.lt(amount)) {
       throw new BadRequestException(
         `Avans bakiyesi yetersiz. Mahsup edilmek istenen tutar ${formatMoneyTr(amount, currency)}, ` +
@@ -325,8 +365,14 @@ export class FinanceService {
     clientId: string,
     currency: string,
     excludeEntryId: string | null = null,
+    /**
+     * Aktif transaction istemcisi. Ö-12: bakiye okuması, onu koruyan kilidin
+     * ARKASINDA yapılmalıdır; dışarıdan okunan bakiye yazma anında bayat olur.
+     */
+    tx?: FinanceTx,
   ): Promise<Prisma.Decimal> {
-    const rows = await this.prisma.client.financialEntry.groupBy({
+    const db = tx ?? this.prisma.client;
+    const rows = await db.financialEntry.groupBy({
       by: ["type"],
       where: {
         tenantId,

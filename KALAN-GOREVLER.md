@@ -13,6 +13,67 @@
 5. **Ürün ilkelerinden taviz verilmez**: AI önerir avukat onaylar · süre ve para hesapları deterministik · kaynak gösterme zorunlu, uydurma yasak · atıflar kayıt üzerinden doğrulanır · KVKK maskeleme onayı · tenant izolasyonu.
 6. **Dosya sahipliği** ajanlar arasında keskin bölünür; `app.module.ts`, `main.ts`, kök `package.json` yalnız entegrasyon ajanına aittir.
 
+---
+
+# 🔖 KALDIĞIM YER — 31 Ağustos 2026, 08:30
+
+> Kullanıcı laptopu kapattı, işte devam edecek. **"Devam et" dediğinde buradan başla.**
+
+## Anlık durum
+
+**Derin denetim (Aşama 8) — düzeltme aşamasında, ~%75.**
+
+- Denetim raporu YAZILDI: `docs/DENETIM-RAPORU.md` (630 satır)
+  - 71 bulgu üretildi → adversaryal doğrulama → **16 KRİTİK, 34 ÖNEMLİ, 21 İYİLEŞTİRME**
+- Düzeltme ajanı çalışırken laptop kapandı; **workflow öldü, ama çalışması diskte duruyor ve commit edildi.**
+- Son durum: `pnpm build` 12/12 ✅ · `pnpm -r test` **663 test geçiyor** ✅
+  (legal-core 78→79: K-04 için regresyon testi eklenmiş)
+
+## Düzeltilenler (kodda bulgu numarasıyla işaretli)
+
+**KRİTİK (16'da 12):** K-01, K-02, K-03, K-04, K-05, K-06, K-07, K-08, K-09, K-10, K-12, K-13
+
+**KRİTİK — KALAN 4 (İLK İŞ BUNLAR):**
+- **K-11** — Dört-göz kataloğu ile yetki matrisi çelişiyor; arayüz söz veriyor, API tutmuyor
+- **K-14** — Kural motorundan üretilen sürenin girdisi (tebliğ tarihi/yöntem) düzeltilemiyor
+- **K-15** — Liste ekranlarında sayfalama zarfı atılıyor; kayıtlar sessizce kırpılıyor
+- **K-16** — Arama istemcide yapılıyor; sunucudaki `q` süzgeci kullanılmıyor
+
+**ÖNEMLİ (34'te en az 13):** Ö-01, Ö-03, Ö-04, Ö-05, Ö-07, Ö-11, Ö-12, Ö-13, Ö-14, Ö-15, Ö-17, Ö-19, Ö-20
+(Not: bu bir ALT SINIR — yorumunda bulgu numarası taşımayan düzeltmeler sayıma girmedi.)
+
+## Devam edince yapılacaklar (sırayla)
+
+1. **`docs/DENETIM-RAPORU.md` dosyasını oku** — kalan KRİTİK (K-11, K-14, K-15, K-16) ve
+   düzeltilmemiş ÖNEMLİ bulguların tam metnini oradan al.
+2. Kalan bulguları düzelt; her düzeltmeye **regresyon testi** ekle.
+3. Rapora **"## Düzeltme Turu Sonucu"** bölümünü ekle (hangi bulgu düzeltildi, hangisi neden
+   bırakıldı, eklenen test sayısı, son test durumu). Bu bölüm yoksa iş bitmemiş demektir.
+4. **Bağımsız doğrulama** — ajan raporuna güvenme, düzeltmeleri kendin canlı test et:
+   platform 2FA kurulumu (K-01), `/ai/chat` maskelemesi (K-07), 2027 tatil hesabı (K-04),
+   azil sonrası portal erişimi (K-12).
+5. **Aşama 8.5 — Docker test ortamı**: `docker-compose.test.yml` (otomatik migration+seed),
+   imajları derle ve çalıştığını doğrula. Kayıt defteri seçeneği kullanıcıya soruldu,
+   karar bekleniyor (yerel derleme / ghcr.io / Docker Hub — ayrıntı §Aşama 8.5).
+6. **Aşama 9 — Kapanış**: final build+test+duman testi, GitHub'a gönderim, kapsamlı
+   kapanış raporu.
+
+## Workflow bilgisi (gerekirse)
+
+Ölen düzeltme workflow'u: `resumeFromRunId: "wf_e8e70670-0c4"`,
+script: `C:\Users\cdiri\.claude\projects\C--Projeler-NomosOS\f2f9eb96-2326-4f00-a47b-4a6c30f86d9c\workflows\scripts\nomosos-derin-denetim-wf_e8e70670-0c4.js`
+Tamamlanan ajanlar önbellekten döner. **Ama muhtemelen daha temizi: kalan 4 kritik bulgu için
+yeni ve dar kapsamlı bir workflow açmak** — denetim ve rapor zaten bitti.
+
+## Ortam hatırlatması
+
+- Docker konteynerleri (postgres/redis/minio) laptop kapanınca durur; `docker compose up -d` ile geri başlat.
+- API duman testi için: `docs/test-ortami.md` §3 ve ortam değişkenleri.
+- Migration tuzağı: sistem saati migration geçmişinin gerisinde. `--create-only` ile üret,
+  klasörü elle adlandır. Son migration: `20260906090000_faz6_raporlama_zamanlanmis`.
+
+---
+
 ## Durum
 
 | # | İş | Durum |
