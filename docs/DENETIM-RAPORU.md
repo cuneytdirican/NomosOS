@@ -1092,3 +1092,23 @@ Aşağıdakiler kapanmadan üretime çıkılmamalıdır. Bu liste, denetimin ilk
 6. **Backlog vaatlerinin arayüz ve pazarlama metninden çıkarılması** — özellikle mevzuat atıf doğrulaması (Ö-25), UYAP entegrasyonu (Ö-26) ve OCR (Ö-24). Bunlar kod hatası değildir; **vaat edilirlerse hataya dönüşürler.**
 
 *Düzeltme turu sonu. Bu bölümdeki her "CANLI" işareti ayakta bir sisteme atılmış gerçek isteğe dayanır; diğer her şey kod incelemesidir ve öyle okunmalıdır.*
+
+---
+
+## Kapatıcılar Turu Sonucu (31 Ağustos 2026, 17:10)
+
+"Üretim öncesi kalan kapatıcılar" listesinin durumu:
+
+| # | Kapatıcı | Durum | Kanıt |
+|---|---|---|---|
+| 1 | K-12 kalıntısı — portal okuma-anı vekaletname canlılık kontrolü | ✅ KAPANDI | `portal/guards/portal-poa-liveness.ts` + guard KAPI 8: müvekkilin vekaletname kaydı VAR ve hiçbiri canlı değilse (azil/süre dolumu/pasif) oturum anında düşer. Canlılık tanımı büro tarafının "AKTİF" süzgeciyle birebir. Regresyon: `portal-poa-liveness.test.ts` (7) |
+| 2 | `PlatformUser` hard delete'inin yapısal olarak imkânsız kılınması | ✅ KAPANDI | `PlatformAuditLog.platformUserId` FK'sı kaldırıldı (`tenantId` deseni); migration `20260910090000` uygulandı. DB'de doğrulandı: kısıt yok, append-only trigger yerinde. Ad-soyad çözümlemesi "(silinmiş kullanıcı)" şeridiyle ayrı sorguda. Regresyon: `platform-audit-fk.test.ts` (5) |
+| 3 | 1. tur düzeltmelerine regresyon testi | ✅ KAPANDI (+36 test) | K-13 `deadline-status-policy.test.ts` (9) · K-05 `aging-rules.test.ts` (7) · K-01 `platform-2fa-key.test.ts` (5) · K-03 `account-lockout.test.ts` (8) · K-08/K-09 `provider-secrets.test.ts` (7) |
+| 4 | `docs/uretim-dagitimi.md` güncellemesi | ✅ KAPANDI | §3.2.1 `TRUSTED_PROXY_HOPS` (üretimde zorunlu, tanımsız/bozuksa açılış durur) · §3.2.2 `RATE_LIMIT_BACKEND` (çok örnekli dağıtımda `redis`) · §3.2.3 büro bazlı AI kovaları |
+| 5 | İ-31 telafi göçü | ✅ KAPANDI | Migration `20260911090000_i31_sahiplik_telafi_gocu`: 7 kaynak türü için `ownershipVerified` bugünkü veriyle yeniden hesaplandı; DB'de doğrulandı |
+| 6 | Backlog vaatlerinin arayüz/pazarlama metninden çıkarılması | ⏳ AÇIK | Ürün kararı gerektirir (Ö-24/25/26); tek başına yapılmaz |
+| — | İ-27 rota kataloğu | ✅ KAPANDI | `api-routes.ts` 3 → 27 modül; sözleşme testi `api-route-catalog.test.ts` (4): katalogdaki hiçbir yol 404'e gitmez, her controller öneği katalogda |
+
+**Sayısal durum:** `pnpm build` 12/12 ✅ · `pnpm typecheck` 20/20 ✅ · `pnpm lint` 0 hata / 10 uyarı ✅ · **851 test geçiyor** (api 512 → 564). Migration sayısı 16 → 18; sonraki `20260912090000_…` olmalıdır.
+
+*Kapatıcılar turu sonu.*

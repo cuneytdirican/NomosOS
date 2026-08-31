@@ -1696,7 +1696,6 @@ model PlatformUser {
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
-  auditLogs     PlatformAuditLog[]
   supportGrants SupportAccessGrant[]
 
   @@index([role])
@@ -1852,8 +1851,11 @@ model Announcement {
 /// Destek erişimi gibi işlemler HER İKİSİNE birden yazılır.
 model PlatformAuditLog {
   id             String        @id @default(uuid())
+  /// Kim İŞLEMİ yaptı — FK DEĞİLDİR (denetim bulgusu Ö-27 kalıntısı).
+  /// `tenantId` ile aynı desen: platform kullanıcısı hard delete edilse dahi
+  /// iz AYAKTA KALIR. FK olsaydı `onDelete: SetNull` denetim satırlarında
+  /// UPDATE koşar ve append-only trigger'ı silme işlemini TAMAMEN BLOKLARDI.
   platformUserId String?
-  platformUser   PlatformUser? @relation(fields: [platformUserId], references: [id], onDelete: SetNull)
   action         String // Örn. "TENANT_SUSPEND", "SUPPORT_GRANT_CREATE"
   entity         String?
   entityId       String?

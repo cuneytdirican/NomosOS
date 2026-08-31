@@ -84,9 +84,6 @@ export class PlatformAuditQueryService {
         orderBy: { createdAt: "desc" },
         skip: page.skip,
         take: page.take,
-        include: {
-          platformUser: { select: { id: true, fullName: true, email: true, role: true } },
-        },
       }),
       this.prisma.client.platformAuditLog.count({ where }),
     ]);
@@ -99,6 +96,28 @@ export class PlatformAuditQueryService {
         })
       : [];
     const tenantNames = new Map(tenants.map((t) => [t.id, t.name]));
+
+    // platformUserId FK DEĞİLDİR (denetim bulgusu Ö-27 kalıntısı): ad-soyad
+    // çözümlemesi tenantIds gibi AYRI sorguyla yapılır. Kullanıcı silinmişse
+    // iz "(silinmiş kullanıcı)" şeridiyle AYAKTA KALIR — join olsaydı satır
+    // kaybolur ya da include null düşerdi.
+    const userIds = [...new Set(rows.map((r) => r.platformUserId).filter((v): v is string => !!v))];
+    const users = userIds.length
+      ? await this.prisma.client.platformUser.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, fullName: true, email: true, role: true },
+        })
+      : [];
+    const userById = new Map(users.map((u) => [u.id, u]));
+    const resolveUser = (id: string | null) =>
+      id
+        ? userById.get(id) ?? {
+            id,
+            fullName: "(silinmiş kullanıcı)",
+            email: null as string | null,
+            role: null as string | null,
+          }
+        : null;
 
     return {
       ...paged(
@@ -114,7 +133,7 @@ export class PlatformAuditQueryService {
           detail: r.detail,
           ipAddress: r.ipAddress,
           createdAt: r.createdAt,
-          platformUser: r.platformUser,
+          platformUser: resolveUser(r.platformUserId),
         })),
         total,
         page

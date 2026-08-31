@@ -223,11 +223,11 @@ komutlar birebir çalıştırılabilir.
 |---|---|---|---|
 | `REDIS_URL` | `redis://localhost:6379` | Sağlık yoklaması; Faz 5'te kuyruk | Sağlık ucu `redis: down` der; bugün başka etki yok |
 | `API_PORT` | 3001 | API dinleme portu | — |
-| `TRUSTED_PROXY_HOPS` | **0** | Kaç güvenilen vekil var. 0 = `X-Forwarded-For`'a hiç bakma | Vekil arkasındayken 0 kalırsa 10 yıl saklanan denetim izindeki IP alanı **yanlış** olur (vekilin IP'si görünür). Nginx/ALB arkasında genellikle `1` |
+| `TRUSTED_PROXY_HOPS` | — | Kaç güvenilen vekil var. **Üretimde zorunlu** — ayrıntı **§3.2.1** | Bozuk ya da üretimde tanımsızsa **açılış durur**; vekil arkasında yanlışsa denetim izindeki IP alanı **yanlış** olur (vekilin IP'si görünür) |
 | `API_FORCE_HSTS` | `false` | TLS ters vekilde sonlanıyorsa HSTS başlığını açar | Üretimde `true` olmalı (§8.1) |
 | `API_JSON_BODY_LIMIT` | `1mb` | JSON gövde tavanı | Belge yüklemesi multipart'tır, bu sınıra takılmaz (Multer 50 MB) |
 | `AI_TIMEOUT_MS` | `60000` (alt 5 sn, üst 600 sn) | AI çağrısı zaman aşımı | Node fetch'inde varsayılan zaman aşımı **yoktur**: sağlayıcı yanıt vermezse istek süresiz asılır ve 50 MB tampon bellekte kalır |
-| `AI_RATE_LIMIT_PER_MINUTE` / `_PER_DAY` | 20 / 300 | Kullanıcı+uç başına pahalı AI uçlarında sınır | BYO-LLM maliyeti doğrudan büroya yazıldığı için sınır ürünün parçasıdır. **Süreç-içi sayaç** — çok örnekli dağıtımda sınır örnek sayısıyla çarpılır |
+| `AI_RATE_LIMIT_PER_MINUTE` / `_PER_DAY` | 20 / 300 | Kullanıcı+uç başına pahalı AI uçlarında sınır | BYO-LLM maliyeti doğrudan büroya yazıldığı için sınır ürünün parçasıdır. Büro bazlı kovalar için **§3.2.3**; çok örnekli dağıtımda sayacın belleği için **§3.2.2** |
 | `AI_INTERNAL_HOSTS` | — | Büro-içi sayılacak EK ana makineler | Yazılmazsa kendi alan adıyla çalışan iç LLM **dış sağlayıcı** sayılır → gereksiz PII onayı ve yanlış KVKK sınıflandırması |
 | `AI_EMBEDDING_MODEL` (+ `_<TİP>`) | — | RAG gömme modeli | Boşsa sağlayıcı tipine göre varsayılan seçilir; gömme desteklenmeyen tipte asistan anahtar kelime aramasına düşer |
 | `MAX_PDF_PAGES` | 300 | Tek PDF'te ayrıştırılacak azami sayfa | Aşılırsa kısmi metin + açık uyarı |
@@ -240,6 +240,53 @@ komutlar birebir çalıştırılabilir.
 | `EINVOICE_PROVIDER` | `noop` | e-Fatura entegratörü | `noop` GİB'e **hiçbir** bağlantı kurmaz; gönderim isteğinde 503 döner ve sahte "gönderildi" durumu üretmez |
 | `NODE_ENV` | — | `production` olmalı | `production` değilse 2FA zorlaması devreye girmez |
 | `TZ` | — | `UTC` önerilir | Tarih hesapları `process.env.TZ`'ye bağlı değildir (`common/dates.ts`), ama günlük zaman damgalarının tekdüze olması için konteynerleri UTC'de çalıştırın |
+
+### 3.2.1 `TRUSTED_PROXY_HOPS` — üretimde ZORUNLU (denetim bulgusu Ö-08)
+
+Bu değişken "önerilen" DEĞİLDİR; **üretimde zorunlu alandır**:
+
+| Durum | Sonuç |
+|---|---|
+| Bozuk değer (`1a`, `99`, `-1`…) | **Her ortamda açılış DURUR** — sessizce 0'a düşmez |
+| `NODE_ENV=production` iken **tanımsız** | **Açılış DURUR** (`common/trusted-proxy.ts`). Vekil arkasındaysanız hop sayısını yazın (nginx/ALB/Caddy/Traefik için genellikle `1`, CDN+vekil zincirinde `2`); API doğrudan internete açıksa **açıkça `TRUSTED_PROXY_HOPS=0`** yazın |
+| Açık `0` | Tek geçerli "vekilim yok" ifadesi — her ortamda çalışır |
+| 10'un üstü | Açılış durur (üst sınır: 10) |
+
+Yanlış ayar üç mekanizmayı birlikte bozar: hesap kilidi, oran sınırlayıcılar ve
+10 yıl saklanan denetim izlerindeki IP alanı (hepsi `request.ip`'yi okur).
+
+### 3.2.2 Oran sınırlayıcı sayaçların belleği — `RATE_LIMIT_BACKEND`
+
+Giriş/2FA/portal kilidi ve AI oran kovaları varsayılan olarak (`auto`)
+**süreç içindedir**. Bu, tek örnekli dağıtımda doğrudur; **çok örnekli
+(yatay ölçeklenen) dağıtımda her örnek kendi kovasını sayar** — sınır
+etkin olarak örnek sayısıyla çarpılır.
+
+| Değer | Davranış |
+|---|---|
+| `auto` (varsayılan) | `REDIS_URL` çözülebilirse Redis'e, çözülemezse süreç içine düşer |
+| `redis` | Zorunlu kılar. `REDIS_URL` yoksa/bozuksa **açılış durmaz ama o uç** süreç-içi sayaca düşmez — hata günlüğe yazılır |
+| `memory` | Süreç-içi kova istenir. Tek örnek dışında **kullanmayın** |
+
+**Çok örnekli dağıtımda `RATE_LIMIT_BACKEND=redis` yazın** (ve `REDIS_URL`
+verin). Yazılmazsa kilit/sayaçlar sessizce süreç içine düşer (denetim bulgusu
+Ö-09'un dağıtım yüzü).
+
+### 3.2.3 Büro (tenant) bazlı AI sınırları
+
+Kullanıcı+uç kovalarına ek olarak dört kova vardır (`common/guards/ai-rate-limit.guard.ts`):
+
+| Kova | Değişken | Varsayılan |
+|---|---|---|
+| Kullanıcı+uç / dakika | `AI_RATE_LIMIT_PER_MINUTE` | 20 |
+| Kullanıcı+uç / gün | `AI_RATE_LIMIT_PER_DAY` | 300 |
+| **Büro (rotadan bağımsız) / dakika** | `AI_RATE_LIMIT_TENANT_PER_MINUTE` | 60 |
+| **Büro (rotadan bağımsız) / gün** | `AI_RATE_LIMIT_TENANT_PER_DAY` | 2000 |
+
+Büro kovaları tek bir kullanıcının parola denemesi yapmasını değil, bir büronun
+toplam AI bütçesini korur; reddedilen istekten kredi **düşmez**. Yönetilen AI
+(kredi satılan) modda bu kovalar maliyet kontrolünün son hattıdır — kredi
+paketlerine göre ayarlayın.
 
 ### 3.3 `MASTER_ENCRYPTION_KEY` — özel uyarı
 

@@ -15,48 +15,89 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 31 Ağustos 2026, 08:30
+# 🔖 KALDIĞIM YER — 31 Ağustos 2026, 17:10
 
-> Kullanıcı laptopu kapattı, işte devam edecek. **"Devam et" dediğinde buradan başla.**
+> **KAPATICILAR TURU TAMAMLANDI.** Denetim raporunun "Üretim öncesi kalan
+> kapatıcılar" listesindeki 1, 2, 3 (kısmen), 4, 5 numaralı maddeler ve İ-27
+> kapandı. Bu bölümün altındaki ayrıntıya bakmadan şunu bil: **kalan tek iş
+> Aşama 9 (kapanış raporu) ve 6. madde (backlog vaatlerinin arayüz/pazarlama
+> metninden çıkarılması — ürün kararı gerektirir).**
+
+## Bu turda yapılanlar
+
+1. **K-12 kalıntısı KAPANDI** — portal guard'ına okuma-anı vekaletname canlılık
+   kontrolü (`portal/guards/portal-poa-liveness.ts` + KAPI 8). Kayıt VAR ve
+   hiçbiri canlı değilse (azil + süre dolumu + pasif) portal erişimi anında kesilir.
+   Regresyon: `portal-poa-liveness.test.ts` (7 test).
+2. **PlatformUser hard delete yapısal olarak imkânsızlaştı** — `PlatformAuditLog.platformUserId`
+   FK'sı kaldırıldı (tenantId deseni); migration `20260910090000_platform_audit_fk_kaldirma`
+   uygulandı, DB'de doğrulandı (FK yok, append-only trigger yerinde).
+   `platform-audit-query.service.ts` ad-soyadı "(silinmiş kullanıcı)" şeridiyle ayrı sorguda çözüyor.
+   Regresyon: `platform-audit-fk.test.ts` (5 test).
+3. **İ-31 telafi göçü** — `20260911090000_i31_sahiplik_telafi_gocu`: tüm mevcut yayınların
+   `ownershipVerified` bayrağı 7 kaynak türü için yeniden hesaplandı, DB'de doğrulandı.
+4. **1. tur düzeltmelerine regresyon testleri** (+36 test):
+   K-13 `deadline-status-policy.test.ts` (9) · K-05 `aging-rules.test.ts` (7) ·
+   K-01 `platform-2fa-key.test.ts` (5) · K-03 `account-lockout.test.ts` (8) ·
+   K-08/K-09 `provider-secrets.test.ts` (7).
+5. **İ-27 rota kataloğu dolduruldu** — `packages/shared/src/api-routes.ts` 3 → 27 modül
+   (AUTH, USERS, CLIENTS, CASES, DEADLINES, HEARINGS, TASKS, DOCUMENTS, PROPOSALS,
+   AI, ASSISTANT, CASELAW, PETITION, CONFLICT, EVIDENCE, EXPERT, SIMULATION, STRATEGY,
+   RISK, COMMUNICATION, CONTRACT, POA, PORTAL_ADMIN, REPORT, CREDIT, NOTIFICATION,
+   DEVICE_TOKEN, DASHBOARD, HEALTH). **Sözleşme testi** `api-route-catalog.test.ts` (4):
+   katalogdaki hiçbir yol 404'e gitmez + her controller öneği katalogda temsil edilir.
+6. **docs/uretim-dagitimi.md güncellendi** — §3.2.1 `TRUSTED_PROXY_HOPS` (üretimde
+   zorunlu, açılış durdurur), §3.2.2 `RATE_LIMIT_BACKEND` (çok örnekli dağıtımda redis),
+   §3.2.3 büro bazlı AI kovaları (`AI_RATE_LIMIT_TENANT_*`).
+
+## Doğrulama
+
+- `pnpm build` 12/12 ✅ · `pnpm typecheck` 20/20 ✅ · `pnpm lint` 0 hata / 10 uyarı ✅
+- `pnpm -r test`: **851 test geçiyor** (api 564 — 52 yeni; diğerleri aynı)
+- Migration 16 → **18** (`20260910090000`, `20260911090000`); **sonraki: `20260912090000_…`**
+
+## Kalan iş (sırayla)
+
+1. **Kapatıcı 6 — backlog vaatlerinin arayüz/pazarlama metninden çıkarılması** (Ö-24 OCR,
+   Ö-25 mevzuat atıf doğrulaması, Ö-26 UYAP) — kullanıcı onayı gerektirir, tek başına yapılmaz.
+2. Kalan İYİLEŞTİRME maddeleri: İ-21 kontrast (50 dosya), kimlik sertleştirme
+   (İ-01 TOTP window, İ-02 bcrypt maliyeti 10→12, İ-19 Gemini anahtarı URL'den başlığa),
+   İ-29 jwt-audience.ts "iki evren" yorumu, `WEB_ORIGIN`'in `.env.example`'a eklenmesi.
+3. `docs/DENETIM-RAPORU.md`'ye "Kapatıcılar Turu Sonucu" bölümü ekle.
+4. **Aşama 9 — Kapanış**: final build+test+canlı duman testi, GitHub'a gönderim, kapanış raporu.
+
+## Anlık durum (önceki turların özeti)
 
 ## Anlık durum
 
-**Derin denetim (Aşama 8) — düzeltme aşamasında, ~%75.**
+**Aşama 8 (derin denetim) düzeltme turu bitti; Aşama 8.5 (Docker test ortamı) bitti.**
 
-- Denetim raporu YAZILDI: `docs/DENETIM-RAPORU.md` (630 satır)
-  - 71 bulgu üretildi → adversaryal doğrulama → **16 KRİTİK, 34 ÖNEMLİ, 21 İYİLEŞTİRME**
-- Düzeltme ajanı çalışırken laptop kapandı; **workflow öldü, ama çalışması diskte duruyor ve commit edildi.**
-- Son durum: `pnpm build` 12/12 ✅ · `pnpm -r test` **663 test geçiyor** ✅
-  (legal-core 78→79: K-04 için regresyon testi eklenmiş)
+- Denetim raporu: `docs/DENETIM-RAPORU.md` (1.094 satır, "Düzeltme Turu Sonucu" bölümü yazıldı)
+- **KRİTİK: 16/16 kapalı** (K-12 kalıntısı için bkz. aşağıdaki kapatıcı 1)
+- **ÖNEMLİ: 34/39 kapalı** (5'i backlog — yazılmamış özellik, hata değil)
+- **İYİLEŞTİRME: 8 kapalı** (+1 kısmen); 15 madde yeniden denetlenmedi, 7 açık doğrulandı
+- `pnpm build` 12/12 ✅ · `pnpm typecheck` 20/20 ✅ · `pnpm lint` 0 hata / 10 uyarı ✅
+- **815 test geçiyor** (api 512, legal-ai 76, legal-core 79, udf 44, e-signature 37, uyap 35, web 32)
+- Migration sayısı 16; **sonraki migration `20260910090000_…` olmalıdır**
 
-## Düzeltilenler (kodda bulgu numarasıyla işaretli)
+## Üretim öncesi kalan kapatıcılar (sırayla, raporun son bölümü)
 
-**KRİTİK (16'da 12):** K-01, K-02, K-03, K-04, K-05, K-06, K-07, K-08, K-09, K-10, K-12, K-13
+1. **K-12 kalıntısı** — portal erişiminde okuma-anı vekaletname canlılık kontrolü yok;
+   süresi dolmuş vekaletnameyle erişim açık kalıyor (canlı kanıtlandı). Portal guard'ına
+   canlılık kontrolü ya da süre dolumu için zamanlanmış iş.
+2. **`PlatformUser` hard delete'inin yapısal olarak imkânsız kılınması** — ya FK kaldır
+   (`platformUserId` tenantId gibi FK'sız nullable kolon) ya da silme yolunu şema düzeyinde kapat.
+3. **1. tur düzeltmelerine regresyon testi** — en az: K-01 (2FA gidiş-dönüş), K-03 (kilit/çıkış/parola),
+   K-05 (vadesiz fatura kovası), K-08+K-09 (şifreleme+rol kapısı), K-13 (`deadline-status-policy` birim testi).
+4. **`docs/uretim-dagitimi.md` güncellemesi** — `TRUSTED_PROXY_HOPS` (üretimde zorunlu, tanımsızsa API açılmaz),
+   `RATE_LIMIT_BACKEND=redis` (çok örnekli dağıtım), `AI_RATE_LIMIT_TENANT_PER_MINUTE/_PER_DAY` belgelenmeli.
+5. **İ-31 telafi göçü** — `PortalPublication.ownershipVerified` `DEFAULT true` damgası; `20260910090000_…` göçü.
+6. **Backlog vaatlerinin arayüz/pazarlama metninden çıkarılması** — mevzuat atıf doğrulaması (Ö-25),
+   UYAP entegrasyonu (Ö-26), OCR (Ö-24) vaat edilemez.
 
-**KRİTİK — KALAN 4 (İLK İŞ BUNLAR):**
-- **K-11** — Dört-göz kataloğu ile yetki matrisi çelişiyor; arayüz söz veriyor, API tutmuyor
-- **K-14** — Kural motorundan üretilen sürenin girdisi (tebliğ tarihi/yöntem) düzeltilemiyor
-- **K-15** — Liste ekranlarında sayfalama zarfı atılıyor; kayıtlar sessizce kırpılıyor
-- **K-16** — Arama istemcide yapılıyor; sunucudaki `q` süzgeci kullanılmıyor
-
-**ÖNEMLİ (34'te en az 13):** Ö-01, Ö-03, Ö-04, Ö-05, Ö-07, Ö-11, Ö-12, Ö-13, Ö-14, Ö-15, Ö-17, Ö-19, Ö-20
-(Not: bu bir ALT SINIR — yorumunda bulgu numarası taşımayan düzeltmeler sayıma girmedi.)
-
-## Devam edince yapılacaklar (sırayla)
-
-1. **`docs/DENETIM-RAPORU.md` dosyasını oku** — kalan KRİTİK (K-11, K-14, K-15, K-16) ve
-   düzeltilmemiş ÖNEMLİ bulguların tam metnini oradan al.
-2. Kalan bulguları düzelt; her düzeltmeye **regresyon testi** ekle.
-3. Rapora **"## Düzeltme Turu Sonucu"** bölümünü ekle (hangi bulgu düzeltildi, hangisi neden
-   bırakıldı, eklenen test sayısı, son test durumu). Bu bölüm yoksa iş bitmemiş demektir.
-4. **Bağımsız doğrulama** — ajan raporuna güvenme, düzeltmeleri kendin canlı test et:
-   platform 2FA kurulumu (K-01), `/ai/chat` maskelemesi (K-07), 2027 tatil hesabı (K-04),
-   azil sonrası portal erişimi (K-12).
-5. **Aşama 8.5 — Docker test ortamı**: `docker-compose.test.yml` (otomatik migration+seed),
-   imajları derle ve çalıştığını doğrula. Kayıt defteri seçeneği kullanıcıya soruldu,
-   karar bekleniyor (yerel derleme / ghcr.io / Docker Hub — ayrıntı §Aşama 8.5).
-6. **Aşama 9 — Kapanış**: final build+test+duman testi, GitHub'a gönderim, kapsamlı
-   kapanış raporu.
+Bunlardan sonra: kalan İYİLEŞTİRME maddeleri (İ-27 rota kataloğu, İ-21 kontrast, kimlik
+sertleştirme İ-01/İ-02/İ-19) ve **Aşama 9 — Kapanış** (final build+test+duman testi,
+GitHub'a gönderim, kapanış raporu).
 
 ## Workflow bilgisi (gerekirse)
 

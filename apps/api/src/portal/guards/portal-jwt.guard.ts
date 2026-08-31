@@ -8,10 +8,12 @@ import {
 import { Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
 import type { Request } from "express";
+import { startOfDay } from "../../common/dates";
 import { PrismaService } from "../../prisma/prisma.service";
 import { PORTAL_ANON_KEY } from "../decorators/portal-anonymous.decorator";
 import { PORTAL_JWT_AUDIENCE, portalJwtSecret } from "../portal.constants";
 import type { PortalAuthUser, PortalJwtPayload } from "../portal.types";
+import { allPoaWhere, livePoaWhere, poaLivenessBlocked } from "./portal-poa-liveness";
 
 /** Abonelik durumu önbelleği — büro tarafındaki `TenantStatusGuard` ile aynı ömür. */
 const SUBSCRIPTION_CACHE_TTL_MS = 30_000;
@@ -22,7 +24,7 @@ const BLOCKED_SUBSCRIPTION_STATUSES: readonly string[] = ["SUSPENDED", "CANCELED
 /**
  * PORTAL KİMLİK GUARD'I — üçüncü kimlik evreninin kapısı.
  *
- * BEŞ AYRI KAPI aynı anda kapalıdır (birinin kaçırılması yetmez):
+ * SEKİZ AYRI KAPI aynı anda kapalıdır (birinin kaçırılması yetmez):
  *
  *   1. **Ayrı imza anahtarı** — büro `JWT_SECRET`'i veya platform anahtarıyla
  *      imzalanmış token burada imza doğrulamasında düşer.
@@ -162,6 +164,32 @@ export class PortalJwtGuard implements CanActivate {
             "durumda avukatınıza doğrudan ulaşın."
         );
       }
+    }
+
+    // KAPI 8 — VEKALETNAME CANLILIĞI (denetim bulgusu K-12 kalıntısı).
+    //
+    // Azil/istifa `revoke()` üzerinden anında kesiliyor (K-12), ama vekaletname
+    // SÜRE DOLUMU hiçbir kod yolu tetiklemiyordu: süresi dolmuş vekaletnameyle
+    // portal erişimi süresiz açık kalıyordu. Burada her istekte tabloya bakılır:
+    // müvekkilin vekaletname kaydı VAR ve hiçbiri canlı değilse oturum düşer.
+    // Kaydı hiç olmayan müvekkil kilitlenmez — portal belge/ödeme görünürlüğü
+    // `PortalPublication` ile ayrıca denetlenir, vekaletname varlığına bağlı
+    // değildir. Canlılık tanımı büro tarafının "AKTİF" süzgeciyle birebir
+    // aynıdır (isActive + revokedAt + expiresAt; bkz. portal-poa-liveness.ts).
+    const today = startOfDay(new Date());
+    const [poaTotal, poaLive] = await Promise.all([
+      this.prisma.client.powerOfAttorney.count({
+        where: allPoaWhere(record.tenantId, record.clientId),
+      }),
+      this.prisma.client.powerOfAttorney.count({
+        where: livePoaWhere(record.tenantId, record.clientId, today),
+      }),
+    ]);
+    if (poaLivenessBlocked(poaTotal, poaLive)) {
+      throw new UnauthorizedException(
+        "Vekalet ilişkiniz sona ermiştir; portal erişiminiz kapatılmıştır. " +
+          "Bilgi için avukatınızla görüşün."
+      );
     }
 
     request.portalUser = {
