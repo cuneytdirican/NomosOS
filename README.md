@@ -20,6 +20,7 @@ duruşma, süre, görev, icra ve finans yönetimini tek platformda toplayan, üz
 | [docs/06-yol-haritasi.md](docs/06-yol-haritasi.md) | Faz 0-6 geliştirme sırası ve çıkış kriterleri |
 | [docs/07-arayuz-ve-pazarlama-sitesi.md](docs/07-arayuz-ve-pazarlama-sitesi.md) | UI tasarım sistemi + tanıtım sitesi spec'i |
 | [docs/08-tanitim-sitesi-icerik.md](docs/08-tanitim-sitesi-icerik.md) | Tanıtım sitesi: hukuk estetiği tasarım dili + birebir Türkçe metin |
+| [docs/09-yerel-ai-sunucusu-rehberi.md](docs/09-yerel-ai-sunucusu-rehberi.md) | Kendi AI sunucunuzu kurarken: sunucu, model, gömme, donanım ve görev eşlemesi |
 | [docs/test-ortami.md](docs/test-ortami.md) | **Test ortamı: adresler, giriş bilgileri, Docker ile çalıştırma, denenecekler** |
 | [docs/uretim-dagitimi.md](docs/uretim-dagitimi.md) | Üretim dağıtımı: topolojiler, sırlar, yedekleme, KVKK yükümlülükleri |
 | [docs/moduller/](docs/moduller/) | 26 modülün ayrıntılı spesifikasyonu (25: platform yönetim paneli, 26: AI kota/kredi sistemi) |
