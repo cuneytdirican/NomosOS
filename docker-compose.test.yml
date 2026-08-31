@@ -126,9 +126,14 @@ services:
     environment:
       <<: [*test-secrets, *test-db, *test-infra]
       API_PORT: "3001"
-      NODE_ENV: "production"
-      # Test ortamında 2FA kapalı — panele hızlı girebilmek için.
-      # Üretimde true olmalıdır.
+      # NODE_ENV bilinçli olarak "production" DEĞİL: bu yığın üretim değildir
+      # ve öyle davranmamalıdır. API'de bir koruma var — üretim ortamında
+      # PLATFORM_REQUIRE_2FA=false ile açılmayı REDDEDER ("panel tüm büroların
+      # üstverisine bakar, tek faktörle korunamaz"). Bu koruma doğrudur ve
+      # devre dışı bırakılmamıştır; ortamı gerçekte ne ise o olarak
+      # etiketliyoruz. Üretimde NODE_ENV=production + 2FA zorunludur.
+      NODE_ENV: "development"
+      # Test panele TOTP uygulaması olmadan girilebilsin diye 2FA kapalı.
       PLATFORM_REQUIRE_2FA: "false"
       TRUSTED_PROXY_HOPS: "0"
     ports:

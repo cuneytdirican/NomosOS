@@ -47,11 +47,13 @@ Mobil uygulama (`apps/mobile`) Docker'a girmez; Expo ile cihazda çalışır (bk
 | E-posta | Rol | Ne yapabilir |
 |---|---|---|
 | `superadmin@nomosos.local` | **SUPER_ADMIN** | Tüm platform yönetimi; tehlikeli işlemler dört-göz onayına tabi |
+| `superadmin2@nomosos.local` | **SUPER_ADMIN** | **İkinci imza** — dört-göz akışını denemek için |
 | `analist@nomosos.local` | **ANALYST_READONLY** | **Yatırımcı/ortak profili**: yalnız toplulaştırılmış iş metrikleri (MRR, plan dağılımı, churn). Hiçbir yazma işlemi yapamaz; tenant'ın müvekkil/dosya verisini **göremez** |
 
-> **Dört-göz ilkesi**: `superadmin` bir tenant'ı askıya almak istediğinde işlem doğrudan
-> uygulanmaz, onay talebi oluşur — ve **kendi talebini onaylayamaz** (403). İkinci bir
-> yetkili gerekir. Test etmek için ikinci bir platform kullanıcısı oluşturmanız gerekir.
+> **Dört-göz ilkesini denemek:** `superadmin` ile bir tenant'ı askıya alın →
+> işlem uygulanmaz, onay talebi oluşur. Aynı hesapla onaylamayı deneyin → **403**
+> ("kendi talebinizi karara bağlayamazsınız"). Sonra `superadmin2` ile giriş yapıp
+> onaylayın → işlem uygulanır. Plan oluşturma, iade ve kredi tahsisi de aynı akıştadır.
 
 ### 2.3 Müvekkil portalı — http://localhost:3003/giris
 
@@ -111,6 +113,13 @@ Yığın hazır olduğunda `http://localhost:3001/api/v1/health` → `{"status":
 | MinIO konsolu | Açık (`:9001`) | Kapalı, port yayınlanmaz |
 | Portlar | Hepsi dışarı açık | Yalnız `127.0.0.1`, dışarıya ters vekil bakar |
 | Platform 2FA | Kapalı (hızlı giriş için) | Zorunlu |
+| `NODE_ENV` | `development` | `production` |
+
+> **2FA neden kapatılabiliyor?** API'de bir koruma var: `NODE_ENV=production` iken
+> `PLATFORM_REQUIRE_2FA=false` ile **açılmayı reddeder** — platform paneli tüm
+> büroların üstverisine ve faturalama kayıtlarına baktığı için tek faktörle
+> korunamaz. Bu koruma devre dışı bırakılmamıştır; test yığını `NODE_ENV`'i
+> gerçekte ne ise o olarak (`development`) etiketler. Üretimde ikisi de zorunludur.
 
 ### Yayımlama (registry)
 
