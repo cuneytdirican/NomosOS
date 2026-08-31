@@ -1,0 +1,16 @@
+node_modules/
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native derleme çıktıları (managed workflow — prebuild sonrası oluşur)
+/ios
+/android
+
+*.log
+.DS_Store
+
+# Ortam dosyası: API adresi geliştiriciye özeldir, depoya girmez.
+.env
+.env.local

@@ -2,7 +2,7 @@
 
 /** Sade, elle yazılmış Tailwind bileşen seti — NomosOS uygulama arayüzü. */
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import type { BadgeTone } from "@/lib/labels";
 
 // ---------- Button ----------
@@ -475,5 +475,328 @@ export function CopyOnceField({
       </div>
       <p className="mt-2 text-[11px] leading-5 text-amber-800">{warning}</p>
     </div>
+  );
+}
+
+// ---------- Faz 6 eklemeleri (yalnız EKLEME) ----------
+
+/**
+ * DÖNEM FARKI GÖSTERGESİ.
+ *
+ * ╔══════════════════════════════════════════════════════════════════════════╗
+ * ║ OK YÖNÜ değerin gittiği yönü, RENK ise bunun iyi mi kötü mü olduğunu     ║
+ * ║ söyler. İkisi AYRI bilgidir ve burada bilinçli olarak ayrıştırılmıştır.  ║
+ * ╚══════════════════════════════════════════════════════════════════════════╝
+ *
+ * "Kaçırılan süre 2 → 5" yükselen bir oktur ama KIRMIZIDIR. Rengi çağıran
+ * belirler (`tone`), çünkü metriğin "iyi yönü" veriye aittir, bileşene değil.
+ * `tone="notr"` iyi yön bilinmiyor demektir ve gri kalır — bilinmeyeni yeşile
+ * boyamak, olmayan bir başarıyı raporlamaktır.
+ *
+ * Ekran okuyucu için ok işareti YETMEZ: `aria-label` farkı sözle yazar.
+ */
+export function DeltaIndicator({
+  delta,
+  tone,
+  valueText,
+  percentText,
+  previousText,
+  className = "",
+}: {
+  /** Farkın işareti (yön oku için). null → "önceki dönem verisi yok". */
+  delta: number | null | undefined;
+  tone: "iyi" | "kotu" | "notr";
+  /** Biçimlenmiş mutlak fark, örn. "12.400,00 ₺" veya "3". */
+  valueText: string;
+  /** Biçimlenmiş yüzde, örn. "%12,4". Oran tanımsızsa boş bırakılır. */
+  percentText?: string;
+  /** Önceki dönem değeri — ipucu metninde gösterilir. */
+  previousText?: string;
+  className?: string;
+}) {
+  const TONES: Record<"iyi" | "kotu" | "notr", string> = {
+    iyi: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    kotu: "bg-red-50 text-red-700 ring-red-200",
+    notr: "bg-slate-100 text-slate-600 ring-slate-200",
+  };
+
+  if (delta === null || delta === undefined || !Number.isFinite(delta)) {
+    return (
+      <span
+        className={`inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-400 ring-1 ring-inset ring-slate-200 ${className}`}
+        title="Önceki dönem verisi yok — karşılaştırma yapılamıyor."
+      >
+        karşılaştırma yok
+      </span>
+    );
+  }
+
+  const up = delta > 0;
+  const flat = delta === 0;
+  const arrow = flat ? "→" : up ? "↑" : "↓";
+  const yon = flat ? "değişmedi" : up ? "arttı" : "azaldı";
+  const yorum = tone === "iyi" ? "olumlu" : tone === "kotu" ? "olumsuz" : "yön nötr";
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ring-1 ring-inset ${TONES[tone]} ${className}`}
+      aria-label={`Önceki döneme göre ${yon}: ${valueText}${percentText ? ` (${percentText})` : ""} — ${yorum}`}
+      title={
+        previousText
+          ? `Önceki dönem: ${previousText} · fark ${valueText}${percentText ? ` (${percentText})` : ""}`
+          : `Önceki döneme göre fark: ${valueText}`
+      }
+    >
+      <span aria-hidden="true">{arrow}</span>
+      {valueText}
+      {percentText && <span className="font-normal opacity-75">{percentText}</span>}
+    </span>
+  );
+}
+
+/** Tabloda sıralanabilir başlık — tıklanınca artan/azalan/kapalı döngüsü. */
+export function SortHeader({
+  label,
+  active,
+  descending,
+  numeric = false,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  descending: boolean;
+  numeric?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <th
+      scope="col"
+      aria-sort={active ? (descending ? "descending" : "ascending") : "none"}
+      className={`whitespace-nowrap border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 ${
+        numeric ? "text-right" : "text-left"
+      }`}
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        className={`inline-flex items-center gap-1 hover:text-slate-900 ${numeric ? "flex-row-reverse" : ""}`}
+      >
+        <span>{label}</span>
+        <span aria-hidden="true" className={active ? "text-amber-600" : "text-slate-300"}>
+          {active ? (descending ? "▼" : "▲") : "↕"}
+        </span>
+      </button>
+    </th>
+  );
+}
+
+export interface ChartPoint {
+  label: string;
+  value: number;
+  /** Önceki dönemin aynı noktası — hayalet karşılaştırma için. */
+  previous?: number | null;
+}
+
+/**
+ * YATAY ÇUBUK LİSTESİ — kategori büyüklüklerini karşılaştırmak için.
+ *
+ * Harici grafik kütüphanesi KURULMAZ (ürün kararı): çubuklar saf CSS'tir,
+ * bu yüzden yazdırmada da, JavaScript kapalıyken de aynı görünür.
+ *
+ * ÇUBUK RENGİ NÖTRDÜR. Yeşil/kırmızı yalnızca fark rozetine ayrılmıştır;
+ * çubuğu da boyamak, tek bir bilgiyi iki kez ve çelişkili biçimde söylemek
+ * olurdu ("büyük çubuk = kötü mü iyi mi?"). Büyüklüğü uzunluk anlatır.
+ */
+export function BarList({
+  points,
+  format,
+  emptyMessage = "Gösterilecek veri yok.",
+  max,
+}: {
+  points: ChartPoint[];
+  format: (value: number) => string;
+  emptyMessage?: string;
+  /** Ölçek tavanı; verilmezse en büyük değerden türetilir. */
+  max?: number;
+}) {
+  if (points.length === 0) return <EmptyState message={emptyMessage} />;
+
+  const values = points.flatMap((p) => [p.value, ...(p.previous != null ? [p.previous] : [])]);
+  const top = max ?? Math.max(...values, 0);
+  const scale = (v: number) => (top <= 0 ? 0 : Math.max(0, Math.min(100, (v / top) * 100)));
+  const hasPrevious = points.some((p) => p.previous != null);
+
+  return (
+    <div>
+      <ul className="space-y-2">
+        {points.map((p, i) => (
+          <li key={`${p.label}-${i}`} className="grid grid-cols-[9rem_1fr_auto] items-center gap-3">
+            <span className="truncate text-xs text-slate-600" title={p.label}>
+              {p.label}
+            </span>
+            <span className="relative block h-2 rounded-full bg-slate-100">
+              <span
+                className="block h-2 rounded-full bg-slate-800"
+                style={{ width: `${scale(p.value)}%` }}
+              />
+              {p.previous != null && (
+                // Önceki dönem: 2px'lik nötr işaret. Ayrı bir çubuk değil, ölçüt.
+                <span
+                  aria-hidden="true"
+                  title={`Önceki dönem: ${format(p.previous)}`}
+                  className="absolute top-[-2px] h-3 w-0.5 rounded-full bg-slate-400"
+                  style={{ left: `calc(${scale(p.previous)}% - 1px)` }}
+                />
+              )}
+            </span>
+            <span className="text-right text-xs font-semibold tabular-nums text-slate-900">
+              {format(p.value)}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {hasPrevious && (
+        <p className="mt-3 flex items-center gap-2 text-[11px] text-slate-400">
+          <span aria-hidden="true" className="inline-block h-3 w-0.5 rounded-full bg-slate-400" />
+          önceki dönem değeri
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * ÇİZGİ GRAFİĞİ — zaman içindeki değişim için (inline SVG, kütüphanesiz).
+ *
+ * TEK EKSEN: önceki dönem serisi AYNI ölçekte kesikli çizgiyle çizilir. İki
+ * ayrı y ekseni kullanmak, iki farklı büyüklüğü aynı eğimle göstererek
+ * sahte bir ilişki uydurmaktır — bu grafikte bilinçli olarak yoktur.
+ *
+ * Her noktanın `<title>` etiketi vardır: fare üzerine gelince tarayıcının
+ * kendi ipucu çıkar, ekran okuyucu da okur. Değer etiketi YALNIZCA ilk ve son
+ * noktada basılır; her noktaya sayı yazmak çizgiyi okunmaz hâle getirir.
+ */
+export function LineChart({
+  points,
+  format,
+  label,
+  previousLabel = "Önceki dönem",
+  emptyMessage = "Gösterilecek veri yok.",
+}: {
+  points: ChartPoint[];
+  format: (value: number) => string;
+  label: string;
+  previousLabel?: string;
+  emptyMessage?: string;
+}) {
+  const clipId = useId();
+  if (points.length < 2) return <EmptyState message={emptyMessage} />;
+
+  const W = 640;
+  const H = 180;
+  const PAD_X = 8;
+  const PAD_Y = 16;
+
+  const all = points.flatMap((p) => [p.value, ...(p.previous != null ? [p.previous] : [])]);
+  const rawMax = Math.max(...all);
+  const rawMin = Math.min(...all, 0);
+  const span = rawMax - rawMin || 1;
+  const x = (i: number) => PAD_X + (i * (W - PAD_X * 2)) / (points.length - 1);
+  const y = (v: number) => H - PAD_Y - ((v - rawMin) / span) * (H - PAD_Y * 2);
+
+  const path = (get: (p: ChartPoint) => number | null | undefined) => {
+    const parts: string[] = [];
+    points.forEach((p, i) => {
+      const v = get(p);
+      if (v === null || v === undefined || !Number.isFinite(v)) return;
+      parts.push(`${parts.length === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+    });
+    return parts.join(" ");
+  };
+
+  const hasPrevious = points.some((p) => p.previous != null);
+  const area = `${path((p) => p.value)} L${x(points.length - 1).toFixed(1)},${(H - PAD_Y).toFixed(1)} L${x(0).toFixed(1)},${(H - PAD_Y).toFixed(1)} Z`;
+
+  return (
+    <figure className="m-0">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="h-44 w-full"
+        role="img"
+        aria-label={`${label} — ${points.length} dönemlik seyir. En yüksek ${format(rawMax)}, en düşük ${format(rawMin)}.`}
+      >
+        <defs>
+          <clipPath id={clipId}>
+            <rect x="0" y="0" width={W} height={H} />
+          </clipPath>
+        </defs>
+        {/* Izgara geri planda kalır: veriyi değil, okumayı destekler. */}
+        {[0, 0.5, 1].map((t) => (
+          <line
+            key={t}
+            x1={PAD_X}
+            x2={W - PAD_X}
+            y1={PAD_Y + t * (H - PAD_Y * 2)}
+            y2={PAD_Y + t * (H - PAD_Y * 2)}
+            className="stroke-slate-200"
+            strokeWidth="1"
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+        <g clipPath={`url(#${clipId})`}>
+          <path d={area} className="fill-slate-900/5" />
+          {hasPrevious && (
+            <path
+              d={path((p) => p.previous)}
+              className="stroke-slate-300"
+              strokeWidth="2"
+              strokeDasharray="5 4"
+              fill="none"
+              vectorEffect="non-scaling-stroke"
+            />
+          )}
+          <path
+            d={path((p) => p.value)}
+            className="stroke-slate-800"
+            strokeWidth="2"
+            fill="none"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            vectorEffect="non-scaling-stroke"
+          />
+          {points.map((p, i) => (
+            <circle key={`${p.label}-${i}`} cx={x(i)} cy={y(p.value)} r="4" className="fill-slate-800">
+              <title>
+                {p.label}: {format(p.value)}
+                {p.previous != null ? ` · ${previousLabel}: ${format(p.previous)}` : ""}
+              </title>
+            </circle>
+          ))}
+        </g>
+      </svg>
+      <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
+        <span>{points[0].label}</span>
+        <span className="font-medium text-slate-600 tabular-nums">
+          {format(points[points.length - 1].value)}
+        </span>
+        <span>{points[points.length - 1].label}</span>
+      </div>
+      {hasPrevious && (
+        <figcaption className="mt-2 flex flex-wrap gap-4 text-[11px] text-slate-500">
+          <span className="inline-flex items-center gap-1.5">
+            <span aria-hidden="true" className="inline-block h-0.5 w-5 rounded bg-slate-800" />
+            {label}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span
+              aria-hidden="true"
+              className="inline-block h-0.5 w-5 rounded bg-slate-300"
+              style={{ backgroundImage: "repeating-linear-gradient(90deg,currentColor 0 4px,transparent 4px 8px)" }}
+            />
+            {previousLabel}
+          </span>
+        </figcaption>
+      )}
+    </figure>
   );
 }

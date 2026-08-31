@@ -14,8 +14,32 @@
     "jsx": "preserve",
     "incremental": true,
     "plugins": [{ "name": "next" }],
+    "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+
+      // REACT 19 TİP TEKLEŞTİRMESİ — apps/mobile'daki eşlemenin AYNASI.
+      //
+      // Monorepo iki React sürümü barındırır: web · admin · portal Next 15 ile
+      // React 19, apps/mobile ise React Native 0.76 ile React 18 kullanır.
+      // pnpm sanal deposu (.pnpm/node_modules) @types/react'in YALNIZ BİR
+      // sürümünü yukarı taşır ve HANGİSİNİ taşıdığı kurulum grafiğine göre
+      // değişir — tek bir mobil bağımlılığı eklemek bile kazananı 19'dan 18'e
+      // çevirebilir (bu fazda tam olarak bu yaşandı: expo-build-properties
+      // eklenince hoist edilen kopya 18 oldu ve web derlemesi
+      // "ReactNode is not assignable to ReactNode" ile patladı).
+      //
+      // Kendi @types/react bağımlılığını bildirmeyen paketler tiplerini o
+      // hoist edilmiş kopyadan çözer; bu paketin kendi dosyaları ise 19'dan.
+      // Sonuç iki ayrı React ad alanıdır. Aşağıdaki eşleme, derlemedeki HER
+      // "react" içe aktarımını BU paketin kendi @types/react@19'una sabitler;
+      // hoist kazananı ne olursa olsun sonuç değişmez ve derleme kurulum
+      // sırasına bağımlı olmaktan çıkar.
+      //
+      // Kök `pnpm.overrides` ile tek sürüme çekmek alternatifti; o da mobili
+      // React 18 tiplerinden ederdi.
+      "react": ["./node_modules/@types/react"],
+      "react/*": ["./node_modules/@types/react/*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

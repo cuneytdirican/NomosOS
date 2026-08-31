@@ -56,6 +56,12 @@ export const AI_TASK_TYPES = [
   "CLIENT_FINANCIAL_SUMMARY",
   // Modül 20 — Sözleşme
   "CONTRACT_REVIEW",
+  /**
+   * Faz 6 — Kurumsal Raporlama. Hazır ve DETERMİNİSTİK rapor ölçülerini Türkçe
+   * yorumlar; rakam ÜRETMEZ (yer tutuculu şablon + uydurma rakam kapısı).
+   * `@AiCredits` tipli olduğu için katalogda bulunması derleme ön koşuludur.
+   */
+  "REPORT_INTERPRET",
 ] as const;
 
 export type AiTaskType = (typeof AI_TASK_TYPES)[number];
@@ -93,4 +99,5 @@ export const AI_TASK_TYPE_LABELS: Record<AiTaskType, string> = {
   DAILY_PRIORITIZE: "Günlük öncelik listesi",
   CLIENT_FINANCIAL_SUMMARY: "Müvekkil finans özeti",
   CONTRACT_REVIEW: "Sözleşme incelemesi",
+  REPORT_INTERPRET: "Rapor yorumu (deterministik rakamların anlatımı)",
 };

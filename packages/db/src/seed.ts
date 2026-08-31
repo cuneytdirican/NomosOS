@@ -1093,6 +1093,17 @@ const AI_TASK_COSTS: TaskCostSeed[] = [
       "Gelen mesajı dosyayla eşleştirme (Modül 19). Ucuzdur çünkü çıktı tek bir {caseId, confidence, reason} önerisidir; kararı insan verir.",
   },
 
+  // ---- Faz 6'nın yeni görevi (Modül 18 — Kurumsal Raporlama) ----
+  {
+    taskType: "REPORT_INTERPRET",
+    credits: 5,
+    isFree: false,
+    description:
+      "Rapor yorumu (Faz 6). Rapor DETERMİNİSTİK çalışır ve ücretsizdir; ücret yalnız " +
+      "isteğe bağlı AI anlatımı içindir. LLM'e rakam gitmez (yalnız ölçü etiketleri ve " +
+      "ARTTI/AZALDI gibi yönsüz sinyaller), bu yüzden CLIENT_STATUS_SUMMARY ile aynı bantta.",
+  },
+
   // ---- Katalogda olup spec fiyat tablosunda GEÇMEYEN görevler ----
   // Satırı olmayan görev tipi kredi motorunda TANIMSIZ davranıştır (fail-open =
   // bedava AI, fail-closed = çalışmayan özellik). Bu yüzden makul bir başlangıç
@@ -1941,6 +1952,127 @@ async function seedCommunications(clientId: string, caseId: string, userId: stri
 }
 
 // ---------------------------------------------------------------------------
+// Faz 6) Zamanlanmış iş tanımları + kayıtlı rapor tohumu
+// ---------------------------------------------------------------------------
+
+/**
+ * Zamanlanmış iş TANIMLARI (docs/06-yol-haritasi.md, Faz 6).
+ *
+ * Bunlar yalnız TANIMDIR — işi çalıştıran kod Zamanlı-iş modülündedir.
+ * Cron ifadeleri gece/sabah bantlarına YAYILMIŞTIR: ağır sayım işleri (kota
+ * anlık görüntüsü, abonelik ve kredi dönem yenileme) mesai dışına, kullanıcıya
+ * bildirim üreten işler ise insanın okuyacağı saate konumlandırılmıştır.
+ * Süre hatırlatması sabah 07:00'de (gün başlarken), duruşma hatırlatması
+ * 18:00'de (ertesi gün için hazırlık) çalışır.
+ *
+ * Her iş İDEMPOTENT olmak zorundadır: aynı gün iki kez tetiklenirse ikinci
+ * çalıştırma çift kayıt/çift bildirim ÜRETMEZ (bildirimlerde koruma
+ * NotificationOutbox.@@unique([tenantId, dedupeKey]) ile veritabanındadır).
+ */
+const SCHEDULED_JOBS: Array<{ key: string; name: string; cronExpression: string }> = [
+  {
+    key: "usage-snapshot-daily",
+    name: "Günlük kullanım/kota anlık görüntüsü",
+    cronExpression: "0 2 * * *",
+  },
+  {
+    key: "deadline-reminder-daily",
+    name: "Yaklaşan ve geçen süre hatırlatmaları",
+    cronExpression: "0 7 * * *",
+  },
+  {
+    key: "hearing-reminder-daily",
+    name: "Ertesi gün duruşma hatırlatmaları",
+    cronExpression: "0 18 * * *",
+  },
+  {
+    key: "subscription-renewal-daily",
+    name: "Abonelik dönem yenileme denetimi",
+    cronExpression: "0 3 * * *",
+  },
+  {
+    key: "credit-period-renewal-daily",
+    name: "Kredi dönemi yenileme ve kota sıfırlama",
+    cronExpression: "0 1 * * *",
+  },
+];
+
+/**
+ * İş tanımlarını yazar. IDEMPOTENT: kayıt varsa DOKUNULMAZ — çalışma zamanı
+ * alanları (lastRunAt/lastStatus) ve operatörün panelden yaptığı
+ * isEnabled/cron değişiklikleri seed tarafından EZİLMEZ.
+ */
+async function seedScheduledJobs(): Promise<number> {
+  let created = 0;
+  for (const j of SCHEDULED_JOBS) {
+    const existing = await prisma.scheduledJob.findUnique({ where: { key: j.key } });
+    if (existing) continue;
+    await prisma.scheduledJob.create({ data: j });
+    created += 1;
+  }
+  return created;
+}
+
+/**
+ * Örnek kayıtlı raporlar — büro genelinde görünür (BURO), panele sabitli.
+ *
+ * paramsJson yalnız FİLTREDİR, sonuç DEĞİLDİR: rapor her açıldığında rakamlar
+ * veritabanından yeniden hesaplanır. Dönem alanlarında kapanış gününün DAHİL
+ * olup olmadığı açıkça yazılır (`donemBitisDahil`) — "ayın son günü sayıldı mı"
+ * belirsizliği rapor rakamını sessizce kaydırmasın.
+ */
+async function seedSavedReports(createdBy: string): Promise<number> {
+  const seeds: Array<{
+    name: string;
+    reportKey: string;
+    params: Record<string, unknown>;
+    isPinned: boolean;
+  }> = [
+    {
+      name: "Büro geneli aylık özet",
+      reportKey: "buro-aylik-ozet",
+      params: { donem: "GECEN_AY", donemBitisDahil: true, kirilim: "AY" },
+      isPinned: true,
+    },
+    {
+      name: "Avukat iş yükü",
+      reportKey: "avukat-is-yuku",
+      // Roller sunucuda ayrıca denetlenir; burada yalnız filtre tarif edilir.
+      params: { donem: "SON_30_GUN", donemBitisDahil: true, roller: ["AVUKAT", "PARTNER"] },
+      isPinned: true,
+    },
+    {
+      name: "Tahsilat yaşlandırma",
+      reportKey: "tahsilat-yaslandirma",
+      // Yaşlandırma kovaları GÜN bazlıdır ve üst sınır HARİÇTİR (0-30, 31-60, ...).
+      params: { referansTarih: "BUGUN", kovalarGun: [30, 60, 90], sadeceAcik: true },
+      isPinned: false,
+    },
+  ];
+
+  let created = 0;
+  for (const s of seeds) {
+    const existing = await prisma.savedReport.findFirst({
+      where: { tenantId: TENANT_ID, reportKey: s.reportKey, name: s.name },
+    });
+    if (existing) continue;
+    await prisma.savedReport.create({
+      data: {
+        tenantId: TENANT_ID,
+        name: s.name,
+        reportKey: s.reportKey,
+        paramsJson: JSON.stringify(s.params),
+        scope: "BURO",
+        createdBy,
+        isPinned: s.isPinned,
+      },
+    });
+    created += 1;
+  }
+  return created;
+}
+
+// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 
@@ -2422,6 +2554,8 @@ async function main() {
   const poa = await seedPowerOfAttorneys(abc.id, c1.record.id, mehmet.id, c3.record.id);
   const contract = await seedContracts(abc.id, c1.record.id, partner.id);
   const commCount = await seedCommunications(abc.id, c1.record.id, avukat.id);
+  const scheduledJobCount = await seedScheduledJobs();
+  const savedReportCount = await seedSavedReports(partner.id);
 
   // ---- Özet --------------------------------------------------------------
 
@@ -2609,6 +2743,20 @@ async function main() {
       `Sözleşme: ${contractTotal} (yeni: ${contract.contractCreated}) | Sürüm: ${contractVersionTotal} | ` +
       `İmza talebi: ${signatureRequestTotal}`,
   );
+  const [scheduledJobTotal, savedReportTotal] = await Promise.all([
+    prisma.scheduledJob.count(),
+    prisma.savedReport.count({ where: { tenantId: TENANT_ID } }),
+  ]);
+
+  console.log(
+    `Zamanlanmış iş tanımı: ${scheduledJobTotal} (yeni: ${scheduledJobCount}) | ` +
+      `Kayıtlı rapor: ${savedReportTotal} (yeni: ${savedReportCount})`,
+  );
+  console.log(
+    "NOT: Faz 6 işleri yalnız TANIM olarak tohumlanır — çalıştırıcı (BullMQ) " +
+      "Zamanlı-iş modülündedir; seed hiçbir işi TETİKLEMEZ.",
+  );
+
   console.log(
     "NOT: kredi fiyatları ve paket TL değerleri TEMSİLİDİR — iş kararıdır, platform panelinden güncellenir. " +
       "OpenAI/Gemini model fiyatları YAKLAŞIKTIR ve doğrulanmalıdır.",

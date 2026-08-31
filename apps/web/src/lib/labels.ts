@@ -1839,3 +1839,535 @@ export function taskProgress(status: string): number {
   if (idx < 0) return 0;
   return Math.round((idx / (TASK_WORKFLOW.length - 1)) * 100);
 }
+
+// =====================================================================
+// Faz 6 — Kurumsal Raporlama ve Bildirimler
+//
+// EKLEME ONLY: bu bölümün üstündeki hiçbir sabit değiştirilmedi.
+// =====================================================================
+
+// ---------- Rapor kapsamı / biçimi ----------
+
+export const REPORT_SCOPE_LABELS: Record<string, string> = {
+  KISISEL: "Yalnız ben",
+  BURO: "Büro geneli",
+};
+
+export const REPORT_SCOPE_TONES: Record<string, BadgeTone> = {
+  KISISEL: "gray",
+  BURO: "navy",
+};
+
+export const REPORT_SCOPE_HINTS: Record<string, string> = {
+  KISISEL: "Bu kayıtlı raporu yalnızca siz görürsünüz.",
+  BURO:
+    "Büronun tümü bu kayıtlı raporu listede görür. GÖRÜNÜRLÜKTÜR, YETKİ DEĞİLDİR: " +
+    "raporu açan kişi yine kendi rolünün izin verdiği rakamları görür.",
+};
+
+export const REPORT_FORMAT_LABELS: Record<string, string> = {
+  EKRAN: "Ekran",
+  CSV: "CSV",
+  PDF: "PDF",
+};
+
+/** Sütun/ölçü veri tipi — hizalama ve biçimlendirme buna bağlıdır. */
+export const REPORT_COLUMN_TYPES = [
+  "METIN",
+  "SAYI",
+  "PARA",
+  "YUZDE",
+  "TARIH",
+  "SURE_DK",
+] as const;
+
+export type ReportColumnType = (typeof REPORT_COLUMN_TYPES)[number];
+
+/** Rakam sütunları sağa yaslanır ve `tabular-nums` ile hizalanır. */
+export function isNumericColumnType(type: string | null | undefined): boolean {
+  return type === "SAYI" || type === "PARA" || type === "YUZDE" || type === "SURE_DK";
+}
+
+// ---------- METRİĞİN "İYİ YÖNÜ" ----------
+
+/**
+ * ╔══════════════════════════════════════════════════════════════════════════╗
+ * ║ ARTIŞ HER ZAMAN YEŞİL DEĞİLDİR.                                          ║
+ * ╚══════════════════════════════════════════════════════════════════════════╝
+ *
+ * Karşılaştırma göstergesinin rengi, farkın İŞARETİNE değil metriğin YÖNÜNE
+ * bakar. "Kaçırılan süre" bir ay içinde 2'den 5'e çıktıysa bu bir ARTIŞTIR ama
+ * felakettir; yeşil bir ok orada avukatı yanıltır. Bu yüzden her ölçünün
+ * "iyi yönü" tanımlıdır:
+ *
+ *   ARTIS_IYI  → değer büyüdükçe iyi  (tahsilat, tamamlanan görev)
+ *   AZALIS_IYI → değer küçüldükçe iyi (kaçırılan süre, vadesi geçen alacak)
+ *   NOTR       → bağlama göre değişir, renklendirilmez (açık dosya sayısı)
+ *
+ * SIRALAMA: (1) sunucunun katalogda bildirdiği `direction` — TEK GERÇEK KAYNAK,
+ * (2) aşağıdaki anahtar tablosu, (3) Türkçe etiket üzerinden anahtar kelime
+ * sezgisi. Hiçbiri tutmazsa NOTR döner: renk yerine gri fark gösterilir.
+ * Bilinmeyen bir ölçüyü rastgele yeşile boyamak, yanlış bilgilendirmedir.
+ */
+export type MetricDirection = "ARTIS_IYI" | "AZALIS_IYI" | "NOTR";
+
+export const METRIC_DIRECTION_LABELS: Record<MetricDirection, string> = {
+  ARTIS_IYI: "Artış olumlu",
+  AZALIS_IYI: "Azalış olumlu",
+  NOTR: "Yön nötr",
+};
+
+/**
+ * Ölçü anahtarı → iyi yön tablosu.
+ *
+ * Anahtarlar sunucunun `columns[].key` / `metrics[].key` değerleridir; hem
+ * Türkçe (`kacirilanSure`) hem İngilizce (`missedDeadlines`) yazım desteklenir
+ * çünkü rapor motoru iki adlandırmayı da üretebilir. Karşılaştırma büyük/küçük
+ * harfe ve `_`/`-` ayracına duyarsızdır.
+ */
+export const METRIC_DIRECTIONS: Record<string, MetricDirection> = {
+  // --- Süre (en kritik yön: artış KIRMIZI) ---
+  kacirilansure: "AZALIS_IYI",
+  kacirilansuresayisi: "AZALIS_IYI",
+  misseddeadlines: "AZALIS_IYI",
+  gecikensure: "AZALIS_IYI",
+  suregecti: "AZALIS_IYI",
+  kritiksure: "AZALIS_IYI",
+  tamamlanansure: "ARTIS_IYI",
+  zamanindatamamlanansure: "ARTIS_IYI",
+  sureuyumorani: "ARTIS_IYI",
+  yaklasansure: "NOTR",
+  aciksure: "NOTR",
+
+  // --- Dosya ---
+  yenidosya: "ARTIS_IYI",
+  acilandosya: "ARTIS_IYI",
+  newcases: "ARTIS_IYI",
+  kapanandosya: "ARTIS_IYI",
+  closedcases: "ARTIS_IYI",
+  aktifdosya: "NOTR",
+  activecases: "NOTR",
+  toplamdosya: "NOTR",
+  kazanilandava: "ARTIS_IYI",
+  kaybedilendava: "AZALIS_IYI",
+  ortalamadosyasuresi: "AZALIS_IYI",
+
+  // --- Görev ---
+  tamamlanangorev: "ARTIS_IYI",
+  completedtasks: "ARTIS_IYI",
+  gecikengorev: "AZALIS_IYI",
+  overduetasks: "AZALIS_IYI",
+  acikgorev: "NOTR",
+  opentasks: "NOTR",
+  gorevtamamlamaorani: "ARTIS_IYI",
+  ortalamagorevsuresi: "AZALIS_IYI",
+
+  // --- Duruşma ---
+  durusmasayisi: "NOTR",
+  yapilandurusma: "NOTR",
+  ertelenendurusma: "AZALIS_IYI",
+  kacirilandurusma: "AZALIS_IYI",
+
+  // --- Para: tahsilat iyi, alacak kötü ---
+  tahsilat: "ARTIS_IYI",
+  tahsiledilen: "ARTIS_IYI",
+  collections: "ARTIS_IYI",
+  tahakkuk: "ARTIS_IYI",
+  faturalanan: "ARTIS_IYI",
+  faturatutari: "ARTIS_IYI",
+  gelir: "ARTIS_IYI",
+  ciro: "ARTIS_IYI",
+  karlilik: "ARTIS_IYI",
+  karmarji: "ARTIS_IYI",
+  netkar: "ARTIS_IYI",
+  tahsilatorani: "ARTIS_IYI",
+  acikalacak: "AZALIS_IYI",
+  tahsiledilecek: "AZALIS_IYI",
+  bakiye: "AZALIS_IYI",
+  receivables: "AZALIS_IYI",
+  vadesigecen: "AZALIS_IYI",
+  vadesigecenalacak: "AZALIS_IYI",
+  overdue: "AZALIS_IYI",
+  gecikmegunu: "AZALIS_IYI",
+  ortalamatahsilatgunu: "AZALIS_IYI",
+  ortalamavadegunu: "AZALIS_IYI",
+  masraf: "AZALIS_IYI",
+  gider: "AZALIS_IYI",
+  harc: "NOTR",
+  tahsilatriski: "AZALIS_IYI",
+
+  // --- Verimlilik ---
+  faturalanabilirsaat: "ARTIS_IYI",
+  faturalanabilirdakika: "ARTIS_IYI",
+  billablehours: "ARTIS_IYI",
+  faturalanmayansaat: "AZALIS_IYI",
+  faturalanmayandakika: "AZALIS_IYI",
+  kullanimorani: "ARTIS_IYI",
+  utilization: "ARTIS_IYI",
+  verimlilik: "ARTIS_IYI",
+  saatlikgetiri: "ARTIS_IYI",
+  toplamsaat: "NOTR",
+  isyuku: "NOTR",
+
+  // --- Risk ---
+  risklidosya: "AZALIS_IYI",
+  yuksekrisklidosya: "AZALIS_IYI",
+  riskskoru: "AZALIS_IYI",
+  ortalamariskskoru: "AZALIS_IYI",
+
+  // --- Müvekkil / iletişim ---
+  yenimuvekkil: "ARTIS_IYI",
+  aktifmuvekkil: "ARTIS_IYI",
+  kaybedilenmuvekkil: "AZALIS_IYI",
+  cevapsizmesaj: "AZALIS_IYI",
+  ortalamacevapsuresi: "AZALIS_IYI",
+
+  // --- AI / kredi ---
+  kredituketimi: "NOTR",
+  aikredi: "NOTR",
+};
+
+/** Etiket sezgisi — anahtar tabloda yoksa Türkçe başlıktan yön çıkarılır. */
+const DIRECTION_HINTS: Array<{ words: string[]; direction: MetricDirection }> = [
+  {
+    words: ["kaçırıl", "kacirilan", "gecikm", "geciken", "vadesi geçen", "aşıl"],
+    direction: "AZALIS_IYI",
+  },
+  {
+    words: ["kaybedil", "iptal", "reddedil", "hata", "risk", "borç", "masraf", "gider"],
+    direction: "AZALIS_IYI",
+  },
+  { words: ["alacak", "bakiye", "tahsil edilecek"], direction: "AZALIS_IYI" },
+  {
+    words: ["tahsilat", "tahsil edilen", "kâr", "kar marj", "gelir", "ciro", "kazanıl"],
+    direction: "ARTIS_IYI",
+  },
+  {
+    words: [
+      "tamamlan",
+      "faturalanabilir",
+      "kullanım oranı",
+      "verimlilik",
+      "yeni müvekkil",
+      "yeni dosya",
+    ],
+    direction: "ARTIS_IYI",
+  },
+];
+
+function normalizeMetricKey(key: string): string {
+  return key.replace(/[\s_\-.]/g, "").toLocaleLowerCase("tr-TR");
+}
+
+/**
+ * Bir ölçünün iyi yönünü çözer.
+ *
+ * `serverDirection` doldurulmuşsa TARTIŞMASIZ o kullanılır — rapor motoru
+ * ölçüyü üreten taraftır ve yönü de o bilir. İstemcideki tablo yalnızca
+ * sunucu sessiz kaldığında devreye girer.
+ */
+export function metricDirection(
+  key: string | null | undefined,
+  label?: string | null,
+  serverDirection?: string | null,
+): MetricDirection {
+  if (
+    serverDirection === "ARTIS_IYI" ||
+    serverDirection === "AZALIS_IYI" ||
+    serverDirection === "NOTR"
+  ) {
+    return serverDirection;
+  }
+  // Sunucu İngilizce yazabilir.
+  if (serverDirection === "up" || serverDirection === "higher_is_better") return "ARTIS_IYI";
+  if (serverDirection === "down" || serverDirection === "lower_is_better") return "AZALIS_IYI";
+
+  if (key) {
+    const hit = METRIC_DIRECTIONS[normalizeMetricKey(key)];
+    if (hit) return hit;
+  }
+  const text = (label ?? "").toLocaleLowerCase("tr-TR");
+  if (text) {
+    for (const hint of DIRECTION_HINTS) {
+      if (hint.words.some((w) => text.includes(w))) return hint.direction;
+    }
+  }
+  return "NOTR";
+}
+
+/**
+ * Farkın ekrandaki tonu.
+ *
+ * `delta > 0` ile "iyi" AYNI ŞEY DEĞİLDİR. Yön NOTR ise renk verilmez: gri
+ * fark, "arttı ama iyi mi kötü mü bilinmiyor" demenin dürüst yoludur.
+ */
+export function deltaTone(
+  delta: number | null | undefined,
+  direction: MetricDirection,
+): "iyi" | "kotu" | "notr" {
+  if (delta === null || delta === undefined || !Number.isFinite(delta) || delta === 0) return "notr";
+  if (direction === "NOTR") return "notr";
+  const better = direction === "ARTIS_IYI" ? delta > 0 : delta < 0;
+  return better ? "iyi" : "kotu";
+}
+
+/** Fark rozetinin Tailwind sınıfları (iyi yeşil, kötü kırmızı, nötr gri). */
+export const DELTA_TONE_CLASSES: Record<"iyi" | "kotu" | "notr", string> = {
+  iyi: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  kotu: "bg-red-50 text-red-700 ring-red-200",
+  notr: "bg-slate-100 text-slate-600 ring-slate-200",
+};
+
+/** Çubuk/çizgi dolgusu — fark rozetiyle aynı yön mantığı. */
+export const DELTA_TONE_BARS: Record<"iyi" | "kotu" | "notr", string> = {
+  iyi: "bg-emerald-500",
+  kotu: "bg-red-500",
+  notr: "bg-slate-400",
+};
+
+/** Yüzde farkı: "%12,4" / "—" (payda 0 ise oran tanımsızdır, uydurulmaz). */
+export function fmtDeltaPercent(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  const abs = Math.abs(value);
+  const digits = abs >= 100 ? 0 : 1;
+  return `%${abs.toLocaleString("tr-TR", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  })}`;
+}
+
+/** Sayıyı tr-TR biçiminde gösterir (rakamlar `tabular-nums` ile hizalanır). */
+export function fmtCount(value: number | null | undefined, digits = 0): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  return value.toLocaleString("tr-TR", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+}
+
+/** Yüzde ölçüsü: 0–100 ölçekli değer → "%68,5". */
+export function fmtPercentValue(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  return `%${value.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
+}
+
+// ---------- Dönem seçici ----------
+
+export const REPORT_PERIOD_PRESETS = [
+  { key: "BU_AY", label: "Bu ay" },
+  { key: "GECEN_AY", label: "Geçen ay" },
+  { key: "SON_3_AY", label: "Son 3 ay" },
+  { key: "BU_YIL", label: "Bu yıl" },
+  { key: "OZEL", label: "Özel aralık" },
+] as const;
+
+export type ReportPeriodPreset = (typeof REPORT_PERIOD_PRESETS)[number]["key"];
+
+/**
+ * Ön tanımlı dönemi UTC GÜN BAZINDA çözer.
+ *
+ * SÖZLEŞME: `from` ve `to` her ikisi de DÂHİLDİR (kapalı aralık). Ekranda
+ * "bitiş günü dâhil" ibaresi bu yüzden yazılıdır — bir raporun 31 Ağustos'u
+ * kapsayıp kapsamadığı, tahsilat toplamını değiştirir.
+ *
+ * Gün sınırları TARAYICININ YEREL SAATİNDEN DEĞİL, UTC takviminden okunur:
+ * Türkiye UTC+3'tür ve yerel `getMonth()` ile ay sınırı hesaplamak, ayın ilk
+ * gününü bir önceki aya kaydırabilir.
+ *
+ * ╔══════════════════════════════════════════════════════════════════════════╗
+ * ║ SÜREN DÖNEM GELECEĞİ KAPSAMAZ (denetim bulgusu 3).                       ║
+ * ║                                                                          ║
+ * ║ "Bu ay" ve "Bu yıl" HENÜZ BİTMEMİŞ dönemlerdir. Bitiş gününü takvimin    ║
+ * ║ son gününe kurmak, raporu yarısı gelecekte olan bir pencereyle           ║
+ * ║ çalıştırır ve sunucu bunu `OZEL` dönem sayıp TAM uzunlukta bir önceki    ║
+ * ║ pencereyle kıyaslar. 15 Ağustos'ta "Bu ay" seçen ortak, 01–31 Ağustos    ║
+ * ║ (yarısı boş) ile 01–31 Temmuz'u (tam ay) karşılaştıran kartlar görür:    ║
+ * ║ 500.000 TL tahakkuk 1.000.000 TL'nin yanında "−%50" ve kırmızı ok        ║
+ * ║ olarak çıkar. Ocak ayında "Bu yıl" bakan biri için sapma 11 katına       ║
+ * ║ ulaşır ("%92 düşüş").                                                    ║
+ * ║                                                                          ║
+ * ║ Bu yüzden bitiş günü `min(takvim sonu, bugün)` ile sınırlanır. Sunucu    ║
+ * ║ ön tanımı da (`report-params.ts`, BU_AY) ay başı→bugündür; iki taraf     ║
+ * ║ artık AYNI dönemi tarif eder. GECEN_AY tamamen geçmişte olduğu için      ║
+ * ║ kırpılmaz.                                                               ║
+ * ╚══════════════════════════════════════════════════════════════════════════╝
+ */
+export function resolvePeriod(
+  preset: ReportPeriodPreset,
+  today = new Date(),
+): { from: string; to: string } {
+  const y = today.getUTCFullYear();
+  const m = today.getUTCMonth();
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const utc = (yy: number, mm: number, dd: number) => new Date(Date.UTC(yy, mm, dd));
+  const todayUtc = utc(y, m, today.getUTCDate());
+  /** Süren dönemlerde bitiş bugünü aşamaz. */
+  const notFuture = (d: Date) => (d.getTime() > todayUtc.getTime() ? todayUtc : d);
+
+  switch (preset) {
+    case "GECEN_AY":
+      // Tamamen geçmiş; kırpma gerekmez.
+      return { from: iso(utc(y, m - 1, 1)), to: iso(utc(y, m, 0)) };
+    case "SON_3_AY":
+      return { from: iso(utc(y, m - 2, 1)), to: iso(notFuture(utc(y, m + 1, 0))) };
+    case "BU_YIL":
+      return { from: iso(utc(y, 0, 1)), to: iso(notFuture(utc(y, 11, 31))) };
+    case "BU_AY":
+    default:
+      return { from: iso(utc(y, m, 1)), to: iso(notFuture(utc(y, m + 1, 0))) };
+  }
+}
+
+/** Aynı uzunlukta ÖNCEKİ dönem — karşılaştırma göstergesinin tabanı. */
+export function previousPeriodOf(from: string, to: string): { from: string; to: string } | null {
+  const a = new Date(`${from}T00:00:00Z`);
+  const b = new Date(`${to}T00:00:00Z`);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime()) || b < a) return null;
+  const days = Math.round((b.getTime() - a.getTime()) / 86_400_000) + 1;
+  const prevTo = new Date(a.getTime() - 86_400_000);
+  const prevFrom = new Date(prevTo.getTime() - (days - 1) * 86_400_000);
+  return { from: prevFrom.toISOString().slice(0, 10), to: prevTo.toISOString().slice(0, 10) };
+}
+
+/** "01 Ağustos 2026 – 31 Ağustos 2026 (bitiş günü dâhil)" */
+export function periodLabel(from: string, to: string, toInclusive = true): string {
+  return `${fmtDate(from)} – ${fmtDate(to)} (bitiş günü ${toInclusive ? "dâhil" : "hariç"})`;
+}
+
+// ---------- Bildirimler ----------
+
+export const NOTIFICATION_KIND_LABELS: Record<string, string> = {
+  SURE_GECTI: "Süre geçti",
+  SURE_YAKLASIYOR: "Süre yaklaşıyor",
+  DURUSMA_YAKLASIYOR: "Duruşma yaklaşıyor",
+  GOREV_ATANDI: "Görev atandı",
+  GOREV_GECIKTI: "Görev gecikti",
+  FATURA_VADESI: "Fatura vadesi",
+  ODEME_ALINDI: "Ödeme alındı",
+  MESAJ_ONAY_BEKLIYOR: "Mesaj onay bekliyor",
+  MESAJ_GELDI: "Yeni mesaj",
+  RAPOR_HAZIR: "Rapor hazır",
+  SOZLESME_YENILEME: "Sözleşme yenileme",
+  VEKALET_SURESI: "Vekaletname süresi",
+  SISTEM: "Sistem",
+};
+
+export const NOTIFICATION_KIND_TONES: Record<string, BadgeTone> = {
+  SURE_GECTI: "danger",
+  SURE_YAKLASIYOR: "red",
+  DURUSMA_YAKLASIYOR: "yellow",
+  GOREV_ATANDI: "blue",
+  GOREV_GECIKTI: "yellow",
+  FATURA_VADESI: "yellow",
+  ODEME_ALINDI: "green",
+  MESAJ_ONAY_BEKLIYOR: "gold",
+  MESAJ_GELDI: "blue",
+  RAPOR_HAZIR: "navy",
+  SOZLESME_YENILEME: "yellow",
+  VEKALET_SURESI: "red",
+  SISTEM: "gray",
+};
+
+export const NOTIFICATION_KIND_ICONS: Record<string, string> = {
+  SURE_GECTI: "⏰",
+  SURE_YAKLASIYOR: "⏳",
+  DURUSMA_YAKLASIYOR: "⚖️",
+  GOREV_ATANDI: "📌",
+  GOREV_GECIKTI: "🔁",
+  FATURA_VADESI: "🧾",
+  ODEME_ALINDI: "💰",
+  MESAJ_ONAY_BEKLIYOR: "✍️",
+  MESAJ_GELDI: "✉️",
+  RAPOR_HAZIR: "📊",
+  SOZLESME_YENILEME: "📄",
+  VEKALET_SURESI: "🪪",
+  SISTEM: "🔔",
+};
+
+/**
+ * KRİTİK TÜRLER — bildirim listesinde görsel olarak öne çıkar.
+ *
+ * Ölçüt "acil mi" değil, TELAFİSİ VAR MI: geçmiş bir süre geri alınamaz.
+ * Bu iki tür kırmızı şeritle, kalın başlıkla ve listenin en üstünde gösterilir.
+ */
+export const CRITICAL_NOTIFICATION_KINDS = ["SURE_GECTI", "SURE_YAKLASIYOR"] as const;
+
+export function isCriticalNotification(kind: string | null | undefined): boolean {
+  return (CRITICAL_NOTIFICATION_KINDS as readonly string[]).includes(kind ?? "");
+}
+
+export const NOTIFICATION_STATUS_LABELS: Record<string, string> = {
+  BEKLIYOR: "Bekliyor",
+  GONDERILDI: "Gönderildi",
+  OKUNDU: "Okundu",
+  IPTAL: "İptal",
+};
+
+/**
+ * Bildirimin GİDECEĞİ ekran.
+ *
+ * `resourceId` şemada bilinçli olarak SKALERDİR (yabancı anahtar yok): kaynak
+ * kayıt silinse bile bildirim geçmişi bozulmaz. Bunun bedeli, hedefin ölü bir
+ * bağlantı olabilmesidir — bu yüzden tür bilinmiyorsa `null` döner ve satır
+ * tıklanabilir gösterilmez; kullanıcı boşluğa tıklamaz.
+ */
+export function notificationHref(
+  resourceType: string | null | undefined,
+  resourceId: string | null | undefined,
+): string | null {
+  const t = (resourceType ?? "").toUpperCase();
+  const id = resourceId ?? "";
+  switch (t) {
+    case "DOSYA":
+    case "CASE":
+      return id ? `/app/dosyalar/${id}` : "/app/dosyalar";
+    case "MUVEKKIL":
+    case "CLIENT":
+      return id ? `/app/muvekkiller/${id}` : "/app/muvekkiller";
+    case "ICRA":
+    case "ENFORCEMENT":
+      return id ? `/app/icra/${id}` : "/app/icra";
+    case "FATURA":
+    case "INVOICE":
+      return id ? `/app/faturalar/${id}` : "/app/faturalar";
+    case "SURE":
+    case "DEADLINE":
+      return "/app/sureler";
+    case "DURUSMA":
+    case "HEARING":
+      return "/app/durusmalar";
+    case "GOREV":
+    case "TASK":
+      return "/app/gorevler";
+    case "MESAJ":
+    case "MESSAGE":
+    case "OUTBOUND_MESSAGE":
+    case "INBOUND_MESSAGE":
+      return "/app/iletisim";
+    case "ONERI":
+    case "PROPOSAL":
+      return "/app/oneriler";
+    case "RAPOR":
+    case "REPORT":
+      return id ? `/app/raporlar/${id}` : "/app/raporlar";
+    default:
+      return null;
+  }
+}
+
+/** "3 dk önce" / "2 saat önce" / "12 Ağustos 2026" — bildirim zaman damgası. */
+export function fmtRelativeTime(value: string | Date | null | undefined): string {
+  if (!value) return "—";
+  const d = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(d.getTime())) return "—";
+  const diff = Date.now() - d.getTime();
+  if (diff < 0) return fmtDateTime(d);
+  const min = Math.floor(diff / 60_000);
+  if (min < 1) return "az önce";
+  if (min < 60) return `${min} dk önce`;
+  const hour = Math.floor(min / 60);
+  if (hour < 24) return `${hour} saat önce`;
+  const day = Math.floor(hour / 24);
+  if (day < 7) return `${day} gün önce`;
+  return fmtDate(d);
+}

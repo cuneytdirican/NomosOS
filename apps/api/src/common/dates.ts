@@ -103,6 +103,32 @@ export function trCalendarYear(date: Date): number {
   return trCalendarDate(date).getUTCFullYear();
 }
 
+/**
+ * TÜRKİYE TAKVİM GÜNÜNÜN UTC GÜN BAŞI — ZAMANLANMIŞ İŞLERİN "BUGÜN"Ü.
+ *
+ * ╔══════════════════════════════════════════════════════════════════════════╗
+ * ║ CRON TR SAATİNDEDİR; "BUGÜN" DE TR TAKVİMİNDE OLMALIDIR (bulgu 5).       ║
+ * ║                                                                          ║
+ * ║ Cron ifadeleri `Europe/Istanbul` (+03) yorumlanır, ama işlerin "bugün"    ║
+ * ║ tanımı `startOfDay()` ile UTC TAKVİM GÜNÜYDÜ. TR saatiyle 00:00–02:59    ║
+ * ║ arasında UTC günü bir gerideyken bu iki takvim AYRIŞIR.                  ║
+ * ║                                                                          ║
+ * ║ Somut arıza: operatör süre hatırlatmasını "0 7 * * *" yerine             ║
+ * ║ "0 2 * * *" yapar (02:00 TR = 23:00 UTC, bir önceki gün). `today` bir    ║
+ * ║ gün geriye kayar; `addDays(today, 1)` penceresi BUGÜN dolan süreleri     ║
+ * ║ "1 gün kaldı" diye işaretler, gerçekten yarın dolanlar ise hiçbir        ║
+ * ║ pencereye girmez — yani "son gün bugün" uyarısı HİÇ GİTMEZ. Aynı hata    ║
+ * ║ kullanım fotoğrafında VARSAYILAN yapılandırmada zaten canlıydı           ║
+ * ║ (`0 2 * * *`): fotoğraf kalıcı olarak bir gün gerideydi.                 ║
+ * ║                                                                          ║
+ * ║ Dönen `Date`, TR takvim gününün UTC gün başıdır — `Deadline.dueDate`     ║
+ * ║ (@db.Date, UTC gün başı) ile DOĞRUDAN karşılaştırılabilir.               ║
+ * ╚══════════════════════════════════════════════════════════════════════════╝
+ */
+export function trCalendarDay(date: Date): Date {
+  return startOfDay(trCalendarDate(date));
+}
+
 /** 30.08.2026 biçimi — hesap izi metinlerinde kullanılır. */
 export function formatTrDate(date: Date): string {
   const d = String(date.getUTCDate()).padStart(2, "0");

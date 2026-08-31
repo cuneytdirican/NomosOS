@@ -24,17 +24,15 @@
 | 4 | Faz 4 (strateji/simülasyon/risk/delil/bilirkişi/çakışma) + tanıtım sitesi + Modül 26 kredi sistemi | ✅ |
 | 7 | Üretim dağıtımı — `docs/uretim-dagitimi.md`, CI, Docker üretim profili | ✅ ⚠️ |
 | 5 | Faz 5 — Müvekkil portalı, iletişim merkezi, vekaletname, sözleşme + e-imza | ✅ |
-| 6 | **Faz 6 — Kurumsal raporlama, mobil uygulama, zamanlanmış işler** | ⏳ SIRADA |
+| 6 | Faz 6 — Kurumsal raporlama, zamanlanmış işler, bildirimler, mobil | ✅ |
 | 8 | **DERİN DENETİM** (aşağıdaki prompt) | ⏳ |
 | 9 | Final GitHub gönderimi + kapanış raporu | ⏳ |
 
-### ⚠️ Açık engel — CI dosyaları gönderilemedi
+### ✅ Çözülen engel — CI dosyaları
 
-`.github/workflows/ci.yml`, `security.yml` ve `README.md` yerelde hazır ancak GitHub'a
-**gönderilemedi**: token'da `workflow` yetkisi yok (GitHub, OAuth uygulamalarının workflow
-dosyası yazmasını bu yetki olmadan reddediyor). Çözüm: `gh auth refresh -h github.com -s workflow`
-ile yetki verilmesi ya da dosyaların elle eklenmesi. Diğer tüm CI yardımcıları (sır tarayıcı,
-dependabot, CodeQL yapılandırması, PR şablonu) gönderildi.
+Kullanıcı 31 Ağustos 2026'da token'a `workflow` yetkisi verdi; `ci.yml`, `security.yml` ve
+`workflows/README.md` commit `b62e5b1` ile gönderildi. Depo ayarı önerisi: `dogrula` ve
+`sir-taramasi` işlerini branch protection'da zorunlu status check yapın.
 
 ## Aşama 5 — Faz 5 kapsamı
 

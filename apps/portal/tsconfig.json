@@ -14,8 +14,18 @@
     "jsx": "preserve",
     "incremental": true,
     "plugins": [{ "name": "next" }],
+    "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      // REACT 19 TİP TEKLEŞTİRMESİ — gerekçesi apps/web/tsconfig.json'da
+      // ayrıntılı yazılıdır. Özeti: monorepo hem React 19 (Next uygulamaları)
+      // hem React 18 (apps/mobile) barındırır; pnpm sanal deposu @types/react'in
+      // yalnız BİR sürümünü yukarı taşır ve hangisini taşıdığı kurulum
+      // grafiğine göre değişir. Bu eşleme, derlemenin kurulum sırasına bağımlı
+      // olmasını engeller: her "react" içe aktarımı bu paketin kendi
+      // @types/react@19'una sabitlenir.
+      "react": ["./node_modules/@types/react"],
+      "react/*": ["./node_modules/@types/react/*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

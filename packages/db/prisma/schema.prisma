@@ -2559,11 +2559,11 @@ model PortalUser {
   /// Bellek içi sayaç süreç yeniden başlayınca sıfırlanıyordu ve çok örnekli
   /// dağıtımda örnek başına tutuluyordu. Sayaç artık kaydın kendisindedir:
   /// kilit sürecin ömründen ve örnek sayısından BAĞIMSIZDIR.
-  failedAttempts Int       @default(0)
+  failedAttempts      Int       @default(0)
   /// Sayaç penceresinin bittiği an — bu andan sonra birikmemiş hatalar unutulur.
   failureWindowEndsAt DateTime?
   /// Kilidin bittiği an. null / geçmiş = kilit yok.
-  lockedUntil    DateTime?
+  lockedUntil         DateTime?
 
   /// ── OTURUM İPTALİ ────────────────────────────────────────────────────────
   /// Bu andan ÖNCE üretilmiş portal token'ları geçersizdir. Çıkış (logout),
@@ -2604,28 +2604,28 @@ model PortalInvite {
 /// `unpublishedAt` dolu kayıt yayından kaldırılmıştır; portal sorgusu
 /// `unpublishedAt: null` süzgeci olmadan ÇALIŞTIRILMAZ.
 model PortalPublication {
-  id            String             @id @default(uuid())
-  tenantId      String
-  clientId      String
-  client        Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  resourceType  PortalResourceType
+  id                String             @id @default(uuid())
+  tenantId          String
+  clientId          String
+  client            Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  resourceType      PortalResourceType
   /// Kaynak kaydın id'si — çok biçimli (polymorphic), İLİŞKİ KURULMAZ.
-  resourceId    String
-  publishedBy   String // User id — yayın kararının sorumlusu
-  publishedAt   DateTime           @default(now())
+  resourceId        String
+  publishedBy       String // User id — yayın kararının sorumlusu
+  publishedAt       DateTime           @default(now())
   /// Yayından kaldırma anı. null = yayında.
-  unpublishedAt DateTime?
+  unpublishedAt     DateTime?
   /// ── SAHİPLİK İKİNCİ AYAĞI ────────────────────────────────────────────────
   /// Portal görünürlüğü normalde İKİ bağımsız koşula dayanır: açık yayın kararı
   /// VE kaydın gerçekten bu müvekkile ait olması. Bazı kaynaklarda sahiplik
   /// çözülemez (ör. hiçbir dosyaya bağlanmamış belge) ve karar YALNIZCA avukatın
   /// tıklamasına iner. Bu bayrak o tekil kararları görünür kılar: `false` ise
   /// kaydın ikinci kapısı KAPANMAMIŞTIR, yalnızca atlanmıştır.
-  ownershipVerified Boolean @default(true)
+  ownershipVerified Boolean            @default(true)
   /// Avukatın yayın notu / müvekkile gösterilen sade açıklama. SAFAHAT_KAYDI
   /// yayınında AI durum özetinin ONAYLANMIŞ metni burada DONDURULUR: kaynak
   /// kayıt sonradan değişse bile müvekkilin gördüğü metin sabit kalır.
-  note          String?
+  note              String?
 
   @@unique([tenantId, resourceType, resourceId, clientId])
   @@index([tenantId, clientId, resourceType])
@@ -2689,32 +2689,32 @@ enum MatchStatus {
 /// Birleşik iletişim geçmişi — kanal fark etmeksizin her yazışmanın tek
 /// zaman çizelgesi. Telefon görüşmesi de elle buraya not edilir.
 model CommunicationLog {
-  id         String        @id @default(uuid())
-  tenantId   String
-  clientId   String?
-  client     Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  caseId     String?
-  case       Case?         @relation(fields: [caseId], references: [id], onDelete: SetNull)
-  direction  CommDirection
-  channel    CommChannel
-  subject    String?
-  body       String
+  id                String        @id @default(uuid())
+  tenantId          String
+  clientId          String?
+  client            Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  caseId            String?
+  case              Case?         @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  direction         CommDirection
+  channel           CommChannel
+  subject           String?
+  body              String
   /// Karşı tarafın adresi: e-posta / telefon numarası. KVKK anonimleştirme
   /// talebinde `body` ile birlikte temizlenir, kayıt iskeleti korunur.
-  contactRef String?
-  occurredAt DateTime
+  contactRef        String?
+  occurredAt        DateTime
   /// Kaydı giren büro kullanıcısı (User.id) — gelen mesajda null olabilir.
-  recordedBy String?
+  recordedBy        String?
   /// ── KAYNAK AYRIMI ────────────────────────────────────────────────────────
   /// "SISTEM" = onay makinesinden geçip GERÇEKTEN gönderilmiş mesaj (aşağıdaki
   /// outboundMessageId doludur). "ELLE" = büro kullanıcısının kendi eliyle
   /// düştüğü not ("telefonda söyledim"). İkisi ayırt edilemezse "müvekkile ne
   /// söylendi, kim onayladı?" sorusu tek tablodan cevaplanamaz.
-  source     String?       @default("ELLE")
+  source            String?       @default("ELLE")
   /// Kaydı doğuran giden mesaj (OutboundMessage.id) — skaler. Onaylayanın
   /// kimliği o kayıttaki `approvedBy` alanındadır.
   outboundMessageId String?
-  createdAt  DateTime      @default(now())
+  createdAt         DateTime      @default(now())
 
   @@index([tenantId, occurredAt])
   @@index([clientId, occurredAt])
@@ -2935,4 +2935,227 @@ model SignatureRequest {
   @@index([contractId])
   @@index([versionId])
   @@index([tenantId, providerRef])
+}
+
+// ---------- Faz 6) Raporlama + zamanlanmış işler + bildirim kuyruğu ----------
+// docs/moduller/18-partner-dashboard.md · 25-sistem-yonetim-paneli.md · docs/06-yol-haritasi.md (Faz 6)
+//
+// TEMEL İLKE: raporlar DETERMİNİSTİKTİR. Buradaki modeller rapor TANIMINI,
+// ÇALIŞTIRMA KAYDINI ve İŞ GÜNLÜĞÜNÜ tutar; RAKAM TUTMAZ. Rakamlar her
+// çalıştırmada veritabanından yeniden üretilir — önbelleğe alınmış bir sayı
+// "rapor sonucu" diye saklanmaz ki eski veri doğruymuş gibi sunulmasın.
+
+/// Kayıtlı raporun görünürlüğü. KISISEL yalnız oluşturana, BURO tenant
+/// genelinde herkese görünür (rol kısıtları AYRICA sunucuda uygulanır:
+/// STAJYER finans raporlarını, SEKRETER kârlılık/verimlilik raporlarını
+/// göremez — BURO kapsamı bu kısıtı GEÇERSİZ KILMAZ).
+enum ReportScope {
+  KISISEL
+  BURO
+}
+
+/// Raporun hangi biçimde üretildiği (denetim izi).
+enum ReportFormat {
+  EKRAN
+  CSV
+  PDF
+}
+
+/// Zamanlanmış iş / iş çalıştırması durumu.
+/// ATLANDI: iş çalıştı ama idempotentlik gereği yapacak bir şey bulamadı
+/// (aynı gün ikinci kez tetiklendi) — BAŞARISIZ değildir.
+enum JobStatus {
+  BASARILI
+  BASARISIZ
+  CALISIYOR
+  ATLANDI
+}
+
+/// Bildirim türü. Her tür, kaynağını (süre/duruşma/görev/kredi/sözleşme/vekalet)
+/// dedupeKey içinde taşır; kuyruk aynı olay için ikinci kaydı ÜRETEMEZ.
+enum NotificationKind {
+  SURE_YAKLASIYOR
+  SURE_GECTI
+  DURUSMA_YARIN
+  GOREV_ATANDI
+  ONAY_BEKLIYOR
+  KREDI_AZALDI
+  SOZLESME_YENILEME
+  VEKALET_SURESI
+}
+
+enum NotificationStatus {
+  BEKLIYOR
+  GONDERILDI
+  OKUNDU
+  IPTAL
+}
+
+enum DevicePlatform {
+  IOS
+  ANDROID
+  WEB
+}
+
+/// Kullanıcının kaydettiği rapor tanımı (rapor + filtre kümesi).
+/// SONUÇ SAKLAMAZ — yalnız "hangi rapor, hangi parametrelerle" bilgisidir;
+/// açıldığında rakamlar yeniden hesaplanır.
+model SavedReport {
+  id         String @id @default(uuid())
+  tenantId   String
+  name       String
+  /// Rapor anahtarı — raporlama modülündeki tanımlı rapora karşılık gelir
+  /// (örn "buro-aylik-ozet", "avukat-is-yuku", "tahsilat-yaslandirma").
+  reportKey  String
+  /// Filtreler (JSON metin): dönem, kullanıcı, müvekkil, dosya türü vb.
+  /// Dönem alanları kapanış tarihinin DAHİL mi HARİÇ mi olduğunu açıkça taşır.
+  paramsJson String
+
+  scope     ReportScope @default(KISISEL)
+  createdBy String // User id
+  /// Panelde üste sabitlenmiş mi.
+  isPinned  Boolean     @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, scope])
+  @@index([tenantId, reportKey])
+  @@index([tenantId, createdBy])
+}
+
+/// Rapor çalıştırma kaydı — DENETİM amaçlıdır (kim, hangi raporu, ne zaman,
+/// hangi filtreyle, hangi biçimde çalıştırdı). Append-only; rapor ÇIKTISI
+/// burada tutulmaz, yalnız satır sayısı ve süre ölçüsü tutulur.
+model ReportRun {
+  id         String @id @default(uuid())
+  tenantId   String
+  reportKey  String
+  paramsJson String
+
+  /// Üretilen satır sayısı (ölçüm; sonucun kendisi değil).
+  rowCount   Int?
+  durationMs Int?
+  format     ReportFormat @default(EKRAN)
+
+  runBy     String // User id
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, reportKey, createdAt])
+  @@index([tenantId, runBy, createdAt])
+}
+
+/// Zamanlanmış iş TANIMI (BullMQ tekrarlayan işine karşılık gelir).
+/// Kayıt SİSTEM GENELİDİR (tenantId yok): iş tüm kiracılar üzerinde dolaşır,
+/// kiracı bazlı sonuç `JobRun.tenantId` ile ayrışır.
+model ScheduledJob {
+  id   String @id @default(uuid())
+  /// Kod tarafındaki değişmez anahtar (örn "usage-snapshot-daily").
+  key  String @unique
+  name String
+
+  /// Cron ifadesi (5 alan). Sunucu saat dilimi işi kuran tarafta sabitlenir.
+  cronExpression String
+  isEnabled      Boolean @default(true)
+
+  lastRunAt      DateTime?
+  lastStatus     JobStatus?
+  lastError      String?
+  lastDurationMs Int?
+  nextRunAt      DateTime?
+
+  updatedAt DateTime @updatedAt
+
+  @@index([isEnabled, nextRunAt])
+}
+
+/// İş çalıştırma günlüğü — APPEND-ONLY. `ScheduledJob.last*` alanları bu
+/// günlüğün özetidir; çelişki halinde KAYNAK BU TABLODUR.
+model JobRun {
+  id       String  @id @default(uuid())
+  /// ScheduledJob.key — skaler; iş tanımı silinse bile günlük korunur.
+  jobKey   String
+  /// Kiracı bazlı işlerde hangi kiracı için çalıştığı; genel işlerde null.
+  ///
+  /// BUGÜN TANIMLI OLAN BÜTÜN İŞLER KİRACILAR ARASIDIR (süre/duruşma
+  /// hatırlatmaları, kullanım fotoğrafı, abonelik ve kredi denetimi hepsi tüm
+  /// kiracıları tek koşuda dolaşır), dolayısıyla bu alan HER SATIRDA null'dur
+  /// ve indeks kullanılmaz. Alan ve indeks bilerek bırakıldı: ileride tek
+  /// kiracıya özel bir iş (ör. bir büronun toplu içe aktarımı) eklendiğinde
+  /// şema değişikliği gerekmesin. "Hangi büro etkilendi" sorusunun bugünkü
+  /// yanıtı `detailJson` içindeki kırılımdır (denetim bulgusu 12).
+  tenantId String?
+
+  status     JobStatus
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  /// İşlenen kayıt sayısı (idempotentlik denetimi için: ikinci çalıştırma 0 olmalı).
+  itemsProcessed Int?
+  errorMessage   String?
+  /// Serbest biçimli ayrıntı (JSON metin) — atlanan kayıtlar, kırılım vb.
+  detailJson     String?
+
+  @@index([jobKey, startedAt])
+  @@index([tenantId, startedAt])
+  @@index([status, startedAt])
+}
+
+/// Bildirim giden kutusu. Bildirim ÜRETİMİ ile GÖNDERİMİ ayrılır: zamanlanmış
+/// iş yalnız BEKLIYOR kaydı yazar, gönderim kanalı sonra işler.
+///
+/// IDEMPOTENTLİK: @@unique([tenantId, dedupeKey]) — dedupeKey olayın kimliğidir
+/// (örn "SURE_YAKLASIYOR:<deadlineId>:3g"). Aynı gün ikinci kez çalışan iş
+/// unique ihlali alır ve kaydı ATLAR; müvekkile/avukata çift bildirim GİTMEZ.
+model NotificationOutbox {
+  id       String  @id @default(uuid())
+  tenantId String
+  /// Alıcı (User id). Boş ise büro geneli duyurudur.
+  userId   String?
+
+  kind  NotificationKind
+  title String
+  body  String
+
+  /// İlgili kaynak (örn "Deadline" / "Hearing" / "Task") ve kimliği — skaler,
+  /// kaynak silinse bile bildirim geçmişi bozulmaz.
+  resourceType String?
+  resourceId   String?
+
+  /// Olay kimliği — idempotentlik anahtarı. ÜRETİCİ İŞ TARAFINDAN belirlenir.
+  dedupeKey String
+
+  status       NotificationStatus @default(BEKLIYOR)
+  /// Ne zaman gönderilmeli (ileri tarihli bildirim); boşsa ilk turda gönderilir.
+  scheduledFor DateTime?
+  sentAt       DateTime?
+  readAt       DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, dedupeKey])
+  @@index([tenantId, status, scheduledFor])
+  @@index([tenantId, userId, status])
+  @@index([tenantId, kind, createdAt])
+}
+
+/// Mobil/tarayıcı bildirim jetonu. Jeton CİHAZA aittir; aynı jeton başka
+/// kullanıcıya geçerse (cihaz devri, çıkış-giriş) kayıt GÜNCELLENİR —
+/// bu yüzden @@unique([token]) tenant'tan bağımsızdır ve bir cihaz iki
+/// kiracıya aynı anda bildirim alamaz.
+model DeviceToken {
+  id       String @id @default(uuid())
+  tenantId String
+  userId   String
+
+  platform   DevicePlatform
+  token      String
+  isActive   Boolean        @default(true)
+  lastSeenAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@unique([token])
+  @@index([tenantId, userId, isActive])
 }

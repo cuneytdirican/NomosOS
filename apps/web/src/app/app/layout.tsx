@@ -7,6 +7,8 @@ import { clearToken, getStoredUser, getToken, type StoredUser } from "@/lib/api"
 import { countPendingProposals } from "@/lib/faz2";
 // Modül 26 — üst çubuktaki kredi göstergesi ve %80 uyarı şeridi.
 import { CreditErrorAlert, CreditMeter, CreditWarningBanner, useWallet } from "@/components/credits";
+// Faz 6 — üst çubuktaki bildirim zili (tüm /app sayfalarında).
+import { NotificationBell } from "./_components/notification-bell";
 
 interface NavItem {
   href: string;
@@ -222,6 +224,27 @@ const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
     ],
   },
   {
+    // Faz 6 — Kurumsal raporlama. Rapor kataloğu SUNUCUDA rol süzgecinden
+    // geçtiği için menü öğesi herkese görünür; içeride kimin ne göreceğine
+    // sunucu karar verir (STAJYER finans, SEKRETER kârlılık kısıtı).
+    title: "Raporlama",
+    items: [
+      {
+        href: "/app/raporlar",
+        label: "Raporlar",
+        icon: (
+          <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+            <path
+              fillRule="evenodd"
+              d="M3 3.75A1.75 1.75 0 0 1 4.75 2h10.5A1.75 1.75 0 0 1 17 3.75v12.5A1.75 1.75 0 0 1 15.25 18H4.75A1.75 1.75 0 0 1 3 16.25V3.75ZM6.5 13.5a.75.75 0 0 0 1.5 0v-3a.75.75 0 0 0-1.5 0v3Zm3-6a.75.75 0 0 1 1.5 0v6a.75.75 0 0 1-1.5 0v-6Zm3.75 2.25a.75.75 0 0 0-.75.75v3a.75.75 0 0 0 1.5 0v-3a.75.75 0 0 0-.75-.75Z"
+              clipRule="evenodd"
+            />
+          </svg>
+        ),
+      },
+    ],
+  },
+  {
     title: "Ayarlar",
     items: [
   {
@@ -309,8 +332,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen bg-slate-50">
-      {/* Sol menü */}
-      <aside className="fixed inset-y-0 left-0 z-30 flex w-60 flex-col bg-slate-900">
+      {/*
+        Sol menü. `print:hidden` — yazdırmada menü kâğıda basılmaz; rapor
+        sayfaları A4'e tam genişlikte çıksın diye içerik sarmalayıcısının sol
+        boşluğu da (`ml-60`) baskıda sıfırlanır.
+      */}
+      <aside className="fixed inset-y-0 left-0 z-30 flex w-60 flex-col bg-slate-900 print:hidden">
         <div className="flex items-center gap-2 border-b border-slate-800 px-5 py-4">
           <svg viewBox="0 0 32 32" className="h-8 w-8" aria-hidden="true">
             <rect width="32" height="32" rx="7" className="fill-amber-500" />
@@ -382,9 +409,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* İçerik */}
-      <div className="ml-60 flex min-h-screen flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex items-center justify-end gap-4 border-b border-slate-200 bg-white px-6 py-3">
+      <div className="ml-60 flex min-h-screen flex-1 flex-col print:ml-0">
+        <header className="sticky top-0 z-20 flex items-center justify-end gap-4 border-b border-slate-200 bg-white px-6 py-3 print:hidden">
           <CreditMeter wallet={wallet} />
+          <NotificationBell />
           <div className="text-right">
             <p className="text-sm font-medium text-slate-900">{user?.fullName ?? user?.email ?? "Kullanıcı"}</p>
             {user?.role && <p className="text-xs text-slate-500">{user.role}</p>}
@@ -400,7 +428,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             Çıkış
           </button>
         </header>
-        <main className="flex-1 space-y-4 p-6">
+        <main className="flex-1 space-y-4 p-6 print:p-0">
           <CreditWarningBanner wallet={wallet} />
           <CreditErrorAlert />
           {children}

@@ -29,6 +29,9 @@ import type { RiskCaseRow } from "./_lib/faz4-types";
 // Faz 5 — onay bekleyen mesajlar + vekaletname/sözleşme uyarıları.
 import { listApprovalQueue, listContractRenewals, listPoaWarnings } from "./_lib/faz5";
 import type { CommEntry, ContractRenewalItem, PoaAlert } from "./_lib/faz5-types";
+// Faz 6 — aylık özet ve bildirim kartları. İkisi de kendi verisini çeker ve
+// uç/rol yoksa hiç çizilmez; panelin mevcut kartlarına dokunmazlar.
+import { MonthlySummaryCard, NotificationsSummaryCard } from "./_components/dashboard-faz6";
 import {
   RISK_BANDS,
   RISK_BAND_BARS,
@@ -299,6 +302,16 @@ export default function PanelPage() {
               tone="gold"
               href="/app/muvekkiller"
             />
+          </div>
+
+          {/* Faz 6 — bu ay özeti (deterministik rapor motorundan) ve bildirimler.
+              KPI şeridinin hemen altında dururlar: şerit "şu an ne var"ı,
+              bu iki kart "bu ay ne oldu / neyi kaçırıyor olabilirim"i söyler. */}
+          {/* `empty:hidden` — iki kart da gizlendiğinde sarmalayıcı boş bir
+              satır aralığı bırakmaz. */}
+          <div className="grid gap-6 empty:hidden xl:grid-cols-2">
+            <MonthlySummaryCard />
+            <NotificationsSummaryCard />
           </div>
 
           {/* Bekleyen AI önerileri — belge hattının ürettiği aksiyonlar */}

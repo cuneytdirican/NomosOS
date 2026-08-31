@@ -1,0 +1,65 @@
+{
+  "expo": {
+    "name": "NomosOS",
+    "slug": "nomosos-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "nomosos",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#0F172A",
+    "primaryColor": "#D97706",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.nomosos.mobile",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Uygulamayı yüz tanıma ile açmak için kullanılır. Müvekkil verisi cihazınızda korunur.",
+        "ITSAppUsesNonExemptEncryption": false,
+        "//NSAppTransportSecurity": "ŞİFRESİZ TRAFİK KAPALI. Expo'nun geliştirici dostu varsayılanı üretim paketine taşınıyordu; adliye/otel Wi-Fi'ında http üzerinden akan JWT ve müvekkil verisi araya girene açıktır. Kod tarafındaki https zorunluluğu (src/api/client.ts) ile birlikte iki kapı oluşturur.",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false,
+          "NSAllowsLocalNetworking": false
+        }
+      }
+    },
+    "android": {
+      "package": "com.nomosos.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#0F172A"
+      },
+      "permissions": ["android.permission.USE_BIOMETRIC", "android.permission.USE_FINGERPRINT"]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Uygulamayı yüz tanıma ile açmak için kullanılır."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "//": "usesCleartextTraffic=false: Android tarafında şifresiz http trafiği YASAK. Geliştirmede Expo Go kendi manifestiyle çalıştığı için yerel API'ye erişim etkilenmez; kısıt üretim (EAS) derlemesinde geçerlidir.",
+          "android": {
+            "usesCleartextTraffic": false
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false,
+      "//": "tsconfigPaths SDK 50'den beri varsayılan açıktır; '@/*' takma adı buna dayandığı için AÇIKÇA yazılır.",
+      "tsconfigPaths": true
+    },
+    "extra": {
+      "//": "apiUrl boş bırakılırsa istemci EXPO_PUBLIC_API_URL'e, o da yoksa Expo geliştirme sunucusunun IP'sine (port 3001) düşer.",
+      "apiUrl": ""
+    }
+  }
+}

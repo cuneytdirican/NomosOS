@@ -25,6 +25,7 @@
 
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -763,6 +764,41 @@ export class CreditService implements OnModuleInit {
        * o eski fotoğraftan hesaplanıyor ve deftere GERÇEKTE yanandan fazlası
        * yazılıyordu — mutabakat kalıcı olarak sapardı.
        */
+      /**
+       * ╔══════════════════════════════════════════════════════════════════╗
+       * ║ DÖNEM KOŞULU İŞLEM İÇİNDE, YAZMANIN KENDİSİNDE UYGULANIR.        ║
+       * ║ (denetim bulgusu 6 — çift tahsis penceresi)                      ║
+       * ║                                                                  ║
+       * ║ Yukarıdaki `periodEnd > now` kontrolü işlem DIŞINDADIR ve yalnız ║
+       * ║ SIRALI koşuları korur. `JobRunnerService` kilidi SÜREÇ İÇİDİR;   ║
+       * ║ iki API örneği çalışıyorsa ya da cron ile panelden tetikleme     ║
+       * ║ çakışırsa iki çağrı da o kontrolü geçer, iki işlem açılır ve     ║
+       * ║ İKİ `TAHSIS` hareketi yazılırdı. `includedConsumed` iki kez      ║
+       * ║ sıfırlanır, büro o dönem için ÇİFT dahil kota alır ve            ║
+       * ║ `balanceAfter` mutabakatı bozulurdu. Kredi paraya eşdeğerdir.    ║
+       * ║ Üstelik ikinci koşuda `SURESI_DOLDU` satırı 0 yanar (kota zaten  ║
+       * ║ sıfırlanmıştır) ve defter "hiç yanmadı" derdi.                   ║
+       * ║                                                                  ║
+       * ║ Koşullu `updateMany` bunu tek atomik adımda kapatır: yarışı      ║
+       * ║ kaybeden çağrı `count === 0` görür ve HİÇBİR ŞEY yazmadan çıkar. ║
+       * ║ Kilit satır üzerindedir; `force` verildiyse koşul aranmaz.       ║
+       * ╚══════════════════════════════════════════════════════════════════╝
+       */
+      const claimed = await tx.creditWallet.updateMany({
+        where: {
+          tenantId,
+          ...(options.force ? {} : { periodEnd: { lte: now } }),
+        },
+        // Dönemi HEMEN ileri taşı: bu yazma "bu dönemi ben yeniliyorum" ilanıdır.
+        data: { periodStart: period.periodStart, periodEnd: period.periodEnd },
+      });
+      if (claimed.count === 0) {
+        throw new ConflictException(
+          "Kredi dönemi bu sırada başka bir koşu tarafından yenilendi; ikinci tahsis YAPILMADI. " +
+            "Bu bir hata değildir, çift tahsis koruması devreye girmiştir.",
+        );
+      }
+
       const current = await tx.creditWallet.findUniqueOrThrow({ where: { tenantId } });
       const expiring = Math.max(0, current.includedCredits - current.includedConsumed);
 

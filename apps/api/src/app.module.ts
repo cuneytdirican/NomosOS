@@ -38,6 +38,9 @@ import { PortalModule } from "./portal/portal.module";
 import { CommunicationModule } from "./communication/communication.module";
 import { PoaModule } from "./poa/poa.module";
 import { ContractsModule } from "./contracts/contracts.module";
+// --- Faz 6 modülleri ---
+import { ReportsModule } from "./reports/reports.module";
+import { SchedulerModule } from "./scheduler/scheduler.module";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
 import { TenantStatusGuard } from "./common/guards/tenant-status.guard";
 
@@ -172,6 +175,27 @@ function requireJwtSecret(config: ConfigService): string {
     // EN SONA konur: portalda AI çağrısı yoktur, bu yüzden kredi kapısına
     // bağımlı değildir; sırası yalnızca okunabilirlik içindir.
     PortalModule,
+    // --- Faz 6 modülleri ---
+    // Kurumsal raporlama (Modül 18/25 kesişimi).
+    // AssistantModule'den SONRA: rapor yorumu (REPORT_INTERPRET) ortak
+    // AssistantLlmService üzerinden gider; CreditsModule'den SONRA: uç
+    // @AiCredits("REPORT_INTERPRET") ile sarmalanmıştır ve global kredi
+    // interceptor'ı zaten kurulu olmalıdır.
+    ReportsModule,
+    // Zamanlanmış işler + bildirim giden kutusu + cihaz jetonları.
+    // CreditsModule ve PlatformModule'den SONRA gelmek ZORUNDADIR:
+    // kredi dönemi yenilemesi CreditService'i, kullanım fotoğrafı
+    // UsageSnapshotService'i (PlatformModule) enjekte eder.
+    //
+    // NOT: `@nestjs/schedule` (ScheduleModule.forRoot) KULLANILMAZ ve
+    // BİLEREK eklenmemiştir. Zamanlama BullMQ'nun tekrarlayan iş
+    // planlayıcısıyla (Redis) yapılır; @nestjs/schedule süreç-içi bir
+    // zamanlayıcıdır ve API birden fazla örnekle (replica) çalıştığında
+    // AYNI gece işi her örnekte bir kez tetiklenir — bildirimler ve kredi
+    // dönemi yenilemesi çoğa katlanırdı. BullMQ'da iş tek kuyruğa yazılır,
+    // tek worker alır. Redis yoksa SchedulerService zarifçe devre dışı
+    // kalır (API yine açılır), bkz. scheduler.service.ts.
+    SchedulerModule,
   ],
   /**
    * GUARD SIRASI ÖNEMLİDİR — dizideki sıra çalışma sırasıdır.

@@ -1,0 +1,29 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      // React 18 TİP TEKLEŞTİRMESİ — monorepo zorunluluğu, keyfi değil.
+      // apps/web · admin · portal Next 15 + React 19 kullanır; bu paket
+      // React Native 0.76 ile React 18'e BAĞLIDIR. pnpm sanal deposu
+      // (.pnpm/node_modules) @types/react@19'u yukarı taşır ve kendi
+      // @types/react bağımlılığını bildirmeyen paketler (@react-navigation/*,
+      // expo-router) tiplerini oradan çözer. Sonuç iki ayrı React ad alanı
+      // ve TS2786 "cannot be used as a JSX component" hatasıdır.
+      // Bu eşleme, derlemedeki HER "react" içe aktarımını bu paketin kendi
+      // @types/react@18'ine sabitler. Alternatifi kök `pnpm.overrides` ile
+      // @types/react'i tek sürüme çekmekti; o da web tarafını React 19
+      // tiplerinden ederdi.
+      "react": ["./node_modules/@types/react"],
+      "react/*": ["./node_modules/@types/react/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
+  "exclude": ["node_modules"]
+}

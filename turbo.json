@@ -1,6 +1,19 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
+    // apps/mobile (Expo/React Native) BİLEREK `build` script'i TAŞIMAZ.
+    //
+    // Turbo, bir pakette görev adında script yoksa o paketi görevden sessizce
+    // eler; yani "hariç tutma" listesi yerine script'in yokluğu kullanılır.
+    // Gerekçe: Expo uygulaması `next build` / `tsc` gibi tek komutla bir
+    // çıktı klasörü üretmez. Karşılığı olan şey `eas build`tır ve o, ağ
+    // erişimi + kimlik doğrulaması + imzalama anahtarları ister; CI'da her
+    // `pnpm build` çağrısında çalışması ne mümkün ne de istenir. Sahte bir
+    // `build: "echo ok"` script'i eklemek daha kötü olurdu: yeşil bir görev,
+    // aslında hiçbir şeyin doğrulanmadığını gizlerdi.
+    //
+    // Mobil paketin derleme güvencesi `typecheck` (tsc --noEmit) ile alınır;
+    // o görev VARDIR ve `pnpm typecheck` ile monorepo genelinde koşar.
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
