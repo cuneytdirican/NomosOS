@@ -32,6 +32,47 @@ export function clearToken(): void {
   try {
     window.localStorage.removeItem(TOKEN_KEY);
     window.localStorage.removeItem(USER_KEY);
+    // Demo gezinti bayrağı da oturumla birlikte düşer.
+    window.localStorage.removeItem(DEMO_ROLE_KEY);
+  } catch {
+    /* yoksay */
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * DEMO GEZİNTİ OTURUMU (/demo-giris)
+ *
+ * Demo giriş sayfası gerçek login akışını KULLANIR (aynı /auth/login
+ * ucu, aynı token); yalnızca hangi rolle gezildiğini panel şeridinde
+ * göstermek için ayrı bir bayrak bırakır. Bayrak kimlik değildir:
+ * yetkiyi YİNE sunucu belirler, localStorage'a bakılmaz.
+ * ------------------------------------------------------------------ */
+
+const DEMO_ROLE_KEY = "nomosos_demo_role";
+
+/** Demo girişten gelinen rolü işaretler (yalnızca gösterim amaçlı). */
+export function setDemoRole(role: string): void {
+  try {
+    window.localStorage.setItem(DEMO_ROLE_KEY, role);
+  } catch {
+    /* yoksay */
+  }
+}
+
+/** Demo gezintisi aktifse rolü, değilse null döner. */
+export function getDemoRole(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(DEMO_ROLE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Yalnız demo bayrağını temizler (oturumu düşürmez). */
+export function clearDemoRole(): void {
+  try {
+    window.localStorage.removeItem(DEMO_ROLE_KEY);
   } catch {
     /* yoksay */
   }

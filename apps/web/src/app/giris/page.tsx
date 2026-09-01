@@ -99,14 +99,15 @@ export default function GirisPage() {
             {loading ? "Giriş yapılıyor…" : "Giriş Yap"}
           </Button>
 
-          <div className="rounded-lg bg-slate-50 px-4 py-3 text-xs text-slate-500">
-            <p className="font-semibold text-slate-600">Demo hesabı</p>
-            <p className="mt-1">
-              E-posta: <code className="text-slate-700">partner@demo.nomosos.local</code>
-              <br />
-              Şifre: <code className="text-slate-700">Demo1234!</code>
-            </p>
-          </div>
+          {/* Demo incelemesi AYRI sayfadadır: rol seçerek gezme (Partner /
+              Avukat / Sekreter / Stajyer). Demo kimlik bilgileri gerçek giriş
+              ekranında durmaz (üretim derlemesinde sızdırma olmasın). */}
+          <Link
+            href="/demo-giris"
+            className="block rounded-lg border border-dashed border-amber-400 px-4 py-3 text-center text-sm font-medium text-amber-700 transition-colors hover:bg-amber-50"
+          >
+            Ürünü merak mı ettiniz? Demo&apos;yu bir rol seçerek inceleyin →
+          </Link>
         </form>
 
         <p className="mt-6 text-center text-xs text-slate-500">

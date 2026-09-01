@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { clearToken, getStoredUser, getToken, type StoredUser } from "@/lib/api";
 import { countPendingProposals } from "@/lib/faz2";
 import { USER_ROLE_LABELS } from "@/lib/labels";
+import { getDemoRole } from "@/lib/api";
 // Modül 26 — üst çubuktaki kredi göstergesi ve %80 uyarı şeridi.
 import { CreditErrorAlert, CreditMeter, CreditWarningBanner, useWallet } from "@/components/credits";
 // Faz 6 — üst çubuktaki bildirim zili (tüm /app sayfalarında).
@@ -18,6 +19,12 @@ interface NavItem {
   exact?: boolean;
   /** Sol menüde bekleyen öneri sayısını gösteren rozet. */
   badge?: "proposals";
+  /**
+   * Bu menü öğesini görebilen roller. Tanımsız = herkes. GÖRÜNÜM süzmesidir:
+   * yetkiyi sunucudaki rol kümeleri belirler (finance-access.ts, ROLE_SETS.ONAY).
+   * Kaynaklar arayüz-sunucu hizasını `demo-giris.test.ts` kilitler.
+   */
+  roles?: readonly string[];
 }
 
 /**
@@ -186,6 +193,9 @@ const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
       {
         href: "/app/finans",
         label: "Finans",
+        // FINANCE_ACCESS.READ (finance-access.ts): STAJYER dışarıda — menü de
+        // öyle. Süzme yalnızca GÖRÜNÜMDÜR; gerçek kapı sunucudadadır.
+        roles: ["ADMIN", "PARTNER", "AVUKAT", "SEKRETER"],
         icon: (
           <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
             <path
@@ -199,6 +209,8 @@ const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
       {
         href: "/app/faturalar",
         label: "Faturalar",
+        // Fatura okuma FINANCE_ACCESS.READ: STAJYER dışarıda.
+        roles: ["ADMIN", "PARTNER", "AVUKAT", "SEKRETER"],
         icon: (
           <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
             <path
@@ -212,6 +224,8 @@ const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
       {
         href: "/app/zaman",
         label: "Zaman Kaydı",
+        // TIME_WRITE (finance-access.ts): STAJYER zaman kaydı yazamaz.
+        roles: ["ADMIN", "PARTNER", "AVUKAT", "SEKRETER"],
         icon: (
           <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
             <path
@@ -261,6 +275,8 @@ const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
   {
     href: "/app/ayarlar/ai-saglayici",
     label: "AI Sağlayıcı",
+    // K-9: sağlayıcı uçları ROLE_SETS.ONAY (ADMIN/PARTNER) — menü de öyle.
+    roles: ["ADMIN", "PARTNER"],
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
         <path
@@ -323,6 +339,25 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     router.replace("/giris");
   }
 
+  /**
+   * Rol bazlı menü süzmesi. `roles` alanı taşıyan öğeler yalnız o rollere
+   * gösterilir; alan taşımayanlar herkese açıktır. Bu GÖRÜNÜM süzmesidir —
+   * yetkiyi SUNUCU belirler: süzülmeyen bir sayfaya girmeye çalışan yetkisiz
+   * rol sunucudan 403 alır, menü bunu "saklamaz".
+   */
+  const visibleGroups = NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter(
+      (item) =>
+        !("roles" in item && item.roles) ||
+        !user?.role ||
+        (item.roles as readonly string[]).includes(user.role),
+    ),
+  })).filter((group) => group.items.length > 0);
+
+  /** Demo gezinti şeridi: /demo-giris'ten gelindiyse rolü her ekranda göster. */
+  const demoRole = getDemoRole();
+
   if (!ready) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm text-slate-500">
@@ -353,7 +388,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           </span>
         </div>
         <nav className="flex-1 overflow-y-auto p-3" aria-label="Ana menü">
-          {NAV_GROUPS.map((group, groupIndex) => (
+          {visibleGroups.map((group, groupIndex) => (
             <div key={group.title} className={groupIndex > 0 ? "mt-5" : ""}>
               <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
                 {group.title}
@@ -411,6 +446,34 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
       {/* İçerik */}
       <div className="ml-60 flex min-h-screen flex-1 flex-col print:ml-0">
+        {demoRole && (
+          <div
+            role="status"
+            className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-300 bg-amber-100 px-6 py-2 text-sm text-amber-900 print:hidden"
+          >
+            <p className="font-medium">
+              🎯 Demo gezinti —{" "}
+              {USER_ROLE_LABELS[user?.role ?? demoRole] ?? demoRole} olarak
+              inceliyorsunuz. Menü ve yetkiler bu role göre süzüldü.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => router.push("/demo-giris")}
+                className="rounded-md border border-amber-400 bg-white px-3 py-1 text-xs font-medium text-amber-900 transition-colors hover:bg-amber-50"
+              >
+                Rol değiştir
+              </button>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="rounded-md bg-amber-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-amber-700"
+              >
+                Demodan çık
+              </button>
+            </div>
+          </div>
+        )}
         <header className="sticky top-0 z-20 flex items-center justify-end gap-4 border-b border-slate-200 bg-white px-6 py-3 print:hidden">
           <CreditMeter wallet={wallet} />
           <NotificationBell />
