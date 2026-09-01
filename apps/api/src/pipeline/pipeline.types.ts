@@ -18,6 +18,7 @@ export const PIPELINE_STEP_CODES = [
   "MATCH_CASE",
   "EXTRACT",
   "DETECT_DEADLINE",
+  "BANKA_CEVABI",
   "CREATE_TASKS",
   "NOTIFY",
 ] as const;
@@ -29,6 +30,7 @@ export const PIPELINE_STEP_LABELS: Record<PipelineStepCode, string> = {
   MATCH_CASE: "Dosya eşleme",
   EXTRACT: "Veri çıkarma",
   DETECT_DEADLINE: "Süre tespiti",
+  BANKA_CEVABI: "Banka cevabı analizi",
   CREATE_TASKS: "Görev önerisi",
   NOTIFY: "Bildirim",
 };
@@ -44,6 +46,8 @@ export interface PipelineStepResult {
   error?: string;
   /** Adımın ürettiği, denetlenebilir çıktı özeti (JSON'a yazılır). */
   output?: Record<string, unknown>;
+  /** Adımın ürettiği öneri taslakları — kalıcı öneri öneri kuyruğuna gider. */
+  proposalDrafts?: ProposalDraft[];
 }
 
 /** stepsJson içindeki tek kayıt. */

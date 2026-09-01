@@ -198,9 +198,23 @@ export class RedisCounterStore implements RateLimitCounterStore {
   async reset(): Promise<void> {
     await this.fallback.reset();
     try {
-      await this.client.flushdb();
+      // İ-04: FLUSHDB TÜM Redis'i boşaltır — BullMQ kuyrukları, oturum
+      // sayaçları, portal limitleri dahil. Yalnız kendi önekli anahtarları
+      // sil (SCAN + DEL, atomik değil ama FLUSHDB'den bin kat daha güvenli).
+      const stream = (this.client as unknown as { scanStream: (o: { match: string }) => AsyncIterable<string[]> })
+        .scanStream({ match: KEY_PREFIX + "*" });
+      const keys: string[] = [];
+      for await (const batch of stream) {
+        keys.push(...batch);
+      }
+      if (keys.length > 0) {
+        const del = (this.client as unknown as { del: (k: string[]) => Promise<number> }).del.bind(
+          this.client
+        );
+        await del(keys);
+      }
     } catch (err) {
-      this.logger.debug(`Redis sayacı sıfırlanamadı: ${(err as Error).message}`);
+      this.logger.debug(`Redis sayaçları sıfırlanamadı: ${(err as Error).message}`);
     }
   }
 }

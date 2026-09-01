@@ -662,16 +662,26 @@ export class PlatformAuthService {
     return { ok: true, counter };
   }
 
-  /** Kullanılan adımı kalıcı sayaca yazar — asla geriye düşürmez. */
+  /** Kullanılan adımı KOSULLU YAZIMLA saklar — TOCTOU düzeltmesi (İ-02). */
   private async markTotpUsed(
     userId: string,
     counter: number,
     lastUsed: number | null
   ): Promise<void> {
-    await this.prisma.client.platformUser.update({
-      where: { id: userId },
-      data: { lastTotpCounter: nextStoredCounter(counter, lastUsed) },
+    // İ-02 (İYİLEŞTİRME): koşullu UPDATE — lastTotpCounter < counter olduğu
+    // sürece yaz. İki eşzamanlı istek aynı adımı geçmeye çalışırsa yalnız biri
+    // başarır (updateMany 0 satır etkiler), diğeri sessizce atlanır.
+    const result = await this.prisma.client.platformUser.updateMany({
+      where: {
+        id: userId,
+        OR: [{ lastTotpCounter: null }, { lastTotpCounter: { lt: counter } }],
+      },
+      data: { lastTotpCounter: counter },
     });
+    if (result.count === 0) {
+      // Başka bir istek aynı adımı daha önce tüketti — eşzamanlı tekrar.
+      this.logger.warn(`TOTP adımı eşzamanlı istekte zaten tüketildi (${userId.slice(0, 8)}).`);
+    }
   }
 
   private decrypt(stored: string): string {

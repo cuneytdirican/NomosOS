@@ -37,6 +37,7 @@ import {
   type PipelineStepResult,
   type ProposalDraft,
 } from "./pipeline.types";
+import { analizBankaCevabi } from "../enforcement/banka-cevabi.service";
 
 /** Sınıflandırmanın "kesin" sayıldığı eşik; altı triyaj kuyruğuna düşer (Modül 06, kural 2). */
 const CLASSIFY_TRIAGE_THRESHOLD = 0.85;
@@ -89,6 +90,8 @@ export class PipelineService {
       { code: "MATCH_CASE", run: (ctx) => this.stepMatchCase(ctx) },
       { code: "EXTRACT", run: (ctx) => this.stepExtract(ctx) },
       { code: "DETECT_DEADLINE", run: (ctx) => this.stepDetectDeadline(ctx) },
+      // B7 (rakip analizi): banka haciz cevabı → deterministik çıkarım → öneri.
+      { code: "BANKA_CEVABI", run: (ctx) => this.stepBankaCevabi(ctx) },
       { code: "CREATE_TASKS", run: (ctx) => this.stepCreateTasks(ctx) },
       { code: "NOTIFY", run: (ctx) => this.stepNotify(ctx) },
     ];
@@ -791,6 +794,67 @@ export class PipelineService {
   /* ------------------------------------------------------------------ *
    * ADIM 6 — GÖREV ÖNERİSİ (kural tabanlı şablonlar)
    * ------------------------------------------------------------------ */
+
+  /**
+   * B7 (rakip analizi) — BANKA HACİZ CEVABI ANALİZİ.
+   *
+   * İİK m.89/2 banka cevapları (BELGE sınıfı BANKA_HACIZ_CEVABI) belge
+   * hattına düştüğünde DETERMİNİSTİK çıkarım yapılır: banka adı, IBAN,
+   * bakiye, tarih. Bulgu VARSA ve belge bir İCRA dosyasına bağlıysa
+   * malvarlığı KAYDI ÖNERİSİ üretilir (kayıt değil — avukat onayı ister).
+   */
+  private async stepBankaCevabi(ctx: PipelineContext): Promise<PipelineStepResult> {
+    const cls = ctx.classification?.class as DocumentClass | undefined;
+    if (cls !== "BANKA_HACIZ_CEVABI") {
+      return { status: "ATLANDI", detail: "Belge banka haciz cevabı değil." };
+    }
+    if (!ctx.text) {
+      return { status: "ATLANDI", detail: "Metin katmanı yok; banka cevabı analizi yapılamadı." };
+    }
+
+    const analiz = analizBankaCevabi(ctx.text);
+    if (!analiz.bulundu) {
+      return {
+        status: "BASARISIZ",
+        detail: "Banka cevabı belgesi olarak sınıflandırıldı ama yapısal alan (banka/IBAN/bakiye) tespit edilemedi.",
+      };
+    }
+
+    const gerekceMetni = analiz.gerekce.join(" ");
+
+    // Belge bir dosyaya bağlıysa ve dosya İCRA türündeyse öneri üret.
+    if (ctx.caseId) {
+      const kase = await this.prisma.client.case.findFirst({
+        where: { id: ctx.caseId, tenantId: ctx.tenantId },
+        select: { type: true, title: true },
+      });
+      if (kase?.type === "ICRA") {
+        return {
+          status: "TAMAM",
+          detail: gerekceMetni,
+          proposalDrafts: [
+            {
+              type: "MALVARLIGI" as never,
+              title: `Banka hesabı malvarlığı kaydı: ${analiz.bulgu.bankaAdi ?? "banka belirsiz"}`,
+              payload: {
+                banka: analiz.bulgu.bankaAdi,
+                iban: analiz.bulgu.iban,
+                bakiye: analiz.bulgu.bakiye,
+                tarih: analiz.bulgu.tarih,
+              },
+              reasoning: "Banka haciz cevabından otomatik tespit — avukat onayı gerekir.",
+              caseId: ctx.caseId,
+            },
+          ],
+        };
+      }
+    }
+
+    return {
+      status: "TAMAM",
+      detail: `Banka cevabı analiz edildi: ${gerekceMetni}`,
+    };
+  }
 
   private async stepCreateTasks(ctx: PipelineContext): Promise<PipelineStepResult> {
     const cls = ctx.classification?.class as DocumentClass | undefined;

@@ -266,7 +266,13 @@ const AUDIT_EXPORT_MAX_ROWS = 50_000;
 /** RFC 4180 kaçışı: tırnak ikilenir, alan tırnak içine alınır. */
 function csvCell(value: unknown): string {
   if (value === null || value === undefined) return '""';
-  const text = value instanceof Date ? value.toISOString() : String(value);
+  let text = value instanceof Date ? value.toISOString() : String(value);
+  // İ-03: CSV formül enjeksiyonu koruması — =, +, -, @, tab ile başlayan
+  // hücre Excel/Sheets'te FORMÜL olarak yorumlanır. Tek tırnak ekleyerek
+  // metin olarak kalmasını garantileriz.
+  if (/^[=+\-@\t\r]/.test(text)) {
+    text = `'${text}`;
+  }
   return `"${text.replace(/"/g, '""')}"`;
 }
 
