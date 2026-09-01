@@ -15,11 +15,56 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 1 Eylül 2026, 16:10
+# 🔖 KALDIĞIM YER — 1 Eylül 2026, 14:30
 
-> **BU KESİT:** E8 portal ödemesi + E9 randevu uçtan uca teslim edildi (rakip
-> farkları turu 3/7 kesit). Migration 25 adım (`20260917090000_odeme_metodu_online`
-> — canlı bulunan enum eksiği düzeltildi).
+> **P0 DÜZELTME DALGASI GÖNDERİLDİ** (commit `0e310cc`): K-01 + K-02 + 26 ÖNEMLİ
+> bulgu kapatıldı; canlı kanıtlar toplandı. Migration 26 adım.
+> **Sıradaki iş:** kalan ~14 ÖNEMLİ (admin panelindeki sözleşmeler + arayüz
+> kontrast/sayfa sıfırlama) + rakip farkları 3-7/7 + final denetim.
+
+## P0 turunda kapatılanlar (commit `0e310cc`)
+
+- **K-01** ✅ Admin 2FA: challengeToken saklanır → POST /auth/2fa/verify ile
+  doğrulanır (challenge sözleşmesi birebir)
+- **K-02** ✅ UYAP eklentisi: popup "geliştirme aşamasında" uyarısı + 404
+  dürüst mesaj + auth.ts yanıltıcı yorum kaldırıldı
+- **Ö-01** ✅ Platform kullanıcı bcrypt 10→12
+- **Ö-02** ✅ Portal bakım kilidi: guard'a 503 kapısı (yazma uçları)
+- **Ö-03** ✅ SSRF IPv4-mapped: `[::ffff:169.254.169.254]` artık yakalanır
+- **Ö-04** ✅ Dayanak görünürlüğü: başka büronun içtihat kaydı bağlanamaz
+- **Ö-05** ✅ Azil istisnası: süresi dolmuş vekaletname "aktif" sayılmaz
+- **Ö-06** ✅ Cevapsız karşı iddiası: contradictingCount (supportingCount değil)
+- **Ö-07** ✅ Dava değeri: en fazla 2 ondalık (kuruş hassasiyeti)
+- **Ö-08** ✅ Duruşma: geçmiş tarih 400 + aynı gün mükerrer 409 (canlı kanıtlı)
+- **Ö-09** ✅ İYUK m.8/3 çapa: recessEnd (Danıştay uygulaması 1-7 Eylül)
+- **Ö-11/12** ✅ /ai/chat: advisory + disclaimer + AgentRun izi
+- **Ö-13** ✅ Risk MISSED_DEADLINE: gün başına göre (off-by-one kapatıldı)
+- **Ö-15** ✅ KVKK export: portalKullanicilari + finansKayitlari eklendi
+- **Ö-16** ✅ Tenant.taxNumber/taxOffice/address + e-belge VKN zorunluluğu
+- **Ö-17** ✅ e-Fatura iptali: sağlayıcıya cancelInvoice iletilir
+- **Ö-18** ✅ Grup satırı kaynak izi: sourceIdsJson (serbest bırakma çözüldü)
+- **Ö-19** ✅ Mükerrer TCKN/VKN 409 (canlı kanıtlı)
+- **Ö-31** ✅ Admin ayarlar: PUT /settings/:key sözleşmesi
+- **Ö-32** ✅ Admin denetim: platformUser iç içe alan okuma
+- **Ö-39** ✅ Dockerfile frozen-lockfile geri düşüş kaldırıldı
+- **Ö-40** ✅ Web Dockerfile USER node
+
+## Kalan ÖNEMLİ (~14)
+
+- Ö-10 (KK6 ORTAK/null), Ö-14 (icra rapor para birimi), Ö-20 (SISTEM log düzenleme)
+- Ö-21-27 (web arayüz: zaman limit, PII önerisi, Toplam Takip, sayfa sıfırlama,
+  tabPanelProps, kontrast)
+- Ö-33-38 (admin panel: jobs sayfası, isEnabledGlobally, targetJson, abonelik
+  PATCH, iade tutarı, parola daveti)
+
+## Doğrulama
+
+- `pnpm build` 12/12 · tip 20/20 · lint 0/0
+- **1014 test** (api 662 · legal-core 90 · web 70 · legal-ai 76 · udf 44 ·
+  e-signature 37 · uyap 35)
+- Migration 26 adım; Docker 7/7; canlı: geçmiş duruşma 400, mükerrer TCKN 409
+
+## Anlık durum (önceki turların özeti)
 
 ## Bu kesitte teslim edilenler
 
