@@ -23,6 +23,10 @@ export function getToken(): string | null {
 export function setToken(token: string): void {
   try {
     window.localStorage.setItem(TOKEN_KEY, token);
+    // İ-55: Middleware'in /app kabuğunu koruyabilmesi için bir PROXY çerezi
+    // bırakılır. Bu çerez TOKEN DEĞİLDİR — yalnızca "oturum var" sinyalidir
+    // (httpOnly değil; middleware okur). Gerçek yetki denetimi API'dedir.
+    document.cookie = "nomosos_session=1; path=/; SameSite=Lax";
   } catch {
     /* localStorage kapalı olabilir */
   }
@@ -34,6 +38,8 @@ export function clearToken(): void {
     window.localStorage.removeItem(USER_KEY);
     // Demo gezinti bayrağı da oturumla birlikte düşer.
     window.localStorage.removeItem(DEMO_ROLE_KEY);
+    // İ-55: proxy çerezi de temizlenir.
+    document.cookie = "nomosos_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
   } catch {
     /* yoksay */
   }

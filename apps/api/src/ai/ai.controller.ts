@@ -76,7 +76,7 @@ export class AiController {
 
   @Get("task-routes")
   listTaskRoutes(@CurrentUser() user: AuthUser) {
-    return this.aiService.listTaskRoutes(user.tenantId);
+    return this.aiService.listTaskRoutes(user);
   }
 
   @Put("task-routes")

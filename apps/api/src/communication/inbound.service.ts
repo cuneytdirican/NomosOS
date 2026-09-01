@@ -20,6 +20,7 @@
  */
 
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -89,6 +90,18 @@ export class InboundService {
     query: { matchStatus?: string; channel?: string; clientId?: string; caseId?: string; page?: string; limit?: string },
   ) {
     const page = resolvePage(query);
+    // İ-18: Enum süzgeçleri DOĞRULANIR — geçersiz değer 422 döner, sessiz boş
+    // liste değil. Kullanıcı yanlış değer gönderdiğinde neden boş sonuç aldığını
+    // bilmelidir.
+    const VALID_MATCH_STATUSES = ["BEKLIYOR", "ESLESTI", "ELLE_ESLESTI", "ESLESMEDI"] as const;
+    const VALID_CHANNELS = ["EPOSTA", "SMS", "WHATSAPP", "TELEFON", "PORTAL", "YUZ_YUZE", "DIGER"] as const;
+    if (query.matchStatus && !(VALID_MATCH_STATUSES as readonly string[]).includes(query.matchStatus)) {
+      throw new BadRequestException(`Geçersiz eşleşme durumu: ${query.matchStatus}. Geçerli değerler: ${VALID_MATCH_STATUSES.join(", ")}.`);
+    }
+    if (query.channel && !(VALID_CHANNELS as readonly string[]).includes(query.channel)) {
+      throw new BadRequestException(`Geçersiz kanal: ${query.channel}. Geçerli değerler: ${VALID_CHANNELS.join(", ")}.`);
+    }
+
     const where: Prisma.InboundMessageWhereInput = {
       tenantId: user.tenantId,
       ...(query.matchStatus ? { matchStatus: query.matchStatus as never } : {}),

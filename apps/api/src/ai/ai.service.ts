@@ -284,9 +284,13 @@ export class AiService {
     return updated;
   }
 
-  async listTaskRoutes(tenantId: string) {
+  async listTaskRoutes(user: AuthUser) {
+    // İ-14: K-09 ruhuna uymak — sağlayıcı/routing yapılandırması görüntülemesi
+    // de ONAY (ADMIN/PARTNER) rolü ister. Rota, sağlayıcı adını ve modeli
+    // açığa çıkarır; bu bir yapılandırma yüzeyidir.
+    assertRole(user, ROLE_SETS.ONAY, "AI görev rotalarını görüntüleme");
     return this.prisma.client.aiTaskRoute.findMany({
-      where: { tenantId },
+      where: { tenantId: user.tenantId },
       include: { providerConfig: { select: { id: true, name: true, type: true, defaultModel: true } } },
       orderBy: { taskType: "asc" },
     });
