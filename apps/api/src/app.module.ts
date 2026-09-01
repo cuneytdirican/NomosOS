@@ -25,6 +25,8 @@ import { AssistantModule } from "./assistant/assistant.module";
 import { EnforcementModule } from "./enforcement/enforcement.module";
 import { FinanceModule } from "./finance/finance.module";
 import { BillingModule } from "./billing/billing.module";
+import { VekaletUcretiModule } from "./vekalet-ucreti/vekalet-ucreti.module";
+import { DemoTalepModule } from "./demo-talep/demo-talep.module";
 import { PlatformModule } from "./platform/platform.module";
 // --- Faz 4 modülleri ---
 import { ConflictModule } from "./conflict/conflict.module";
@@ -127,6 +129,10 @@ function requireJwtSecret(config: ConfigService): string {
     FinanceModule,
     // Faturalama (Modül 09) → FinanceModule. Sıra bu yüzden bağlayıcıdır.
     BillingModule,
+    // D7 (rakip analizi) — AAÜT vekalet ücreti hesabı. Motor legal-core'tadır.
+    VekaletUcretiModule,
+    // Demo talepleri (pazarlama formu → DemoRequest kaydı; panel izler).
+    DemoTalepModule,
     // Platform yönetim paneli (Modül 25).
     // AYRI DÜNYA: kendi kimlik tablosu (PlatformUser), kendi imza anahtarı,
     // kendi audience'ı (`aud: "platform"`) ve kendi yol öneki (/api/admin/v1).

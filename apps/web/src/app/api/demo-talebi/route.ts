@@ -1,22 +1,19 @@
 /**
  * DEMO TALEBİ UCU — `POST /api/demo-talebi`
  *
- * NEDEN VAR: Form, hiçbir yere istek atmadan kullanıcıya "Talebiniz alındı.
- * Ekibimiz bir iş günü içinde size dönecek." diyordu. Ziyaretçi ad, baro,
- * e-posta, telefon ve avukat sayısını giriyor, KVKK onayı veriyor, sistem
- * TAAHHÜT İÇEREN bir onay basıyor ve veri hiçbir yere gitmiyordu. Bu, hem
- * bütün satış hunisinin sessizce boşa akması hem de kullanıcıya
- * gerçekleşmeyecek bir söz verilmesi demekti.
+ * NEDEN VAR: Form, hiçbir yere istek atmadan kullanıcıya "Talebiniz alındı."
+ * diyordu — gerçekleşmeyecek bir söz. Artık talep SİSTEME YAZILIR.
  *
- * TASARIM — İKİ DÜRÜST DURUM, ÜÇÜNCÜSÜ YOK:
- *   1. `DEMO_REQUEST_WEBHOOK_URL` tanımlıysa talep oraya iletilir ve
- *      `delivered: true` döner. Form "Talebiniz alındı" der — çünkü alındı.
- *   2. Tanımlı değilse `delivered: false` döner ve form kullanıcıyı doğrudan
- *      e-postaya yönlendirir (hazır doldurulmuş `mailto`). Form ASLA
+ * TASARIM (kullanıcı kararı — e-posta/webhook YOK):
+ *   1. Talep, NomosOS API'sine iletilir: `POST /api/v1/demo-talepleri` (herkese
+ *      açık uç) ve DemoRequest KAYDI olarak düşer. Platform yönetim panelindeki
+ *      "Demo Talepleri" sayfasından takip edilir; hiçbir e-posta gönderilmez.
+ *   2. API yazımı düşerse `delivered: false` döner ve form kullanıcıyı
+ *      doğrudan e-postaya yönlendirir (hazır doldurulmuş `mailto`). Form ASLA
  *      iletilmemiş bir talebi "alındı" diye göstermez.
  *
  * KİŞİSEL VERİ: gövde diske yazılmaz ve günlüğe BASILMAZ. Günlüğe yalnız
- * "talep geldi / iletildi mi" bilgisi düşer; ad, e-posta, telefon düşmez.
+ * "talep geldi / kaydedildi mi" bilgisi düşer; ad, e-posta, telefon düşmez.
  */
 
 import { NextResponse } from "next/server";
@@ -123,7 +120,6 @@ export async function POST(request: Request) {
     phone: text(body.phone, 50),
     lawyerCount: text(body.lawyerCount, 20),
     message: text(body.message, 2000),
-    receivedAt: new Date().toISOString(),
   };
 
   if (!payload.fullName || !payload.email) {
@@ -133,29 +129,39 @@ export async function POST(request: Request) {
     );
   }
 
-  const webhook = process.env.DEMO_REQUEST_WEBHOOK_URL?.trim();
-  if (!webhook) {
-    // İLETİM YOLU YAPILANDIRILMAMIŞ. Uydurma bir başarı dönmek yerine durum
-    // açıkça bildirilir; form e-posta yolunu gösterir.
-    return NextResponse.json({ ok: true, delivered: false });
-  }
-
+  // Talebi SİSTEME YAZ: NomosOS API → DemoRequest kaydı → platform paneli
+  // (kullanıcı kararı: e-posta/webhook gönderilmez, kayıt panelden izlenir).
+  const apiBase = process.env.NEXT_PUBLIC_API_URL?.trim() || "http://localhost:3001";
   try {
-    const response = await fetch(webhook, {
+    const response = await fetch(`${apiBase}/api/v1/demo-talepleri`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) {
-      console.error(`[demo-talebi] Iletim ucu ${response.status} dondu.`);
+      // API kendisi hız sınırına takılmış olabilir (429) — kullanıcıya ilet,
+      // sessizce "alındı" deme.
+      if (response.status === 429) {
+        const data = (await response.json().catch(() => null)) as { message?: string } | null;
+        return NextResponse.json(
+          {
+            ok: false,
+            hata:
+              data?.message ??
+              "Kısa sürede çok fazla talep gönderildi. Lütfen 10 dakika sonra tekrar deneyin.",
+          },
+          { status: 429 },
+        );
+      }
+      console.error(`[demo-talebi] API ucu ${response.status} döndü.`);
       return NextResponse.json({ ok: true, delivered: false });
     }
-    console.info("[demo-talebi] Talep iletildi.");
+    console.info("[demo-talebi] Talep kaydedildi (DemoRequest).");
     return NextResponse.json({ ok: true, delivered: true });
   } catch (err) {
     // Ayrıntı günlüğe düşer, kullanıcıya e-posta yolu gösterilir.
-    console.error(`[demo-talebi] Iletim basarisiz: ${(err as Error).message}`);
+    console.error(`[demo-talebi] Kayit basarisiz: ${(err as Error).message}`);
     return NextResponse.json({ ok: true, delivered: false });
   }
 }

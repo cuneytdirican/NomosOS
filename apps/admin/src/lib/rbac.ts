@@ -78,6 +78,8 @@ export type AdminAction =
   | "platform_user.create"
   | "platform_user.credential_reset"
   | "platform_user.assign_super_admin"
+  | "demoRequests.view"
+  | "demoRequests.update"
   | "audit.view"
   | "audit.export"
   | "board_report.view"
@@ -320,6 +322,20 @@ export const PERMISSION_MATRIX: Matrix = {
     ANALYST_READONLY: N,
   },
   // | PlatformAuditLog görüntüle / dışa aktar | ✅ / 4️⃣ | 👁 (kendi alanı) | 👁 (finans) | 👁 (kendi işlemleri) | ❌ |
+  "demoRequests.view": {
+    SUPER_ADMIN: "full",
+    OPS_ADMIN: "read",
+    BILLING_ADMIN: "read",
+    SUPPORT_AGENT: "read",
+    ANALYST_READONLY: N,
+  },
+  "demoRequests.update": {
+    SUPER_ADMIN: "full",
+    OPS_ADMIN: "full",
+    BILLING_ADMIN: N,
+    SUPPORT_AGENT: "read",
+    ANALYST_READONLY: N,
+  },
   "audit.view": {
     SUPER_ADMIN: "full",
     OPS_ADMIN: "read",
@@ -561,6 +577,8 @@ export const ACTION_LABELS: Record<AdminAction, string> = {
   "platform_user.credential_reset": "Panel kullanıcısının parola/2FA sıfırlaması",
   "platform_user.assign_super_admin": "SUPER_ADMIN atama / düşürme",
   "audit.view": "PlatformAuditLog görüntüle",
+  "demoRequests.view": "Demo taleplerini görüntüle",
+  "demoRequests.update": "Demo talebi durum güncelle",
   "audit.export": "PlatformAuditLog dışa aktar",
   "board_report.view": "Kurul Raporu",
   "metrics.overview.view": "Platform genel bakış KPI'ları",

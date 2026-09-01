@@ -412,4 +412,16 @@ export const DASHBOARD_ROUTES = {
 export const HEALTH_ROUTES = {
   root: "/health",
   live: "/health/live",
+};
+
+/** Demo talebi (tanıtım sitesi formu → platform paneli izler; e-posta yok). */
+export const DEMO_TALEP_ROUTES = {
+  create: "/demo-talepleri",
+};
+
+/** AAÜT vekalet ücreti hesabı (D7 — tarife büro tarafından girilir). */
+export const VEKALET_UCRETI_ROUTES = {
+  hesapla: "/vekalet-ucreti/hesapla",
+  tarife: (yil: string | number) => `/vekalet-ucreti/tarife/${yil}`,
+  tarifeKaydet: "/vekalet-ucreti/tarife",
 } as const;

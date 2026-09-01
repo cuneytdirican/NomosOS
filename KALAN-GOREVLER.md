@@ -15,20 +15,49 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 1 Eylül 2026, 06:45
+# 🔖 KALDIĞIM YER — 1 Eylül 2026, 12:40
 
-> **RAKİP ANALİZİ TAMAMLANDI** → `docs/faz2/rakip-analizi.md`: Türkiye pazarındaki 11 satıcı
-> okundu (Hansoft, Avukat Bulut, Lexmira, Hukuk Bulutu, DavaCep, Hukuk Bilgi Sistemi,
-> Rod Responsa, Lexpera, Kanunum, Sinerji, Corpus). "Onlarda olup bizde olmayan" 20 madde
-> çıkarıldı: 6'sı F2 planında zaten var (B4 UYAP gönderim/çekme, A3a UETS, D1 içtihat
-> veritabanı, B6 SMS sağlayıcı), 14'ü YENİ epic önerisi. Öncelik sırası raporda.
-> Not: "Lawaia" rakibi doğrulanamadı (park edilmiş alan adı — halüsinasyon kaynağı).
+> **BU TUR:** Demo talep akışı e-postasız sisteme bağlandı + rakip farkları
+> turunun İLK KESİTİ (D7 AAÜT vekalet ücreti) uçtan uca teslim edildi.
+> Migration `20260916090000_rakip_farklari` uygulandı (DemoRequest, VekaletTarife,
+> OdemeLinki, Randevu, e-SMM belge türü, özel alanlar, banka cevabı sınıfı).
 
-## Sıradaki iş (öncelik sırasıyla)
+## Bu turda yapılanlar
 
-1. **F2 düzeltme turu** — denetim raporundaki 2 KRİTİK + 40 ÖNEMLİ (plan izlemesi yarım kaldı)
-2. **Rakip boşluk epicleştirme** — rakip analizindeki 14 yeni epic'yi yol haritasına T2+ adayı olarak işle
-3. Hata yönetimi + kendi kendini onarma iş kolu (planlanmış, yazılmadı)
+1. **DEMO TALEP ARTIK SİSTEMDE** (kullanıcı kararı — e-posta/webhook YOK):
+   tanıtım sitesi formu → `POST /api/v1/demo-talepleri` (herkese açık; IP hız
+   sınırı 3/dk+10/sa; aynı e-posta 10 dk'da bir) → **DemoRequest** kaydı →
+   platform paneli **"Demo Talepleri"** sayfası (liste + durum: Yeni/İletişime
+   geçildi/Kapandı; iz PlatformAuditLog'a). Yetkiler: demoRequests.view (tüm
+   okuma rolleri) / demoRequests.update (OPS_ADMIN+; SUPPORT_AGENT yalnız okur).
+   Canlı kanıt: form → kayıt → panel listesi → durum değişimi doğrulandı.
+2. **D7 — AAÜT vekalet ücreti hesabı** (rakip farkı): legal-core motoru
+   (kademeli maktu + tekrar dilimi + nispi asgari kuralı + KDV; kuruş/BigInt)
+   + tarife API'si (tarife RAKAMLARI büro tarafından RG'den girilir — motor
+   uydurmaz) + hesap ucu + 15 test. Canlı kanıt: tarife girişi (Partner) →
+   1.000.000 TL → NİSPİ 165.000 TL + KDV = 198.000 TL, iz görünür.
+3. **Şema hazırlığı**: E8 ödeme bağlantısı (OdemeLinki) ve E9 randevu (Randevu)
+   tabloları + e-SMM belge türü + müvekkil özel alanları + banka cevabı belge
+   sınıfı migration'da yaratıldı (kodları sıradaki kesitte).
+
+## Doğrulama
+
+- `pnpm build` 12/12 · `pnpm typecheck` ✅ · `pnpm lint` 0/0
+- **Testler: api 635 (+13) · legal-core 90 (+11) · web 60** — hepsi geçiyor
+- Migration 23 adım; Docker 7/7 sağlıklı; canlı uçtan uca: demo talep kaydı →
+  panel listesi → durum güncelleme; vekalet tarife → hesap (404 dürüst yanıtı dahil)
+
+## Sıradaki iş (kesit kesit)
+
+1. **E8 portal ödemesi** (OdemeLinki tablosu hazır): bağlantı üretimi + portal
+   ödeme sayfası + Noop sağlayıcı (dürüst 503) + webhook → Payment kaydı
+2. **E9 randevu** (Randevu tablosu hazır): büro ajandası + portal self-servis +
+   çakışma kapısı + hatırlatma işi
+3. **A6 e-SMM** (belge türü hazır): fatura → e-SMM gönderim ucu (Noop adaptör) + arayüz düğmesi
+4. **B7 banka cevabı ajanı** (sınıf hazır): deterministik çıkarım → icra önerisi
+5. **A1 CSV içe aktarma + özel alanlar UI + vekalet ücreti web aracı**
+6. F2 düzeltme turu (denetim: 2 KRİTİK + 40 ÖNEMLİ — admin 2FA K-01 başta)
+7. Pazarlama: yalnız YAPILAN özellikler (vaat kısıtı)
 
 ## Anlık durum (önceki turların özeti)
 

@@ -112,3 +112,5 @@ export {
   trMonthName,
   trWeekdayName,
 } from "./date-utils";
+
+export * from "./vekalet-ucreti";

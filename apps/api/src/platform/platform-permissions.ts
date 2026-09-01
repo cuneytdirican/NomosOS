@@ -86,6 +86,9 @@ export type AdminAction =
    */
   | "platform_user.credential_reset"
   | "platform_user.assign_super_admin"
+  /** Demo talepleri (tanıtım sitesi) — panelden izleme ve durum yönetimi. */
+  | "demoRequests.view"
+  | "demoRequests.update"
   | "audit.view"
   | "audit.export"
   | "board_report.view"
@@ -329,6 +332,21 @@ export const PERMISSION_MATRIX: Matrix = {
     SUPPORT_AGENT: "read",
     ANALYST_READONLY: N,
   },
+  /** Demo talepleri: satış hattı — destek ve operasyon takip eder. */
+  "demoRequests.view": {
+    SUPER_ADMIN: "full",
+    OPS_ADMIN: "read",
+    BILLING_ADMIN: "read",
+    SUPPORT_AGENT: "read",
+    ANALYST_READONLY: N,
+  },
+  "demoRequests.update": {
+    SUPER_ADMIN: "full",
+    OPS_ADMIN: "full",
+    BILLING_ADMIN: N,
+    SUPPORT_AGENT: "read",
+    ANALYST_READONLY: N,
+  },
   "audit.export": {
     SUPER_ADMIN: "four_eyes",
     OPS_ADMIN: N,
@@ -549,6 +567,8 @@ export const ACTION_LABELS: Record<AdminAction, string> = {
   "platform_user.credential_reset": "Panel kullanıcısının parola/2FA sıfırlaması",
   "platform_user.assign_super_admin": "SUPER_ADMIN atama/düşürme",
   "audit.view": "Platform denetim izi görüntüleme",
+  "demoRequests.view": "Demo taleplerini görüntüleme",
+  "demoRequests.update": "Demo talebi durum güncelleme",
   "audit.export": "Platform denetim izi dışa aktarma",
   "board_report.view": "Kurul (yatırımcı) raporu",
   "metrics.overview.view": "Platform genel bakış KPI'ları",

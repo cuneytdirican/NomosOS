@@ -35,6 +35,8 @@ import { UsageSnapshotService } from "./metrics/usage-snapshot.service";
 import { PlatformSupportController } from "./support/platform-support.controller";
 import { PlatformSupportService } from "./support/platform-support.service";
 import { PlatformAuditController } from "./audit/platform-audit.controller";
+import { PlatformDemoRequestsController } from "./demo-requests/platform-demo-requests.controller";
+import { PlatformDemoRequestsService } from "./demo-requests/platform-demo-requests.service";
 import { PlatformAuditQueryService } from "./audit/platform-audit-query.service";
 import { PlatformUsersController } from "./users/platform-users.controller";
 import { PlatformUsersService } from "./users/platform-users.service";
@@ -74,6 +76,7 @@ import { PlatformUsersService } from "./users/platform-users.service";
     PlatformMetricsController,
     PlatformSupportController,
     PlatformAuditController,
+    PlatformDemoRequestsController,
     PlatformUsersController,
   ],
   providers: [
@@ -95,6 +98,7 @@ import { PlatformUsersService } from "./users/platform-users.service";
     UsageSnapshotService,
     PlatformSupportService,
     PlatformAuditQueryService,
+    PlatformDemoRequestsService,
     PlatformUsersService,
   ],
   // UsageSnapshotService dışa açılır: Faz 6'da BullMQ repeatable job bu

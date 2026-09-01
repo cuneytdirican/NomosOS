@@ -14,6 +14,7 @@ export interface NavItem {
 
 export const NAV_ITEMS: readonly NavItem[] = [
   { href: "/", label: "Genel Bakış", action: "metrics.overview.view", exact: true },
+  { href: "/demo-talepleri", label: "Demo Talepleri", action: "demoRequests.view" },
   { href: "/tenantlar", label: "Tenantlar", action: "tenant.view" },
   { href: "/abonelikler", label: "Abonelikler", action: "subscription.view" },
   { href: "/odemeler", label: "Ödemeler", action: "payment.view" },

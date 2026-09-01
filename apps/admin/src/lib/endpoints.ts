@@ -79,6 +79,11 @@ export const EP = {
     revoke: (id: string) => `/support-access/${encodeURIComponent(id)}`,
   },
   audit: "/audit",
+  /** Tanıtım sitesi demo talepleri — kayıt olarak izlenir (e-posta yok). */
+  demoRequests: {
+    list: "/demo-requests",
+    detail: (id: string) => `/demo-requests/${id}`,
+  },
   /** Modül 26 — AI kota ve kredi sistemi. */
   credits: {
     tenants: "/credits/tenants",

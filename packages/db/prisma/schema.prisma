@@ -130,6 +130,11 @@ model Client {
   category      String?
   /// Büro içi müvekkil referans kodu (örn. "MV-2026-001")
   referenceCode String?
+  /// BÜROYA ÖZEL ALANLAR (rakip analizi — Avukat Bulut deseni):
+  /// [{"key":"cocukSayisi","label":"Çocuk sayısı","value":"2"}] — JSON.
+  /// Anahtarlar koddan DEĞİL avukatın girişinden gelir; UI koşullu gösterim için
+  /// etiketle listeler. Kişisel veri işlendiği için KVKK politika matrisi K1 geçerli.
+  customFieldsJson String?
   isActive      Boolean    @default(true)
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
@@ -139,6 +144,7 @@ model Client {
   powerOfAttorneys PowerOfAttorney[]
   financialEntries FinancialEntry[]
   feeAgreements    FeeAgreement[]
+  randevular       Randevu[]
   timeEntries      TimeEntry[]
   invoices         Invoice[]
   payments         Payment[]
@@ -561,6 +567,8 @@ enum DocumentClass {
   DELIL
   FATURA
   ICRA_EVRAKI
+  /// İİK m.89/2 üçüncü kişi (banka vb.) haciz cevabı (rakip analizi — B7).
+  BANKA_HACIZ_CEVABI
   DIGER
 }
 
@@ -1621,6 +1629,9 @@ model Invoice {
   /// Postgres'te NULL'lar birbirinden farklı sayıldığı için birden çok
   /// numarasız taslak @@unique([tenantId, invoiceNo]) ile çakışmaz.
   invoiceNo      String?
+  /// Belge türü (rakip analizi — A6): avukatın serbest meslek makbuzu
+  /// (e-SMM) ile faturası (e-Fatura/e-Arşiv) AYRI belge türleridir.
+  documentType   InvoiceDocType @default(FATURA)
   issueDate      DateTime
   dueDate        DateTime?
   subtotal       Decimal        @db.Decimal(18, 2)
@@ -1637,12 +1648,21 @@ model Invoice {
 
   lines    InvoiceLine[]
   payments Payment[]
+  /// Portal ödeme bağlantıları (rakip analizi — E8).
+  odemeLinkileri OdemeLinki[]
 
   @@unique([tenantId, invoiceNo])
   @@index([tenantId, status])
   @@index([tenantId, issueDate])
   @@index([clientId])
   @@index([tenantId, eInvoiceStatus])
+}
+
+/// Belge türü (A6): e-Fatura/e-Arşiv mi e-SMM mi — GİB'e gönderim kanalı
+/// ve UBL eşlemesi türe göre ayrışır.
+enum InvoiceDocType {
+  FATURA
+  E_SMM
 }
 
 /// Fatura satırı. lineTotal = quantity * unitPrice (KDV hariç) — Decimal ile
@@ -1672,6 +1692,8 @@ enum PaymentMethod {
   CEK
   SENET
   MAHSUP
+  /// Portal ödeme bağlantısından gelen online tahsilat (rakip analizi — E8).
+  ONLINE
   DIGER
 }
 
@@ -2233,6 +2255,106 @@ model DashboardSnapshot {
   createdAt DateTime @default(now())
 
   @@unique([tenantId, date])
+}
+
+// ---------- Rakip Analizi Özellikleri (docs/faz2/rakip-analizi.md) ----------
+
+/// AAÜT vekalet ücreti tarifesi — YILLIK, büro tarafından girilir (D7).
+///
+/// VERİ SÖZLEŞMESİ: NomosOS tarife RAKAMLARINI üretmez/uydurmaz — AAÜT her yıl
+/// Resmî Gazete ile yayımlanır; avukat yıllık rakamları bu tabloya girer
+/// (yönetim负担 bilinçli: yılda bir, beş dakika). Motor (packages/legal-core
+/// vekalet-ucreti.ts) girilen tarifeden hesaplar.
+model VekaletTarife {
+  id        String   @id @default(uuid())
+  tenantId  String
+  yil       Int
+  /// MAKTI kademeleri (AAÜT m.1): [{"limitKurus":"20000000","ucretKurus":"3700000"},…]
+  /// Son kademenin limit'i null → üst sınır yok. Kuruş cinsinden string (para
+  /// hassasiyeti: JS float ASLA kullanılmaz).
+  maktuKademelerJson String
+  /// Tekrarlı dilim (AAÜT m.1 son cümlesi): eşik üzeri her `birimKurus` için
+  /// `ucretKurus`. Yoksa null. {"esikKurus":"20000000","birimKurus":"1000000","ucretKurus":"300000"}
+  maktuTekrarJson    String?
+  /// Nispi oran (AAÜT m.2): yüzde, örn. "16.50".
+  nispiOranYuzde     Decimal @db.Decimal(5, 2)
+  /// KDV oranı (serbest meslek faaliyeti KDV'ye tabi), yüzde.
+  kdvOrani           Decimal @db.Decimal(4, 2) @default(20)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([tenantId, yil])
+}
+
+/// TANITIM SİTESİ DEMO TALEBİ — platform yönetim panelinde izlenir.
+///
+/// İletişim KANALI DEĞİLDİR: talep e-posta/webhook GÖNDERİLMEZ; kayıt olarak
+/// düşer ve platform panelinden (Demo Talepleri) takip edilir. Kullanıcının
+/// verdiği iletişim bilgisi yalnız bu kayıtta durur — satış ekibi panelden arar.
+model DemoRequest {
+  id          String   @id @default(uuid())
+  fullName    String
+  barAssociation String?
+  email       String
+  phone       String?
+  lawyerCount String?
+  message     String?
+  /// YENI | ILETISIME_GECILDI | KAPANDI
+  status      String   @default("YENI")
+  /// Durumu değiştiren platform kullanıcısı (iz).
+  statusChangedBy String?
+  statusChangedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([status, createdAt])
+}
+
+/// Portal ödeme bağlantısı (E8): fatura için tek kullanımlık, token'lı ödeme
+/// adresi. Token URL'de taşınır; kimlik İSTEMEZ — bağlantıya sahip olan öder
+/// (talep sahibi müvekkildir). Ödeme sağlayıcı soyutlaması Noop'tur:
+/// yapılandırılmadıysa ödeme alınamaz, dürüst 503 döner.
+model OdemeLinki {
+  id        String   @id @default(uuid())
+  tenantId  String
+  invoiceId String
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  /// Rastgele URL token'ı (32 bayt hex) — tek kullanımlık ödeme adresi.
+  token     String   @unique
+  amount    Decimal  @db.Decimal(18, 2)
+  currency  String   @default("TRY")
+  /// AKTIF | ODENDI | IPTAL
+  status    String   @default("AKTIF")
+  expiresAt DateTime?
+  paidAt    DateTime?
+  /// Ödeme gerçekleşince yazılan tahsilat kaydının kimliği (Payment.id).
+  paidPaymentId String?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, invoiceId])
+}
+
+/// Randevu (E9): büro ajandası + müvekkil portal self-servisi.
+/// Çakışma kapısı serviste: aynı büroda zaman aralığı ÇAKIŞAN randevu
+/// oluşturulamaz (409).
+model Randevu {
+  id        String   @id @default(uuid())
+  tenantId  String
+  clientId  String?
+  client    Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  /// Portal üzerinden alındıysa portal kullanıcı kimliği.
+  portalUserId String?
+  title     String
+  startAt   DateTime
+  endAt     DateTime
+  /// PLANLANDI | IPTAL | TAMAMLANDI
+  status    String   @default("PLANLANDI")
+  note      String?
+  /// Büro tarafından açıldıysa açan kullanıcı.
+  createdBy String?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, startAt])
+  @@index([tenantId, status])
 }
 
 /// Avukatın elle bant geçersiz kılması. GEREKÇE ZORUNLUDUR — gerekçesiz
