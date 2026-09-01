@@ -25,6 +25,12 @@ enum AiPolicy {
 model Tenant {
   id              String   @id @default(uuid())
   name            String // Büro adı
+  /// BÜRONUN VERGİ KİMLİK BİLGİLERİ (F2-Ö-16): e-Fatura/e-Arşiv/e-SMM'de
+  /// SATICI VKN'si GİB'e gönderilmek ZORUNDADIR; alan yoksa belge reddedilir.
+  /// null = henüz girilmemiş; e-belge gönderimi bunu 400 ile reddeder.
+  taxNumber       String?
+  taxOffice       String?
+  address         String?
   /// SERBEST | SADECE_YEREL — dış AI sağlayıcısı kullanımına izin var mı?
   aiPolicy        AiPolicy @default(SERBEST)
   /// Otomatik belge hattının dış sağlayıcıya MASKELİ metin göndermesine
@@ -1680,6 +1686,11 @@ model InvoiceLine {
   sourceType  String?
   /// Kaynak kaydın id'si (TimeEntry.id / FeeAgreement.id / FinancialEntry.id)
   sourceId    String?
+  /// F2-Ö-18: Grup satırının temsil ettiği zaman kaydı id'leri (JSON dizi).
+  /// `createFromTimeEntries` grup satırlarında doldurur; satır faturadan
+  /// çıkarıldığında hangi kayıtların serbest bırakılacağı buradan bilinir
+  /// (sourceId=null olduğu için serbest bırakma kaynağı belli olmuyordu).
+  sourceIdsJson String?
 
   @@index([invoiceId])
   @@index([sourceType, sourceId])

@@ -21,9 +21,20 @@ export const updateCaseSchema = z
     fileNumber: nullableText(50, "Esas no"),
     judgeName: nullableText(150, "Hakim adı"),
     subject: nullableText(2000, "Dava konusu"),
+    // F2-Ö-07: dava değeri kuruş hassasiyeti ister — `coerce.number()` her
+    // float'u (0.30000000000000004 gibi) kabul ediyordu. En fazla İKİ ondalık
+    // kabul edilir; daha hassas girdi reddedilir (kuruş altı anlamsızdır).
     amount: z.preprocess(
       (v) => (typeof v === "string" && v.trim() === "" ? null : v),
-      z.coerce.number({ invalid_type_error: "Dava değeri sayı olmalıdır." }).min(0, "Dava değeri negatif olamaz.").nullable().optional()
+      z.coerce
+        .number({ invalid_type_error: "Dava değeri sayı olmalıdır." })
+        .min(0, "Dava değeri negatif olamaz.")
+        .refine(
+          (n) => Math.round(n * 100) === n * 100,
+          "Dava değeri en fazla iki ondalık basamak içerebilir (kuruş hassasiyeti).",
+        )
+        .nullable()
+        .optional()
     ),
     responsibleUserId: nullableUuid("Sorumlu avukat"),
     closedAt: nullableDate("Kapanış tarihi"),

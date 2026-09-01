@@ -20,7 +20,8 @@ COPY tsconfig.base.json ./
 COPY packages ./packages
 COPY apps/web ./apps/web
 
-RUN pnpm install --frozen-lockfile || pnpm install
+# F2-Ö-39: `|| pnpm install` geri düşüşü kilit dosyasıyla uyumsuz imaj üretir.
+RUN pnpm install --frozen-lockfile
 # apps/web, shared'ın yanında legal-core'a da bağımlıdır (süre etiketleri).
 RUN pnpm --filter @nomosos/shared build \
  && pnpm --filter @nomosos/legal-core build \
@@ -32,5 +33,7 @@ WORKDIR /repo
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=build /repo ./
+# F2-Ö-40: root kullanıcıyla koşma — gereksiz ayrıcalık yüzeyi (admin/portal deseni).
+USER node
 EXPOSE 3000
 CMD ["pnpm", "--filter", "@nomosos/web", "start"]

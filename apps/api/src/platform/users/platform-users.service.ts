@@ -11,7 +11,8 @@ import { canMutate } from "../platform-permissions";
 import type { PlatformAuthUser } from "../platform.types";
 import type { PlatformUserCreateInput, PlatformUserPatchInput } from "./platform-users.schemas";
 
-const BCRYPT_ROUNDS = 10;
+/** bcrypt maliyeti — üç kimlik alanında da 12 (denetim bulgusu İ-02/F2-Ö-01). */
+const BCRYPT_ROUNDS = 12;
 
 /**
  * PANEL PERSONELİ YÖNETİMİ — yalnızca SUPER_ADMIN.

@@ -45,9 +45,11 @@ export interface LoginResponse {
   access_token?: string;
   user?: AdminUserProfile;
   twoFactorRequired?: boolean;
-  totpRequired?: boolean;
-  requiresTwoFactor?: boolean;
-  requiresTotp?: boolean;
+  /** Kurulum zorunlu ama tamamlanmamış — /auth/2fa/setup akışına yönlendirir. */
+  twoFactorSetupRequired?: boolean;
+  /** 2FA ikinci adımının anahtarı — /auth/2fa/verify girdisidir (F2-K-01). */
+  challengeToken?: string;
+  message?: string;
 }
 
 // ---------------------------------------------------------------- Tenant
@@ -362,6 +364,14 @@ export interface AdminAuditEntry {
   id: string;
   createdAt: Iso;
   platformUserId?: string | null;
+  /** F2-Ö-32: sunucu platformUser'ı iç içe döndürür (post-FK-kaldırma deseni). */
+  platformUser?: {
+    id: string;
+    fullName: string;
+    email: string;
+    role: string;
+  } | null;
+  /** @deprecated Eski düz alanlar — silinmiş kullanıcılar için artık gelmez. */
   platformUserEmail?: string | null;
   platformUserName?: string | null;
   platformUserRole?: string | null;

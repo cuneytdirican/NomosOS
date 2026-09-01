@@ -200,6 +200,10 @@ export const invoiceLineSchema = z.object({
   vatRate: percentRate("KDV oranı"),
   sourceType: z.enum(INVOICE_LINE_SOURCE_TYPES).optional().default("MANUEL"),
   sourceId: nullableUuid("Kaynak kayıt"),
+  /// F2-Ö-18: grup satırının temsil ettiği zaman kayıtları (JSON dizi string).
+  /// İstemciden değil yalnızca `createFromTimeEntries` akışından gelir; PATCH
+  /// gövdesinde mevcut satırların `sourceIdsJson`'ı geri gönderilir.
+  sourceIdsJson: z.string().max(10_000).nullish(),
 });
 export type InvoiceLineInputDto = z.infer<typeof invoiceLineSchema>;
 

@@ -387,20 +387,28 @@ export class EvidenceService {
     const claim = await this.loadClaim(user.tenantId, claimId);
 
     /**
-     * ATIF KAYIT ÜZERİNDEN DOĞRULANIR. İçtihat havuzu kiracıdan bağımsızdır
-     * (`CaseLawDocument`'ta tenantId yoktur), bu yüzden süzgeç yalnız id'dir.
-     * Bulunamayan künye kabul edilmez: matristen dilekçeye aktarılacak bir
-     * dayanağın uydurma olması, ürünün en ağır hatasıdır.
+     * ATIF KAYIT ÜZERİNDEN DOĞRULANIR. İçtihat havuzu ortaktır ama GÖRÜNÜRLÜK
+     * kiracıya göredir (F2-Ö-04): başka bir büronun ELLE girdiği (MANUEL) kayıt,
+     * kayıt kimliği bilinse bile bu büroya dayanak OLAMAZ — teyit hattı aynı
+     * kaydı BULAMADI sayar ve "doğrulanmış dayanak" görünümü doğar (tutarsız
+     * sonuç). Kamusal/sistem kayıtları (createdByTenantId=null) herkese açıktır.
      */
     if (input.caseLawId) {
-      const found = await this.prisma.client.caseLawDocument.findUnique({
-        where: { id: input.caseLawId },
+      const found = await this.prisma.client.caseLawDocument.findFirst({
+        where: {
+          id: input.caseLawId,
+          OR: [
+            { createdByTenantId: null },
+            { createdByTenantId: user.tenantId },
+          ],
+        },
         select: { id: true },
       });
       if (!found) {
         throw new UnprocessableEntityException(
-          "Belirtilen içtihat kaydı bulunamadı. Hukuki dayanak, içtihat havuzundaki bir KAYITLA " +
-            "eşleşmelidir; doğrulanmamış künye matrise yazılamaz.",
+          "Belirtilen içtihat kaydı bu büro için görünür değil. Hukuki dayanak, bu büronun " +
+            "görebildiği içtihat havuzundaki bir KAYITLA eşleşmelidir; doğrulanmamış künye " +
+            "matrise yazılamaz.",
         );
       }
     }

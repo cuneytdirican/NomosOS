@@ -166,9 +166,9 @@ export class EvidenceAiService {
     const onlyPlanned = computed.rows.filter((r) => r.onlyPlannedSupport);
     /** Çürüten bağı olan BİZ iddiaları — deterministik tespit (F2 · E6). */
     const contradicted = computed.rows.filter((r) => r.contradicted);
-    /** Karşı tarafın, hiçbir delilimizle karşılanmamış iddiaları. */
+    /** Karşı tarafın, bizim hiçbir ÇÜRÜTEN delille karşılanmamış iddiaları. */
     const unansweredOpposing = computed.rows.filter(
-      (r) => r.side === "KARSI_TARAF" && r.status !== "CURUTULDU" && r.supportingCount === 0,
+      (r) => r.side === "KARSI_TARAF" && r.status !== "CURUTULDU" && r.contradictingCount === 0,
     );
 
     const gapLines = [

@@ -327,6 +327,11 @@ export function isPrivateHost(host: string): boolean {
   }
   // IPv6 benzersiz yerel adresler (fc00::/7) ve link-local (fe80::/10).
   if (/^f[cd][0-9a-f]{2}:/.test(h) || /^fe[89ab][0-9a-f]:/.test(h)) return true;
+
+  // IPv4-MAPPED IPv6 (F2-Ö-03): [::ffff:169.254.169.254] → 169.254.169.254.
+  // Eski kod bu biçimi tanımıyordu; SSRF kapısı IPv4-mapped adreslerde DELİNİYORDU.
+  const mapped = /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(h);
+  if (mapped) return isPrivateHost(mapped[1]);
   return false;
 }
 
@@ -371,7 +376,14 @@ export function validateProviderBaseUrl(baseUrl: string | undefined | null): Bas
     };
   }
   const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (/^169\.254\./.test(host) || host === "metadata.google.internal" || host === "metadata") {
+  // F2-Ö-03: IPv4-mapped biçim normalleştirilir ([::ffff:169.254.169.254]).
+  const mapped = /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(host);
+  const normalizedHost = mapped ? mapped[1] : host;
+  if (
+    /^169\.254\./.test(normalizedHost) ||
+    normalizedHost === "metadata.google.internal" ||
+    normalizedHost === "metadata"
+  ) {
     return {
       ok: false,
       message:

@@ -15,7 +15,9 @@ COPY tsconfig.base.json ./
 COPY packages ./packages
 COPY apps/api ./apps/api
 
-RUN pnpm install --frozen-lockfile || pnpm install
+# F2-Ö-39: `|| pnpm install` geri düşüşü kilit dosyasıyla uyumsuz imaj üretir.
+# Kilit bozuksa DERHAL düş — sessizce serbest çözümleme yapılmaz.
+RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @nomosos/db exec prisma generate
 RUN pnpm --filter @nomosos/shared build \
  && pnpm --filter @nomosos/ai build \

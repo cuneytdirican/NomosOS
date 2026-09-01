@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import type { Prisma } from "@nomosos/db";
 import type { CreateClientInput } from "@nomosos/shared";
 import { PrismaService } from "../prisma/prisma.service";
@@ -105,6 +105,28 @@ export class ClientsService {
 
   async create(user: AuthUser, input: CreateClientInput) {
     assertRole(user, ROLE_SETS.OPERASYON, "müvekkil kaydı oluşturma");
+
+    // F2-Ö-19 (Modül 01, kural 2): mükerrer TCKN/VKN — aynı kimlik numarasıyla
+    // ikinci kayıt AÇILAMAZ (409). Mevcut kart görüntülenir; veri ikiye
+    // bölünmesinin önü alınır.
+    if (input.tckn || input.taxNumber) {
+      const dupeField = input.tckn ? "tckn" : "taxNumber";
+      const dupeValue = (input.tckn ?? input.taxNumber) as string;
+      const existing = await this.prisma.client.client.findFirst({
+        where: { tenantId: user.tenantId, [dupeField]: dupeValue },
+        select: { id: true, name: true, isActive: true },
+      });
+      if (existing) {
+        throw new ConflictException({
+          message:
+            `Bu ${dupeField === "tckn" ? "TCKN" : "vergi kimlik numarası"} ile bir müvekkil ` +
+            `kaydı zaten var: ${existing.name}${existing.isActive ? "" : " (pasif)"}. ` +
+            "Mevcut kaydı güncelleyin; aynı kimlikle ikinci kart açılamaz.",
+          existingClientId: existing.id,
+        });
+      }
+    }
+
     const client = await this.prisma.client.client.create({
       data: { tenantId: user.tenantId, ...input },
       select: CLIENT_PUBLIC_SELECT,
@@ -381,14 +403,26 @@ export class ClientsService {
     ]);
 
     const caseIds = cases.map((c) => c.id);
-    const inbound =
+    const [inbound, financialEntries, portalUsers] = await Promise.all([
       caseIds.length > 0
-        ? await this.prisma.client.inboundMessage.findMany({
+        ? this.prisma.client.inboundMessage.findMany({
             where: { tenantId, caseId: { in: caseIds } },
             orderBy: { receivedAt: "asc" },
             select: { channel: true, fromRef: true, subject: true, body: true, receivedAt: true },
           })
-        : [];
+        : Promise.resolve([]),
+      // F2-Ö-15: manifest K6 (finans) beyan ediyor ama FinancialEntry eksikti.
+      this.prisma.client.financialEntry.findMany({
+        where: { tenantId, clientId },
+        orderBy: { date: "asc" },
+        select: { type: true, amount: true, currency: true, date: true, description: true },
+      }),
+      // F2-Ö-15: manifest K1 beyan ediyor ama PortalUser kaydı eksikti.
+      this.prisma.client.portalUser.findMany({
+        where: { tenantId, clientId },
+        select: { email: true, fullName: true, isActive: true, createdAt: true },
+      }),
+    ]);
 
     await this.audit.log({
       tenantId,
@@ -418,6 +452,10 @@ export class ClientsService {
       vekaletler: poas,
       gidenMesajlar: messages,
       gelenMesajlar: inbound,
+      // F2-Ö-15: manifestin beyan ettiği K1 (PortalUser) ve K6 (FinancialEntry)
+      // artık yanıtta GERÇEKTEN var.
+      portalKullanicilari: portalUsers,
+      finansKayitlari: financialEntries,
     };
   }
 

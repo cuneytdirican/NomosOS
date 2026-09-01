@@ -29,6 +29,7 @@ import type {
 } from "@nomosos/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
+import { AgentRunService } from "../agents/agent-run.service";
 import { assertAiPolicyAllows, tenantAiPolicy } from "../common/ai-policy";
 import { creditRunContext } from "../credits/credit-context";
 import { providerUnreachable } from "../common/errors";
@@ -121,7 +122,10 @@ export class AiService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly audit: AuditService
+    private readonly audit: AuditService,
+    // F2-Ö-11: /ai/chat de ajan izine bağlanır — "her LLM çağrısı izlenir"
+    // sözleşmesi bu yürütücüde eksikti.
+    private readonly agentRuns: AgentRunService
   ) {}
 
   /**
@@ -401,9 +405,43 @@ export class AiService {
       const provider = createProvider(this.resolveConfig(config));
       result = await provider.chat({ model, messages, maxTokens: 2048 });
     } catch (err) {
+      // F2-Ö-11: sağlayıcı arızası da iz bırakır (üç-durum sözleşmesi).
+      await this.agentRuns.record({
+        tenantId: user.tenantId,
+        userId: user.userId,
+        taskType: "CASE_CHAT",
+        status: "BASARISIZ",
+        model,
+        providerType: config.type,
+        durationMs: Date.now() - startedAt,
+        piiMasked,
+        entity: "Case",
+        entityId: input.caseId ?? null,
+        outboundTexts: messages.map((m) => m.content),
+        errorMessage: (err as Error).message,
+      });
       throw providerUnreachable(this.logger, err);
     }
     const durationMs = Date.now() - startedAt;
+
+    // F2-Ö-12: Yanıt ÖNERİDİR — advisory bayrağı sözleşmenin parçasıdır.
+    // Serbest metin döndüğü için şema guard'ı uygulanmaz; içerik öneri olarak
+    // işaretlenir ve istemci bunu her yanıtta görüntüler.
+    await this.agentRuns.record({
+      tenantId: user.tenantId,
+      userId: user.userId,
+      taskType: "CASE_CHAT",
+      status: "BASARILI",
+      model,
+      providerType: config.type,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      durationMs,
+      piiMasked,
+      entity: "Case",
+      entityId: input.caseId ?? null,
+      outboundTexts: messages.map((m) => m.content),
+    });
 
     const usageLog = await this.prisma.client.aiUsageLog.create({
       data: {
@@ -440,6 +478,12 @@ export class AiService {
     return {
       content: result.content,
       model,
+      // F2-Ö-12: her AI yanıtı ÖNERİDİR; bayta istemci tarafında her yanıtta
+      // görünür biçimde belirtilir.
+      advisory: true as const,
+      disclaimer:
+        "Bu yanıt yapay zekâ tarafından üretilen bir BİLGİLENDİRMEDİR; hukuki danışmanlık " +
+        "değildir. Dayandığı belgeleri ve mevzuatı kendiniz doğrulayın.",
       usage: {
         inputTokens: result.inputTokens,
         outputTokens: result.outputTokens,

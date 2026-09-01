@@ -63,6 +63,15 @@ import {
 
 type TabKey = "ayarlar" | "flags" | "duyurular" | "saglik";
 
+/** JSON dizesini çözümler; geçersizse ham metni döndürür (sunucu doğrular). */
+function safeParseJson(v: string): unknown {
+  try {
+    return JSON.parse(v);
+  } catch {
+    return v;
+  }
+}
+
 export default function SistemPage() {
   return (
     <PageGate action="system.settings">
@@ -218,9 +227,15 @@ function SettingModal({
   }, [value]);
 
   async function submit() {
+    // F2-Ö-31: sunucu sözleşmesi PUT /settings/:key + { value, reason } —
+    // eski kod PUT /settings + { key, valueJson, reason } gönderiyordu ve
+    // HER AYAR KAYDI 404 alıyordu.
     const ok = await mutation.run(
-      EP.settings,
-      { method: "PUT", body: { key: setting.key, valueJson: value, reason: reason.trim() } },
+      EP.settingsDetail(setting.key),
+      {
+        method: "PUT",
+        body: { value: safeParseJson(value), reason: reason.trim() },
+      },
       { successMessage: "Ayar güncellendi.", onSuccess: onSaved },
     );
     if (ok) onSaved();
@@ -231,7 +246,7 @@ function SettingModal({
       open
       onClose={onClose}
       title={`Ayar: ${setting.key}`}
-      subtitle={`PUT /api/admin/v1${EP.settings}`}
+      subtitle={`PUT /api/admin/v1${EP.settingsDetail(setting.key)}`}
     >
       <div className="space-y-4">
         {setting.description && <InfoBox>{setting.description}</InfoBox>}

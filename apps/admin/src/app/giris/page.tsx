@@ -3,22 +3,27 @@
 /**
  * Platform paneli girişi — tenant girişinden (apps/web /giris) tamamen ayrıdır.
  *
- * Akış (POST /api/admin/v1/auth/login):
- *   1. { email, password }
- *      → { token, user }                     : 2FA kapalı hesap, giriş tamam
- *      → { twoFactorRequired: true }         : 2. adıma geç
- *      → 401 + code/message "TOTP"           : 2. adıma geç
- *   2. { email, password, totp } → { token, user }
+ * GERÇEK SUNUCU SÖZLEŞMESİ (platform-auth.controller.ts + service):
+ *   1. POST /auth/login { email, password }
+ *      → { twoFactorRequired: false, accessToken, user }   : giriş tamam
+ *      → { twoFactorRequired: true, twoFactorSetupRequired: false,
+ *           challengeToken, message }                       : 2. adım (verify)
+ *      → { twoFactorRequired: true, twoFactorSetupRequired: true,
+ *           challengeToken, ... }                          : kurulum + doğrulama
+ *   2. POST /auth/2fa/verify { challengeToken, code }
+ *      → { twoFactorRequired: false, accessToken, user }
+ *   (kurulum gerekliyse önce POST /auth/2fa/setup { challengeToken } → QR/otpauth)
  *
- * Token localStorage("nomosos_admin_token")'a yazılır; tenant token'ıyla aynı anahtarı
- * KULLANMAZ ve JWT'nin aud="platform" olması sunucuda zorlanır.
+ * DÜZELTME (denetim bulgusu F2-K-01): önceki akış TOTP'yi login gövdesine
+ * `totp` alanıyla gönderiyordu — şema onu bilmez, kod YUTULUR ve challengeToken
+ * hiç saklanmazdı; 2FA kurulu hiçbir hesap panele giremezdi. Bu dosya artık
+ * sunucu sözleşmesini birebir uygular.
  */
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   adminApi,
-  ApiError,
   errorMessage,
   getToken,
   isEndpointMissing,
@@ -29,40 +34,16 @@ import { EP } from "@/lib/endpoints";
 import type { LoginResponse } from "@/lib/types";
 import { Button, EndpointMissingNotice, ErrorBox, Field, InfoBox, Input } from "@/components/ui";
 
-/** Yanıt gövdesinden oturum anahtarını çıkarır. */
-function tokenOf(data: LoginResponse | null | undefined): string | null {
-  if (!data) return null;
-  return data.token ?? data.accessToken ?? data.access_token ?? null;
-}
-
-function saysTwoFactorRequired(data: LoginResponse | null | undefined): boolean {
-  if (!data) return false;
-  return Boolean(
-    data.twoFactorRequired ?? data.totpRequired ?? data.requiresTwoFactor ?? data.requiresTotp,
-  );
-}
-
-/** 401/403 gövdesinde TOTP isteği var mı? (sunucu bunu hata olarak da döndürebilir) */
-function errorAsksForTotp(err: unknown): boolean {
-  if (!(err instanceof ApiError)) return false;
-  if (err.status !== 401 && err.status !== 403 && err.status !== 428) return false;
-  const data = err.data as Record<string, unknown> | null;
-  const code = typeof data?.code === "string" ? data.code : "";
-  const haystack = `${code} ${err.message}`.toUpperCase();
-  return (
-    haystack.includes("TOTP") ||
-    haystack.includes("2FA") ||
-    haystack.includes("TWO_FACTOR") ||
-    haystack.includes("IKI_ASAMALI")
-  );
-}
-
 export default function AdminGirisPage() {
   const router = useRouter();
-  const [step, setStep] = useState<"credentials" | "totp">("credentials");
+  const [step, setStep] = useState<"credentials" | "totp" | "setup">("credentials");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [totp, setTotp] = useState("");
+  /** Login yanıtından gelen 2FA challenge token'ı — verify ucunun girdisidir. */
+  const [challengeToken, setChallengeToken] = useState<string | null>(null);
+  /** Kurulum gerekliyse setup ucunun döndürdüğü otpauth/QR bağlantısı. */
+  const [setupUri, setSetupUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [missingEndpoint, setMissingEndpoint] = useState(false);
@@ -72,7 +53,7 @@ export default function AdminGirisPage() {
   }, [router]);
 
   function completeLogin(data: LoginResponse): boolean {
-    const token = tokenOf(data);
+    const token = data.accessToken ?? data.token ?? null;
     if (!token) return false;
     setToken(token);
     if (data.user) {
@@ -87,45 +68,90 @@ export default function AdminGirisPage() {
     return true;
   }
 
-  async function submit(withTotp: boolean) {
+  /** Login yanıtı 2FA istiyorsa durumu 2. adıma taşır. */
+  function handleLoginResponse(data: LoginResponse) {
+    if (data.twoFactorRequired && data.challengeToken) {
+      setChallengeToken(data.challengeToken);
+      if (data.twoFactorSetupRequired) {
+        // Kurulum tamamlanmamış hesap: önce QR, sonra doğrulama.
+        setStep("setup");
+        return;
+      }
+      setStep("totp");
+      if (data.message) setError(data.message);
+      return;
+    }
+    if (completeLogin(data)) return;
+    setError("Sunucu geçerli bir oturum anahtarı döndürmedi.");
+  }
+
+  async function submitCredentials() {
     setError(null);
     setMissingEndpoint(false);
     setLoading(true);
     try {
-      const body: Record<string, string> = { email, password };
-      if (withTotp) body.totp = totp;
-
+      // Sözleşme: yalnızca email + password. TOTP BURAYA GİRMEZ.
       const data = await adminApi<LoginResponse>(EP.auth.login, {
         method: "POST",
-        body,
+        body: { email, password },
         noAuthRedirect: true,
       });
-
-      if (saysTwoFactorRequired(data) && !withTotp) {
-        setStep("totp");
-        return;
-      }
-      if (completeLogin(data)) return;
-
-      // Token yok, 2FA da istenmiyor → sözleşme dışı yanıt.
-      if (!withTotp) {
-        setStep("totp");
-        setError(
-          "Sunucu oturum anahtarı döndürmedi. İki aşamalı doğrulama gerekiyorsa kodu girin.",
-        );
-        return;
-      }
-      setError("Sunucu geçerli bir oturum anahtarı döndürmedi.");
+      handleLoginResponse(data);
     } catch (err) {
       if (isEndpointMissing(err)) {
         setMissingEndpoint(true);
         return;
       }
-      if (!withTotp && errorAsksForTotp(err)) {
-        setStep("totp");
+      setError(errorMessage(err, "Giriş yapılamadı."));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /** Kurulum: POST /auth/2fa/setup { challengeToken } → otpauth URI. */
+  async function startSetup() {
+    if (!challengeToken) return;
+    setError(null);
+    setLoading(true);
+    try {
+      const data = await adminApi<{ otpauthUrl?: string; secretEnc?: string }>(EP.auth.setup2fa, {
+        method: "POST",
+        body: { challengeToken },
+        noAuthRedirect: true,
+      });
+      setSetupUri(data.otpauthUrl ?? null);
+      setStep("totp");
+    } catch (err) {
+      setError(errorMessage(err, "2FA kurulumu başlatılamadı."));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /** 2. adım: POST /auth/2fa/verify { challengeToken, code } → oturum. */
+  async function submitTotp() {
+    setError(null);
+    setMissingEndpoint(false);
+    setLoading(true);
+    try {
+      if (!challengeToken) {
+        setError("Oturum anahtarı kayboldu; baştan giriş yapın.");
+        setStep("credentials");
         return;
       }
-      setError(errorMessage(err, "Giriş yapılamadı."));
+      const data = await adminApi<LoginResponse>(EP.auth.verify2fa, {
+        method: "POST",
+        body: { challengeToken, code: totp },
+        noAuthRedirect: true,
+      });
+      if (completeLogin(data)) return;
+      setError("Doğrulama başarılı ama oturum anahtarı alınamadı.");
+    } catch (err) {
+      if (isEndpointMissing(err)) {
+        setMissingEndpoint(true);
+        return;
+      }
+      setError(errorMessage(err, "Doğrulama kodu hatalı ya da süresi doldu."));
     } finally {
       setLoading(false);
     }
@@ -151,11 +177,11 @@ export default function AdminGirisPage() {
         </div>
 
         <div className="rounded-2xl border border-steel-800 bg-steel-900 p-8 shadow-2xl">
-          {step === "credentials" ? (
+          {step === "credentials" && (
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                void submit(false);
+                void submitCredentials();
               }}
               className="space-y-4"
             >
@@ -194,11 +220,50 @@ export default function AdminGirisPage() {
                 {loading ? "Doğrulanıyor…" : "Giriş yap"}
               </Button>
             </form>
-          ) : (
+          )}
+
+          {step === "setup" && (
+            <div className="space-y-4">
+              <div>
+                <h1 className="text-lg font-semibold text-steel-50">
+                  İki Aşamalı Doğrulama Kurulumu
+                </h1>
+                <p className="mt-1 text-sm text-steel-400">
+                  Hesabınız iki aşamalı doğrulama zorunluluğuyla korunuyor; kurulum
+                  tamamlanmamış. Kurulumu başlatın, kimlik doğrulayıcı uygulamanızla QR/kodu
+                  ekleyin, sonra 6 haneli kodla doğrulayın.
+                </p>
+              </div>
+              {error && <ErrorBox message={error} />}
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setStep("credentials");
+                    setChallengeToken(null);
+                    setError(null);
+                  }}
+                >
+                  Geri
+                </Button>
+                <Button
+                  type="button"
+                  className="flex-1"
+                  disabled={loading || !challengeToken}
+                  onClick={() => void startSetup()}
+                >
+                  {loading ? "Hazırlanıyor…" : "Kurulumu başlat"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {step === "totp" && (
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                void submit(true);
+                void submitTotp();
               }}
               className="space-y-4"
             >
@@ -209,6 +274,12 @@ export default function AdminGirisPage() {
                   <span className="text-steel-300">{email}</span>
                 </p>
               </div>
+              {setupUri && (
+                <div className="rounded-lg border border-steel-700 bg-steel-950 p-3">
+                  <p className="text-xs font-medium text-steel-300">Kimlik doğrulayıcıya ekle:</p>
+                  <p className="mt-1 break-all font-mono text-[11px] text-accent-300">{setupUri}</p>
+                </div>
+              )}
               <Field label="TOTP kodu" required>
                 <Input
                   inputMode="numeric"
@@ -225,7 +296,7 @@ export default function AdminGirisPage() {
               </Field>
               {error && <ErrorBox message={error} />}
               {missingEndpoint && (
-                <EndpointMissingNotice endpoint={EP.auth.login} method="POST" what="Panel girişi" />
+                <EndpointMissingNotice endpoint={EP.auth.verify2fa} method="POST" what="2FA doğrulama" />
               )}
               <div className="flex gap-2">
                 <Button
@@ -234,6 +305,8 @@ export default function AdminGirisPage() {
                   onClick={() => {
                     setStep("credentials");
                     setTotp("");
+                    setChallengeToken(null);
+                    setSetupUri(null);
                     setError(null);
                   }}
                 >

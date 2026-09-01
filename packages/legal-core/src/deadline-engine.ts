@@ -232,7 +232,11 @@ function uzamaDayanagi(rule: RecessExtensionRule): string {
  */
 function applyRecessExtension(recessEnd: Date, rule: RecessExtensionRule): Date {
   const days = uzamaGunSayisi(rule);
-  const anchor = rule === "IYUK_8" ? addDays(recessEnd, 1) : recessEnd;
+  // F2-Ö-09: İYUK m.8/3 uzatması Danıştay uygulamasında 1–7 Eylül'dir; çapa
+  // recessEnd'İN KENDİSİDİR (bugün +1 atlamak uzatmayı bir gün genişletir).
+  // Eski `addDays(recessEnd, 1)` 60 günlük dava açma süresini de bir gün
+  // taşırıyordu. Karar: çapa recessEnd; tartışmalı hesap iz dizisinde görünür.
+  const anchor = recessEnd;
   return addDays(anchor, days);
 }
 

@@ -405,9 +405,11 @@ export class InvoicesService {
       unitPrice: g.rate,
       vatRate: g.vatRate,
       sourceType: "TIME_ENTRY",
-      // Grup birden çok kaydı temsil eder; kaynak izi `sourceId` yerine
-      // TimeEntry.invoiceId üzerinden kurulur (çoklu kaynak tek satır).
+      // F2-Ö-18: Grup birden çok kaydı temsil eder; kaynak izi `sourceId` yerine
+      // `sourceIdsJson` üzerinden kurulur — satır faturadan çıkarıldığında
+      // hangi kayıtların serbest bırakılacağı buradan bilinir.
       sourceId: null,
+      sourceIdsJson: JSON.stringify(g.entryIds),
     }));
 
     const totals = computeInvoiceTotals(lines);
@@ -522,7 +524,18 @@ export class InvoicesService {
         });
         const timeEntryIds = [
           ...new Set([
-            ...(keepsTimeEntryLines ? previousTimeEntries.map((e) => e.id) : []),
+            // F2-Ö-18: yalnız YENİ satır setinin temsil ettiği kayıtlar geri
+            // sahiplenilir; çıkarılan grubun kayıtları serbest kalır.
+            ...input.lines
+              .filter((l) => l.sourceType === "TIME_ENTRY" && l.sourceIdsJson)
+              .flatMap((l) => {
+                try {
+                  return JSON.parse(l.sourceIdsJson as string) as string[];
+                } catch {
+                  return [];
+                }
+              }),
+            // Tekil satırlar (kaynağı bire bir) eski yoldan da sahiplenilir.
             ...this.collectSourceIds(input.lines, "TIME_ENTRY"),
           ]),
         ];
@@ -684,6 +697,14 @@ export class InvoicesService {
     assertFinanceAccess(user, FINANCE_ACCESS.INVOICE_ISSUE, "fatura iptali");
     const existing = await this.requireInvoice(user.tenantId, id);
 
+    // F2-Ö-17 (Modül 09, kural 3): sağlayıcıya GÖNDERİLMİŞ bir e-belge iptal
+    // edilirken GİB'e de iptal bildirimi gönderilmeliydi. Gönderilmiş = GIB
+    // durumu GONDERILDI/KABUL olan VE eInvoiceUuid'si olan belge.
+    const adapter = this.eInvoice.resolve(user.tenantId);
+    const wasSentToProvider =
+      Boolean(existing.eInvoiceUuid) &&
+      (existing.eInvoiceStatus === "GONDERILDI" || existing.eInvoiceStatus === "KABUL");
+
     if (existing.status === "IPTAL") {
       throw new ConflictException("Fatura zaten iptal edilmiş.");
     }
@@ -699,6 +720,15 @@ export class InvoicesService {
         `Bu faturaya bağlı ${paymentCount} tahsilat kaydı var; fatura doğrudan iptal edilemez. ` +
           "Önce ödeme kayıtlarını kaldırın ya da iade faturası düzenleyin.",
       );
+    }
+
+    // F2-Ö-17: GİB'e gönderilmiş e-belge — iptal ÖNCE sağlayıcıya iletilir.
+    // Noop (yapılandırılmamış) sağlayıcı burada 503 fırlar: yerel iptal de
+    // yapılmaz; "GİB'te duran belge yerelde iptal görünsün" yarı-durumu
+    // oluşmaz. Noop'ta zaten GİB'e hiçbir şey gitmediyse (eInvoiceUuid yok)
+    // wasSentToProvider false'tur ve akış buraya girmez.
+    if (wasSentToProvider && existing.eInvoiceUuid) {
+      await adapter.cancelInvoice(existing.eInvoiceUuid, input.reason);
     }
 
     const canceled = await this.prisma.client.$transaction(async (tx) => {
@@ -798,8 +828,19 @@ export class InvoicesService {
 
     const tenant = await this.prisma.client.tenant.findUnique({
       where: { id: user.tenantId },
-      select: { name: true },
+      select: { name: true, taxNumber: true, taxOffice: true, address: true },
     });
+    // F2-Ö-16: GİB, satıcı VKN'si olmayan e-belgeyi reddeder. VKN girilmemişse
+    // gönderim denemesi 400 ile durur — sağlayıcıya boş belge POST etmek
+    // mükellef sorgusunu da boşa harcardı.
+    const tenantVkn = tenant?.taxNumber?.replace(/\D/g, "") ?? "";
+    if (tenantVkn.length !== 10) {
+      throw new BadRequestException(
+        "Büronuzun vergi kimlik numarası (VKN) tanımlı değil; GİB satıcı VKN'si olmadan " +
+          "e-belge gönderimini reddeder. Ayarlar → Büro Bilgileri'nden VKN, vergi dairesi ve " +
+          "adresi girip tekrar deneyin.",
+      );
+    }
 
     const totals = computeInvoiceTotals(
       invoice.lines.map((l) => ({
@@ -1113,6 +1154,8 @@ export class InvoicesService {
         dueDate: true,
         note: true,
         eInvoiceStatus: true,
+        // F2-Ö-17: iptal akışı sağlayıcı referansına bakar.
+        eInvoiceUuid: true,
       },
     });
     if (!invoice) throw new NotFoundException("Fatura bulunamadı.");

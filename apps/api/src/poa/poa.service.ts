@@ -445,13 +445,23 @@ export class PoaService {
       // etkili olmasını da garantiler: `portal-jwt.guard.ts` damgadan eski
       // token'ı reddeder, önbelleğe bakmaz.
       //
-      // Diğer aktif bir vekaletname VARSA erişim kesilmez: müvekkille ilişki
+      // Diğer CANLI bir vekaletname VARSA erişim kesilmez: müvekkille ilişki
       // sürüyordur; kesilen yalnız bu vekaletnamedir.
+      //
+      // F2-Ö-05: "canlı" tanımı büro tarafının AKTİF süzgeciyle birebirdir —
+      // isActive VE revokedAt NULL VE (expiresAt yok ya da bugünden sonraysa).
+      // Eskiden yalnız isActive'e bakılıyordu: süresi YILMIŞ ama isActive=true
+      // kalmış tek vekaletname, azil anında portal erişimini KORUYOR ve
+      // "vekalet ilişkiniz sürüyor" yanıtı üretiliyordu.
+      const todayStart = new Date();
+      todayStart.setUTCHours(0, 0, 0, 0);
       const otherActive = await tx.powerOfAttorney.count({
         where: {
           tenantId: user.tenantId,
           clientId: existing.clientId,
           isActive: true,
+          revokedAt: null,
+          OR: [{ expiresAt: null }, { expiresAt: { gte: todayStart } }],
           NOT: { id },
         },
       });

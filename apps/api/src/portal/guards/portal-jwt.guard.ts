@@ -3,6 +3,7 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
@@ -20,6 +21,53 @@ const SUBSCRIPTION_CACHE_TTL_MS = 30_000;
 
 /** Erişimi kesilen abonelik durumları (büro tarafıyla birebir aynı liste). */
 const BLOCKED_SUBSCRIPTION_STATUSES: readonly string[] = ["SUSPENDED", "CANCELED"];
+
+/** Bakım kilidi ayar anahtarı — TenantStatusGuard ile aynı (F2-Ö-02). */
+const MAINTENANCE_SETTING_KEY = "maintenance";
+
+/** Bakım önbelleği — kiracı guard'ıyla aynı ömür (30 sn). */
+const MAINTENANCE_CACHE_TTL_MS = 30_000;
+let maintenanceCache: { fullLock: boolean; message: string; expiresAt: number } = {
+  fullLock: false,
+  message: "",
+  expiresAt: 0,
+};
+
+/**
+ * BAKIM TAM KİLİDİ okuması (F2-Ö-02). TenantStatusGuard yalnız `/api/v1/**`
+ * (kiracı) uçlarına uygulanır; portal uçları `@Public` olduğu için bakım
+ * kilidi açıkken bile portal (mesaj gönderme, davet, parola sıfırlama)
+ * çalışmaya devam ediyordu. Portal guard'ı artık aynı kilide bakar.
+ *
+ * Platform paneli (/api/admin) kapsama GİRMEZ — kilidi kapatabilmek için
+ * panelin ayakta kalması şarttır (guard'ın kendi ilkesi).
+ */
+async function readMaintenanceLock(prisma: {
+  client: { systemSetting: { findUnique: (a: { where: { key: string } }) => Promise<{ valueJson: string } | null> } };
+}): Promise<{ fullLock: boolean; message: string }> {
+  const now = Date.now();
+  if (maintenanceCache.expiresAt > now) return maintenanceCache;
+
+  const setting = await prisma.client.systemSetting.findUnique({
+    where: { key: MAINTENANCE_SETTING_KEY },
+  });
+  let fullLock = false;
+  let message = "Sistem bakımdadır. Kısa süre sonra tekrar deneyin.";
+  if (setting) {
+    try {
+      const parsed = JSON.parse(setting.valueJson) as { fullLock?: unknown; message?: unknown };
+      fullLock = parsed.fullLock === true;
+      if (typeof parsed.message === "string" && parsed.message.trim()) {
+        message = parsed.message;
+      }
+    } catch {
+      // Bozuk ayar kilit SAYILMAZ (TenantStatusGuard ile aynı karar).
+      fullLock = false;
+    }
+  }
+  maintenanceCache = { fullLock, message, expiresAt: now + MAINTENANCE_CACHE_TTL_MS };
+  return maintenanceCache;
+}
 
 /**
  * PORTAL KİMLİK GUARD'I — üçüncü kimlik evreninin kapısı.
@@ -155,6 +203,18 @@ export class PortalJwtGuard implements CanActivate {
     // devam edebiliyordu. Büro tarafındaki kuralın AYNISI burada uygulanır:
     // okuma açık kalır (veri rehin alınmaz), yazma durur.
     const method = (request.method ?? "GET").toUpperCase();
+
+    // KAPI 7a — BAKIM TAM KİLİDİ (F2-Ö-02): kiracı guard'ı bu uçlara uygulanmadığı
+    // için bakım kilidi portalı kesmiyordu; kilidi açıkken mesaj gönderme, davet
+    // ve parola sıfırlama çalışıyordu. Büro tarafındaki kuralın aynısı: bakım
+    // kilidi açıkken portal YAZMA uçları 503 döner; okuma açık kalır.
+    if (method !== "GET" && method !== "HEAD" && method !== "OPTIONS") {
+      const lock = await readMaintenanceLock(this.prisma);
+      if (lock.fullLock) {
+        throw new ServiceUnavailableException(lock.message);
+      }
+    }
+
     if (method !== "GET" && method !== "HEAD" && method !== "OPTIONS") {
       const status = await this.readSubscriptionStatus(record.tenantId);
       if (status && BLOCKED_SUBSCRIPTION_STATUSES.includes(status)) {

@@ -458,14 +458,14 @@ describe("computeDeadline — adli tatil (HMK m.104 / İYUK m.8/3 / CMK m.331/4)
     expect(result.warnings.join(" ")).toContain("HMK m.104 uzaması UYGULANMADI");
   });
 
-  it("İYUK m.8/3 rejimi bir gün daha uzatır (ara vermeyi İZLEYEN tarihten + 7 gün)", () => {
+  it("İYUK m.8/3: Danıştay uygulaması 1-7 Eylül (F2-Ö-09: çapa recessEnd)", () => {
     const result = run({
       triggerDate: trigger,
       rule: { durationValue: 2, durationUnit: "HAFTA", legalBasis: "İYUK m.7 — 60 gün" },
       applyJudicialRecess: true,
       recessRule: "IYUK_8",
     });
-    expect(iso(result.dueDate)).toBe("2026-09-08");
+    expect(iso(result.dueDate)).toBe("2026-09-07");
     expect(
       result.steps.find((s) => s.step === DEADLINE_STEP_CODES.ADLI_TATIL)!.explanation,
     ).toContain("İYUK m.8/3");
@@ -526,9 +526,9 @@ describe("computeDeadline — ay ve yıl birimleri", () => {
 describe("gerçek senaryolar", () => {
   it("İYUK m.7 — 60 günlük idari dava açma süresi (tebliğ 15.06.2026)", () => {
     const result = runSystemRule("IYUK_DAVA_ACMA", d("2026-06-15"), { serviceMethod: "POSTA" });
-    // 15.06 + 60 gün = 14.08.2026 → adli tatil içinde → İYUK m.8/3: 01.09 + 7 = 08.09.2026
+    // 15.06 + 60 gün = 14.08.2026 → adli tatil içinde → İYUK m.8/3: 01.09 + 7 = 07.09.2026
     expect(stepDate(result, DEADLINE_STEP_CODES.SURE_EKLEME)).toBe("2026-08-14");
-    expect(iso(result.dueDate)).toBe("2026-09-08");
+    expect(iso(result.dueDate)).toBe("2026-09-07");
   });
 
   it("İş K. m.20 — işe iade davası, adli tatilde işlemeye devam eder (HMK m.103/1-b)", () => {

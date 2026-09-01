@@ -97,10 +97,13 @@ function AuditLogViewer() {
       render: (l) => (
         <div>
           <p className="font-mono text-xs text-steel-200">
-            {l.platformUserEmail ?? l.platformUserName ?? l.platformUserId ?? "—"}
+            {/* F2-Ö-32: sunucu platformUser'ı İÇ İÇE döndürüyor
+                ({ platformUser: { email, fullName, role } }); eski kod düz
+                alanlar bekliyordu ve her satır "—" gösteriyordu. */}
+            {l.platformUser?.email ?? l.platformUser?.fullName ?? l.platformUserId ?? "—"}
           </p>
-          {l.platformUserRole && (
-            <p className="text-[11px] text-steel-500">{roleLabel(l.platformUserRole)}</p>
+          {l.platformUser?.role && (
+            <p className="text-[11px] text-steel-500">{roleLabel(l.platformUser.role)}</p>
           )}
         </div>
       ),
@@ -176,9 +179,9 @@ function AuditLogViewer() {
                     {
                       key: "user",
                       header: "Personel",
-                      value: (l) => l.platformUserEmail ?? l.platformUserId ?? "",
+                      value: (l) => l.platformUser?.email ?? l.platformUserId ?? "",
                     },
-                    { key: "role", header: "Rol", value: (l) => l.platformUserRole ?? "" },
+                    { key: "role", header: "Rol", value: (l) => l.platformUser?.role ?? "" },
                     { key: "action", header: "Aksiyon", value: (l) => l.action },
                     { key: "tenantId", header: "Tenant ID", value: (l) => l.tenantId ?? "" },
                     { key: "tenant", header: "Tenant", value: (l) => l.tenantName ?? "" },

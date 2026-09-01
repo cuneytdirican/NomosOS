@@ -3,7 +3,8 @@
  * Yol sabitleri tek yerde tutulur ki sayfalar arasında sapma olmasın.
  *
  * Kaynak sözleşme (Platform ajanı bu uçları yazar):
- *   POST   /auth/login                     { email, password, totp? } → { token, user }
+ *   POST   /auth/login                     { email, password } → { accessToken, user } | { twoFactorRequired, challengeToken }
+ *   POST   /auth/2fa/verify                { challengeToken, code } → { accessToken, user }
  *   GET    /auth/me
  *   GET    /tenants?q=&status=&plan=
  *   GET    /tenants/:id
@@ -31,6 +32,10 @@
 export const EP = {
   auth: {
     login: "/auth/login",
+    /** 2FA ikinci adımı — { challengeToken, code } → { accessToken, user }. */
+    verify2fa: "/auth/2fa/verify",
+    /** 2FA kurulumu (kurulum zorunlu ama tamamlanmamışsa) — { challengeToken }. */
+    setup2fa: "/auth/2fa/setup",
     me: "/auth/me",
   },
   tenants: {
@@ -56,6 +61,8 @@ export const EP = {
     reject: (id: string) => `/approvals/${encodeURIComponent(id)}/reject`,
   },
   settings: "/settings",
+  /** F2-Ö-31: sunucu sözleşmesi PUT /settings/:key + { value, reason }. */
+  settingsDetail: (key: string) => `/settings/${encodeURIComponent(key)}`,
   featureFlags: {
     list: "/feature-flags",
     create: "/feature-flags",

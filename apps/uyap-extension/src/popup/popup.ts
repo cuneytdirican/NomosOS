@@ -189,7 +189,15 @@ async function eslestir(): Promise<void> {
 
   const response = await sendMessage({ type: "PAIR", pairingCode, apiBaseUrl });
   if (!response.ok) {
-    hataGoster(response.error.message);
+    // F2-K-02: arka uç dağıtılmadığında eşleştirme ucu 404 döner. Kullanıcıya
+    // genel "bulunamadı" yerine GERÇEK durum bildirilir: arka uç geliştirme
+    // aşamasında; kod/adres hatası değil altyapı eksikliği vardır.
+    const mesaj = response.error.message.includes("bulunamadı")
+      ? "Eşleştirilemedi: NomosOS sunucusunda UYAP arka ucu henüz dağıtılmamış " +
+        "(geliştirme aşamasında). Sunucu adresi ve kod doğru olsa bile bağlantı kurulamaz. " +
+        "Ayrıntı için büronuzun NomosOS yöneticisiyle görüşün."
+      : response.error.message;
+    hataGoster(mesaj);
     return;
   }
   (el<HTMLInputElement>("eslestirmeKodu")).value = "";

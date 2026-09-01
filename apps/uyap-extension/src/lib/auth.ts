@@ -26,13 +26,17 @@ import type { AuthSession } from "../types/state";
 const REFRESH_MARGIN_MS = 60_000;
 
 /**
- * NomosOS API yolları.
+ * NomosOS API yolları — UYAP ARKA UCU SÖZLEŞMESİ.
  *
- * DÜZELTİLDİ (kod tutarlılık denetimi, bulgu 4): eski değerler `/api/uyap/*` idi.
- * `apps/api/src/main.ts` global öneki `api/v1` olarak kurar (`setGlobalPrefix("api/v1")`),
- * yani `@Controller("uyap")` gerçekte `/api/v1/uyap/*` altında yayınlanır
- * (`apps/web/src/lib/api.ts` de `${API_BASE}/api/v1${path}` kullanır).
- * Eski önekle her çağrı 404 alır ve `codeFromStatus` bunu NOT_FOUND sayıp yeniden denemez.
+ * ⚠️ DÜRÜST DURUM (denetim bulgusu F2-K-02): sunucuda `@Controller("uyap")`
+ * YOKTUR — bu uçlar henüz hiçbir yerde yayınlanmaz. UYAP arka ucu NomosOS
+ * yol haritasının B4 kalemidir (geliştirme aşamasında). Bu sabitler, arka uç
+ * yazıldığında eklentinin BAĞLANACAĞI sözleşmeyi önceden sabitler; eklenti
+ * tarafı hazır tutulur. Arka uç dağıtılmadan eşleştirme 404 alır ve popup
+ * kullanıcıya gerçeği söyler ("arka uç geliştirme aşamasında").
+ *
+ * (Yol öneki `api/v1`'dir: `apps/api/src/main.ts` `setGlobalPrefix("api/v1")`
+ * kurar; eski `/api/uyap/*` değerleri her çağrıda 404 alırdı.)
  */
 export const UYAP_API_PATHS = {
   pair: "/api/v1/uyap/pair",

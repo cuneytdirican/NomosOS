@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import type { HearingStatus as DbHearingStatus, Prisma } from "@nomosos/db";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
@@ -78,6 +83,37 @@ export class HearingsService {
   async create(user: AuthUser, input: CreateHearingInput) {
     assertRole(user, ROLE_SETS.OPERASYON, "duruşma kaydı oluşturma");
     const relatedCase = await this.requireCase(user.tenantId, input.caseId);
+
+    // F2-Ö-08 (Modül 03, kural 1 + KK11): aynı dosyada aynı GÜN celse mükerrer
+    // olamaz (409) ve geçmiş tarihe duruşma açılamaz (400).
+    const hearingDayStart = new Date(input.date);
+    hearingDayStart.setUTCHours(0, 0, 0, 0);
+    const hearingDayEnd = new Date(hearingDayStart.getTime() + 86_400_000);
+
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
+    if (hearingDayStart.getTime() < todayStart.getTime()) {
+      throw new BadRequestException(
+        "Geçmiş tarihe duruşma kaydı açılamaz. Tarih/saati kontrol edin; geçmiş oturum " +
+          "için sonucu mevcut kayıt üzerinden güncelleyin.",
+      );
+    }
+
+    const duplicate = await this.prisma.client.hearing.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        caseId: input.caseId,
+        date: { gte: hearingDayStart, lt: hearingDayEnd },
+        NOT: { status: "IPTAL" },
+      },
+      select: { id: true },
+    });
+    if (duplicate) {
+      throw new ConflictException(
+        "Bu dosyada aynı güne zaten bir duruşma kaydı var. Aynı gün ikinci bir oturum " +
+          "gerçekten varsa not alanına ayırt edici bilgi girin veya mevcut kaydı güncelleyin.",
+      );
+    }
 
     const hearing = await this.prisma.client.hearing.create({
       data: {

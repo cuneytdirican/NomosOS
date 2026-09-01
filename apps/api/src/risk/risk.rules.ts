@@ -177,11 +177,18 @@ export function computeSure(s: RiskCaseSnapshot): DimensionResult {
   const open = s.deadlines.filter((d) => d.status === "BEKLIYOR" || d.status === "ONAYLANDI");
 
   // Kaçırılmış = açıkça KACIRILDI işaretli VEYA hâlâ açık olup son günü geçmiş.
+  // F2-Ö-13 (off-by-one): dueDate alanı @db.Date'tir (gece yarısı). Vade GÜNÜ
+  // içindeyken "kaçırılmış" sayılmaz — süre günün SONUNA kadar açıktır. Bu
+  // nedenle kıyaslama takvim günüyle yapılır: dueDate < startOfDay(now).
+  // sure-performansi.report.ts aynı olguyu `(dueDate + 1 gün)` ile hesaplıyordu;
+  // iki modül artık aynı sonucu verir.
+  const nowDayStart = new Date(s.now);
+  nowDayStart.setUTCHours(0, 0, 0, 0);
   const missed = s.deadlines.filter(
     (d) =>
       d.status === "KACIRILDI" ||
       ((d.status === "BEKLIYOR" || d.status === "ONAYLANDI") &&
-        d.dueDate.getTime() < s.now.getTime()),
+        d.dueDate.getTime() < nowDayStart.getTime()),
   );
   signals.push({
     key: "MISSED_DEADLINE",
