@@ -244,6 +244,12 @@ export class BillingController {
     return this.invoices.sendEInvoice(user, id);
   }
 
+  /** A6 (rakip analizi) — e-SMM (Serbest Meslek Makbuzu) gönderimi. */
+  @Post("invoices/:id/e-smm/send")
+  sendESmm(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.invoices.sendESmm(user, id);
+  }
+
   // ================================================================ ÖDEMELER
 
   @Get("payments")

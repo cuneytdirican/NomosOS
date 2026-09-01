@@ -56,6 +56,7 @@ import {
   Spinner,
   TruncationNotice,
   Tabs,
+  tabPanelProps,
   Textarea,
 } from "@/components/ui";
 import { ComputeNote } from "@/components/compute-note";
@@ -417,7 +418,10 @@ export default function DosyaDetayPage({ params }: { params: Promise<{ id: strin
 
       {actionError && <ErrorBox message={actionError} />}
 
-      <Tabs tabs={tabsWithCounts} active={tab} onChange={setTab} ariaLabel="Dosya sekmeleri" />
+      <Tabs tabs={tabsWithCounts} active={tab} onChange={setTab} ariaLabel="Dosya sekmeleri" idPrefix="dosya" />
+
+      {/* F2-Ö-25: sekme paneli WCAG 4.1.2 — role="tabpanel" + aria-labelledby. */}
+      <div {...tabPanelProps("dosya", tab)} className="mt-6">
 
       {/* ---------- Özet ---------- */}
       {tab === "ozet" && (
@@ -971,6 +975,8 @@ export default function DosyaDetayPage({ params }: { params: Promise<{ id: strin
       />
 
       <ToastStack toasts={toasts} onDismiss={dismiss} />
+      </div>
+      {/* /tabpanel F2-Ö-25 */}
     </div>
   );
 }

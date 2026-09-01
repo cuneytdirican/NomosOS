@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import type { Prisma } from "@nomosos/db";
 import type { CreateClientInput } from "@nomosos/shared";
 import { PrismaService } from "../prisma/prisma.service";
@@ -140,6 +145,92 @@ export class ClientsService {
       detail: client.name,
     });
     return maskClient(client);
+  }
+
+  /* ================================================================== *
+   * A1 (rakip analizi) — CSV İÇE AKTARMA
+   *
+   * Pazar taramasında "toplu veri taşıma sihirbazı" pazar genelinde açık
+   * bulundu. Büronun mevcut müşteri listesi (Excel/CSV) tek istekte girilir.
+   * Mükerrer TCKN/VKN kontrolü create() ile AYNI hattan geçer.
+   * ================================================================== */
+
+  /** POST /clients/import — CSV metninden toplu müvekkil aktarımı. */
+  async importCsv(user: AuthUser, csv: string) {
+    assertRole(user, ROLE_SETS.ONAY, "müvekkil içe aktarma");
+
+    const lines = csv.split(/\r?\n/).filter((l) => l.trim());
+    if (lines.length < 2) {
+      throw new BadRequestException("CSV en az bir başlık ve bir veri satırı içermelidir.");
+    }
+    if (lines.length > 1001) {
+      throw new BadRequestException("Tek istekte en fazla 1000 satır içe aktarılabilir.");
+    }
+
+    // Başlık: ad;e-posta;telefon;tckn;vkn;adres (Türkçe veya İngilizce kabul)
+    const headers = lines[0].split(";").map((h) => h.trim().toLowerCase());
+    const col = (name: string) => headers.indexOf(name);
+    const cName = col("ad") >= 0 ? col("ad") : col("name");
+    const cEmail = col("e-posta") >= 0 ? col("e-posta") : col("email");
+    const cPhone = col("telefon") >= 0 ? col("telefon") : col("phone");
+    const cTckn = col("tckn") >= 0 ? col("tckn") : col("tckn");
+    const cVkn = col("vkn") >= 0 ? col("vkn") : col("taxnumber");
+    const cAddr = col("adres") >= 0 ? col("adres") : col("address");
+
+    if (cName < 0) {
+      throw new BadRequestException(
+        "CSV başlığında 'ad' (veya 'name') kolonu bulunamadı. Beklenen biçim: ad;e-posta;telefon;tckn;vkn;adres",
+      );
+    }
+
+    const results: { row: number; status: "eklendi" | "hata"; message?: string }[] = [];
+    let added = 0;
+    let failed = 0;
+
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(";").map((c) => c.trim());
+      const name = cName >= 0 ? cols[cName] ?? "" : "";
+      if (!name) {
+        failed++;
+        results.push({ row: i + 1, status: "hata", message: "ad boş" });
+        continue;
+      }
+
+      try {
+        const hasTckn = cTckn >= 0 && cols[cTckn];
+        const hasVkn = cVkn >= 0 && cols[cVkn];
+        const input = {
+          name,
+          type: (hasTckn || hasVkn ? "TUZEL_KISI" : "GERCEK_KISI") as "TUZEL_KISI" | "GERCEK_KISI",
+          ...(cEmail >= 0 && cols[cEmail] ? { email: cols[cEmail] } : {}),
+          ...(cPhone >= 0 && cols[cPhone] ? { phone: cols[cPhone] } : {}),
+          ...(hasTckn ? { tckn: cols[cTckn] } : {}),
+          ...(hasVkn ? { taxNumber: cols[cVkn] } : {}),
+          ...(cAddr >= 0 && cols[cAddr] ? { address: cols[cAddr] } : {}),
+        };
+        // create() mükerrer TCKN/VKN kontrolü yapar (F2-Ö-19).
+        await this.create(user, input);
+        added++;
+        results.push({ row: i + 1, status: "eklendi" });
+      } catch (err) {
+        failed++;
+        results.push({
+          row: i + 1,
+          status: "hata",
+          message: err instanceof Error ? err.message : "bilinmeyen hata",
+        });
+      }
+    }
+
+    await this.audit.log({
+      tenantId: user.tenantId,
+      userId: user.userId,
+      action: "CLIENT_IMPORT",
+      entity: "Client",
+      detail: `${lines.length - 1} satır işlendi · ${added} eklendi · ${failed} hata`,
+    });
+
+    return { total: lines.length - 1, added, failed, results };
   }
 
   async detail(tenantId: string, id: string) {

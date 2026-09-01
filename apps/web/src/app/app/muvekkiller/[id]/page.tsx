@@ -38,6 +38,7 @@ import {
   StatCard,
   SuccessBox,
   Tabs,
+  tabPanelProps,
   Textarea,
 } from "@/components/ui";
 import {
@@ -327,7 +328,10 @@ export default function MuvekkilDetayPage({ params }: { params: Promise<{ id: st
         </button>
       </div>
 
-      <Tabs tabs={TABS} active={tab} onChange={setTab} ariaLabel="Müvekkil sekmeleri" />
+      <Tabs tabs={TABS} active={tab} onChange={setTab} ariaLabel="Müvekkil sekmeleri" idPrefix="musteri" />
+
+      {/* F2-Ö-25: sekme paneli WCAG 4.1.2. */}
+      <div {...tabPanelProps("musteri", tab)} className="mt-6">
 
       {tab === "genel" && (
         <GeneralTab client={client} onSaved={load} />
@@ -437,6 +441,8 @@ export default function MuvekkilDetayPage({ params }: { params: Promise<{ id: st
       )}
 
       <ToastStack toasts={toasts} onDismiss={dismiss} />
+      </div>
+      {/* /tabpanel F2-Ö-25 */}
     </div>
   );
 }

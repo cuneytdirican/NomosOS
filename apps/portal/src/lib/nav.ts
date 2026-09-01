@@ -19,6 +19,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { href: "/dosyalarim", label: "Dosyalarım", short: "Dosyalar" },
   { href: "/belgelerim", label: "Belgelerim", short: "Belgeler" },
   { href: "/durusmalarim", label: "Duruşmalarım", short: "Duruşmalar" },
+  { href: "/randevularim", label: "Randevularım", short: "Randevular" },
   { href: "/odemelerim", label: "Ödemelerim", short: "Ödemeler" },
   { href: "/mesajlar", label: "Mesajlar", short: "Mesajlar" },
   { href: "/avukatim", label: "Avukatım", short: "Avukatım" },

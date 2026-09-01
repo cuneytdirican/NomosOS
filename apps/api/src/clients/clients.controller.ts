@@ -3,6 +3,7 @@ import { createClientSchema, type CreateClientInput } from "@nomosos/shared";
 import { ClientsService } from "./clients.service";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe";
+import { importCsvSchema } from "./clients.dto";
 import type { AuthUser } from "../common/types";
 import {
   createContactSchema,
@@ -32,6 +33,16 @@ export class ClientsController {
   @Post()
   create(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(createClientSchema)) body: CreateClientInput) {
     return this.clientsService.create(user, body);
+  }
+
+  /**
+   * A1 (rakip analizi) — CSV içe aktarma.
+   * Gövde: { csv: "ad;e-posta;tckn..." } — metin, dosya DEĞİL.
+   * Mükerrer kontrolü create() ile aynı hattan geçer.
+   */
+  @Post("import")
+  importCsv(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(importCsvSchema)) body: { csv: string }) {
+    return this.clientsService.importCsv(user, body.csv);
   }
 
   @Get(":id")

@@ -893,6 +893,105 @@ export class InvoicesService {
     return this.serialize(updated);
   }
 
+  /**
+   * POST /billing/invoices/:id/e-smm/send — Serbest Meslek Makbuzu (e-SMM).
+   *
+   * A6 (rakip analizi): Avukatlar müşterilerine hizmet için FATURA değil e-SMM
+   * keser (GİB'in serbest meslek makbuzu belge türü). e-SMM, fatura ile AYNI
+   * veri modelini kullanır ama belge TÜRÜ farklıdır (E_SMM) ve serbest meslek
+   * takip numarası taşır. Gönderim, e-Fatura ile AYNI adaptörden geçer.
+   */
+  async sendESmm(user: AuthUser, id: string) {
+    assertFinanceAccess(user, FINANCE_ACCESS.INVOICE_ISSUE, "e-SMM gönderme");
+    const invoice = await this.prisma.client.invoice.findFirst({
+      where: { id, tenantId: user.tenantId },
+      include: INVOICE_INCLUDE,
+    });
+    if (!invoice) throw new NotFoundException("Fatura bulunamadı.");
+
+    if (invoice.status === "TASLAK") {
+      throw new ConflictException(
+        "Taslak belge gönderilemez. Önce POST /billing/invoices/:id/finalize ile kesinleştirin.",
+      );
+    }
+    if (invoice.status === "IPTAL") {
+      throw new ConflictException("İptal edilmiş belge gönderilemez.");
+    }
+    if (invoice.eInvoiceStatus === "GONDERILDI" || invoice.eInvoiceStatus === "KABUL") {
+      throw new ConflictException("Bu belge zaten gönderilmiş.");
+    }
+
+    const tenant = await this.prisma.client.tenant.findUnique({
+      where: { id: user.tenantId },
+      select: { name: true, taxNumber: true, taxOffice: true, address: true },
+    });
+    const tenantVkn = tenant?.taxNumber?.replace(/\D/g, "") ?? "";
+    if (tenantVkn.length !== 10) {
+      throw new BadRequestException(
+        "Büronuzun vergi kimlik numarası (VKN) tanımlı değil; GİB satıcı VKN'si olmadan " +
+          "e-SMM gönderimini reddeder.",
+      );
+    }
+
+    const adapter = this.eInvoice.resolve(user.tenantId);
+    const totals = computeInvoiceTotals(
+      invoice.lines.map((l) => ({
+        description: l.description,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+        vatRate: l.vatRate,
+        sourceType: l.sourceType,
+        sourceId: l.sourceId,
+      })),
+    );
+
+    const uuid = invoice.eInvoiceUuid ?? randomUUID();
+    const payload = buildUblInvoicePayload({
+      invoice,
+      client: invoice.client,
+      tenant: {
+        name: tenant?.name ?? "NomosOS Kullanıcısı",
+        taxNumber: tenant?.taxNumber,
+        taxOffice: tenant?.taxOffice,
+        address: tenant?.address,
+      },
+      // e-SMM: mükellef sorgusu YAPILMAZ — e-SMM herkese kesilebilir.
+      documentKind: "E_ARSIV",
+      uuid,
+      vatBreakdown: totals.vatBreakdown,
+    });
+
+    await this.prisma.client.invoice.update({
+      where: { id },
+      data: {
+        eInvoiceUuid: uuid,
+        eInvoiceStatus: "BEKLIYOR",
+        documentType: "E_SMM",
+      },
+    });
+
+    const result = await adapter.sendInvoice(payload);
+
+    const updated = await this.prisma.client.invoice.update({
+      where: { id },
+      data: {
+        eInvoiceUuid: result.gibUuid || uuid,
+        eInvoiceStatus: result.status === "KABUL" ? "KABUL" : "GONDERILDI",
+      },
+      include: INVOICE_INCLUDE,
+    });
+
+    await this.audit.log({
+      tenantId: user.tenantId,
+      userId: user.userId,
+      action: "INVOICE_ESMM_SEND",
+      entity: "Invoice",
+      entityId: id,
+      detail: `saglayici=${adapter.key} belgeTipi=E_SMM durum=${result.status}`,
+    });
+    return this.serialize(updated);
+  }
+
   // ================================================= ÖDEME SONRASI MUTABAKAT
 
   /**

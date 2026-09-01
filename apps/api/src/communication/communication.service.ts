@@ -13,7 +13,12 @@
  * "gönderilmedi" etiketiyle görünür.
  */
 
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { scanPii } from "@nomosos/ai";
 import type { CommChannel, CommDirection, Prisma } from "@nomosos/db";
 import { classifyOutboundPii } from "./pii-classify";
@@ -292,6 +297,24 @@ export class CommunicationService {
   async update(user: AuthUser, id: string, input: UpdateCommunicationInput) {
     assertRole(user, ROLE_SETS.OPERASYON, "iletişim kaydı güncelleme");
     const existing = await this.detail(user, id);
+
+    // F2-Ö-20: GERÇEKTEN gönderilmiş (SISTEM kaynaklı) kaydın gövdesi DÜZENLENEMEZ.
+    //
+    // İletişim geçmişi "müvekkile ne söylendi?" sorusunun KANITIDIR. Silme
+    // dört-gözlü iken gövde düzenlemesinin serbest kalması kanıt bütünlüğünü
+    // sessizce bozar: orijinal metin gider, AuditLog yalnız "güncellendi"
+    // yazar ve neyin değiştiği bilinmez. SISTEM kaynaklı kayıtlar yalnız
+    // META (client/case bağlantısı) düzeyinde düzeltilebilir; gövde DEĞİŞMEZ.
+    if (
+      (input.subject !== undefined || input.body !== undefined) &&
+      existing.source === "SISTEM"
+    ) {
+      throw new ConflictException(
+        "Bu kayıt sistem tarafından gönderilmiş bir iletişimin ta kendisidir; gövdesi " +
+        "düzenlenemez (kanıt bütünlüğü). Yalnızca bağlantı (müvekkil/dosya) düzeltilebilir. " +
+        "Gövdede düzeltme gerekiyorsa kaydı silin (dört-göz) ve yenisini oluşturun.",
+      );
+    }
 
     if (input.clientId) await this.requireClient(user.tenantId, input.clientId);
     if (input.caseId) {

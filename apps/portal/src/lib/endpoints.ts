@@ -61,6 +61,9 @@ export const EP = {
 
   /** GET → yayınlanmış duruşmalar. */
   hearings: "/hearings",
+  /** E9 (rakip analizi) — portal randevu self-servisi. */
+  randevular: "/randevular",
+  randevuIptal: (id: string) => `/randevular/${encodeURIComponent(id)}/iptal`,
 
   /**
    * GET → yayınlanmış faturalar / tahsilatlar. AYRI UÇLARDIR: sunucuda tek bir

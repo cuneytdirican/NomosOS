@@ -32,6 +32,15 @@ export const updateClientSchema = z
   .refine((data) => Object.keys(data).length > 0, "Güncellenecek en az bir alan gönderilmelidir.");
 export type UpdateClientInput = z.infer<typeof updateClientSchema>;
 
+/** A1 (rakip analizi) — CSV içe aktarma gövdesi. */
+export const importCsvSchema = z.object({
+  csv: z
+    .string()
+    .min(10, "CSV metni çok kısa — en az bir başlık ve bir satır gerekir.")
+    .max(500_000, "CSV metni 500 KB'ı aşamaz; parça parça gönderin."),
+});
+export type ImportCsvInput = z.infer<typeof importCsvSchema>;
+
 /** POST /clients/:id/contacts */
 export const createContactSchema = z.object({
   fullName: z.string().min(2, "İlgili kişi adı en az 2 karakter olmalıdır.").max(200, "İlgili kişi adı en fazla 200 karakter olabilir."),

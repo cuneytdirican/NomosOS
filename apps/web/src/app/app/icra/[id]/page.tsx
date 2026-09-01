@@ -58,6 +58,7 @@ import {
   Spinner,
   TruncationNotice,
   Tabs,
+  tabPanelProps,
   Textarea,
 } from "@/components/ui";
 import { FeatureUnavailable, ToastStack, useToasts } from "@/components/ai-ui";
@@ -234,7 +235,10 @@ export default function IcraDetayPage({ params }: { params: Promise<{ id: string
         onRefresh={() => void loadBalance()}
       />
 
-      <Tabs tabs={TABS} active={tab} onChange={setTab} ariaLabel="İcra dosyası sekmeleri" />
+      <Tabs tabs={TABS} active={tab} onChange={setTab} ariaLabel="İcra dosyası sekmeleri" idPrefix="icra" />
+
+      {/* F2-Ö-25: sekme paneli WCAG 4.1.2. */}
+      <div {...tabPanelProps("icra", tab)} className="mt-6">
 
       {tab === "islemler" && (
         <ActionsTab
@@ -288,6 +292,8 @@ export default function IcraDetayPage({ params }: { params: Promise<{ id: string
       />
 
       <ToastStack toasts={toasts} onDismiss={dismiss} />
+      </div>
+      {/* /tabpanel F2-Ö-25 */}
     </div>
   );
 }

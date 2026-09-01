@@ -33,6 +33,8 @@ export const BILLING_ROUTES = {
   invoiceCancel: (id: string) => `/billing/invoices/${id}/cancel`,
   /** e-Fatura gönderimi. İstemci bir dönem `/send` çağırıyordu — uç yok. */
   invoiceSendEInvoice: (id: string) => `/billing/invoices/${id}/e-invoice/send`,
+  /** A6 (rakip analizi): e-SMM (Serbest Meslek Makbuzu) gönderimi. */
+  invoiceSendESmm: (id: string) => `/billing/invoices/${id}/e-smm/send`,
 
   /**
    * TAHSİLAT KAYDI FATURA ALTINDA DEĞİL, KENDİ UCUNDADIR ve gövdesinde
@@ -378,7 +380,6 @@ export const REPORT_ROUTES = {
   interpret: (key: string) => `/reports/${key}/interpret`,
 } as const;
 
-/** AI kota/kredi sistemi (Modül 26). */
 export const CREDIT_ROUTES = {
   wallet: "/credits/wallet",
   transactions: "/credits/transactions",

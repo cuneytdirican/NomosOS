@@ -181,7 +181,8 @@ Yanında **hesap izi kartı** (gerçek çıktı):
 2  Tebligat düzeltmesi    Bu yöntemde ekleme yapılmaz
 3  Başlangıç              HMK m.92: tebliğ günü hesaba katılmaz
 4  Süre ekleme            2 hafta → 01.09.2026 Salı
-5  Tatil kaydırması       HMK m.93: son gün iş günü, kaydırma gerekmedi
+5  Adli tatil kontrolü    01.09 > 31.08 → HMK m.104: tatil izleyen iş gününe kadar uzar
+6  Tatil uzatması         01.09.2026 Salı (tatil bitişi 31.08; süre zaten tatil sonrasına denk)
 
 SON GÜN                   01.09.2026 Salı
 ```
@@ -201,7 +202,7 @@ büroya özel kural tanımlanabilir.
 Akış görseli (dikey adımlar, altın çizgiyle bağlı):
 
 ```
-Evrak sisteme girer  (yükleme; UYAP eklentisi: geliştirme aşamasında)
+Evrak sisteme girer  (yükleme (UYAP eklentisi: geliştirme aşamasında))
         ↓
 Metin çıkarılır ve sınıflandırılır  (ara karar · bilirkişi raporu · tebligat …
         PDF, Word (DOCX), UDF ve düz metin — metin katmanı olan belgelerde)
