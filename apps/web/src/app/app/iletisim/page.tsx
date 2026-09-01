@@ -19,7 +19,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { SERVER_MAX_PAGE_SIZE } from "@/lib/api";
+import { ApiError, SERVER_MAX_PAGE_SIZE } from "@/lib/api";
 import type { CaseSummary, Client } from "@/lib/types";
 import {
   Badge,
@@ -487,12 +487,15 @@ function InboundMatchRow({
     preselect ? (entry.case?.title ?? entry.case?.fileNumber ?? "") : "",
   );
   const [busy, setBusy] = useState<"match" | "reject" | "suggest" | null>(null);
+  // F2-Ö-22: AI önerisi 409 (PII onayı) döndürdüğünde ikinci bir şans verilir.
+  const [pendingPiiApproval, setPendingPiiApproval] = useState(false);
 
-  async function act(kind: "match" | "reject" | "suggest") {
+  async function act(kind: "match" | "reject" | "suggest", piiApproved = false) {
     setBusy(kind);
     try {
       if (kind === "suggest") {
-        await suggestInboundCase(entry.id);
+        await suggestInboundCase(entry.id, piiApproved);
+        setPendingPiiApproval(false);
         await onChanged("AI dosya önerisi üretildi — kararı siz verirsiniz.");
       } else if (kind === "reject") {
         await matchInboundMessage(entry.id, { matched: false });
@@ -505,6 +508,14 @@ function InboundMatchRow({
         await onChanged("Mesaj dosyaya bağlandı.");
       }
     } catch (err) {
+      // F2-Ö-22: 409 + requiresPiiApproval → ikinci deneme için onay kutusu göster.
+      if (kind === "suggest" && err instanceof ApiError && err.status === 409) {
+        const data = err.data as { requiresPiiApproval?: boolean } | null;
+        if (data?.requiresPiiApproval) {
+          setPendingPiiApproval(true);
+          return; // hata değil — onay bekleniyor
+        }
+      }
       onError(errText(err, "İşlem tamamlanamadı."));
     } finally {
       setBusy(null);
@@ -608,6 +619,22 @@ function InboundMatchRow({
           {busy === "suggest" ? "Öneri isteniyor…" : "AI dosya önerisi iste"}
           <CreditBadge taskType="MESSAGE_CASE_MATCH" costs={costs} />
         </Button>
+        {/* F2-Ö-22: PII onayı gerektiğinde ikinci şans — onayla ve tekrar dene. */}
+        {pendingPiiApproval && (
+          <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs">
+            <span className="text-amber-800">
+              Mesaj metninde kişisel veri tespit edildi; dış sağlayıcıya maskelenmiş olarak gönderilecek.
+            </span>
+            <Button
+              size="sm"
+              variant="gold"
+              disabled={busy !== null}
+              onClick={() => void act("suggest", true)}
+            >
+              Onayla ve gönder
+            </Button>
+          </div>
+        )}
         <Button
           size="sm"
           variant="ghost"

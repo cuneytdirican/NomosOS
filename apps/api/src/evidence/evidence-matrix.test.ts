@@ -174,14 +174,14 @@ describe("E6/KK6: delil tarafı (offeredBy) ve tutarlılık kapısı", () => {
   it("KK6: BİZ iddiası + BİZ delili + CONTRADICTS → 422 reddi kodda var", () => {
     expect(service).toContain('claim.side === "BIZ"');
     expect(service).toContain('(input.linkType ?? "SUPPORTS") === "CONTRADICTS"');
-    expect(service).toContain('evidence.offeredBy === "BIZ"');
+    expect(service).toContain('evidence.offeredBy !== "KARSI_TARAF"');
     expect(service).toContain("UnprocessableEntityException");
   });
 
-  it("KK6 yalnız üçlü BİRLİKTE kapanır — karşı taraf delili çürütebilir", () => {
-    // Kapı BİZ delilini hedefler; KARSI_TARAF/null delilin çürütme bağı serbesttir.
-    expect(service).toContain("evidence.offeredBy === \"BIZ\"");
-    expect(service).not.toContain('evidence.offeredBy === "KARSI_TARAF")');
+  it("KK6 (F2-Ö-10): CONTRADICTS yalnız KARSI_TARAF deliline kurulabilir", () => {
+    // Kapı artık 'BIZ' değil '!KARSI_TARAF' ile kapanır (spec'in 5. kuralı).
+    expect(service).not.toContain('evidence.offeredBy === "BIZ"');
+    expect(service).toContain('evidence.offeredBy !== "KARSI_TARAF"');
   });
 
   it("offeredBy hem oluşturmada hem güncellemede kabul edilir", () => {

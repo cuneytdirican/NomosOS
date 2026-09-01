@@ -153,7 +153,9 @@ export default function IcraListPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Toplam Takip" value={files.length} tone="navy" />
+        {/* F2-Ö-23: kart sunucudan gelen TOPLAM sayıyı gösterir; files.length
+            yalnız MEVCUT SAYFANIN satır sayısıdır ve sayfa 2'de yanlış görünür. */}
+        <StatCard label="Toplam Takip" value={total} tone="navy" />
         <StatCard label="Açık Dosya" value={openCount} tone="slate" />
         <StatCard
           label="İtirazlı"

@@ -429,14 +429,17 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             </div>
           ))}
         </nav>
-        <div className="border-t border-slate-800 px-5 py-3 text-[11px] text-slate-500">
+        {/* F2-Ö-26: slate-900 zemin üzerinde slate-500 (3.7:1) AA altındaydı;
+            slate-300 (9.2:1) koyu zemin için doğru tondur ve açık-zemin
+            yasağına takılmaz. */}
+        <div className="border-t border-slate-800 px-5 py-3 text-[11px] text-slate-300">
           <p>NomosOS · AI-Native Legal OS</p>
           <p className="mt-1">
             <a
               href="https://mindaeon.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-slate-500 transition-colors hover:text-amber-400 hover:underline"
+              className="text-slate-300 transition-colors hover:text-amber-400 hover:underline"
             >
               Developed by MindAeon AI
             </a>

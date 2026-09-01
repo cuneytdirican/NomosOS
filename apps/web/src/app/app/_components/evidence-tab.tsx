@@ -322,7 +322,9 @@ export function EvidenceTab({ caseId, onNotify }: { caseId: string; onNotify: No
                                     : direction === "BELIRSIZ"
                                       ? "border-transparent bg-slate-500 text-white"
                                       : "border-transparent text-white"
-                                  : "border-dashed border-slate-300 text-slate-300 hover:border-slate-500 hover:text-slate-500"
+                                  // F2-Ö-27: boş hücre "+" işareti AA dışıydı
+                                  // (1.9:1); slate-400 ile 3:1'e çıkar (WCAG 1.4.11).
+                                  : "border-dashed border-slate-400 text-slate-500 hover:border-slate-600 hover:text-slate-600"
                               }`}
                               style={
                                 link && direction === "SUPPORTS"

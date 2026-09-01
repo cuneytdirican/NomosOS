@@ -99,12 +99,18 @@ export const icraTahsilatReport: ReportBuilder = async (ctx): Promise<ReportBody
        GROUP BY ef.stage, ef.currency
        ORDER BY 3 DESC
     `,
-    db.collectionRecord.groupBy({
-      by: ["method"],
-      where: { tenantId, date: { gte: from, lt: end } },
-      _sum: { amount: true },
-      _count: { _all: true },
-    }),
+    // F2-Ö-14: dönem tahsilatı PARA BİRİMİNE GÖRE ayrılır. CollectionRecord'ta
+    // currency kolonu yoktur; para birimi dosyadan (EnforcementFile.currency)
+    // gelir. Eski sorgu tüm para birimlerini tek toplamda karıştırıyordu.
+    db.$queryRaw<{ method: string; currency: string; toplam: Prisma.Decimal; adet: number }[]>`
+      SELECT cr.method::text AS method, ef.currency, SUM(cr.amount) AS toplam, COUNT(*)::int AS adet
+        FROM "CollectionRecord" cr
+        JOIN "EnforcementFile" ef ON ef.id = cr."enforcementFileId"
+       WHERE cr."tenantId" = ${tenantId}
+         AND cr."date" >= ${from} AND cr."date" < ${end}
+       GROUP BY cr.method, ef.currency
+       ORDER BY toplam DESC
+    `,
     db.$queryRaw<{ gun: number | null; dosya: number }[]>`
       SELECT AVG(
                EXTRACT(EPOCH FROM (fc.first_col - ef."requestDate")) / 86400.0
@@ -161,11 +167,14 @@ export const icraTahsilatReport: ReportBuilder = async (ctx): Promise<ReportBody
 
   const totalFiles = stageRows.reduce((sum, r) => sum + intOf(r.dosya), 0);
 
-  const periodCollected = periodCollections.reduce(
-    (sum, r) => sum.plus(decOf(r._sum.amount)),
-    new Prisma.Decimal(0),
-  );
-  const periodCollectionCount = periodCollections.reduce((sum, r) => sum + r._count._all, 0);
+  // F2-Ö-14: dönem tahsilatı yalnız İLK para birimi üzerinden toplanır; diğer
+  // para birimleri ayrı satırda rapor edilir (Ö-11 kuralının birebir uygulanması).
+  const periodCollected = periodCollections
+    .filter((r) => r.currency === primaryCurrency)
+    .reduce((sum, r) => sum.plus(decOf(r.toplam)), new Prisma.Decimal(0));
+  const periodCollectionCount = periodCollections
+    .filter((r) => r.currency === primaryCurrency)
+    .reduce((sum, r) => sum + r.adet, 0);
 
   const avgDays = durationRows[0]?.gun;
   const avgDaysFileCount = intOf(durationRows[0]?.dosya);
@@ -245,10 +254,10 @@ export const icraTahsilatReport: ReportBuilder = async (ctx): Promise<ReportBody
     },
     periodCollections
       .map((r) => {
-        const amount = decOf(r._sum.amount);
+        const amount = decOf(r.toplam);
         return {
-          yontem: r.method,
-          adet: r._count._all,
+          yontem: `${r.method} (${r.currency})`,
+          adet: r.adet,
           tutar: moneyOut(amount),
           pay: periodCollected.isZero()
             ? 0

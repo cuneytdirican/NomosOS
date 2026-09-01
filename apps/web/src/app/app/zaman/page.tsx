@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ApiError, api, asList } from "@/lib/api";
+import { ApiError, api, asList, SERVER_MAX_PAGE_SIZE } from "@/lib/api";
 import { errText, isMissingEndpoint } from "@/lib/faz2";
 import { createTimeEntry, deleteTimeEntry, listTimeEntries } from "@/lib/billing";
 import type { TimeEntry } from "@/lib/faz3-types";
@@ -79,7 +79,10 @@ export default function ZamanPage() {
           dateFrom,
           dateTo,
           userId: userFilter || undefined,
-          limit: 300,
+          // F2-Ö-21: sunucu 200 üstünü kırpıyor (SERVER_MAX_PAGE_SIZE=200);
+          // 300 istemek sunucuda sessizce 200'e düşer. En yüksek değer açıkça
+          // istenir; kırpılma biliniyorsa uyarı gösterilir (aşağıda truncated).
+          limit: SERVER_MAX_PAGE_SIZE,
         }),
       );
       setMissing(false);
@@ -100,7 +103,10 @@ export default function ZamanPage() {
   }, [load]);
 
   useEffect(() => {
-    void api<unknown>("/cases", { query: { limit: 300 } })
+    // F2-Ö-21: dosya seçici de 300 yerine sunucu tavanını ister (200) ve
+    // SAYFALI çeker — ilk sayfa yalnızca ilk 200 dosyayı gösterir, arama
+    // kutusundan geri kalanlar bulunur (aşağıda caseSearch filtresi).
+    void api<unknown>("/cases", { query: { limit: SERVER_MAX_PAGE_SIZE } })
       .then((p) => setCases(asList<CaseSummary>(p)))
       .catch(() => setCases([]));
     void api<unknown>("/users")

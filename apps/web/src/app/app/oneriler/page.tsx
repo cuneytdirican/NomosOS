@@ -206,7 +206,15 @@ export default function OnerilerPage() {
       {countsByType.size > 0 && (
         <div className="flex flex-wrap gap-2">
           {[...countsByType.entries()].map(([type, count]) => (
-            <button key={type} type="button" onClick={() => setTypeFilter(type)}>
+            <button
+              key={type}
+              type="button"
+              onClick={() => {
+                // F2-Ö-24: rozet süzgeci de sayfayı sıfırlar (select ile aynı kural).
+                setTypeFilter(type);
+                setPage(1);
+              }}
+            >
               <Badge tone={PROPOSAL_TYPE_TONES[type] ?? "gray"}>
                 {labelOf(PROPOSAL_TYPE_LABELS, type as ProposalType)}: {count}
               </Badge>

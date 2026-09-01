@@ -311,11 +311,16 @@ export class EvidenceService {
     if (
       claim.side === "BIZ" &&
       (input.linkType ?? "SUPPORTS") === "CONTRADICTS" &&
-      evidence.offeredBy === "BIZ"
+      // F2-Ö-10: kapı spec'in 5. kuralıyla genişletildi — CONTRADICTS yalnız
+      // KARSI_TARAF delilleriyle kurulabilir (Modül 14 KK6). ORTAK (mahkeme/
+      // bilirkişi) ve null (eski kayıt) delillerle de kendimize-çelişki bağı
+      // kurulamaz; yalnız KARSI_TARAF delili bizim iddiamızı çürütebilir.
+      evidence.offeredBy !== "KARSI_TARAF"
     ) {
       throw new UnprocessableEntityException(
-        "Bu delil BİZ tarafının sunduğu olarak işaretli; kendi iddiamızı çürüttüğü bağlanamaz. " +
-        "Delil tarafını kontrol edin: delil karşı tarafa aitse offeredBy=KARSI_TARAF yapın.",
+        "Bu delil kendi tarafımızın (veya tarafı belirsiz bir kaydın) sunduğu olarak işaretli; " +
+        "kendi iddiamızı çürüttüğü bağlanamaz. Delil karşı tarafa aitse offeredBy=KARSI_TARAF yapın; " +
+        "ayırt edilemiyorsa BELIRSIZ bağ tipini kullanın.",
       );
     }
 
