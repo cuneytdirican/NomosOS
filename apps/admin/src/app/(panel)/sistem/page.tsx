@@ -729,6 +729,8 @@ function AnnouncementModal({
   const [body, setBody] = useState(announcement?.body ?? "");
   const [severity, setSeverity] = useState(announcement?.severity ?? "BILGI");
   const [audience, setAudience] = useState(announcement?.audience ?? "TUM");
+  // F2-Ö-35: sunucu `target` NESESİ bekliyor (targetJson string değil).
+  // PLAN_BAZLI → planKeys[], TENANT_BAZLI → tenantIds[].
   const [target, setTarget] = useState(announcement?.targetJson ?? "");
   const [publishedAt, setPublishedAt] = useState(toLocalInput(announcement?.publishedAt));
   const [expiresAt, setExpiresAt] = useState(toLocalInput(announcement?.expiresAt));
@@ -737,12 +739,21 @@ function AnnouncementModal({
   const path = isNew ? EP.announcements.create : EP.announcements.update(announcement!.id);
 
   async function submit(publishNow: boolean) {
+    // F2-Ö-35: `targetJson` string'i sunucu şemasında YOKTUR — sessizce
+    // düşüyor ve hedef kitle kayboluyordu. Artık `target` nesnesi gönderilir.
+    let targetObj: Record<string, unknown> | null = null;
+    if (audience === "PLAN_BAZLI") {
+      targetObj = { planKeys: target.split(",").map((s) => s.trim()).filter(Boolean) };
+    } else if (audience === "TENANT_BAZLI") {
+      targetObj = { tenantIds: target.split(",").map((s) => s.trim()).filter(Boolean) };
+    }
+
     const body_: Record<string, unknown> = {
       title: title.trim(),
       body: body.trim(),
       severity,
       audience,
-      targetJson: audience === "TUM" ? null : target.trim() || null,
+      target: targetObj,
       publishedAt: publishNow
         ? publishedAt
           ? new Date(publishedAt).toISOString()

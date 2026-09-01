@@ -48,6 +48,8 @@ export const EP = {
   subscriptions: {
     list: "/subscriptions",
     update: (id: string) => `/subscriptions/${encodeURIComponent(id)}`,
+    /** F2-Ö-36: durum geçişi AYRI uçta — POST /subscriptions/:id/transition. */
+    transition: (id: string) => `/subscriptions/${encodeURIComponent(id)}/transition`,
     cancel: (id: string) => `/subscriptions/${encodeURIComponent(id)}/cancel`,
   },
   payments: {
@@ -84,6 +86,12 @@ export const EP = {
   supportAccess: {
     list: "/support-access",
     revoke: (id: string) => `/support-access/${encodeURIComponent(id)}`,
+  },
+  /** F2-Ö-33: platform zamanlanmış işleri. */
+  jobs: {
+    list: "/jobs",
+    runs: (key: string) => `/jobs/${encodeURIComponent(key)}/runs`,
+    run: (key: string) => `/jobs/${encodeURIComponent(key)}/run`,
   },
   audit: "/audit",
   /** Tanıtım sitesi demo talepleri — kayıt olarak izlenir (e-posta yok). */

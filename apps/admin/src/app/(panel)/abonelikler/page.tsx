@@ -307,9 +307,22 @@ function EditSubscriptionModal({
   const needsApproval = planChanged || status === "SUSPENDED";
 
   async function submit() {
+    // F2-Ö-36: Sunucuda durum değişikliği PATCH ile değil, AYRI uçta
+    // (POST /subscriptions/:id/transition + { to, reason }) yapılır.
+    // Eski kod status'u PATCH gövdesine koyuyordu; şemada yok → sessizce
+    // düşüyor veya 422 — durum ASLA değişmiyordu.
+    if (statusChanged) {
+      const ok = await mutation.run(
+        EP.subscriptions.transition(subscription.id),
+        { method: "POST", body: { to: status, reason: reason.trim() } },
+        { successMessage: "Abonelik durumu güncellendi." },
+      );
+      if (!ok) return;
+    }
+
     const body: Record<string, unknown> = { reason: reason.trim() };
     if (planChanged) body.planKey = planKey;
-    if (statusChanged) body.status = status;
+    // F2-Ö-36: status artık PATCH gövdesinden ÇIKARILDI (transition ucunda).
     if (Number(seats) !== subscription.seats) body.seats = Number(seats);
 
     const ok = await mutation.run(

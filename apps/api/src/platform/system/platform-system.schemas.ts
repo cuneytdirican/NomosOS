@@ -30,6 +30,11 @@ export const flagCreateSchema = z.object({
     .regex(/^[a-z0-9][a-z0-9-_]{1,63}$/, "Bayrak anahtarı 2-64 karakter, küçük harf/rakam/-/_ olmalıdır."),
   description: z.string().trim().max(500).nullable().optional(),
   enabledTenantIds: z.array(z.string().uuid()).max(1000).default([]),
+  /**
+   * F2-Ö-34: Platform GENELİ açma — artık OLUŞTURMA sırasında da kabul edilir.
+   * Dört-göz onayı Zod'da değil, SERVİSTE uygulanır (flag global write ayrıcalığı).
+   */
+  isEnabledGlobally: z.boolean().optional(),
 });
 export type FlagCreateInput = z.infer<typeof flagCreateSchema>;
 

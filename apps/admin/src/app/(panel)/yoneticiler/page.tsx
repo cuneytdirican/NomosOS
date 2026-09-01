@@ -316,7 +316,7 @@ function UserModal({
             </Field>
             <Field
               label="Geçici şifre"
-              hint="Boş bırakılırsa sunucu kendi davet/şifre akışını uygular."
+              hint="F2-Ö-38: Sunucuda davet/şifre akışı YOKTUR — parola ZORUNLUDUR (en az 14 karakter). Kendiniz belirleyip kullanıcıya güvenli bir kanaldan iletin."
             >
               <Input
                 type="password"
