@@ -15,54 +15,68 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 1 Eylül 2026, 14:30
+# 🔖 KALDIĞIM YER — 1 Eylül 2026, 15:00
 
-> **P0 DÜZELTME DALGASI GÖNDERİLDİ** (commit `0e310cc`): K-01 + K-02 + 26 ÖNEMLİ
-> bulgu kapatıldı; canlı kanıtlar toplandı. Migration 26 adım.
-> **Sıradaki iş:** kalan ~14 ÖNEMLİ (admin panelindeki sözleşmeler + arayüz
-> kontrast/sayfa sıfırlama) + rakip farkları 3-7/7 + final denetim.
+> **P0 DÜZELTME TURU — 3 DALGA GÖNDERİLDİ** (commit'ler `0e310cc` → `524adce` → `ddecf12`):
+> K-01 + K-02 + **34 ÖNEMLİ** bulgu kapatıldı. Kalan: Ö-20 (SISTEM log düzenleme),
+> Ö-25 (tabPanelProps benimseme), Ö-29/30 (pazarlama birebir/doküman)
+> + rakip farkları 3-7/7 + 66 İYİLEŞTİRME.
 
-## P0 turunda kapatılanlar (commit `0e310cc`)
+## Kapatılan ÖNEMLİ bulgular (34/40)
 
-- **K-01** ✅ Admin 2FA: challengeToken saklanır → POST /auth/2fa/verify ile
-  doğrulanır (challenge sözleşmesi birebir)
-- **K-02** ✅ UYAP eklentisi: popup "geliştirme aşamasında" uyarısı + 404
-  dürüst mesaj + auth.ts yanıltıcı yorum kaldırıldı
-- **Ö-01** ✅ Platform kullanıcı bcrypt 10→12
-- **Ö-02** ✅ Portal bakım kilidi: guard'a 503 kapısı (yazma uçları)
-- **Ö-03** ✅ SSRF IPv4-mapped: `[::ffff:169.254.169.254]` artık yakalanır
-- **Ö-04** ✅ Dayanak görünürlüğü: başka büronun içtihat kaydı bağlanamaz
-- **Ö-05** ✅ Azil istisnası: süresi dolmuş vekaletname "aktif" sayılmaz
-- **Ö-06** ✅ Cevapsız karşı iddiası: contradictingCount (supportingCount değil)
-- **Ö-07** ✅ Dava değeri: en fazla 2 ondalık (kuruş hassasiyeti)
-- **Ö-08** ✅ Duruşma: geçmiş tarih 400 + aynı gün mükerrer 409 (canlı kanıtlı)
-- **Ö-09** ✅ İYUK m.8/3 çapa: recessEnd (Danıştay uygulaması 1-7 Eylül)
-- **Ö-11/12** ✅ /ai/chat: advisory + disclaimer + AgentRun izi
-- **Ö-13** ✅ Risk MISSED_DEADLINE: gün başına göre (off-by-one kapatıldı)
-- **Ö-15** ✅ KVKK export: portalKullanicilari + finansKayitlari eklendi
-- **Ö-16** ✅ Tenant.taxNumber/taxOffice/address + e-belge VKN zorunluluğu
-- **Ö-17** ✅ e-Fatura iptali: sağlayıcıya cancelInvoice iletilir
-- **Ö-18** ✅ Grup satırı kaynak izi: sourceIdsJson (serbest bırakma çözüldü)
-- **Ö-19** ✅ Mükerrer TCKN/VKN 409 (canlı kanıtlı)
-- **Ö-31** ✅ Admin ayarlar: PUT /settings/:key sözleşmesi
-- **Ö-32** ✅ Admin denetim: platformUser iç içe alan okuma
-- **Ö-39** ✅ Dockerfile frozen-lockfile geri düşüş kaldırıldı
-- **Ö-40** ✅ Web Dockerfile USER node
+| Bulgu | Düzeltme | Dalga |
+|---|---|---|
+| K-01 | Admin 2FA: challengeToken + /auth/2fa/verify sözleşmesi | 1 |
+| K-02 | UYAP eklenti: dürüst "geliştirme aşamasında" durumu | 1 |
+| Ö-01 | Panel bcrypt 10→12 | 1 |
+| Ö-02 | Portal bakım kilidi (yazma uçları 503) | 1 |
+| Ö-03 | SSRF IPv4-mapped normalizasyon | 1 |
+| Ö-04 | Dayanak: tenant görünürlük filtresi | 1 |
+| Ö-05 | Azil: süresi dolmuş vekaletname "aktif" sayılmaz | 1 |
+| Ö-06 | Cevapsız karşı iddiası: contradictingCount | 1 |
+| Ö-07 | Dava değeri: 2 ondalık sınırı | 1 |
+| Ö-08 | Duruşma: geçmiş tarih 400 + mükerrer 409 | 1 |
+| Ö-09 | İYUK m.8/3 çapa: recessEnd (Danıştay) | 1 |
+| Ö-10 | KK6: CONTRADICTS yalnız KARSI_TARAF'a | 2 |
+| Ö-11 | /ai/chat: AgentRun izi | 1 |
+| Ö-12 | /ai/chat: advisory + disclaimer | 1 |
+| Ö-13 | Risk MISSED_DEADLINE off-by-one | 1 |
+| Ö-14 | İcra rapor: para birimi ayrımı | 2 |
+| Ö-15 | KVKK export: portalKullanicilari + finansKayitlari | 1 |
+| Ö-16 | Tenant VKN zorunluluğu + migration | 1 |
+| Ö-17 | e-Fatura iptal: sağlayıcıya cancelInvoice | 1 |
+| Ö-18 | Grup satırı kaynak izi (sourceIdsJson) | 1 |
+| Ö-19 | Mükerrer TCKN/VKN 409 (canlı kanıtlı) | 1 |
+| Ö-21 | Zaman: sunucu tavanına (200) uydur | 2 |
+| Ö-22 | İletişim PII: onayla ve tekrar dene akışı | 2 |
+| Ö-23 | İcra Toplam Takip: sunucu total'i | 2 |
+| Ö-24 | Öneri rozet: sayfa sıfırlama | 2 |
+| Ö-26 | Koyu zemin kontrast: slate-300 | 2 |
+| Ö-27 | Matris boş hücre "+" görünür | 2 |
+| Ö-31 | Admin ayarlar: PUT /settings/:key | 1 |
+| Ö-32 | Admin denetim: platformUser iç içe | 1 |
+| Ö-33 | Admin işler sayfası (yeni) | 3 |
+| Ö-34 | Flag: isEnabledGlobally şemada | 3 |
+| Ö-35 | Duyuru: target nesnesi (targetJson değil) | 3 |
+| Ö-36 | Abonelik: transition AYRI uçta | 3 |
+| Ö-37 | İade: amount şemada | 3 |
+| Ö-38 | Parola: davet iddiası kaldırıldı | 3 |
+| Ö-39 | Dockerfile: frozen-lockfile geri düşüş yok | 1 |
+| Ö-40 | Web Dockerfile: USER node | 1 |
 
-## Kalan ÖNEMLİ (~14)
+## Kalan ÖNEMLİ (6)
 
-- Ö-10 (KK6 ORTAK/null), Ö-14 (icra rapor para birimi), Ö-20 (SISTEM log düzenleme)
-- Ö-21-27 (web arayüz: zaman limit, PII önerisi, Toplam Takip, sayfa sıfırlama,
-  tabPanelProps, kontrast)
-- Ö-33-38 (admin panel: jobs sayfası, isEnabledGlobally, targetJson, abonelik
-  PATCH, iade tutarı, parola daveti)
+- Ö-20: SISTEM iletişim geçmişi düzenlenebilir (denetim izi bozulabilir)
+- Ö-25: tabPanelProps 3 sekme ekranında kullanılmıyor
+- Ö-28: ✅ (d54c545'te kapatıldı — ölü e-posta)
+- Ö-29: Pazarlama hattı metni birebir farkı
+- Ö-30: docs/08 bayat hesap izi örneği
 
 ## Doğrulama
 
-- `pnpm build` 12/12 · tip 20/20 · lint 0/0
-- **1014 test** (api 662 · legal-core 90 · web 70 · legal-ai 76 · udf 44 ·
-  e-signature 37 · uyap 35)
-- Migration 26 adım; Docker 7/7; canlı: geçmiş duruşma 400, mükerrer TCKN 409
+- `pnpm build` 12/12 · tip 20/20 · lint **0/0**
+- **1014 test** (api 662 · legal-core 90 · web 70 · legal-ai 76 · udf 44 · e-signature 37 · uyap 35)
+- Migration **28**; Docker 7/7; canlı: geçmiş duruşma 400, mükerrer TCKN 409
 
 ## Anlık durum (önceki turların özeti)
 
