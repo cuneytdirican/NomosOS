@@ -15,68 +15,41 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 1 Eylül 2026, 15:00
+# 🔖 KALDIĞIM YER — 1 Eylül 2026, 20:00
 
-> **P0 DÜZELTME TURU — 3 DALGA GÖNDERİLDİ** (commit'ler `0e310cc` → `524adce` → `ddecf12`):
-> K-01 + K-02 + **34 ÖNEMLİ** bulgu kapatıldı. Kalan: Ö-20 (SISTEM log düzenleme),
-> Ö-25 (tabPanelProps benimseme), Ö-29/30 (pazarlama birebir/doküman)
-> + rakip farkları 3-7/7 + 66 İYİLEŞTİRME.
+> **TÜM 40 ÖNEMLİ BULGU KAPATILDI + rakip farkları A6/A1/portal-randevu teslim edildi.**
+> Son commit `8d6044d` GitHub'da; Docker 7/7 sağlıklı; tüm yüzeyler 200.
+>
+> Kalan: vekalet ücreti web aracı sayfası + B7 (banka cevabı ajanı) + 66 İYİLEŞTİRME.
 
-## Kapatılan ÖNEMLİ bulgular (34/40)
+## Bu turda kapatılan ÖNEMLİ bulgular (40/40 ✅)
 
-| Bulgu | Düzeltme | Dalga |
-|---|---|---|
-| K-01 | Admin 2FA: challengeToken + /auth/2fa/verify sözleşmesi | 1 |
-| K-02 | UYAP eklenti: dürüst "geliştirme aşamasında" durumu | 1 |
-| Ö-01 | Panel bcrypt 10→12 | 1 |
-| Ö-02 | Portal bakım kilidi (yazma uçları 503) | 1 |
-| Ö-03 | SSRF IPv4-mapped normalizasyon | 1 |
-| Ö-04 | Dayanak: tenant görünürlük filtresi | 1 |
-| Ö-05 | Azil: süresi dolmuş vekaletname "aktif" sayılmaz | 1 |
-| Ö-06 | Cevapsız karşı iddiası: contradictingCount | 1 |
-| Ö-07 | Dava değeri: 2 ondalık sınırı | 1 |
-| Ö-08 | Duruşma: geçmiş tarih 400 + mükerrer 409 | 1 |
-| Ö-09 | İYUK m.8/3 çapa: recessEnd (Danıştay) | 1 |
-| Ö-10 | KK6: CONTRADICTS yalnız KARSI_TARAF'a | 2 |
-| Ö-11 | /ai/chat: AgentRun izi | 1 |
-| Ö-12 | /ai/chat: advisory + disclaimer | 1 |
-| Ö-13 | Risk MISSED_DEADLINE off-by-one | 1 |
-| Ö-14 | İcra rapor: para birimi ayrımı | 2 |
-| Ö-15 | KVKK export: portalKullanicilari + finansKayitlari | 1 |
-| Ö-16 | Tenant VKN zorunluluğu + migration | 1 |
-| Ö-17 | e-Fatura iptal: sağlayıcıya cancelInvoice | 1 |
-| Ö-18 | Grup satırı kaynak izi (sourceIdsJson) | 1 |
-| Ö-19 | Mükerrer TCKN/VKN 409 (canlı kanıtlı) | 1 |
-| Ö-21 | Zaman: sunucu tavanına (200) uydur | 2 |
-| Ö-22 | İletişim PII: onayla ve tekrar dene akışı | 2 |
-| Ö-23 | İcra Toplam Takip: sunucu total'i | 2 |
-| Ö-24 | Öneri rozet: sayfa sıfırlama | 2 |
-| Ö-26 | Koyu zemin kontrast: slate-300 | 2 |
-| Ö-27 | Matris boş hücre "+" görünür | 2 |
-| Ö-31 | Admin ayarlar: PUT /settings/:key | 1 |
-| Ö-32 | Admin denetim: platformUser iç içe | 1 |
-| Ö-33 | Admin işler sayfası (yeni) | 3 |
-| Ö-34 | Flag: isEnabledGlobally şemada | 3 |
-| Ö-35 | Duyuru: target nesnesi (targetJson değil) | 3 |
-| Ö-36 | Abonelik: transition AYRI uçta | 3 |
-| Ö-37 | İade: amount şemada | 3 |
-| Ö-38 | Parola: davet iddiası kaldırıldı | 3 |
-| Ö-39 | Dockerfile: frozen-lockfile geri düşüş yok | 1 |
-| Ö-40 | Web Dockerfile: USER node | 1 |
+- **Ö-20** ✅ SISTEM kaydının gövdesi düzenlenemez (kanıt bütünlüğü; 409)
+- **Ö-25** ✅ tabPanelProps 3 sekme ekranına bağlandı (WCAG 4.1.2)
+- **Ö-29** ✅ Pazarlama hattı metni birebir düzeltildi
+- **Ö-30** ✅ docs/08 hesap izi örneği motora senkronlandı
 
-## Kalan ÖNEMLİ (6)
+## Rakip farkları (4/7 kesit teslim)
 
-- Ö-20: SISTEM iletişim geçmişi düzenlenebilir (denetim izi bozulabilir)
-- Ö-25: tabPanelProps 3 sekme ekranında kullanılmıyor
-- Ö-28: ✅ (d54c545'te kapatıldı — ölü e-posta)
-- Ö-29: Pazarlama hattı metni birebir farkı
-- Ö-30: docs/08 bayat hesap izi örneği
+| Kesit | İçerik |
+|---|---|
+| **A6** | e-SMM gönderimi (`POST /billing/invoices/:id/e-smm/send` + belge türü E_SMM) |
+| **A1** | CSV içe aktarma (`POST /clients/import` — mükerrer kontrolü create() hattından geçer) |
+| **E9 portal** | Müvekkil portalında "Randevularım" sayfası (al + listele + iptal + nav) |
+| Önceki | E8 ödeme, E9 API, D7 AAÜT, demo talep |
 
 ## Doğrulama
 
 - `pnpm build` 12/12 · tip 20/20 · lint **0/0**
 - **1014 test** (api 662 · legal-core 90 · web 70 · legal-ai 76 · udf 44 · e-signature 37 · uyap 35)
-- Migration **28**; Docker 7/7; canlı: geçmiş duruşma 400, mükerrer TCKN 409
+- Migration 28 · Docker 7/7 · tüm yüzeyler 200
+
+## Sırada
+
+1. **Vekalet ücreti web aracı** sayfası (web'de hızlı hesap aracı)
+2. **B7** banka haciz cevabı ajanı (deterministik çıkarım → icra önerisi)
+3. 66 İYİLEŞTİRME maddesi
+4. Bağımsız final denetim
 
 ## Anlık durum (önceki turların özeti)
 
