@@ -15,12 +15,22 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 31 Ağustos 2026, 22:30
+# 🔖 KALDIĞIM YER — 1 Eylül 2026, 06:45
 
-> **F2 DERİN DENETİMİ BİTTİ** (`docs/DENETIM-RAPORU-F2.md`): 8 alan denetçisi
-> ~787 dosyanın TAMAMINI okudu; 2 KRİTİK · 40 ÖNEMLİ · 66 İYİLEŞTİRME bulgusu
-> üretildi; 14 bulgu adversarial olarak yeniden okunarak doğrulandı.
-> **SIRADAKİ İŞ: DÜZELTME TURU** (raporun "Sıradaki Adımlar" bölümündeki öncelikle).
+> **RAKİP ANALİZİ TAMAMLANDI** → `docs/faz2/rakip-analizi.md`: Türkiye pazarındaki 11 satıcı
+> okundu (Hansoft, Avukat Bulut, Lexmira, Hukuk Bulutu, DavaCep, Hukuk Bilgi Sistemi,
+> Rod Responsa, Lexpera, Kanunum, Sinerji, Corpus). "Onlarda olup bizde olmayan" 20 madde
+> çıkarıldı: 6'sı F2 planında zaten var (B4 UYAP gönderim/çekme, A3a UETS, D1 içtihat
+> veritabanı, B6 SMS sağlayıcı), 14'ü YENİ epic önerisi. Öncelik sırası raporda.
+> Not: "Lawaia" rakibi doğrulanamadı (park edilmiş alan adı — halüsinasyon kaynağı).
+
+## Sıradaki iş (öncelik sırasıyla)
+
+1. **F2 düzeltme turu** — denetim raporundaki 2 KRİTİK + 40 ÖNEMLİ (plan izlemesi yarım kaldı)
+2. **Rakip boşluk epicleştirme** — rakip analizindeki 14 yeni epic'yi yol haritasına T2+ adayı olarak işle
+3. Hata yönetimi + kendi kendini onarma iş kolu (planlanmış, yazılmadı)
+
+## Anlık durum (önceki turların özeti)
 
 ## Denetim sonuç özeti
 
