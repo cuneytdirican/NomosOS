@@ -1,6 +1,9 @@
 import { Module } from "@nestjs/common";
 import { FinanceModule } from "../finance/finance.module";
 import { BillingController } from "./billing.controller";
+import { OdemeLinkiController } from "./odeme-linki.controller";
+import { OdemeLinkiService } from "./odeme-linki.service";
+import { OdemeSaglayici } from "./odeme-saglayici";
 import { FeeAgreementsService } from "./fee-agreements.service";
 import { TimeEntriesService } from "./time-entries.service";
 import { InvoicesService } from "./invoices.service";
@@ -23,7 +26,7 @@ import { EInvoiceService } from "./e-invoice/e-invoice.service";
  */
 @Module({
   imports: [FinanceModule],
-  controllers: [BillingController],
+  controllers: [BillingController, OdemeLinkiController],
   providers: [
     FeeAgreementsService,
     TimeEntriesService,
@@ -31,7 +34,10 @@ import { EInvoiceService } from "./e-invoice/e-invoice.service";
     PaymentsService,
     InvoiceNumberService,
     EInvoiceService,
+    // E8 (rakip analizi) — portal ödeme bağlantısı.
+    OdemeSaglayici,
+    OdemeLinkiService,
   ],
-  exports: [FeeAgreementsService, InvoicesService, TimeEntriesService, EInvoiceService],
+  exports: [FeeAgreementsService, InvoicesService, TimeEntriesService, EInvoiceService, OdemeLinkiService],
 })
 export class BillingModule {}

@@ -281,6 +281,8 @@ export const PAYMENT_METHODS = [
   "CEK",
   "SENET",
   "MAHSUP",
+  // Portal ödeme bağlantısından gelen online tahsilat (rakip analizi — E8).
+  "ONLINE",
   "DIGER",
 ] as const;
 

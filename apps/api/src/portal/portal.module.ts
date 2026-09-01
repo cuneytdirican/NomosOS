@@ -11,6 +11,7 @@ import { PortalService } from "./portal.service";
 import { PortalJwtGuard } from "./guards/portal-jwt.guard";
 import { PortalRateLimitGuard } from "./guards/portal-rate-limit.guard";
 import { PortalAuditInterceptor } from "./interceptors/portal-audit.interceptor";
+import { RandevuModule } from "../randevu/randevu.module";
 
 /**
  * MÜVEKKİL PORTALI (Modül 10) — İKİ YÜZLÜ TEK MODÜL.
@@ -54,7 +55,7 @@ import { PortalAuditInterceptor } from "./interceptors/portal-audit.interceptor"
    * `InboundService` portalı bilmez); yalnız modül grafiği döngüseldir ve
    * `forwardRef` tam olarak bunun içindir.
    */
-  imports: [forwardRef(() => CommunicationModule)],
+  imports: [forwardRef(() => CommunicationModule), RandevuModule],
   controllers: [PortalAuthController, PortalDataController, PortalAdminController],
   providers: [
     PortalAuthService,

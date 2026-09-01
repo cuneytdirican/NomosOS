@@ -15,12 +15,52 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 1 Eylül 2026, 12:40
+# 🔖 KALDIĞIM YER — 1 Eylül 2026, 16:10
 
-> **BU TUR:** Demo talep akışı e-postasız sisteme bağlandı + rakip farkları
-> turunun İLK KESİTİ (D7 AAÜT vekalet ücreti) uçtan uca teslim edildi.
-> Migration `20260916090000_rakip_farklari` uygulandı (DemoRequest, VekaletTarife,
-> OdemeLinki, Randevu, e-SMM belge türü, özel alanlar, banka cevabı sınıfı).
+> **BU KESİT:** E8 portal ödemesi + E9 randevu uçtan uca teslim edildi (rakip
+> farkları turu 3/7 kesit). Migration 25 adım (`20260917090000_odeme_metodu_online`
+> — canlı bulunan enum eksiği düzeltildi).
+
+## Bu kesitte teslim edilenler
+
+1. **E8 — PORTAL ÖDEME BAĞLANTISI** (canlı kanıtlı):
+   - Büro: `POST /billing/invoices/:id/odeme-linki` → kalan bakiyeli, 64 hex
+     token'lı, 30 gün geçerli TEK KULLANIMLIK bağlantı (PAYMENT_WRITE yetkisi)
+   - Müvekkil (public, token yetkidir): `/portal/odeme/:token` bilgi +
+     `/ode` ödeme — Ödeme sayfası portal uygulamasında (`/odeme/[token]`)
+   - Para disiplini PaymentsService ile aynı: transaction + FOR UPDATE kilidi +
+     Payment(ONLINE) + FinancialEntry(TAHSILAT) + fatura durumu yeniden hesap;
+     fazla ödeme YOK (kalan kadar tahsilat)
+   - Sağlayıcı: `ODEME_SAGLAYICI=SIMULASYON` test modu; tanımsızsa DÜRÜST 503
+   - **Canlı**: bağlantı 28.000 TRY → ödeme OK → fatura ODENDI → ikinci ödeme 409
+2. **E9 — RANDEVU** (canlı kanıtlı):
+   - Büro ajandası `/randevular` (her rol alabilir; durum OPERASYON)
+   - Çakışma kapısı: yarı-açık aralık; KESİŞEN randevu 409 (canlı sınandı)
+   - Portal self-servisi: `GET/POST /portal/randevular` + `:id/iptal` — süre
+     sabit 30 dk, clientId oturumdan (istemciden ASLA alınmaz), hız sınırı
+   - **Canlı**: sekreter büro randevusu → portal telefon randevusu (30 dk) →
+     çakışma 409 → portal iptal IPTAL
+3. **Düzeltmeler**: PaymentMethod.ONLINE enum'u DB'ye migration'la eklendi
+   (canlı 500 hatası bulundu ve kapatıldı) · katalog sözleşme testi portal
+   composite dekoratörünü öğrendi · test yığınına SIMULASYON modu
+
+## Doğrulama
+
+- `pnpm build` 12/12 · lint 0/0 · **1004 test** (api 652 · legal-core 90 ·
+  web 70 · legal-ai 76 · udf 44 · e-signature 37 · uyap 35)
+- Migration 25 adım; Docker 7/7 sağlıklı; E8 + E9 canlı uçtan uca kanıtlı
+
+## Sıradaki kesit (kalan 4/7)
+
+1. **A6 e-SMM**: fatura → e-SMM gönderim ucu (belge türü hazır) + arayüz düğmesi
+2. **B7 banka cevabı ajanı**: BANKA_HACIZ_CEVABI sınıfı hazır → deterministik
+   çıkarım (banka/tutar/IBAN) → icra malvarlığı ÖNERİSİ
+3. **A1 CSV içe aktarma + özel alanlar** (customFieldsJson hazır) + arayüzleri
+4. **Vekalet ücreti web aracı** sayfası + portal randevu SAYFASI (API hazır)
+5. Pazarlama: yalnız YAPILANLAR (vaat kısıtı) + docs/08 birebir
+6. F2 düzeltme turu (denetim: 2 KRİTİK + 40 ÖNEMLİ — admin 2FA K-01 başta)
+
+## Anlık durum (önceki turların özeti)
 
 ## Bu turda yapılanlar
 

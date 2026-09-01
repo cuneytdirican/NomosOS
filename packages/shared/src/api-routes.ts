@@ -425,3 +425,17 @@ export const VEKALET_UCRETI_ROUTES = {
   tarife: (yil: string | number) => `/vekalet-ucreti/tarife/${yil}`,
   tarifeKaydet: "/vekalet-ucreti/tarife",
 } as const;
+
+/** Randevu ajandası (E9 — büro tarafı). */
+export const RANDEVU_ROUTES = {
+  list: "/randevular",
+  create: "/randevular",
+  detail: (id: string) => `/randevular/${id}`,
+} as const;
+
+/** Portal self-servis uçları (E9 randevu + E8 ödeme — token yetkidir). */
+export const PORTAL_SELF_ROUTES = {
+  randevular: "/portal/randevular",
+  randevuIptal: (id: string) => `/portal/randevular/${id}/iptal`,
+  odeme: (token: string) => `/portal/odeme/${token}`,
+} as const;

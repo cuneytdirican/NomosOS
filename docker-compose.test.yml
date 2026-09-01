@@ -136,6 +136,10 @@ services:
       # Test panele TOTP uygulaması olmadan girilebilsin diye 2FA kapalı.
       PLATFORM_REQUIRE_2FA: "false"
       TRUSTED_PROXY_HOPS: "0"
+      # E8 (rakip analizi) — portal ödeme bağlantısı test yığında SİMÜLASYON
+      # modunda: gerçek para hareketi yok, ödeme kaydı düşer. Üretimde gerçek
+      # sanal POS sözleşmesi bağlanana kadar tanımsız bırakılır (dürüst 503).
+      ODEME_SAGLAYICI: "SIMULASYON"
     ports:
       - "3001:3001"
     depends_on:

@@ -32,12 +32,14 @@ interface Token { t: "ctrl" | "route"; i: number; base?: string; method?: string
 function scanController(source: string): Token[] {
   const tokens: Token[] = [];
   // Temel önek TIRNAKSIZ da boş olabilir: `@Controller()` (auth.controller).
-  const ctrlRe = /@Controller\(\s*(?:["'`]([^"'`]*)["'`])?\s*\)/g;
+  // Portal controller'ı composite dekoratör kullanır (`@PortalControllerDecorator("portal")`
+  // → applyDecorators(Controller(path), …)); @Controller regex'i onu göremez —
+  // portal öneki katalog tarafıyla eşleşsin diye composite AYRI YAKALANIR.
+  const ctrlRe = /@(?:Controller|PortalControllerDecorator)\(\s*(?:["'`]([^"'`]*)["'`]\s*)?\)/g;
   const routeRe = /@(Get|Post|Patch|Put|Delete)\(\s*(?:["'`]([^"'`]*)["'`]\s*)?\)/g;
   let m: RegExpExecArray | null;
   while ((m = ctrlRe.exec(source))) tokens.push({ t: "ctrl", base: m[1] ?? "", i: m.index });
-  while ((m = routeRe.exec(source)))
-    tokens.push({ t: "route", method: m[1], sub: m[2] ?? "", i: m.index });
+  while ((m = routeRe.exec(source))) tokens.push({ t: "route", method: m[1], sub: m[2] ?? "", i: m.index });
   tokens.sort((a, b) => a.i - b.i);
   return tokens;
 }
