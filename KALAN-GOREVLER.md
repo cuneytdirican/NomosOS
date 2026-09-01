@@ -15,28 +15,39 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 1 Eylül 2026, 20:00
+# 🔖 KALDIĞIM YER — 1 Eylül 2026, 22:30
 
-> **TÜM 40 ÖNEMLİ BULGU KAPATILDI + rakip farkları A6/A1/portal-randevu teslim edildi.**
-> Son commit `8d6044d` GitHub'da; Docker 7/7 sağlıklı; tüm yüzeyler 200.
+> **RAKİP FARKLARI 7/7 TAMAMLANDI + kritik İYİLEŞTİRMELER kapatıldı.**
+> Son commit `88a8615` GitHub'da; Docker 7/7 sağlıklı; tüm yüzeyler 200.
 >
-> Kalan: vekalet ücreti web aracı sayfası + B7 (banka cevabı ajanı) + 66 İYİLEŞTİRME.
+> Kalan: 63 İYİLEŞTİRME maddesi (P2-P4) + bağımsız final denetim.
 
-## Bu turda kapatılan ÖNEMLİ bulgular (40/40 ✅)
+## Bu turda teslim edilenler
 
-- **Ö-20** ✅ SISTEM kaydının gövdesi düzenlenemez (kanıt bütünlüğü; 409)
-- **Ö-25** ✅ tabPanelProps 3 sekme ekranına bağlandı (WCAG 4.1.2)
-- **Ö-29** ✅ Pazarlama hattı metni birebir düzeltildi
-- **Ö-30** ✅ docs/08 hesap izi örneği motora senkronlandı
+1. **Vekalet ücreti web aracı** (D7): `/araclar/vekalet-ucreti` — hesap sunucudaki
+   D7 motorundan (kuruş hassasiyeti + iz gösterimi); tarife girilmemişse dürüst 404;
+   nav'da "Vekalet Ücreti Hesabı" altında
+2. **B7 banka haciz cevabı ajanı**: `BANKA_CEVABI` pipeline adımı — İİK m.89/2
+   banka cevabı belgesi DETERMİNİSTİK analiz edilir (banka adı, IBAN, bakiye, tarih
+   regex); icra dosyasına bağlıysa malvarlığı ÖNERİSİ (kayıt değil)
+3. **İYİLEŞTİRME İ-02**: TOTP adım tüketimi koşullu yazımla (updateMany) — TOCTOU
+   kapatıldı, eşzamanlı tekrar oynatma engellendi
+4. **İYİLEŞTİRME İ-03**: CSV dışa aktarmada formül enjeksiyonu koruması (`, +, -, @, tab`
+   ile başlayan hücrelere tek tırnak)
+5. **İYİLEŞTİRME İ-04**: Redis sayaç resetleme FLUSHDB yerine önekli SCAN+DEL
+   (BullMQ kuyruklarını korur)
 
-## Rakip farkları (4/7 kesit teslim)
+## Rakip farkları durumu: 7/7 TAMAMLANDI
 
-| Kesit | İçerik |
-|---|---|
-| **A6** | e-SMM gönderimi (`POST /billing/invoices/:id/e-smm/send` + belge türü E_SMM) |
-| **A1** | CSV içe aktarma (`POST /clients/import` — mükerrer kontrolü create() hattından geçer) |
-| **E9 portal** | Müvekkil portalında "Randevularım" sayfası (al + listele + iptal + nav) |
-| Önceki | E8 ödeme, E9 API, D7 AAÜT, demo talep |
+| # | Özellik | Uç/Arayüz |
+|---|---|---|
+| D7 | AAÜT vekalet ücreti | Motor + API + web aracı sayfası |
+| A6 | e-SMM | POST /billing/invoices/:id/e-smm/send |
+| E8 | Portal ödeme | Tek kullanımlık bağlantı + portal ödeme sayfası |
+| E9 | Randevu | Büro ajandası + portal self-servis sayfası |
+| A1 | CSV içe aktarma | POST /clients/import (mükerrer kontrolü dahil) |
+| B7 | Banka cevabı ajanı | Deterministik pipeline adımı + öneri |
+| Demo talep | Sistem kaydı | DemoRequest + platform paneli sayfası |
 
 ## Doğrulama
 
@@ -46,10 +57,9 @@
 
 ## Sırada
 
-1. **Vekalet ücreti web aracı** sayfası (web'de hızlı hesap aracı)
-2. **B7** banka haciz cevabı ajanı (deterministik çıkarım → icra önerisi)
-3. 66 İYİLEŞTİRME maddesi
-4. Bağımsız final denetim
+1. Kalan ~60 İYİLEŞTİRME maddesi (P2 UX → P4 mimari) — önceliklendirilmiş işleme
+2. Bağımsız final denetim (yeni gözle, sıfırdan okuma)
+3. FINAL-COMPLETION-REPORT.md üretimi
 
 ## Anlık durum (önceki turların özeti)
 
