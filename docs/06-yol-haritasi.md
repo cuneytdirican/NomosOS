@@ -67,12 +67,13 @@ görev zinciri (sorumlu → kontrol → onay) uçtan uca; rol bazlı yetki testl
 
 ## Faz 2 — AI Katmanı + UYAP
 
-> **DURUM NOTU (derin denetim, 31.08.2026):** Faz 2'nin çıkış kriterlerinin tamamı
-> karşılanmadı — **UYAP extension'ın ARKA UCU yazılmadı** (spec'in tanımladığı 6 uç yok;
-> yalnızca eklentinin istemci tarafı var). UYAP entegrasyonu bu yüzden "çalışan özellik"
-> değil, **geliştirme aşamasında**dır ve pazarlama/arayüz metinlerinde böyle anılır
-> (denetim bulgusu Ö-26). Faz 2'nin kalan çıkış kriterleri: UYAP'tan aktarılan evrakın
-> otomatik sınıflanıp dosyaya bağlanması.
+> **DURUM GÜNCELLEMESİ (02.09.2026):** UYAP Köprüsü tamamlandı — eklentinin 7 uçluk
+> arka ucu yazıldı (`apps/api/src/uyap`: pair, pair/refresh, sync/files, sync/events,
+> documents/presign, documents/commit, status + web yönetim uçları), eşleştirme kodu +
+> cihaz yönetimi + eşleştirme kuyruğu arayüzde (`/app/uyap`), eklenti NomosOS
+> sunucusundan ZIP olarak iner (mağaza yok). Pazarlama metinleri "geliştirme
+> aşamasında" ibaresinden arındırıldı (Ö-26 vaat testi güncellendi). Kalan:
+> UYAP'tan aktarılan evrakın otomatik sınıflanıp dosyaya bağlanması tam otomasyonu.
 
 **Hedef**: "AI-Native" iddiasının karşılanması; benchmark ürünle özellik paritesi + aşma.
 

@@ -77,6 +77,41 @@ export class UyapService {
     });
   }
 
+  /**
+   * Uygulama içi UYAP sayfası için durum özeti: izlenen dosya sayısı, son
+   * senkron, bekleyen eşleşme, eşleştirilmiş cihazlar.
+   */
+  async webSummary(user: AuthUser) {
+    const [watchedFileCount, lastEvent, pendingMatchCount, devices] = await Promise.all([
+      this.prisma.client.uyapCaseLink.count({ where: { tenantId: user.tenantId } }),
+      this.prisma.client.uyapEventRecord.findFirst({
+        where: { tenantId: user.tenantId },
+        orderBy: { createdAt: "desc" },
+        select: { createdAt: true },
+      }),
+      this.prisma.client.uyapMatchQueue.count({
+        where: { tenantId: user.tenantId, resolvedAt: null },
+      }),
+      this.prisma.client.uyapExtensionToken.findMany({
+        where: { tenantId: user.tenantId, revokedAt: null },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          deviceName: true,
+          extensionVersion: true,
+          lastUsedAt: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+    return {
+      watchedFileCount,
+      lastSyncAt: lastEvent?.createdAt ?? null,
+      pendingMatchCount,
+      devices,
+    };
+  }
+
   /** Cihazın jetonunu iptal eder — o tarayıcı bir daha senkron yapamaz. */
   async revokeDevice(user: AuthUser, tokenId: string) {
     const device = await this.prisma.client.uyapExtensionToken.findFirst({

@@ -276,6 +276,19 @@ const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
           </svg>
         ),
       },
+      {
+        href: "/app/uyap",
+        label: "UYAP Eklentisi",
+        icon: (
+          <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+            <path
+              fillRule="evenodd"
+              d="M5.5 2.5A1.5 1.5 0 0 0 4 4v12a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 16 16V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 10.378 2H5.5Zm2.75 7.75a.75.75 0 0 1 .75-.75h2.5a.75.75 0 1 1 0 1.5h-.69l-1.22 2.44 1.06 1.06a.75.75 0 0 1-.53 1.28H8.25a.75.75 0 0 1 0-1.5h1.19l-.94-.94a.75.75 0 0 1-.14-.85l.86-1.74H9a.75.75 0 0 1-.75-.75Z"
+              clipRule="evenodd"
+            />
+          </svg>
+        ),
+      },
     ],
   },
   {

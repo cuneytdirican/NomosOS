@@ -186,8 +186,8 @@ export const modules = {
       text: "İİK m.89/2 banka cevap belgesi yüklendiğinde banka adı, IBAN, bakiye ve tarih otomatik tespit edilir. İcra dosyasına bağlıysa malvarlığı kaydı önerilir — kaydı yine siz onaylarsınız.",
     },
     {
-      title: "UYAP Köprüsü (geliştirme aşamasında)",
-      text: "Tarayıcı eklentisiyle dosya, safahat ve evrak aktarımı hedefleniyor. UYAP'ın yerine geçmez; üzerine bir operasyon katmanı kurar.",
+      title: "UYAP Köprüsü",
+      text: "Tarayıcı eklentisiyle dosya listesi, safahat ve evrak aktarımı. NomosOS'tan indirilir, eşleştirme koduyla büronuza bağlanır. UYAP'ın yerine geçmez; üzerine bir operasyon katmanı kurar.",
     },
   ],
 } as const;
@@ -237,7 +237,7 @@ export const pipeline = {
   title: "Evrak geldi. Sistem ne yapılacağını çıkardı.",
   lead: "Bugün belge yüklemek bir arşivleme işidir. NomosOS'ta belge, sürecin başlangıcıdır.",
   steps: [
-    { title: "Evrak sisteme girer", detail: "yükleme (UYAP eklentisi: geliştirme aşamasında)" },
+    { title: "Evrak sisteme girer", detail: "yükleme · UYAP eklentisi · portal" },
     {
       title: "Metin çıkarılır ve sınıflandırılır",
       detail:
@@ -326,10 +326,10 @@ export const byollm = {
  * ----------------------------------------------------------------------- */
 
 export const uyap = {
-  kicker: "ENTEGRASYON · GELİŞTİRME AŞAMASINDA",
+  kicker: "ENTEGRASYON",
   title: "UYAP'ın yerine geçmez. Üzerine bir katman kurar.",
   paragraphs: [
-    "Hedef: kendi UYAP oturumunuz üzerinden çalışan bir tarayıcı eklentisiyle dosya listesi, safahat, duruşma bilgileri ve evrakların NomosOS'a aktarılması ve gelen her evrakın otomatik aksiyon hattına girmesi. Eklentinin istemci tarafı yazıldı; senkronizasyon ve aktarım altyapısı geliştirme aşamasındadır — kullanıma açıldığında duyurulacaktır.",
+    "Tarayıcı eklentisi, kendi UYAP oturumunuz üzerinden dosya listesi, safahat ve duruşma bilgilerini NomosOS'a aktarır; UYAP evrakları belge kütüphanenize düşer ve otomatik aksiyon hattına girer. Eklenti NomosOS'tan indirilir (Chrome Web Mağazası gerekmez), büronuzla eşleştirme koduyla bağlanır.",
   ],
   signature: {
     before: "Hazırladığınız dilekçeyi UDF formatında dışa aktarır; UYAP ekranına aktarım hedefi eklentiyle birlikte gelecek — ancak ",
@@ -339,15 +339,15 @@ export const uyap = {
   note: "UYAP oturum ve e-imza bilgileriniz NomosOS'a hiçbir şekilde aktarılmaz.",
 } as const;
 
-/** UYAP köprüsü mockup'ı (gerçek veri değildir; hedeflenen akışın gösterimi). */
+/** UYAP köprüsü mockup'ı (gerçek veri değildir; akışın gösterimi). */
 export const uyapMockup = {
   sampleBadge: "örnek veri",
   windowTitle: "NomosOS · UYAP Köprüsü",
   rows: [
-    { label: "Dosya listesi", detail: "142 dosya eşleşti", state: "Hedef akış" },
-    { label: "Safahat", detail: "38 yeni kayıt", state: "Hedef akış" },
-    { label: "Duruşma bilgileri", detail: "9 duruşma güncellendi", state: "Hedef akış" },
-    { label: "Evrak", detail: "5 evrak aksiyon hattına girdi", state: "Hedef akış" },
+    { label: "Dosya listesi", detail: "142 dosya eşleşti", state: "Senkron" },
+    { label: "Safahat", detail: "38 yeni kayıt", state: "Senkron" },
+    { label: "Duruşma bilgileri", detail: "9 duruşma güncellendi", state: "Senkron" },
+    { label: "Evrak", detail: "5 evrak aksiyon hattına girdi", state: "Senkron" },
     { label: "Dilekçe gönderimi", detail: "e-imza sizde", state: "Onayınızda" },
   ],
 } as const;

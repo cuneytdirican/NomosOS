@@ -16,7 +16,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
-  Query,
+  Req,
   UseGuards,
 } from "@nestjs/common";
 import { z } from "zod";
@@ -65,31 +65,43 @@ export class UyapExtensionController {
 
   @Post("sync/files")
   @UseGuards(UyapTokenGuard)
-  syncFiles(req: UyapTokenRequest, @Body(new ZodValidationPipe(syncFilesSchema)) body: SyncFilesInput) {
+  syncFiles(
+    @Req() req: UyapTokenRequest,
+    @Body(new ZodValidationPipe(syncFilesSchema)) body: SyncFilesInput,
+  ) {
     return this.uyap.syncFiles(req.uyapToken!, body);
   }
 
   @Post("sync/events")
   @UseGuards(UyapTokenGuard)
-  syncEvents(req: UyapTokenRequest, @Body(new ZodValidationPipe(syncEventsSchema)) body: SyncEventsInput) {
+  syncEvents(
+    @Req() req: UyapTokenRequest,
+    @Body(new ZodValidationPipe(syncEventsSchema)) body: SyncEventsInput,
+  ) {
     return this.uyap.syncEvents(req.uyapToken!, body);
   }
 
   @Post("documents/presign")
   @UseGuards(UyapTokenGuard)
-  presign(req: UyapTokenRequest, @Body(new ZodValidationPipe(presignSchema)) body: PresignInput) {
+  presign(
+    @Req() req: UyapTokenRequest,
+    @Body(new ZodValidationPipe(presignSchema)) body: PresignInput,
+  ) {
     return this.uyap.presignDocument(req.uyapToken!, body);
   }
 
   @Post("documents/commit")
   @UseGuards(UyapTokenGuard)
-  commit(req: UyapTokenRequest, @Body(new ZodValidationPipe(commitSchema)) body: CommitInput) {
+  commit(
+    @Req() req: UyapTokenRequest,
+    @Body(new ZodValidationPipe(commitSchema)) body: CommitInput,
+  ) {
     return this.uyap.commitDocument(req.uyapToken!, body);
   }
 
   @Get("status")
   @UseGuards(UyapTokenGuard)
-  status(req: UyapTokenRequest) {
+  status(@Req() req: UyapTokenRequest) {
     return this.uyap.status(req.uyapToken!);
   }
 }
@@ -137,13 +149,9 @@ export class UyapWebController {
     return this.uyap.resolveMatch(user, id, body.caseId);
   }
 
-  /** UYAP senkron durum özeti (izlenen dosya, bekleyen eşleşme). */
+  /** UYAP senkron durum özeti — uygulama içi sayfa için (izlenen dosya, son senkron, cihazlar). */
   @Get("ozet")
-  summary(
-    @CurrentUser() user: AuthUser,
-    @Query("unused") _unused?: string,
-  ) {
-    void _unused;
-    return this.uyap.matchQueue(user);
+  async summary(@CurrentUser() user: AuthUser) {
+    return this.uyap.webSummary(user);
   }
 }

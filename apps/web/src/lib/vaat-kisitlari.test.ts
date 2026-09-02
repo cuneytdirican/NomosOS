@@ -7,7 +7,7 @@
  * gösteremez. Bu test yasak ifadeleri tarar; biri geri gelirse kırmızıya döner.
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -26,34 +26,54 @@ const codeOnly = (src: string) =>
     .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
     .join("\n");
 
-describe("Ö-26: UYAP çalışan özellik gibi sunulamaz", () => {
+describe("Ö-26: UYAP vaadi kurulumun GERÇEĞİNE eşit", () => {
   it("güven şeridinde 'UYAP entegrasyonu' çipi yok (içtihat teyidi çipi var)", () => {
     expect(codeOnly(CONTENT)).not.toMatch(/"UYAP entegrasyonu"/);
   });
 
-  it("UYAP bölümü geliştirme aşaması olarak işaretli", () => {
-    expect(codeOnly(CONTENT)).toContain("GELİŞTİRME AŞAMASINDA");
-    expect(codeOnly(CONTENT)).toContain("geliştirme aşamasındadır");
+  it("UYAP bölümü eklentinin YAYINDA olduğunu söylüyor — arka uç yazıldı, 'geliştirme aşamasında' kalktı", () => {
+    // Eklenti + arka uç tamamen yazıldı (uyap modülü 7 uçla yayında);
+    // "geliştirme aşamasında" ifadesi artık YANILTICI olurdu.
+    expect(codeOnly(CONTENT)).toContain("NomosOS'tan indirilir");
+    expect(codeOnly(CONTENT)).toContain("eşleştirme koduyla");
+    expect(codeOnly(CONTENT)).not.toContain("geliştirme aşamasında");
   });
 
-  it("'şu an aktarılır' şimdiki zaman vaadi kalktı; mockup 'Aktarıldı' demiyor", () => {
-    expect(codeOnly(CONTENT)).not.toContain("Aktarıldı");
+  it("mockup 'Senkron' diyor — 'Hedef akış' yok (akış hedef değil, çalışıyor)", () => {
+    expect(codeOnly(CONTENT)).toContain("Senkron");
+    expect(codeOnly(CONTENT)).not.toContain("Hedef akış");
     expect(codeOnly(CONTENT)).not.toContain("UYAP ekranını sizin için");
-    expect(codeOnly(CONTENT)).toContain("Hedef akış");
   });
 
-  it("modül listesinde UYAP geliştirme aşaması etiketi taşıyor", () => {
-    expect(codeOnly(CONTENT)).toContain("UYAP Köprüsü (geliştirme aşamasında)");
+  it("modül listesinde 'geliştirme aşamasında' etiketi YOK", () => {
+    expect(codeOnly(CONTENT)).not.toContain("UYAP Köprüsü (geliştirme aşamasında)");
+    expect(codeOnly(CONTENT)).toContain("UYAP Köprüsü");
   });
 
-  it("kaynak doküman da aynı kısıtı taşıyor (birebir kuralı)", () => {
-    expect(MARKETING_DOC).toContain("GELİŞTİRME AŞAMASINDA");
+  it("kaynak doküman da aynı vaadi taşıyor (birebir kuralı)", () => {
+    expect(MARKETING_DOC).toContain("NomosOS'tan indirilir");
+    expect(MARKETING_DOC).not.toContain("GELİŞTİRME AŞAMASINDA");
     expect(MARKETING_DOC).not.toContain("ekranını sizin için");
   });
 
-  it("yol haritası Faz 2'yi UYAP arka ucu olmadan işaretliyor", () => {
+  it("UYAP'a GÖNDERİM vaadi yok — eklenti OKUR, e-imza ve gönderim avukattadır", () => {
+    expect(codeOnly(CONTENT)).toContain("Sistem sizin adınıza hiçbir evrak göndermez");
+    expect(codeOnly(CONTENT)).not.toMatch(/UYAP'a (otomatik )?gönder/i);
+  });
+
+  it("yol haritası Faz 2 UYAP arka ucunu TAMAMLANMIŞ işaretliyor", () => {
     const roadmap = read("..", "..", "docs", "06-yol-haritasi.md");
-    expect(roadmap).toContain("ARKA UCU yazılmadı");
+    expect(roadmap).toContain("UYAP Köprüsü tamamlandı");
+  });
+
+  it("uygulama içinde eklenti KENDİ SUNUCUMUZDAN iner (mağaza yok) — indirme paketi var", () => {
+    // ZIP repo içinde public/downloads altında durur; sayfa statik bağla verir.
+    const page = read("src", "app", "app", "uyap", "page.tsx");
+    expect(page).toContain("/downloads/nomosos-uyap-koprusu-v");
+    expect(page).toContain("Paketlenmemiş yükle");
+    expect(existsSync("public/downloads")).toBe(true);
+    const zips = readdirSync("public/downloads").filter((f) => f.startsWith("nomosos-uyap-koprusu-v"));
+    expect(zips.length).toBeGreaterThanOrEqual(1);
   });
 });
 

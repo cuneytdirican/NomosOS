@@ -50,6 +50,14 @@ Mobil uygulama (`apps/mobile`) Docker'a girmez; Expo ile cihazda çalışır (bk
 | `superadmin2@nomosos.local` | **SUPER_ADMIN** | **İkinci imza** — dört-göz akışını denemek için |
 | `analist@nomosos.local` | **ANALYST_READONLY** | **Yatırımcı/ortak profili**: yalnız toplulaştırılmış iş metrikleri (MRR, plan dağılımı, churn). Hiçbir yazma işlemi yapamaz; tenant'ın müvekkil/dosya verisini **göremez** |
 
+Panel girişi: http://localhost:3002/giris
+
+Hesap	E-posta	Parola	Rol
+Süper yönetici	superadmin@nomosos.local	Demo1234!	SUPER_ADMIN
+İkinci imza	superadmin2@nomosos.local	Demo1234!	SUPER_ADMIN (dört-göz akışları için)
+Yatırımcı	analist@nomosos.local	Demo1234!	ANALYST_READONLY (maskeli görünüm)
+
+
 > **Dört-göz ilkesini denemek:** `superadmin` ile bir tenant'ı askıya alın →
 > işlem uygulanmaz, onay talebi oluşur. Aynı hesapla onaylamayı deneyin → **403**
 > ("kendi talebinizi karara bağlayamazsınız"). Sonra `superadmin2` ile giriş yapıp

@@ -48,7 +48,11 @@ function serviceWith(over?: { cakisan?: unknown }) {
   return { svc: new RandevuService(prisma, audit), created };
 }
 
-const BUGUN = new Date("2026-09-02T10:00:00.000Z");
+// BUGÜN SABİT DEĞİL — NİSPİ: testin koştuğu AN'dan 1 saat sonra (zaman-bombası
+// test olmasın: sabit tarih yazıldığı günün sonunda "geçmiş zamana randevu"
+// hatasına düşüyordu).
+const BUGUN = new Date(Date.now() + 60 * 60_000);
+const at = (minutesOffset: number) => new Date(BUGUN.getTime() + minutesOffset * 60_000);
 
 describe("Çakışma kapısı", () => {
   it("boş ajandaya randevu kurulur", async () => {
@@ -56,7 +60,7 @@ describe("Çakışma kapısı", () => {
     const r = await svc.create(BUREAU_USER, {
       title: "Müvekkil görüşmesi",
       startAt: BUGUN,
-      endAt: new Date("2026-09-02T10:30:00.000Z"),
+      endAt: at(30),
     });
     expect(r.status).toBe("PLANLANDI");
     expect(created[0].title).toBe("Müvekkil görüşmesi");
@@ -67,18 +71,18 @@ describe("Çakışma kapısı", () => {
     await expect(
       svc.create(BUREAU_USER, {
         title: "Çakışan randevu",
-        startAt: new Date("2026-09-02T10:15:00.000Z"),
-        endAt: new Date("2026-09-02T10:45:00.000Z"),
+        startAt: at(15),
+        endAt: at(45),
       }),
     ).rejects.toThrow(ConflictException);
   });
 
   it("bitişi başlangıca değen randevu KABUL edilir (yarı-açık aralık)", async () => {
-    const { svc } = serviceWith(); // cakisan yok — 10:30-11:00 serbest
+    const { svc } = serviceWith(); // cakisan yok — BUGUN+30..+60 serbest
     const r = await svc.create(BUREAU_USER, {
       title: "Art arda randevu",
-      startAt: new Date("2026-09-02T10:30:00.000Z"),
-      endAt: new Date("2026-09-02T11:00:00.000Z"),
+      startAt: at(30),
+      endAt: at(60),
     });
     expect(r.status).toBe("PLANLANDI");
   });
@@ -88,8 +92,8 @@ describe("Çakışma kapısı", () => {
     await expect(
       svc.create(BUREAU_USER, {
         title: "Ters aralık",
-        startAt: new Date("2026-09-02T11:00:00.000Z"),
-        endAt: new Date("2026-09-02T10:00:00.000Z"),
+        startAt: at(60),
+        endAt: at(0),
       }),
     ).rejects.toThrow(ConflictException);
   });

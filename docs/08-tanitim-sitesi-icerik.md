@@ -161,7 +161,7 @@ kağıt zemine oturmuş.
 | **Randevu Yönetimi** | Büro ajandası ve müvekkil portalında self-servis randevu. Müvekkiliniz portalından 30 dakikalık randevu alır; sistem çakışan saatleri otomatik engeller. |
 | **Vekalet Ücreti Hesabı** | AAÜT asgari ücret tarifesi üzerinden maktu/nispi hesaplama. Kademe, tekrar dilimi, asgari kuralı ve KDV — hesabın her adımı görünür. Tarife rakamlarını siz girersiniz, motor uydurmaz. |
 | **Banka Haciz Cevabı Ajanı** | İİK m.89/2 banka cevap belgesi yüklendiğinde banka adı, IBAN, bakiye ve tarih otomatik tespit edilir. İcra dosyasına bağlıysa malvarlığı kaydı önerilir — kaydı yine siz onaylarsınız. |
-| **UYAP Köprüsü (geliştirme aşamasında)** | Tarayıcı eklentisiyle dosya, safahat ve evrak aktarımı hedefleniyor. UYAP'ın yerine geçmez; üzerine bir operasyon katmanı kurar. |
+| **UYAP Köprüsü** | Tarayıcı eklentisiyle dosya listesi, safahat ve evrak aktarımı. NomosOS'tan indirilir, eşleştirme koduyla büronuza bağlanır. UYAP'ın yerine geçmez; üzerine bir operasyon katmanı kurar. |
 
 ### 3.4 Öne çıkan: Süre Motoru
 
@@ -205,7 +205,7 @@ büroya özel kural tanımlanabilir.
 Akış görseli (dikey adımlar, altın çizgiyle bağlı):
 
 ```
-Evrak sisteme girer  (yükleme (UYAP eklentisi: geliştirme aşamasında))
+Evrak sisteme girer  (yükleme · UYAP eklentisi · portal)
         ↓
 Metin çıkarılır ve sınıflandırılır  (ara karar · bilirkişi raporu · tebligat …
         PDF, Word (DOCX), UDF ve düz metin — metin katmanı olan belgelerde)
@@ -277,17 +277,17 @@ Kendi özel sunucunuz**
 
 ### 3.8 UYAP Köprüsü
 
-> **Üst etiket:** ENTEGRASYON · GELİŞTİRME AŞAMASINDA
+> **Üst etiket:** ENTEGRASYON
 > **Başlık:** UYAP'ın yerine geçmez. Üzerine bir katman kurar.
 >
-> Hedef: kendi UYAP oturumunuz üzerinden çalışan bir tarayıcı eklentisiyle dosya listesi,
-> safahat, duruşma bilgileri ve evrakların NomosOS'a aktarılması ve gelen her evrakın
-> otomatik aksiyon hattına girmesi. Eklentinin istemci tarafı yazıldı; senkronizasyon ve
-> aktarım altyapısı geliştirme aşamasındadır — kullanıma açıldığında duyurulacaktır.
+> Tarayıcı eklentisi, kendi UYAP oturumunuz üzerinden dosya listesi, safahat ve
+> duruşma bilgilerini NomosOS'a aktarır; UYAP evrakları belge kütüphanenize
+> düşer ve otomatik aksiyon hattına girer. Eklenti NomosOS'tan indirilir
+> (Chrome Web Mağazası gerekmez), büronuzla eşleştirme koduyla bağlanır.
 >
-> Hazırladığınız dilekçeyi UDF formatında dışa aktarır; UYAP ekranına aktarım hedefi
-> eklentiyle birlikte gelecek — ancak **e-imzanızı siz atarsınız, gönderimi siz
-> onaylarsınız.** Sistem sizin adınıza hiçbir evrak göndermez.
+> Hazırladığınız dilekçeyi UDF formatında dışa aktarır; UYAP ekranına aktarım
+> hedefi eklentiyle birlikte gelecek — ancak **e-imzanızı siz atarsınız,
+> gönderimi siz onaylarsınız.** Sistem sizin adınıza hiçbir evrak göndermez.
 
 Küçük not: *UYAP oturum ve e-imza bilgileriniz NomosOS'a hiçbir şekilde aktarılmaz.*
 
