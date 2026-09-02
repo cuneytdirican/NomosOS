@@ -47,6 +47,12 @@ yöneticiler, demo talepleri, AI sağlayıcılar sayfaları ZATEN VARDI. M1'in
 - Matris değişiklikleri: `tenant.create` dört-göz (iki matriste de — ikiz
   değişmezi testli); büro adı düzeltmesi yeni `tenant.update` eylemine
   taşındı (katalog taraması onay beyanı zorunlu kıldı).
+- **M6 (UYAP) TAMAM:** Eşleşme çözümü sonrası otomatik yeniden senkron —
+  `resolveMatch` artık eşleşme anında `caseId: null` bekleyen sahnelenmiş
+  olayları TEK İŞLEMDE dosyaya işliyor (safahat → zaman çizelgesi, duruşma →
+  ajanda PLANLANDI) ve `replayed` sayısını döndürüyor; web sayfası sayıyı
+  kullanıcıya gösteriyor. Canlı doğrulandı: 3 sahnelenmiş olay → resolve
+  200/replayed:3 → timeline +2 safahat + 1 PLANLANDI duruşma ajandada.
 
 ## 1. Eksikler (öncelik sırasıyla)
 

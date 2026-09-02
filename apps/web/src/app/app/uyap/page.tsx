@@ -77,6 +77,7 @@ export default function UyapEklentisiPage() {
   const [cases, setCases] = useState<CaseOption[]>([]);
   const [resolveBusy, setResolveBusy] = useState<string | null>(null);
   const [resolveError, setResolveError] = useState<string | null>(null);
+  const [resolveNotice, setResolveNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -158,10 +159,19 @@ export default function UyapEklentisiPage() {
     setResolveBusy(matchId);
     setResolveError(null);
     try {
-      await api(`/uyap/match-queue/${matchId}/resolve`, {
+      const res = await api<{ replayed?: number }>(`/uyap/match-queue/${matchId}/resolve`, {
         method: "POST",
         body: { caseId },
       });
+      // D5 / M6 — eşleşme anında sahnelenmiş olaylar işlendi; sayı kullanıcıya
+      // görünür (0 ise "bekleyen olay yoktu" bilgi değeri taşır).
+      setResolveNotice(
+        typeof res?.replayed === "number"
+          ? res.replayed > 0
+            ? `Eşleştirme yapıldı; ${res.replayed} bekleyen UYAP olayı dosyaya işlendi (safahat → zaman çizelgesi, duruşma → ajanda).`
+            : "Eşleştirme yapıldı; bekleyen UYAP olayı yoktu."
+          : "Eşleştirme yapıldı."
+      );
       await load();
     } catch (err) {
       setResolveError(err instanceof ApiError ? err.message : "Eşleştirme yapılamadı.");
@@ -340,6 +350,11 @@ export default function UyapEklentisiPage() {
                 </div>
               ))}
               {resolveError && <ErrorBox message={resolveError} />}
+              {resolveNotice && !resolveError && (
+                <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                  {resolveNotice}
+                </p>
+              )}
             </div>
           )}
         </div>

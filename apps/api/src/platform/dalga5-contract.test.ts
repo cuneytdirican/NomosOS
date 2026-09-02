@@ -81,6 +81,40 @@ describe("M2: kiracı açma — dört-göz TENANT_CREATE", () => {
   });
 });
 
+describe("M6: UYAP eşleşme sonrası otomatik yeniden senkron", () => {
+  const svc = () => read("src", "uyap", "uyap.service.ts");
+
+  it("resolveMatch eşleşme anında sahnelenmiş olayları dosyaya İŞLER (caseId null → hedef)", () => {
+    const s = svc();
+    expect(s).toContain("OTOMATİK YENİDEN SENKRON");
+    expect(s).toContain("caseId: null");
+    expect(s).toMatch(/uyapEventRecord\.update\(\{ where: \{ id: ev\.id \}, data: \{ caseId \} \}\)/);
+  });
+
+  it("safahat → zaman çizelgesi; duruşma → ajanda (PLANLANDI) — syncEvents ile AYNI biçim", () => {
+    const s = svc();
+    expect(s).toMatch(/kind === "DURUSMA"[\s\S]{0,400}status: "PLANLANDI"/);
+    // Duruşma notu eşleşme sonrası işlendiğini belgeler; safahat başlığı
+    // syncEvents ile aynı biçimdedir (UYAP: <işlem>).
+    expect(s).toContain("eşleşme sonrası işlendi");
+    expect(s).toMatch(/title: `UYAP: \$\{ev\.islem\}`/);
+  });
+
+  it("yanıt işlenen kayıt sayısını döner (replayed) — panel/web gösterir", () => {
+    const s = svc();
+    expect(s).toContain("replayed = staged.length");
+    expect(s).toContain("return { ok: true, replayed }");
+    const page = read("..", "web", "src", "app", "app", "uyap", "page.tsx");
+    expect(page).toContain("replayed");
+    expect(page).toContain("bekleyen UYAP olayı dosyaya işlendi");
+  });
+
+  it("işlem TEK İŞLEMDEDİR (link + kuyruk çözümü + replay aynı transaction'da)", () => {
+    const s = svc();
+    expect(s).toMatch(/\$transaction\(async \(tx\) => \{[\s\S]*uyapCaseLink\.upsert[\s\S]*uyapMatchQueue\.update[\s\S]*uyapEventRecord\.findMany/);
+  });
+});
+
 describe("M3: askıda kiracı GİRİŞ engeli (abonelik → login)", () => {
   it("login: SUSPENDED ve CANCELED abonelik 403 ile reddedilir", () => {
     const s = read("src", "auth", "auth.service.ts");

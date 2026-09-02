@@ -162,6 +162,8 @@ export class UyapService {
     });
     if (!targetCase) throw new NotFoundException("Hedef dosya bulunamadı.");
 
+    /** D5 / M6 — eşleşme anında sahnelenmiş olaylardan işlenen kayıt sayısı. */
+    let replayed = 0;
     await this.prisma.client.$transaction(async (tx) => {
       await tx.uyapCaseLink.upsert({
         where: {
@@ -179,8 +181,49 @@ export class UyapService {
         where: { id },
         data: { resolvedAt: new Date(), resolvedCaseId: caseId },
       });
+
+      // D5 / M6 — EŞLEŞME ÇÖZÜLÜNCE OTOMATİK YENİDEN SENKRON.
+      // Eşleşme YOKKEN sahnelenen olaylar `caseId: null` olarak duruyordu ve
+      // dosyaya hiçbir şey işlenmiyordu; avukat eşleşmeyi çözünce SADECE link
+      // kuruluyordu — olaylar bir sonraki eklenti senkronuna kadar askıda
+      // kalıyordu. Artık bağlanan an TÜM sahnelenmiş olay dosyaya işlenir:
+      // safahat → zaman çizelgesi, duruşma → ajanda (PLANLANDI).
+      const staged = await tx.uyapEventRecord.findMany({
+        where: { tenantId: user.tenantId, uyapDosyaNo: queued.uyapDosyaNo, caseId: null },
+        orderBy: { tarih: "asc" },
+      });
+      for (const ev of staged) {
+        await tx.uyapEventRecord.update({ where: { id: ev.id }, data: { caseId } });
+        if (ev.kind === "DURUSMA") {
+          await tx.hearing.create({
+            data: {
+              tenantId: user.tenantId,
+              caseId,
+              type: "DURUSMA",
+              status: "PLANLANDI",
+              date: ev.tarih,
+              courtroom: ev.salon ?? ev.birim ?? null,
+              note:
+                `UYAP Köprüsü'nden eşleşme sonrası işlendi${ev.islem ? ` (${ev.islem})` : ""}.`,
+            },
+          });
+        } else {
+          await tx.timelineEvent.create({
+            data: {
+              tenantId: user.tenantId,
+              caseId,
+              userId: null,
+              date: ev.tarih,
+              title: `UYAP: ${ev.islem}`,
+              detail: ev.aciklama ?? null,
+              source: "UYAP",
+            },
+          });
+        }
+      }
+      replayed = staged.length;
     });
-    return { ok: true };
+    return { ok: true, replayed };
   }
 
   /* ----------------------- Eklenti tarafı: kimlik ----------------------- */
