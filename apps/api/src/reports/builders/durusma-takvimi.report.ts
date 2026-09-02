@@ -11,7 +11,7 @@
  * saat 14:30'daki duruşma rapora GİRER (`lte: gün başı` kullanılsaydı düşerdi).
  */
 
-import { countMetric, finishTable, intOf, ratioPercent, truncationWarning } from "../report-helpers";
+import { countMetric, finishTable, intOf, ratioPercent, takeWithProbe, truncationWarning } from "../report-helpers";
 import type { ReportBody, ReportBuilder, ReportCell } from "../report-types";
 import { Prisma } from "@nomosos/db";
 
@@ -69,7 +69,11 @@ export const durusmaTakvimiReport: ReportBuilder = async (ctx): Promise<ReportBo
         },
       },
       orderBy: { date: "asc" },
-      take: Math.min(params.limit, 2000),
+      // İ-17: görünmez 2000 tavanı KALDIRILDI — `take: Math.min(params.limit,
+      // 2000)` kullanıcının istediğinden fazlasını kırpıyor ve kırpıldığı
+      // bildirilmiyordu. Probe satırı `finishTable`'a sınıra dayanıldığını
+      // söyler; toplam ölçüler zaten `byStatus` kırılımından alınır.
+      take: takeWithProbe(params.limit),
     }),
     /**
      * KİŞİ KIRILIMI KULLANICI KİMLİĞİYLE GRUPLANIR (denetim bulgusu 17).

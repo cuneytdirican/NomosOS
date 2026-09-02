@@ -796,20 +796,10 @@ export class InvoicesService {
     });
     if (!invoice) throw new NotFoundException("Fatura bulunamadı.");
 
-    const adapter = this.eInvoice.resolve(user.tenantId);
-    const identification = resolveCustomerIdentification(invoice.client);
-
-    // (1) Mükellef sorgusu — e-Fatura mı e-Arşiv mi? Yapılandırılmamış
-    //     adaptörde burada 503 fırlar ve fatura HİÇ DEĞİŞMEZ.
-    if (!identification) {
-      throw new BadRequestException(
-        "Alıcının VKN (10 hane) veya TCKN (11 hane) bilgisi eksik; e-Fatura/e-Arşiv " +
-          "belgesi düzenlenemez. Müvekkil kartından vergi kimlik bilgisini tamamlayın.",
-      );
-    }
-    const taxpayer = await adapter.checkTaxpayer(identification.value);
-
-    // (2) Buradan sonrası yalnızca YAPILANDIRILMIŞ sağlayıcıda çalışır.
+    // İ-31: DURUM KONTROLLERİ MÜKELLEF SORGUSUNDAN ÖNCE. Taslak/iptal/çok kez
+    // gönderilmiş bir fatura için sağlayıcıya mükellef sorgusu atmak parasal ve
+    // kota israfıydı; ayrıca yapılandırılmamış adaptör 503 verince kullanıcı
+    // asıl hatayı (taslak gönderilemez) değil 503'ü görüyordu.
     if (invoice.status === "TASLAK") {
       throw new ConflictException(
         "Taslak fatura gönderilemez. Önce POST /billing/invoices/:id/finalize ile " +
@@ -826,6 +816,20 @@ export class InvoicesService {
       );
     }
 
+    const adapter = this.eInvoice.resolve(user.tenantId);
+    const identification = resolveCustomerIdentification(invoice.client);
+
+    // (1) Mükellef sorgusu — e-Fatura mı e-Arşiv mi? Yapılandırılmamış
+    //     adaptörde burada 503 fırlar ve fatura HİÇ DEĞİŞMEZ.
+    if (!identification) {
+      throw new BadRequestException(
+        "Alıcının VKN (10 hane) veya TCKN (11 hane) bilgisi eksik; e-Fatura/e-Arşiv " +
+          "belgesi düzenlenemez. Müvekkil kartından vergi kimlik bilgisini tamamlayın.",
+      );
+    }
+    const taxpayer = await adapter.checkTaxpayer(identification.value);
+
+    // (2) Buradan sonrası yalnızca YAPILANDIRILMIŞ sağlayıcıda çalışır.
     const tenant = await this.prisma.client.tenant.findUnique({
       where: { id: user.tenantId },
       select: { name: true, taxNumber: true, taxOffice: true, address: true },
@@ -1042,7 +1046,12 @@ export class InvoicesService {
   // ============================================================ YARDIMCILAR
 
   serialize(invoice: InvoiceWithRelations) {
-    const paid = invoice.payments.reduce((acc, p) => acc.plus(dec(p.amount)), new Prisma.Decimal(0));
+    // İ-30 / Ö-14: paidToplam yalnız FATURANIN para birimindeki tahsilatları
+    // toplar — EUR faturaya sonradan bağlanan TRY tahsilat, kalan bakiyeyi
+    // yanıltıyordu.
+    const paid = invoice.payments
+      .filter((p) => p.currency === invoice.currency)
+      .reduce((acc, p) => acc.plus(dec(p.amount)), new Prisma.Decimal(0));
     const remaining = dec(invoice.total).minus(paid);
     return {
       id: invoice.id,

@@ -3121,8 +3121,9 @@ model InboundMessage {
   client          Client?     @relation(fields: [clientId], references: [id], onDelete: SetNull)
   caseId          String?
   case            Case?       @relation(fields: [caseId], references: [id], onDelete: SetNull)
-  /// MESSAGE_CASE_MATCH güven skoru 0..1. >=0.85 öneri ön-seçili gelir,
-  /// <0.5 hiç gösterilmez — ama HER İKİ HALDE de insan onayı gerekir.
+  /// MESSAGE_CASE_MATCH güven skoru 0..1. >=0.80 öneri ön-seçili gelir,
+  /// <0.50 hiç gösterilmez — ama HER İKİ HALDE de insan onayı gerekir.
+  /// (Eşikler: inbound-match.ts — motorun kuralıdır.)
   matchConfidence Float?
   matchStatus     MatchStatus @default(BEKLIYOR)
   /// Eşleştirmeyi onaylayan büro kullanıcısı (User.id).

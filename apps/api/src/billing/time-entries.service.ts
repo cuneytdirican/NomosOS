@@ -92,6 +92,10 @@ export class TimeEntriesService {
     assertFinanceAccess(user, FINANCE_ACCESS.READ, "zaman kaydı özetini görüntüleme");
     const where = this.buildWhere(user.tenantId, params);
 
+    // İ-33: özet sınırsız satır okuyordu — tek seferde bir yıllık veri okunurken
+    // bellek şişer ve istek yavaşlar. Tavan 10.000 kayıt; aşılırsa yanıt açıkça
+    // KISMİ döner (uydurma yok).
+    const SUMMARY_ROW_CAP = 10_000;
     const rows = await this.prisma.client.timeEntry.findMany({
       where,
       select: {
@@ -103,7 +107,11 @@ export class TimeEntriesService {
         hourlyRate: true,
         invoiceId: true,
       },
+      take: SUMMARY_ROW_CAP,
+      orderBy: { date: "desc" },
     });
+    const totalRows = await this.prisma.client.timeEntry.count({ where });
+    const truncated = totalRows > rows.length;
 
     const byUser = new Map<string, { minutes: number; billableMinutes: number; amount: Prisma.Decimal; unratedMinutes: number }>();
     const byCase = new Map<string, { minutes: number; billableMinutes: number; amount: Prisma.Decimal; unratedMinutes: number }>();
@@ -202,6 +210,8 @@ export class TimeEntriesService {
           unratedMinutes: b.unratedMinutes,
         }))
         .sort((a, b) => b.minutes - a.minutes),
+      truncated,
+      truncatedRowCount: truncated ? totalRows : null,
       note:
         "Tutarlar, kayıttaki saat ücreti anlık görüntüsünden hesaplanır. Saat ücreti " +
         "girilmemiş kayıtlar tutara dâhil edilmez; `unratedMinutes` bunları gösterir.",

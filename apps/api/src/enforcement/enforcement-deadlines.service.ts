@@ -32,7 +32,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { DeadlineRulesService } from "../deadline-rules/deadline-rules.service";
-import { addYears, formatTrDate, startOfDay } from "../common/dates";
+import { addYears, formatTrDate, startOfDay, trCalendarDay } from "../common/dates";
 import type { AuthUser } from "../common/types";
 
 export interface DeadlineCandidate {
@@ -72,7 +72,10 @@ export class EnforcementDeadlinesService {
   async computeCandidates(tenantId: string, file: EnforcementFile): Promise<DeadlineCandidate[]> {
     const triggers = await this.collectTriggers(tenantId, file);
     const candidates: DeadlineCandidate[] = [];
-    const today = startOfDay(new Date());
+    // İ-19: "bugün" TR takvim günüdür — UTC günü değil. UTC'de 21:00–24:00
+    // arası TR'de ertesi gündür; UTC günü kullanılırsa gece çalışan avukat
+    // için kalan gün sayısı BİR GÜN SAPIK hesaplanıyordu.
+    const today = trCalendarDay(new Date());
 
     for (const trigger of triggers) {
       const rule = await this.rules.resolveByKey(tenantId, trigger.ruleKey).catch(() => null);
@@ -227,7 +230,8 @@ export class EnforcementDeadlinesService {
    */
   async auditDeadlines(tenantId: string, file: EnforcementFile) {
     const candidates = await this.computeCandidates(tenantId, file);
-    const today = startOfDay(new Date());
+    // İ-19: TR takvim günü (yukarıdaki açıklama).
+    const today = trCalendarDay(new Date());
 
     const recorded = await this.prisma.client.deadline.findMany({
       where: { tenantId, caseId: file.caseId },

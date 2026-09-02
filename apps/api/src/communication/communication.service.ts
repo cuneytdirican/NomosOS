@@ -500,18 +500,37 @@ export class CommunicationService {
       include: { client: { select: { id: true, name: true } } },
     });
 
+    // İ-21: N+1 GİDERİLDİ. Aday başına bir `count` sorgusu yerine TEK
+    // `groupBy`: "bu müvekkile en son NE ZAMAN gönderilmiş mesaj var" sorusu
+    // her aday için aynı sorgunun tekrarıydı. Müvekkil başına EN SON gönderim
+    // zamanı yeterlidir — receivedAt'ten sonra mesajı olan müvekkilin adayı
+    // (yanıtlanmış) düşer; kalanlar yanıtsızdır.
+    const clientIds = [
+      ...new Set(candidates.map((m) => m.clientId).filter((v): v is string => v !== null)),
+    ];
+    const lastSentByClient = new Map<string, Date>();
+    if (clientIds.length > 0) {
+      const sentRows = await this.prisma.client.outboundMessage.groupBy({
+        by: ["clientId"],
+        where: {
+          tenantId: user.tenantId,
+          clientId: { in: clientIds },
+          status: "GONDERILDI",
+        },
+        _max: { sentAt: true },
+      });
+      for (const row of sentRows) {
+        const max = row._max.sentAt;
+        if (max) lastSentByClient.set(row.clientId, max);
+      }
+    }
+
     const items = [];
     for (const message of candidates) {
       if (message.clientId) {
-        const replied = await this.prisma.client.outboundMessage.count({
-          where: {
-            tenantId: user.tenantId,
-            clientId: message.clientId,
-            status: "GONDERILDI",
-            sentAt: { gt: message.receivedAt },
-          },
-        });
-        if (replied > 0) continue;
+        const lastSent = lastSentByClient.get(message.clientId);
+        // Bu müvekkile mesaj geldikten SONRA gönderilmiş mesaj var → yanıtlanmış.
+        if (lastSent && lastSent.getTime() > message.receivedAt.getTime()) continue;
       }
       items.push({
         id: message.id,

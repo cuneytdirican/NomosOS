@@ -413,6 +413,10 @@ export class InboundService {
       // gönderen adresi başka bir müvekkilinkiyle çakışsa bile mesaj sahibini
       // değiştiremez.
       where: { tenantId, ...(knownClientId ? { id: knownClientId } : {}) },
+      // İ-27: orderBy'suz take, veritabanının rasgele döndürdüğü 5000 satırı
+      // okur — en son eklenen müvekkil hiç taranmayabiliyordu. En yeni önce;
+      // yeni müvekkilin ilk mesajı en çok karışan senaryodur.
+      orderBy: { createdAt: "desc" },
       take: CLIENT_SCAN_LIMIT,
       select: {
         id: true,
@@ -421,6 +425,9 @@ export class InboundService {
         contacts: { select: { email: true, phone: true } },
       },
     });
+    // Tavandan fazla müvekkil varsa eşleştirme KISMİDİR — bu bir taahhüt
+    // değil, bir uyarıdır; avukat yine de elle eşleştirebilir.
+    const clientScanCapped = clients.length >= CLIENT_SCAN_LIMIT;
 
     const clientIndex: ClientContactIndex[] = clients.map((c) => ({
       clientId: c.id,
@@ -470,6 +477,11 @@ export class InboundService {
           "Müvekkil, kimliği doğrulanmış oturum üzerinden kesin olarak bilinmektedir. " +
           decision.reason,
       };
+    }
+    // İ-27: tarama tavafa takıldıysa kararar KISMİ TARAMA bilgisi eklenir —
+    // "eşleşmedi" ile "aranamadı" farklı şeylerdir.
+    if (clientScanCapped) {
+      decision.reason += ` (Uyarı: büro müvekkillerinin yalnızca ilk ${CLIENT_SCAN_LIMIT} tanesi taranabildi.)`;
     }
     return decision;
   }

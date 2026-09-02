@@ -357,6 +357,13 @@ export class AssistantLlmService {
     });
 
     if (!guarded.ok || guarded.data === undefined) {
+      // İ-13: GUARD REDDİNDE KREDİ İADESİ. `record()` yukarıda çağrıldı; HTTP
+      // istisnası interceptor'ün `settle()` yolundan geçmeyebilir ve kayıt
+      // takılı kalırdı — avukat kullanılamayan çıktı için kredi öderdi. İş
+      // kuralı 4: kullanılmayan sonuçtan kredi ALINMAZ. (AiUsageLog satırı
+      // kasıtlı olarak kalır — çağrı gerçekten yapılmıştır, iç maliyet
+      // muhasebesi görür.)
+      creditRunContext.discard(usageLog.id);
       throw new UnprocessableEntityException({
         message:
           "AI yanıtı doğrulanamadı; çıktı beklenen biçimde değil. Lütfen tekrar deneyin " +

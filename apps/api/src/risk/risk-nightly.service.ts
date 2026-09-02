@@ -169,6 +169,30 @@ export class RiskNightlyService {
       }
     }
 
+    // İ-12: FOTOĞRAF OVERRIDE'LARI YOK SAYIYORDU. risk.service.ts okuma anında
+    // aktif GENEL override'ının bandını uyguladığı hâlde, gece fotoğrafı ham
+    // hesaplanan bandı yazıyordu — panel sayıları ile fotoğraf çelişiyordu.
+    // Fotoğraf da okuma anındaki kuralı izler: aktif (süresi dolmamış) GENEL
+    // override'ı bant dağılımına uygulanır.
+    const activeOverrides = await this.prisma.client.riskOverride.findMany({
+      where: {
+        tenantId,
+        caseId: { in: cases.map((c) => c.id) },
+        dimension: "GENEL",
+        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      },
+      orderBy: { createdAt: "desc" },
+      select: { caseId: true, band: true },
+    });
+    const overrideBandByCase = new Map<string, "DUSUK" | "ORTA" | "YUKSEK">();
+    for (const o of activeOverrides) {
+      if (!overrideBandByCase.has(o.caseId)) overrideBandByCase.set(o.caseId, o.band);
+    }
+    for (const row of snapshotRows) {
+      const overrideBand = overrideBandByCase.get(row.caseId);
+      if (overrideBand) row.genelBand = overrideBand;
+    }
+
     await this.writeSnapshot(tenantId, date, snapshotRows, recomputed);
     return { recomputed, failed };
   }

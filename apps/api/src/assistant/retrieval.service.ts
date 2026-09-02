@@ -180,6 +180,10 @@ export class RetrievalService {
       },
       // `embedding` BİLEREK seçilmiyor: her satırda yüzlerce float taşımanın anlamı yok.
       select: { id: true, documentId: true, sourceLabel: true, content: true },
+      // İ-11: orderBy'suz take, veritabanının rasgele döndürdüğü 400 satırı
+      // alıyordu — en yeni dosyalar hiç okunmadan kırpılabiliyordu. En yeni
+      // önce: hukuki dosyalarda güncel dilekçe eski ekte önceliklidir.
+      orderBy: { createdAt: "desc" },
       take: KEYWORD_SCAN_CAP,
     });
 

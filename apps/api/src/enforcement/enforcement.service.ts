@@ -30,7 +30,7 @@ import { assertRole, hasRole, ROLE_SETS } from "../common/roles";
 import { assertFinanceAccess, FINANCE_ACCESS } from "../finance/finance-access";
 import { normalizeQuery, paged, resolvePage } from "../common/pagination";
 import { touchCase } from "../common/case-denormals";
-import { formatTrDate, parseDateParam } from "../common/dates";
+import { formatTrDate, parseDateParam, trCalendarDay } from "../common/dates";
 import type { AuthUser } from "../common/types";
 import { EnforcementBalanceService } from "./balance.service";
 import { CollectionScoreService, SCORE_BAND_LABELS } from "./collection-score.service";
@@ -1289,9 +1289,12 @@ function displayValue(value: unknown): string {
   return String(value);
 }
 
-/** İki tarihin (null olabilir) aynı günü gösterip göstermediği. */
+/** İki tarihin (null olabilir) aynı TAKVİM GÜNÜNÜ gösterip göstermediği. */
 function sameDay(a: Date | null, b: Date | null): boolean {
   if (a === null && b === null) return true;
   if (a === null || b === null) return false;
-  return a.getTime() === b.getTime();
+  // İ-24: `getTime()` eşitliği SAAT farkına duyarlıdır — 14:03 ve 15:10 aynı
+  // günde olduğu hâlde farklı sayılıyordu ("gün" diyordu, gün karşılaştırmıyordu).
+  // Takvim günü karşılaştırması TR bölgesine göre normalleştirilir.
+  return trCalendarDay(a).getTime() === trCalendarDay(b).getTime();
 }

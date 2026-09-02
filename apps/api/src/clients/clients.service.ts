@@ -338,10 +338,15 @@ export class ClientsService {
 
   async listContacts(tenantId: string, clientId: string) {
     await this.requireClient(tenantId, clientId);
-    return this.prisma.client.clientContact.findMany({
+    // İ-28: çıplak dizi yerine SAYFALAMA ZARFI — tüketici (web/mobile) toplam
+    // sayıyı bilemeden "hepsi bu kadar" varsayımı yapıyordu. Bir müvekkilin
+    // ilgili kişi listesi pratikte kısadır; tavan 500 ile sınırlıdır.
+    const contacts = await this.prisma.client.clientContact.findMany({
       where: { clientId },
       orderBy: { fullName: "asc" },
+      take: 500,
     });
+    return { items: contacts, total: contacts.length, page: 1, limit: 500 };
   }
 
   /** POST /clients/:id/contacts */

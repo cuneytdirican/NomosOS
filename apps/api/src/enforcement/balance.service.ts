@@ -10,7 +10,8 @@
  * kayması da icra dairesine yanlış bakiye bildirilmesine yol açar. Yuvarlama
  * YALNIZCA gösterim katmanında (`toFixed(2)`) yapılır.
  *
- * MAHSUP SIRASI (Modül 05 kural 11) DEĞİŞTİRİLEMEZ: masraf → faiz → asıl alacak.
+ * MAHSUP SIRASI (Modül 05 kural 11) DEĞİŞTİRİLEMEZ:
+ * masraf/harç → vekâlet ücreti → faiz → asıl alacak (bkz. applyMahsup).
  *
  * ─────────────────────────── FAİZ: DİLİMLİ HESAP ───────────────────────────
  *
