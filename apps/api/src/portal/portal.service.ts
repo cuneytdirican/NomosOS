@@ -175,6 +175,7 @@ export class PortalService {
       where: {
         id: { in: [...publications.keys()] },
         tenantId: user.tenantId,
+        deletedAt: null,
         ...(caseId
           ? { caseId }
           : { OR: [{ caseId: { in: visibleCaseIds } }, { caseId: null }] }),
@@ -202,7 +203,7 @@ export class PortalService {
     await this.publications.assertPublished(user, "BELGE", documentId);
 
     const document = await this.prisma.client.document.findFirst({
-      where: { id: documentId, tenantId: user.tenantId },
+      where: { id: documentId, tenantId: user.tenantId, deletedAt: null },
       select: { id: true, name: true, storageKey: true, mimeType: true },
     });
     if (!document) throw new NotFoundException("Kayıt bulunamadı.");

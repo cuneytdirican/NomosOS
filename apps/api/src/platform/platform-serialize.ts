@@ -80,7 +80,8 @@ export class Pseudonymizer {
   alias(tenantId: string): string {
     const existing = this.map.get(tenantId);
     if (existing) return existing;
-    const alias = `Tenant #${randomBytes(2).toString("hex").toUpperCase()}`;
+    // İ-06: 16 bit (4 hex) rastgelelik çakışabilirdi; 32 bit (8 hex) yeterli.
+    const alias = `Tenant #${randomBytes(4).toString("hex").toUpperCase()}`;
     this.map.set(tenantId, alias);
     return alias;
   }

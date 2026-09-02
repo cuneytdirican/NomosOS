@@ -437,7 +437,7 @@ export class SimulationService {
     }
 
     const document = await this.prisma.client.document.findFirst({
-      where: { id: documentId, tenantId, caseId },
+      where: { id: documentId, tenantId, caseId, deletedAt: null },
       select: { id: true, name: true, class: true, ocrText: true, aiSummary: true, source: true },
     });
     if (!document) {

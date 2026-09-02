@@ -101,10 +101,11 @@ export class DocumentsService {
     //    (Belge hattı yüklemeden sonra caseId atadığı için, ilk nüshanın caseId'si
     //     null kalmaz; yalnızca `caseId: null` aranırsa kopya asla yakalanmazdı.)
     if (!input.allowDuplicate) {
+      // İ-16: yumuşak silinmiş belge kopya sayılmaz — yeniden yükleme serbest.
       const existing = await this.prisma.client.document.findFirst({
         where: input.caseId
-          ? { tenantId: user.tenantId, hash, caseId: input.caseId }
-          : { tenantId: user.tenantId, hash },
+          ? { tenantId: user.tenantId, hash, caseId: input.caseId, deletedAt: null }
+          : { tenantId: user.tenantId, hash, deletedAt: null },
         orderBy: { createdAt: "asc" },
         select: DOCUMENT_LIST_SELECT,
       });
@@ -250,7 +251,8 @@ export class DocumentsService {
       limit?: string;
     }
   ) {
-    const where: Prisma.DocumentWhereInput = { tenantId };
+    // İ-16: yumuşak silinmiş belgeler listede görünmez.
+    const where: Prisma.DocumentWhereInput = { tenantId, deletedAt: null };
     const pageParams = resolvePage(params);
 
     if (params.caseId) where.caseId = params.caseId;
@@ -319,7 +321,7 @@ export class DocumentsService {
     const map = new Map<string, string>();
     if (ids.length === 0) return map;
     const rows = await this.prisma.client.document.findMany({
-      where: { tenantId, id: { in: ids.slice(0, SNIPPET_LIMIT) } },
+      where: { tenantId, id: { in: ids.slice(0, SNIPPET_LIMIT) }, deletedAt: null },
       select: { id: true, ocrText: true },
     });
     const needle = query.toLocaleLowerCase("tr-TR");
@@ -339,8 +341,9 @@ export class DocumentsService {
    * ------------------------------------------------------------------ */
 
   async detail(tenantId: string, id: string) {
+    // İ-16: yumuşak silinmiş belge 404 döner.
     const document = await this.prisma.client.document.findFirst({
-      where: { id, tenantId },
+      where: { id, tenantId, deletedAt: null },
       select: {
         ...DOCUMENT_LIST_SELECT,
         pipelines: {
@@ -400,7 +403,7 @@ export class DocumentsService {
 
   async text(tenantId: string, id: string) {
     const document = await this.prisma.client.document.findFirst({
-      where: { id, tenantId },
+      where: { id, tenantId, deletedAt: null },
       select: { id: true, name: true, ocrText: true, ocrStatus: true, pageCount: true },
     });
     if (!document) {
@@ -428,8 +431,9 @@ export class DocumentsService {
   async download(user: AuthUser, id: string) {
     // TENANT SÜZGECİ: başka bir büronun storageKey'i bilinse bile bu sorgu
     // kaydı bulamaz → 404. İmzalı URL yalnızca kendi belgeniz için üretilir.
+    // İ-16: yumuşak silinmiş belge indirilemez.
     const document = await this.prisma.client.document.findFirst({
-      where: { id, tenantId: user.tenantId },
+      where: { id, tenantId: user.tenantId, deletedAt: null },
       select: { id: true, name: true, storageKey: true, mimeType: true, caseId: true },
     });
     if (!document) {
@@ -548,8 +552,9 @@ export class DocumentsService {
 
   async remove(user: AuthUser, id: string) {
     assertRole(user, ROLE_SETS.HUKUKI, "belge silme");
+    // İ-16: zaten yumuşak silinmiş belge ikinci kez silinemez — 404.
     const existing = await this.prisma.client.document.findFirst({
-      where: { id, tenantId: user.tenantId },
+      where: { id, tenantId: user.tenantId, deletedAt: null },
       select: {
         id: true,
         name: true,
@@ -571,9 +576,12 @@ export class DocumentsService {
       );
     }
 
-    // Cascade: DocumentChunk, PipelineRun, DocumentActionProposal.
-    await this.prisma.client.document.delete({ where: { id } });
-    await this.storage.deleteObject(existing.storageKey);
+    // İ-16: YUMUŞAK SİLME — fiziksel delete yok. S3 nesnesi korunur; satır
+    // `deletedAt` ile gizlenir (hukuki geri dönüşüm + denetim izi).
+    await this.prisma.client.document.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
 
     if (existing.caseId) await touchCase(this.prisma.client, existing.caseId);
     await this.audit.log({
@@ -582,9 +590,9 @@ export class DocumentsService {
       action: "DOCUMENT_DELETE",
       entity: "Document",
       entityId: id,
-      detail: existing.name,
+      detail: `${existing.name} — yumuşak silme (S3 nesnesi korundu)`,
     });
-    return { ok: true, id };
+    return { ok: true, id, softDeleted: true };
   }
 
   /* ------------------------------------------------------------------ *
@@ -593,7 +601,7 @@ export class DocumentsService {
 
   private async requireDocument(tenantId: string, id: string) {
     const found = await this.prisma.client.document.findFirst({
-      where: { id, tenantId },
+      where: { id, tenantId, deletedAt: null },
       select: { id: true, name: true, caseId: true, storageKey: true },
     });
     if (!found) {

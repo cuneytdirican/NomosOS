@@ -37,8 +37,19 @@ export const updateCaseSchema = z
         .optional()
     ),
     responsibleUserId: nullableUuid("Sorumlu avukat"),
+    // İ-10: status PATCH'te de değiştirilebilir; closedAt yalnız status ile.
+    status: z.enum(CASE_STATUSES).optional(),
     closedAt: nullableDate("Kapanış tarihi"),
   })
+  .refine(
+    (data) => {
+      if (data.closedAt !== undefined && data.status !== undefined && data.status !== "KAPANDI") {
+        return false;
+      }
+      return true;
+    },
+    "Kapanış tarihi yalnızca dosya durumu KAPANDI olarak değiştirilirken yazılabilir.",
+  )
   .refine((data) => Object.keys(data).length > 0, "Güncellenecek en az bir alan gönderilmelidir.");
 export type UpdateCaseInput = z.infer<typeof updateCaseSchema>;
 

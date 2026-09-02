@@ -599,6 +599,10 @@ model Document {
   storageKey  String // MinIO/S3 nesne anahtarı
   uploadedBy  String? // User id
   aiSummary   String? // AI tarafından üretilen kısa özet
+  /// İ-16: YUMUŞAK SİLME. Fiziksel delete yerine bu alan yazılır; tüm listeler
+  /// `deletedAt: null` süzmesiyle çalışır. S3 nesnesi saklanır — hukuki geri
+  /// dönüşüm ve denetim izi için.
+  deletedAt   DateTime?
   /// Metin çıkarma sonucu — HAM metin (maskesiz). LLM'e giderken scanPii'den geçirilir.
   ocrText     String?
   ocrStatus   ProcessingStatus?
@@ -1781,7 +1785,11 @@ model PlatformUser {
   tokenVersion    Int          @default(0)
   /// Ardışık başarısız giriş/2FA denemesi. 5'te hesap kilitlenir.
   failedAttempts  Int          @default(0)
-  /// Kilit bitiş anı. Kilidi başka bir SUPER_ADMIN erkenden açabilir.
+  /// HATA PENCERESİ SONU (İ-01): pencere dolmuşsa sayaç yeniden başlar —
+  /// aylara yayılan seyrek hatalar hesabı kilitlenmez (tenant tarafıyla
+  /// aynı davranış; bkz. common/account-lockout.ts).
+  failureWindowEndsAt DateTime?
+  /// Başarısız deneme sınırına ulaşınca hesap bu zamana kadar kilitlenir.
   lockedUntil     DateTime?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt

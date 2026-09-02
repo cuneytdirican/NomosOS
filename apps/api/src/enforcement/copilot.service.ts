@@ -430,6 +430,7 @@ export class EnforcementCopilotService {
         tenantId: user.tenantId,
         caseId: parts.file.caseId,
         class: { in: ["DILEKCE", "ICRA_EVRAKI", "TEBLIGAT", "DIGER"] },
+        deletedAt: null,
       },
       orderBy: { createdAt: "asc" },
       take: 8,

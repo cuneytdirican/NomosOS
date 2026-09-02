@@ -107,7 +107,7 @@ export class PipelineService {
     documentId: string;
   }): Promise<{ runId: string | null; status: string; proposalCount: number }> {
     const document = await this.prisma.client.document.findFirst({
-      where: { id: params.documentId, tenantId: params.tenantId },
+      where: { id: params.documentId, tenantId: params.tenantId, deletedAt: null },
       select: {
         id: true,
         name: true,

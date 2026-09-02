@@ -70,7 +70,7 @@ export class UsersService {
       where: { tenantId: user.tenantId, isActive: true },
       select: { id: true, fullName: true, role: true },
       orderBy: [{ fullName: "asc" }, { id: "asc" }],
-      take: 500,
+      take: 200, // İ-05: sunucu tavanına (200) uydur — 500 istense de sessizce 200'e düşer
     });
   }
 
@@ -81,7 +81,7 @@ export class UsersService {
       where: { tenantId: user.tenantId },
       select: { ...USER_PUBLIC_SELECT, lockedUntil: true },
       orderBy: [{ isActive: "desc" }, { fullName: "asc" }],
-      take: 500,
+      take: 200, // İ-05: sunucu tavanına (200) uydur
     });
     const now = Date.now();
     return rows.map(({ lockedUntil, ...rest }) => ({

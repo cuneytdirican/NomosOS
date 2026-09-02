@@ -623,7 +623,7 @@ export class PortalAdminService {
       caseId =
         (
           await this.prisma.client.document.findFirst({
-            where: { id: resourceId, tenantId },
+            where: { id: resourceId, tenantId, deletedAt: null },
             select: { caseId: true },
           })
         )?.caseId ?? null;
@@ -697,7 +697,7 @@ export class PortalAdminService {
       }
       case "BELGE": {
         if (caseIds.length === 0) return empty;
-        const where = { tenantId, caseId: { in: caseIds } };
+        const where = { tenantId, caseId: { in: caseIds }, deletedAt: null };
         const [rows, total] = await Promise.all([
           this.prisma.client.document.findMany({
             where,

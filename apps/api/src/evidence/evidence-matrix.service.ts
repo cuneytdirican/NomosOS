@@ -281,7 +281,7 @@ export class EvidenceMatrixService {
     if (ids.length === 0) return new Map<string, { id: string; name: string; class: string }>();
 
     const docs = await this.prisma.client.document.findMany({
-      where: { id: { in: ids }, tenantId },
+      where: { id: { in: ids }, tenantId, deletedAt: null },
       select: { id: true, name: true, class: true },
     });
     return new Map(docs.map((d) => [d.id, d]));

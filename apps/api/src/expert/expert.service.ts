@@ -465,6 +465,18 @@ export class ExpertService {
       );
     }
 
+    // İ-09: petitionId değiştirilirken varlık + kiracı doğrulaması yapılır —
+    // başka kiracının dilekçe kimliği bilinse bile bağlanamaz.
+    if (input.petitionId !== undefined && input.petitionId !== null) {
+      const petition = await this.prisma.client.petition.findFirst({
+        where: { id: input.petitionId, tenantId: user.tenantId },
+        select: { id: true },
+      });
+      if (!petition) {
+        throw new UnprocessableEntityException("Belirtilen dilekçe bu büro için bulunamadı.");
+      }
+    }
+
     const objection = await this.prisma.client.expertObjection.update({
       where: { id: existing.id },
       data: {
@@ -673,7 +685,7 @@ export class ExpertService {
   ) {
     if (!documentId) return;
     const doc = await this.prisma.client.document.findFirst({
-      where: { id: documentId, tenantId },
+      where: { id: documentId, tenantId, deletedAt: null },
       select: { id: true, caseId: true },
     });
     if (!doc) throw new UnprocessableEntityException("Rapor belgesi bulunamadı.");

@@ -369,7 +369,7 @@ export class EvidenceAiService {
       }),
       // Dosyanın belgeleri — metni çıkarılmamış olanlar aşağıda ELENİR.
       this.prisma.client.document.findMany({
-        where: { tenantId, caseId },
+        where: { tenantId, caseId, deletedAt: null },
         orderBy: { createdAt: "desc" },
         take: MAX_DOCS,
         select: { id: true, name: true, class: true, ocrText: true, aiSummary: true },

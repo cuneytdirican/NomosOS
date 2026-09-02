@@ -92,6 +92,7 @@ export class IndexingService {
       where: {
         tenantId: user.tenantId,
         caseId,
+        deletedAt: null,
         ...(input?.documentIds?.length ? { id: { in: input.documentIds } } : {}),
       },
       select: {
@@ -251,7 +252,7 @@ export class IndexingService {
   /** Dosyanın indeks durumu — cevaplara "X belgesi indekslenmedi" uyarısı bu veriden gelir. */
   async indexStatus(tenantId: string, caseId: string) {
     const documents = await this.prisma.client.document.findMany({
-      where: { tenantId, caseId },
+      where: { tenantId, caseId, deletedAt: null },
       select: {
         id: true,
         name: true,

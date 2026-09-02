@@ -252,7 +252,7 @@ export class ExpertDiffService {
   ) {
     if (report.documentId) {
       const doc = await this.prisma.client.document.findFirst({
-        where: { id: report.documentId, tenantId },
+        where: { id: report.documentId, tenantId, deletedAt: null },
         select: { ocrText: true, aiSummary: true, name: true },
       });
       const ocr = doc?.ocrText?.trim();

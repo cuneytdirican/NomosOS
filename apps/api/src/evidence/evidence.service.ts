@@ -231,6 +231,26 @@ export class EvidenceService {
         ? existing.documentId
         : await this.resolveDocumentId(user.tenantId, existing.caseId, input.documentId);
 
+    // İ-08: offeredBy sonradan BİZ yapılırsa mevcut CONTRADICTS bağları
+    // tutarsızlaşır — kendimize-çelişki bağları varsa BİZ'e geçilemez.
+    if (input.offeredBy === "BIZ" && existing.offeredBy !== "BIZ") {
+      const hasContradicts = await this.prisma.client.claimEvidenceLink.findFirst({
+        where: {
+          evidenceId: existing.id,
+          linkType: "CONTRADICTS",
+          claim: { side: "BIZ" },
+        },
+        select: { id: true },
+      });
+      if (hasContradicts) {
+        throw new UnprocessableEntityException(
+          "Bu delile bağlı kendimize-çelişki (CONTRADICTS) bağları var; delili BİZ tarafına " +
+          "taşımak bu bağları geçersiz kılar. Önce ilgili bağları kaldırın ya da delili " +
+          "BELIRSIZ olarak işaretleyin.",
+        );
+      }
+    }
+
     const evidence = await this.prisma.client.evidence.update({
       where: { id: existing.id },
       data: {
@@ -497,7 +517,7 @@ export class EvidenceService {
   ): Promise<string | null> {
     if (!documentId) return null;
     const doc = await this.prisma.client.document.findFirst({
-      where: { id: documentId, tenantId },
+      where: { id: documentId, tenantId, deletedAt: null },
       select: { id: true, caseId: true },
     });
     if (!doc) {

@@ -212,7 +212,7 @@ export class PortalPublicationService {
       }
       case "BELGE": {
         const row = await this.prisma.client.document.findFirst({
-          where: { id: resourceId, tenantId },
+          where: { id: resourceId, tenantId, deletedAt: null },
           select: { caseId: true, case: { select: { clientId: true } } },
         });
         if (!row) return null;

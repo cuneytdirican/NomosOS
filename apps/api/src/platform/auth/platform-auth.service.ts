@@ -603,9 +603,23 @@ export class PlatformAuthService {
     ip: string,
     reason: string
   ): Promise<boolean> {
+    // İ-01: pencere dolmuşsa sayaç yeniden başlar — aylara yayılan seyrek
+    // hatalar hesabı kilitlenmez (tenant tarafıyla aynı davranış).
+    const existing = await this.prisma.client.platformUser.findUnique({
+      where: { id },
+      select: { failureWindowEndsAt: true, failedAttempts: true },
+    });
+    const windowExpired =
+      existing !== null &&
+      existing.failureWindowEndsAt !== null &&
+      existing.failureWindowEndsAt.getTime() < Date.now();
+
     const updated = await this.prisma.client.platformUser.update({
       where: { id },
-      data: { failedAttempts: { increment: 1 } },
+      data: {
+        failedAttempts: windowExpired ? 1 : { increment: 1 },
+        failureWindowEndsAt: new Date(Date.now() + 15 * 60_000),
+      },
       select: { failedAttempts: true, email: true },
     });
 

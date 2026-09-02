@@ -83,7 +83,11 @@ export async function extractText(params: {
 
 async function extractFromPdf(buffer: Buffer): Promise<TextExtractResult> {
   try {
-    const { default: pdfParse } = await import("pdf-parse");
+    // İ-64: DOĞRUDAN lib dosyası içe aktarılır. pdf-parse@1.1.1'in ana
+    // modülü `module.parent` tanımsızken (ESM dinamik import'ta hep öyle)
+    // DEBUG moduna geçip diskteki test PDF'ini okumaya çalışır — üretimde
+    // dosya yoksa çöker, varsa sahte metin döner. lib girişi bu dalı içermez.
+    const { default: pdfParse } = await import("pdf-parse/lib/pdf-parse.js");
     // SAYFA TAVANI: sınır olmadan 3000 sayfalık bir PDF tek istekte
     // ayrıştırılıyordu (pdf-parse'ın ara yapıları belleği katlar). Tavanı aşan
     // belgeden KISMİ metin çıkarılır ve durum kullanıcıya AÇIKÇA bildirilir.
