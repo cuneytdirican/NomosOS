@@ -7,7 +7,7 @@
  * ║ RAKAM ÜRETEN TEK YER SUNUCUDUR.                                          ║
  * ╚══════════════════════════════════════════════════════════════════════════╝
  *
- * Bu ekran hiçbir toplam, oran veya fark HESAPLAMAZ; `POST /reports/:key/run`
+ * Bu ekran hiçbir toplam, oran veya fark HESAPLAMAZ; `GET /reports/:key`
  * sonucunu biçimlendirip çizer. Sıralama yalnızca satırların YERİNİ değiştirir.
  * CSV de sunucudan indirilir (ekrandan üretilmez): ekrandaki tablo rol
  * süzgecinden geçmiş bir kesittir ve onu dosyaya çevirmek, kullanıcıya "tam
@@ -327,7 +327,7 @@ export default function ReportViewPage({ params }: { params: Promise<{ key: stri
         <Breadcrumb title={title} />
         <FeatureUnavailable
           title="Rapor motoru henüz yayında değil"
-          detail="POST /reports/:key/run ucu yayına alındığında bu rapor kendiliğinden çalışacak."
+          detail="GET /reports/:key ucu yayına alındığında bu rapor kendiliğinden çalışacak."
         />
       </div>
     );

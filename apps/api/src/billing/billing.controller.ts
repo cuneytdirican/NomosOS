@@ -244,6 +244,15 @@ export class BillingController {
     return this.invoices.sendEInvoice(user, id);
   }
 
+  /**
+   * GET /billing/invoices/:id/e-invoice/status — BEKLIYOR mutabakat yolu (İ-32).
+   * GİB'ten dönen gerçek durumu yerel kayda yansıtır; çift gönderim gerektirmez.
+   */
+  @Get("invoices/:id/e-invoice/status")
+  reconcileEInvoiceStatus(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.invoices.reconcileEInvoiceStatus(user, id);
+  }
+
   /** A6 (rakip analizi) — e-SMM (Serbest Meslek Makbuzu) gönderimi. */
   @Post("invoices/:id/e-smm/send")
   sendESmm(@CurrentUser() user: AuthUser, @Param("id") id: string) {

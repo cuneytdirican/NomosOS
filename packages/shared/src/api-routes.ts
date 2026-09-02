@@ -33,6 +33,11 @@ export const BILLING_ROUTES = {
   invoiceCancel: (id: string) => `/billing/invoices/${id}/cancel`,
   /** e-Fatura gönderimi. İstemci bir dönem `/send` çağırıyordu — uç yok. */
   invoiceSendEInvoice: (id: string) => `/billing/invoices/${id}/e-invoice/send`,
+  /**
+   * İ-32: BEKLIYOR mutabakat yolu — gönderim zaman aşımında takılan belgeyi
+   * GİB'ten dönen gerçek durumla uzlaştırır (çift gönderim YOK).
+   */
+  invoiceEInvoiceStatus: (id: string) => `/billing/invoices/${id}/e-invoice/status`,
   /** A6 (rakip analizi): e-SMM (Serbest Meslek Makbuzu) gönderimi. */
   invoiceSendESmm: (id: string) => `/billing/invoices/${id}/e-smm/send`,
 

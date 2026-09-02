@@ -126,11 +126,28 @@ export class FinanceSummaryService {
     const totalCaseCount = caseCounts.reduce((sum, c) => sum + c._count._all, 0);
 
     const receivables = this.buildAging(balances);
-    const risk = this.assessRisk(
-      primary ? dec(primary.accrued) : new Prisma.Decimal(0),
-      primary ? dec(primary.outstanding) : new Prisma.Decimal(0),
-      balances,
-    );
+    // İ-37: risk ARTIK yalnız primary para biriminden hesaplanmıyor. Para
+    // birimleri TOPLANMAZ (ürün ilkesi); her para birimi KENDİ oranıyla
+    // değerlendirilir ve EN AĞIR bant döner — EUR borcunu geciken bir
+    // müvekkil, TRY bakiyesi sıfır diye "tahakkuk yok" riskinde görünemez.
+    const perCurrencyRisks = currencies.map((c) => {
+      const r = this.assessRisk(
+        dec(c.accrued),
+        dec(c.outstanding),
+        balances.filter((b) => b.currency === c.currency),
+      );
+      return { currency: c.currency, ...r };
+    });
+    const BAND_ORDER: Record<RiskBand, number> = { DUSUK: 0, ORTA: 1, YUKSEK: 2 };
+    const risk = perCurrencyRisks.slice().sort((a, b) => BAND_ORDER[b.band] - BAND_ORDER[a.band])[0] ?? {
+      currency: primary?.currency ?? "TRY",
+      band: "DUSUK" as RiskBand,
+      reasons: ["Bu müvekkil için henüz tahakkuk kaydı yok; oran hesaplanamadı."],
+      outstandingRatioPercent: "0.00",
+      averageOverdueDays: 0,
+      rule: "ort. gecikme > 60 gün veya bekleyen/tahakkuk > %40 → YUKSEK; > 30 gün veya > %20 → ORTA; aksi DUSUK.",
+    };
+    risk.reasons = risk.reasons.map((r) => (perCurrencyRisks.length > 1 ? `[${risk.currency}] ${r}` : r));
 
     return {
       client,

@@ -128,6 +128,15 @@ export class InvoicesService {
       where.status = { in: statuses as InvoiceStatus[] };
     }
     if (params.clientId) where.clientId = params.clientId;
+    // İ-34: eInvoiceStatus filtre alanı tanımlıydı ama sorguya UYGULANMIYORDU —
+    // filtreleyici "her şeyi" döndürüyordu. Geçersiz değer 400 ile döner.
+    if (params.eInvoiceStatus) {
+      const statuses = params.eInvoiceStatus.split(",").map((s) => s.trim().toUpperCase());
+      const valid = ["YOK", "BEKLIYOR", "GONDERILDI", "KABUL", "RED", "IPTAL"] as const;
+      const invalid = statuses.find((s) => !(valid as readonly string[]).includes(s));
+      if (invalid) throw new BadRequestException(`Geçersiz e-belge durumu: ${invalid}`);
+      where.eInvoiceStatus = { in: statuses as (typeof valid)[number][] };
+    }
     if (params.from || params.to) {
       where.issueDate = {
         ...(params.from ? { gte: startOfDay(parseDateParam(params.from, "başlangıç")) } : {}),
@@ -895,6 +904,56 @@ export class InvoicesService {
       detail: `saglayici=${adapter.key} belgeTipi=${payload.documentKind} durum=${result.status}`,
     });
     return this.serialize(updated);
+  }
+
+  /**
+   * GET /billing/invoices/:id/e-invoice/status — BEKLIYOR mutabakat yolu (İ-32).
+   *
+   * Gönderim çağrısı zaman aşımına uğrarsa fatura BEKLIYOR'da kalır ve
+   * yeniden gönderim çift-fatura riski yüzünden kapalıdır (iş kuralı 9).
+   * Bu uç adaptörün `getStatus`'unu sorgular, GİB'ten dönen gerçek durumu
+   * yerel kayda YANSITIR ve faturayı döndürür — mutabakat budur.
+   */
+  async reconcileEInvoiceStatus(user: AuthUser, id: string) {
+    assertFinanceAccess(user, FINANCE_ACCESS.READ, "e-Fatura durum sorgulama");
+    const invoice = await this.prisma.client.invoice.findFirst({
+      where: { id, tenantId: user.tenantId },
+      include: INVOICE_INCLUDE,
+    });
+    if (!invoice) throw new NotFoundException("Fatura bulunamadı.");
+
+    if (!invoice.eInvoiceUuid) {
+      throw new ConflictException(
+        "Bu belge hiç gönderilmemiş; durum sorgusu yalnızca gönderilmiş belgeler için anlamlıdır.",
+      );
+    }
+
+    const adapter = this.eInvoice.resolve(user.tenantId);
+    const gibStatus = await adapter.getStatus(invoice.eInvoiceUuid);
+
+    // GİB durumu yerel kayda YANSITILIR — yalnız KESİN durumlar yazılır;
+    // BILINMIYOR yerel durumu DEĞİŞTİRMEZ (yanlışlıkla GONDERILDI'ye
+    // çekilmesin).
+    const nextStatus =
+      gibStatus === "GONDERILDI" || gibStatus === "KABUL" || gibStatus === "RED" || gibStatus === "IPTAL"
+        ? gibStatus
+        : invoice.eInvoiceStatus;
+
+    const updated = await this.prisma.client.invoice.update({
+      where: { id },
+      data: { eInvoiceStatus: nextStatus },
+      include: INVOICE_INCLUDE,
+    });
+
+    await this.audit.log({
+      tenantId: user.tenantId,
+      userId: user.userId,
+      action: "INVOICE_EINVOICE_STATUS",
+      entity: "Invoice",
+      entityId: id,
+      detail: `saglayici=${adapter.key} gibDurumu=${gibStatus} yerelDurum=${nextStatus}`,
+    });
+    return { invoice: this.serialize(updated), gibStatus };
   }
 
   /**

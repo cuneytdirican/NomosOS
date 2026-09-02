@@ -25,7 +25,10 @@ export const FINANCE_ACCESS = {
   ENTRY_WRITE: ["ADMIN", "PARTNER", "AVUKAT"] as UserRole[],
   /** Ücret sözleşmesi — parasal sözleşme hükmüdür, yalnız yönetim. */
   AGREEMENT_WRITE: ["ADMIN", "PARTNER"] as UserRole[],
-  /** Zaman kaydı girişi (sekreter de kendi/başkası adına girebilir). */
+  /**
+   * Zaman kaydı girişi (İ-35: sekreter YALNIZ KENDİSİ adına girebilir —
+   * başkası adına giriş TIME_MANAGE_OTHERS ister, bkz. time-entries.service).
+   */
   TIME_WRITE: ["ADMIN", "PARTNER", "AVUKAT", "SEKRETER"] as UserRole[],
   /** Başkasının zaman kaydını düzenleme/silme. */
   TIME_MANAGE_OTHERS: ["ADMIN", "PARTNER"] as UserRole[],

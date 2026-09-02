@@ -42,7 +42,16 @@ export default function GirisPage() {
       if (data.user) setStoredUser(data.user);
       router.replace("/app");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Giriş yapılamadı. Lütfen tekrar deneyin.");
+      // İ-49: kilit durumu ayrıca bildirilir — sunucu 423/kilit mesajı döndürse
+      // de "giriş yapılamadı" genel metni kilit sebebini gizliyordu.
+      if (err instanceof ApiError && (err.status === 423 || err.status === 429 || /kilit/i.test(err.message))) {
+        setError(
+          "Hesabınız art arda başarısız denemeler nedeniyle geçici olarak KİLİTLENDİ. " +
+            "Kısa bir süre sonra tekrar deneyin.",
+        );
+      } else {
+        setError(err instanceof ApiError ? err.message : "Giriş yapılamadı. Lütfen tekrar deneyin.");
+      }
     } finally {
       setLoading(false);
     }

@@ -5,10 +5,12 @@
  *
  * POST   /documents               (multipart, ilerleme göstergeli)
  * GET    /documents?caseId=
- * GET    /documents/:id/pipeline  → "Analiz ediliyor… → 3 öneri üretildi"
+ * GET    /documents/:id           → `pipeline` alanı hat durumunu taşır
+ *                                 ("Analiz ediliyor… → 3 öneri üretildi";
+ *                                  ayrı bir /pipeline ucu YOKTUR)
  * GET    /documents/:id/download  → ön-imzalı URL
  * PATCH  /documents/:id           → sınıf düzeltme (AI sınıflandırmasını ezer)
- * DELETE /documents/:id
+ * DELETE /documents/:id           → yumuşak silme (İ-16)
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -66,8 +68,9 @@ function preflight(file: File): string | null {
 }
 
 /**
- * Hat ucu (/documents/:id/pipeline) henüz yayında değilse her belge satırı için
- * ayrı ayrı 404 istemenin anlamı yok — ilk başarısızlıkta oturum boyunca susarız.
+ * Hat verisi (/documents/:id detayının `pipeline` alanı) dönmüyorsa her belge
+ * satırı için ayrı ayrı istek atmaya gerek yok — ilk başarısızlıkta oturum
+ * boyunca susarız.
  */
 let pipelineEndpointDown = false;
 

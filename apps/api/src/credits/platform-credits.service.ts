@@ -219,16 +219,23 @@ export class PlatformCreditsService {
         `${masked ? " (takma adlı görünüm)" : ""}.`,
     });
 
+    // İ-36: sessiz kesim bildirimi — cüzdan/tenant tavanlarına takılındıysa
+    // panel bilir; 500 cüzdan/1000 büro üstü kurulumda liste TAM DEĞİLDİR.
+    const truncated = wallets.length >= 500 || allTenants.length >= 1000;
+
     return {
       items: filtered,
       total: filtered.length,
       maskeli: masked,
       cuzdansizSayisi: walletless,
+      truncated,
       not:
-        walletless > 0
-          ? `${walletless} büronun kredi cüzdanı yok; bu bürolarda AI işlemleri KOTASIZ ` +
-            "çalışıyor ve tüketim ölçülmüyor."
-          : null,
+        (truncated
+          ? "Uyarı: liste cüzdan (500) veya büro (1000) tavanına takıldı — TÜM bürolar listelenmemiş olabilir. "
+          : "") +
+        (walletless > 0
+          ? `${walletless} büronun kredi cüzdanı yok; bu bürolarda AI işlemleri KOTASIZ çalışıyor ve tüketim ölçülmüyor.`
+          : ""),
     };
   }
 

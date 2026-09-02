@@ -715,6 +715,7 @@ function AgentRunsCard() {
                 <th className="px-5 py-2 font-medium">Durum</th>
                 <th className="px-5 py-2 font-medium">Model</th>
                 <th className="px-5 py-2 text-right font-medium">Süre</th>
+                <th className="px-5 py-2 text-right font-medium">Token (giriş/çıkış)</th>
                 <th className="px-5 py-2 font-medium">PII maskesi</th>
                 <th className="px-5 py-2 font-medium">Zaman</th>
               </tr>
@@ -743,6 +744,14 @@ function AgentRunsCard() {
                     </td>
                     <td className="px-5 py-2 text-right tabular-nums text-slate-600">
                       {r.durationMs === null ? "—" : `${(r.durationMs / 1000).toFixed(1)} sn`}
+                    </td>
+                    <td className="px-5 py-2 text-right tabular-nums text-slate-600">
+                      {/* İ-41: iz satırında token sayıları görünür — BYO-LLM
+                          bürosu kendi sağlayıcı faturasını bunlarla mutabakat
+                          yapar. Ana göstergeler yine KREDİ bazındadır. */}
+                      {r.inputTokens === null && r.outputTokens === null
+                        ? "—"
+                        : `${r.inputTokens ?? 0} / ${r.outputTokens ?? 0}`}
                     </td>
                     <td className="px-5 py-2">
                       <Badge tone={r.piiMasked ? "blue" : "gray"}>

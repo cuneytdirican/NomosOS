@@ -456,8 +456,8 @@ export default function IletisimMerkeziPage() {
  * Elle eşleştirme satırı.
  *
  * AI önerisi ÖN-SEÇİLİ gelebilir ama kaydı insan yapar (Modül 19, iş kuralı 5):
- *  - güven < 0.5  → öneri HİÇ gösterilmez (zayıf tahmin yanlış yönlendirir),
- *  - güven ≥ 0.85 → öneri ön-seçili gelir,
+ *  - güven < 0.50 → öneri HİÇ gösterilmez (zayıf tahmin yanlış yönlendirir),
+ *  - güven ≥ 0.80 → öneri ön-seçili gelir,
  *  - arada        → öneri gösterilir ama seçili DEĞİLDİR.
  *
  * "İlgisiz" düğmesi `matched: false` gönderir: mesajı bir dosyaya bağlamamak da

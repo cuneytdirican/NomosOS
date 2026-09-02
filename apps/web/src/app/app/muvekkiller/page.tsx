@@ -226,7 +226,18 @@ export default function MuvekkillerPage() {
                   <tr
                     key={c.id}
                     onClick={() => router.push(`/app/muvekkiller/${c.id}`)}
-                    className="cursor-pointer hover:bg-slate-50"
+                    onKeyDown={(e) => {
+                      // İ-43: satır tıklaması klavyeden de çalışsın — Enter/Space
+                      // aynı detay sayfasına götürür (imleçli satır odaklanabilir).
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        router.push(`/app/muvekkiller/${c.id}`);
+                      }
+                    }}
+                    tabIndex={0}
+                    role="link"
+                    aria-label={`Müvekkil ${c.name} — detay`}
+                    className="cursor-pointer outline-none transition-colors hover:bg-slate-50 focus-visible:bg-amber-50 focus-visible:ring-1 focus-visible:ring-amber-400"
                   >
                     <td className="py-3 pr-4">
                       <Link

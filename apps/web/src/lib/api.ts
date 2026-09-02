@@ -190,6 +190,15 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
   }
 
   if (!res.ok) {
+    // İ-47: 403'e özel mesaj — sunucu bazen yalnız "Forbidden" döndürüyordu;
+    // avukat neyin yasak olduğunu anlayamıyordu.
+    if (res.status === 403) {
+      throw new ApiError(
+        extractMessage(data, "Bu işlem için yetkiniz yok."),
+        403,
+        data,
+      );
+    }
     throw new ApiError(
       extractMessage(data, `İstek başarısız oldu (HTTP ${res.status}).`),
       res.status,

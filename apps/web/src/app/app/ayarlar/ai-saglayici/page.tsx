@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { api, asList, ApiError } from "@/lib/api";
 import type { AiProvider, AiTaskRoute } from "@/lib/types";
 import {
@@ -71,6 +72,7 @@ export default function AiSaglayiciPage() {
   const [providers, setProviders] = useState<AiProvider[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [forbidden, setForbidden] = useState(false);
   const [tests, setTests] = useState<Record<string, TestState>>({});
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -92,7 +94,13 @@ export default function AiSaglayiciPage() {
       const data = await api<unknown>("/ai/providers");
       setProviders(asList<AiProvider>(data));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Sağlayıcılar yüklenemedi.");
+      // İ-38: 403 ayrımı — AVUKAT/SEKRETER buraya doğrudan URL yazarak gelirse
+      // "yüklenemedi" değil rol kartı görür (ai-kullanim deseni).
+      if (err instanceof ApiError && err.status === 403) {
+        setForbidden(true);
+      } else {
+        setError(err instanceof ApiError ? err.message : "Sağlayıcılar yüklenemedi.");
+      }
     } finally {
       setLoading(false);
     }
@@ -233,6 +241,27 @@ export default function AiSaglayiciPage() {
     }
   }
 
+  // İ-38: yetkisiz rol için açık rol kartı — ham hata metni yerine.
+  if (forbidden) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">AI Sağlayıcı Ayarları</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            BYO-LLM: kendi modelinizi bağlayın. Ollama veya özel endpoint seçerseniz verileriniz
+            büronuzdan çıkmaz.
+          </p>
+        </div>
+        <Card>
+          <p className="p-5 text-sm text-slate-600">
+            Sağlayıcı yapılandırması <strong>Ortak</strong> ve <strong>Yönetici</strong>{" "}
+            rollerine açıktır — API anahtarları bütçe ve veri akışı kararıdır.
+          </p>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -269,12 +298,14 @@ export default function AiSaglayiciPage() {
                 Yönetilen AI modundasınız: bu dönem{" "}
                 <strong className="tabular-nums">{wallet.cuzdan.kullanilabilir}</strong> krediniz
                 kaldı.{" "}
-                <a
+                {/* İ-42: iç gezinmede next/link — düz <a> tüm istemci
+                    durumunu boşaltıp tam sayfa yeniden yüklemeye zorluyordu. */}
+                <Link
                   href="/app/ayarlar/ai-kullanim"
                   className="font-medium text-slate-900 underline underline-offset-2"
                 >
                   Kullanım dökümü
-                </a>
+                </Link>
               </p>
               <p className="mt-1 text-slate-500">
                 Aşağıdan kendi API anahtarınızı bağlarsanız kredi limitleri tamamen kalkar ve

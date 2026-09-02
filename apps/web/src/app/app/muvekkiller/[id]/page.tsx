@@ -70,7 +70,10 @@ const TABS = [
   // ---- Faz 5 ----
   { key: "portal", label: "Portal" },
   { key: "vekaletname", label: "Vekaletnameler" },
-  { key: "sozlesmeler5", label: "Sözleşmeler" },
+  // İ-45: etiket ayrımı — bunlar VAKA sözleşmeleridir (Modül 20, sürüm +
+  // e-imza); "Ücret Sözleşmeleri" ise parasal ücret anlaşmasıdır. İkisinin
+  // adı aynı olduğunda kullanıcı hangisinin ne olduğunu bilemiyordu.
+  { key: "sozlesmeler5", label: "Vaka Sözleşmeleri (İmza)" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
