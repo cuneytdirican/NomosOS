@@ -67,6 +67,7 @@ import { TaskProgress } from "@/components/task-progress";
 import { AssistantPanel } from "@/components/assistant-panel";
 import { DocumentsTab } from "@/components/documents-tab";
 import { PetitionsTab } from "@/components/petitions-tab";
+import { ExpensesTab } from "../../_components/expenses-tab";
 import { ProposalCard } from "@/components/proposal-card";
 import { ToastStack, useToasts } from "@/components/ai-ui";
 // ---- Faz 5: dosya bağlamında iletişim ve sözleşmeler ----
@@ -131,6 +132,8 @@ const TABS = [
   { key: "iletisim", label: "İletişim" },
   { key: "sozlesmeler", label: "Sözleşmeler" },
   { key: "ai", label: "AI Asistan" },
+  // ---- Dalga 2 ----
+  { key: "giderler", label: "Giderler" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -920,6 +923,9 @@ export default function DosyaDetayPage({ params }: { params: Promise<{ id: strin
           focusDocumentId={focusDocumentId}
         />
       )}
+
+      {/* ---------- Giderler (D2 A1) ---------- */}
+      {tab === "giderler" && <ExpensesTab caseId={id} />}
 
       {/* ---------- Modallar ---------- */}
       <DeadlineWizard

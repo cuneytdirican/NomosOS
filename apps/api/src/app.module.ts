@@ -33,6 +33,9 @@ import { ChatModule } from "./chat/chat.module";
 import { DiskQuotaModule } from "./disk-quota/disk-quota.module";
 import { JudicialModule } from "./judicial/judicial.module";
 import { AgendaModule } from "./agenda/agenda.module";
+import { CaseExpensesModule } from "./case-expenses/case-expenses.module";
+import { MediationModule } from "./mediation/mediation.module";
+import { AiTrainingModule } from "./ai-training/ai-training.module";
 import { PlatformModule } from "./platform/platform.module";
 // --- Faz 4 modülleri ---
 import { ConflictModule } from "./conflict/conflict.module";
@@ -150,6 +153,12 @@ function requireJwtSecret(config: ConfigService): string {
     JudicialModule,
     // Birleşik ajanda — duruşma/randevu/süre/görev tek takvimde.
     AgendaModule,
+    // Dosya giderleri (A1) — harç/bilirkişi/tebligat; İİK m.202 iade hesabı.
+    CaseExpensesModule,
+    // Arabuluculuk süreci (A2) — ANLASMA_YOK'ta 6325 m.18 dava süresi üretir.
+    MediationModule,
+    // AI eğitim verisi (C3) — opt-in kiracı, maskeli örnekler, JSONL dışa aktarım.
+    AiTrainingModule,
     // Platform yönetim paneli (Modül 25).
     // AYRI DÜNYA: kendi kimlik tablosu (PlatformUser), kendi imza anahtarı,
     // kendi audience'ı (`aud: "platform"`) ve kendi yol öneki (/api/admin/v1).

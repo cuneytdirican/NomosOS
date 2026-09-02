@@ -17,6 +17,18 @@ import type { DeadlineRuleInput, SystemDeadlineRule } from "./types";
 
 export const SYSTEM_DEADLINE_RULES: SystemDeadlineRule[] = [
   {
+    key: "ARABULUCULUK_DAVA",
+    name: "Arabuluculuk sonrası dava açma süresi",
+    description:
+      "Anlaşmaya varılamadığına dair son tutanağın düzenlendiği tarihten itibaren dava açma süresi.",
+    durationValue: 2,
+    durationUnit: "HAFTA",
+    legalBasis: "6325 sayılı Hukuk Uyuşmazlıklarında Arabuluculuk Kanunu m.18 — 2 hafta",
+    caseTypes: ["ARABULUCULUK", "DAVA", "DANISMANLIK"],
+    judicialRecessApplies: true,
+    procedureCode: "HMK",
+  },
+  {
     key: "HMK_CEVAP",
     name: "Cevap dilekçesi süresi",
     description: "Dava dilekçesinin tebliğinden itibaren cevap dilekçesi verme süresi.",

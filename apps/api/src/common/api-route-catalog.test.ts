@@ -35,7 +35,7 @@ function scanController(source: string): Token[] {
   // Portal controller'ı composite dekoratör kullanır (`@PortalControllerDecorator("portal")`
   // → applyDecorators(Controller(path), …)); @Controller regex'i onu göremez —
   // portal öneki katalog tarafıyla eşleşsin diye composite AYRI YAKALANIR.
-  const ctrlRe = /@(?:Controller|PortalControllerDecorator)\(\s*(?:["'`]([^"'`]*)["'`]\s*)?\)/g;
+  const ctrlRe = /@(?:Controller|PortalControllerDecorator|PlatformController)\(\s*(?:["'`]([^"'`]*)["'`]\s*)?\)/g;
   const routeRe = /@(Get|Post|Patch|Put|Delete)\(\s*(?:["'`]([^"'`]*)["'`]\s*)?\)/g;
   let m: RegExpExecArray | null;
   while ((m = ctrlRe.exec(source))) tokens.push({ t: "ctrl", base: m[1] ?? "", i: m.index });
@@ -84,7 +84,10 @@ function routeShape(path: string): string {
   return path
     .split("/")
     .filter((s) => s.length > 0)
-    .map((s) => (s.startsWith(":") ? "*" : s))
+    // Şablon değişkeni (PlatformController'ın `${ADMIN_ROUTE_PREFIX}/…` dizisi)
+    // statik bir önek DEĞİLDİR — jokere indirgenir ki platform uçları katalog
+    // tarafındaki `admin/…` yollarıyla eşleşebilsin.
+    .map((s) => (s.startsWith(":") || s.startsWith("${") ? "*" : s))
     .join("/");
 }
 

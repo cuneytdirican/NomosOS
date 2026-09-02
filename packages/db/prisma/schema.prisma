@@ -37,6 +37,9 @@ model Tenant {
   /// verilen tek seferlik açık rıza. false ise hattın AI adımları ATLANIR
   /// ve belge triyaja düşer (docs/04, kabul kriteri 1).
   autoMaskConsent Boolean  @default(false)
+  /// AI EĞİTİM VERİSİ RIZASI (C3): onay/ret/düzeltme örnekleri NomosOS
+  /// tarafından toplansın mı? Varsayılan KAPALI — KVKK açık rıza.
+  aiTrainingOptIn Boolean  @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -285,6 +288,12 @@ model Case {
 
   /// UYAP Köprüsü — UYAP dosya numarası ↔ NomosOS dosyası bağlantısı
   uyapLinks UyapCaseLink[]
+
+  /// Dosya giderleri (A1 — harç, bilirkişi, tebligat, yol, danışma)
+  expenses CaseExpense[]
+
+  /// Arabuluculuk süreçleri (A2 — dava şartı arabuluculuk)
+  mediations Mediation[]
 
   @@index([tenantId])
   @@index([tenantId, status])
@@ -3092,6 +3101,104 @@ model DiskPackage {
   price    Decimal @db.Decimal(18, 2)
   currency String  @default("TRY")
   isActive Boolean @default(true)
+}
+
+// ===========================================================================
+// DOSYA GİDERLERİ (geliştirme planı A1) — dosyanın GERÇEK maliyeti.
+// Harç, bilirkişi ücreti, tebligat, yol/danışma; İİK m.202 gider avansı iadesi
+// dosya kapatma hesabında bu kayıtlardan üretilir.
+// ===========================================================================
+
+/// Dosya gider kaydı — kuruş hassasiyeti (Decimal, yüzüncük hane).
+model CaseExpense {
+  id        String    @id @default(uuid())
+  tenantId  String
+  caseId    String
+  case      Case      @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  /// HARC | BILIRKISI | TEBLIGAT | YOL_DANISMA | DIGER
+  category  String
+  /// Kısa başlık, örn. "Peşin harç", "Bilirkişi ücreti (1. rapor)"
+  title     String
+  /// TL kuruş hassasiyeti — negatif olamaz.
+  amount    Decimal   @db.Decimal(18, 2)
+  currency  String    @default("TRY")
+  /// Giderin gerçekleştiği tarih.
+  spentAt   DateTime  @db.Date
+  /// Ödendi mi? Ödendiyse ödeme anı.
+  paidAt    DateTime?
+  /// AVANS (müvekkil avansından) | BURO (büro kasasından)
+  paidFrom  String    @default("AVANS")
+  /// İİK m.202 kapsamında gider avansından karşılanıp dosya sonunda
+  /// müvekkile İADE edilecek kalem mi? (bilirkişi ücreti gibi)
+  refundable Boolean  @default(true)
+  note      String?
+  createdBy String?
+  createdAt DateTime  @default(now())
+
+  @@index([tenantId, caseId])
+  @@index([tenantId, spentAt])
+}
+
+// ===========================================================================
+// ARABULUCULUK SÜRECİ (geliştirme planı A2) — dava şartı arabuluculuk.
+// Son tutanakta anlaşma yoksa 2 haftada dava açılır (6325 s.K. m.18/son);
+// süreç ANLASMA_YOK'a geçince motor bu süreyi üretir.
+// ===========================================================================
+
+/// Arabuluculuk süreç kaydı.
+model Mediation {
+  id        String    @id @default(uuid())
+  tenantId  String
+  caseId    String?
+  case      Case?     @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  clientId  String?
+  title     String
+  /// DAVET | TOPLANTI | SONUC | ANLASMA | ANLASMA_YOK | DAVA_ACILDI | FERAGAT
+  status    String    @default("DAVET")
+  /// Toplantı tarihi (planlandıysa).
+  meetingAt DateTime?
+  /// SONUC tutanağı tarihi — ANLASMA_YOK'ta dava süresi başlangıcı.
+  finalProtocolAt DateTime?
+  /// Sonuç: anlaşılan tutar (ANLASMA'da).
+  settlementAmount Decimal? @db.Decimal(18, 2)
+  note      String?
+  /// 6325 m.18: ANLASMA_YOK geçişinde üretilen 2 haftalık dava süresi.
+  lawsuitDeadlineId String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([tenantId, status])
+  @@index([tenantId, caseId])
+}
+
+// ===========================================================================
+// AI EĞİTİM VERİSİ (geliştirme planı C3) — avukat onay/ret/düzeltmelerinden.
+// YALNIZCA opt-in kiracı verisi toplanır (Tenant.aiTrainingOptIn, varsayılan
+// KAPALI); toplanan örnekler PII kapısından MASKELİ geçer; dışa aktarım
+// platformdan JSONL olarak ve denetim izli yapılır.
+// ===========================================================================
+
+/// Tek eğitim örneği — öneri kararı / elle düzeltme / belge sınıf düzeltmesi.
+model AiTrainingSample {
+  id           String    @id @default(uuid())
+  tenantId     String
+  /// Kaynak görev tipi: DOCUMENT_CLASSIFY, ACTION_PROPOSAL, SMART_NOTE…
+  taskType     String
+  /// ONAY (öneri kabul edildi) | RED (öneri reddedildi) | DUZELTME (elle düzeltildi)
+  kind         String
+  /// Maskeli model GİRDİSİ (JSON) — scanPii'den geçmiş.
+  inputJson    String
+  /// Model çıktısı (JSON).
+  outputJson   String
+  /// İnsan kararı/düzeltmesi (JSON).
+  feedbackJson String?
+  /// YENI | ONAYLANDI (dışa çıkabilir) | REDDEDILDI (kalitesiz) | IHRAC_EDILDI
+  exportStatus String    @default("YENI")
+  exportedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([tenantId, taskType, kind])
+  @@index([tenantId, exportStatus])
 }
 
 // ===========================================================================

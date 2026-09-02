@@ -3,6 +3,8 @@ import type { DocumentActionProposal, Prisma, ProposalStatus, ProposalType, Task
 import { formatTrDate } from "@nomosos/legal-core";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
+// D2 C3: AI eğitim verisi (opt-in kiracı) — karar anları örnek üretir.
+import { AiTrainingDataService } from "../ai-training/ai-training.service";
 import { DeadlineComputeService } from "../pipeline/deadline-compute.service";
 import type { AuthUser } from "../common/types";
 import { assertRole, ROLE_SETS } from "../common/roles";
@@ -43,7 +45,9 @@ export class ProposalsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
-    private readonly deadlines: DeadlineComputeService
+    private readonly deadlines: DeadlineComputeService,
+    // D2 C3: onay/ret kararları eğitim örneği üretir (opt-in kiracıda).
+    private readonly training: AiTrainingDataService
   ) {}
 
   /* ------------------------------------------------------------------ *
@@ -173,6 +177,20 @@ export class ProposalsService {
         (input.note ? ` Not: ${input.note}` : ""),
     });
 
+    // D2 C3: ONAY kararı eğitim örneği üretir — yalnız opt-in kiracıda,
+    // model girdisi/çıktısı KVKK maskesinden geçer, avukat kararı etiket olarak yazılır.
+    void this.training
+      .recordDecision({
+        tenantId: user.tenantId,
+        taskType: "DOCUMENT_ACTION",
+        kind: "ONAY",
+        modelInput: { documentId: proposal.documentId, type: proposal.type, title: proposal.title },
+        modelOutput: payload,
+        feedback: { decision: "ONAY", note: input.note ?? null },
+        userId: user.userId,
+      })
+      .catch(() => undefined);
+
     return {
       proposal: present(updated),
       created: { entity: applied.entity, id: applied.entityId, summary: applied.summary },
@@ -212,6 +230,20 @@ export class ProposalsService {
       entityId: id,
       detail: `${proposal.type}: ${proposal.title} — gerekçe: ${input.reason}`,
     });
+
+    // D2 C3: RET kararı da eğitim örneğidir — öneri neyi yanlış önerdi sorusunun
+    // cevabı; maske uygulanır, opt-in şart.
+    void this.training
+      .recordDecision({
+        tenantId: user.tenantId,
+        taskType: "DOCUMENT_ACTION",
+        kind: "RED",
+        modelInput: { documentId: proposal.documentId, type: proposal.type, title: proposal.title },
+        modelOutput: payload,
+        feedback: { decision: "RED", reason: input.reason },
+        userId: user.userId,
+      })
+      .catch(() => undefined);
 
     return { id: updated.id, status: updated.status, reason: input.reason };
   }

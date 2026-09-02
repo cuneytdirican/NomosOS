@@ -493,6 +493,34 @@ export const JUDICIAL_ROUTES = {
   notaries: "/judicial/notaries",
 } as const;
 
+/** Birleşik ajanda — dört kaynak tek takvimde. */
+export const AGENDA_ROUTES = {
+  list: "/agenda",
+} as const;
+
+/** Dosya giderleri (İİK m.202 kapatma hesabı dâhil). */
+export const CASE_EXPENSE_ROUTES = {
+  list: "/case-expenses",
+  caseExpenses: (caseId: string) => `/cases/${caseId}/case-expenses`,
+  closing: (caseId: string) => `/cases/${caseId}/case-expenses/closing`,
+  markPaid: (id: string) => `/case-expenses/${id}/mark-paid`,
+} as const;
+
+/** Arabuluculuk süreçleri (6325 s.K.). */
+export const MEDIATION_ROUTES = {
+  list: "/mediations",
+  create: "/mediations",
+  detail: (id: string) => `/mediations/${id}`,
+  transition: (id: string) => `/mediations/${id}/transition`,
+} as const;
+
+/** AI eğitim verisi (opt-in kiracı; maskeli örnekler). */
+export const AI_TRAINING_ROUTES = {
+  summary: "/ai-training/summary",
+  optIn: "/ai-training/opt-in",
+  samples: "/ai-training/samples",
+} as const;
+
 /** Portal self-servis uçları (E9 randevu + E8 ödeme — token yetkidir). */
 export const PORTAL_SELF_ROUTES = {
   randevular: "/portal/randevular",

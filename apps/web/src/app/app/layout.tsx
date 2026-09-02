@@ -336,6 +336,30 @@ const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
           </svg>
         ),
       },
+      {
+        // D2 A3: kıdem/ihbar, faiz, dava harcı — deterministik motorlar.
+        href: "/app/araclar/hesap-araclari",
+        label: "Hesap Araçları",
+        icon: (
+          <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+            <path
+              fillRule="evenodd"
+              d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM7.5 6.75a.75.75 0 0 0 0 1.5h5a.75.75 0 0 0 0-1.5h-5Zm.75 3.75a.75.75 0 0 1 .75-.75h3a.75.75 0 0 1 0 1.5h-3a.75.75 0 0 1-.75-.75ZM9 13.5a.75.75 0 0 0 0 1.5h2a.75.75 0 0 0 0-1.5H9Z"
+              clipRule="evenodd"
+            />
+          </svg>
+        ),
+      },
+      {
+        // D2 A2: arabuluculuk süreçleri — ANLASMA_YOK'ta dava süresi üretir.
+        href: "/app/arabuluculuk",
+        label: "Arabuluculuk",
+        icon: (
+          <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+            <path d="M10 2c-1.9 0-3.5 1.6-3.5 3.5v.75H6A2.5 2.5 0 0 0 3.5 8.75v6A2.5 2.5 0 0 0 6 17.25h8a2.5 2.5 0 0 0 2.5-2.5v-6A2.5 2.5 0 0 0 14 6.25h-.5V5.5C13.5 3.6 11.9 2 10 2Zm2 4.25H8V5.5a2 2 0 1 1 4 0v.75Z" />
+          </svg>
+        ),
+      },
     ],
   },
   {

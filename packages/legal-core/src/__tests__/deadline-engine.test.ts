@@ -762,7 +762,8 @@ describe("sistem kural seti", () => {
     // Eşik, set büyüklüğüne SABİTLENMİŞTİR: eski `>= 12` eşiği 18 kurallık bir
     // sette kural silinmesini yakalamıyordu (denetim bulgusu 15).
     // F2 A4: 22 → 29 (İİK m.89 üçlüsü, İİK m.33, İİK m.363, HMK m.394, HMK m.317/2).
-    expect(SYSTEM_DEADLINE_RULES).toHaveLength(29);
+    // D2 A2: 29 → 30 (6325 s.K. m.18 — arabuluculuk sonrası dava süresi).
+    expect(SYSTEM_DEADLINE_RULES).toHaveLength(30);
     expect(new Set(SYSTEM_DEADLINE_RULE_KEYS).size).toBe(SYSTEM_DEADLINE_RULES.length);
   });
 
@@ -836,6 +837,8 @@ describe("sistem kural seti", () => {
       ["IIK_ISTINAF", 10, "GUN", "İİK m.363 — 10 gün"],
       ["HMK_IHTIYATI_TEDBIRE_ITIRAZ", 1, "HAFTA", "HMK m.394 — 1 hafta"],
       ["HMK_BASIT_YARGILAMA_CEVAP", 2, "HAFTA", "HMK m.317/2 — 2 hafta"],
+      // ── D2 A2: arabuluculuk sonrası dava süresi ───────────────────────────
+      ["ARABULUCULUK_DAVA", 2, "HAFTA", "6325 sayılı Hukuk Uyuşmazlıklarında Arabuluculuk Kanunu m.18 — 2 hafta"],
     ];
     expect(beklenen).toHaveLength(SYSTEM_DEADLINE_RULES.length);
     for (const [key, value, unit, basis] of beklenen) {
