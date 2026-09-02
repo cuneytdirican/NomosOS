@@ -375,6 +375,20 @@ const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
           </svg>
         ),
       },
+      {
+        // D4 A6: konkordato/iflas süreç takibi — şerit denetimli aşamalar.
+        href: "/app/konkordato",
+        label: "Konkordato/İflas",
+        icon: (
+          <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+            <path
+              fillRule="evenodd"
+              d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm-1.5-4a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0Zm.75-3.25a.75.75 0 0 0 1.5 0V6.5a.75.75 0 0 0-1.5 0v4.25Z"
+              clipRule="evenodd"
+            />
+          </svg>
+        ),
+      },
     ],
   },
   {

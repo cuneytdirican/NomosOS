@@ -9,6 +9,7 @@
  */
 
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
+import { z } from "zod";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AiThrottle } from "../common/guards/ai-rate-limit.guard";
 import { AiCredits } from "../credits/ai-credits.decorator";
@@ -17,6 +18,7 @@ import type { AuthUser } from "../common/types";
 import { EnforcementCopilotService } from "./copilot.service";
 import { CollectionScoreService } from "./collection-score.service";
 import { EnforcementService } from "./enforcement.service";
+import { EnforcementAssetMarketService, APPRAISER_TYPES, SALE_RESULTS, SALE_TYPES } from "./enforcement-asset-market.service";
 import {
   changeStageSchema,
   copilotSchema,
@@ -39,6 +41,35 @@ import {
   type UpdateAssetInput,
   type UpdateEnforcementInput,
 } from "./enforcement.dto";
+
+/* ---------------- D4 / A6: kıymet takdiri + satış şemaları ---------------- */
+
+const createValuationSchema = z.object({
+  appraiserType: z.enum(APPRAISER_TYPES, {
+    errorMap: () => ({ message: "Geçersiz takdiri yapan türü (bilirkişi/icra memuru/encümen)." }),
+  }),
+  appraiserName: z.string().trim().max(200).optional(),
+  appraisedValue: z.number().positive("Takdir bedeli pozitif olmalıdır."),
+  appraisedAt: z.string().datetime({ message: "Takdir tarihi zorunludur." }),
+  note: z.string().trim().max(2000).optional(),
+});
+export type CreateValuationInput = z.infer<typeof createValuationSchema>;
+
+const createSaleSchema = z.object({
+  saleType: z.enum(SALE_TYPES, {
+    errorMap: () => ({ message: "Geçersiz satış türü (açık artırma / posta ile teklif)." }),
+  }),
+  saleDate: z.string().datetime({ message: "Satış tarihi zorunludur." }),
+  minimumBid: z.number().positive().nullable().optional(),
+  depositRatio: z.number().min(0).max(100).nullable().optional(),
+  result: z.enum(SALE_RESULTS, {
+    errorMap: () => ({ message: "Geçersiz satış sonucu." }),
+  }),
+  soldAmount: z.number().positive().nullable().optional(),
+  buyerName: z.string().trim().max(200).optional(),
+  note: z.string().trim().max(2000).optional(),
+});
+export type CreateSaleInput = z.infer<typeof createSaleSchema>;
 
 @Controller("enforcement")
 export class EnforcementController {
@@ -241,7 +272,10 @@ export class EnforcementActionsController {
 /** Malvarlığı kayıtları dosyadan bağımsız da adreslenir. */
 @Controller("assets")
 export class AssetsController {
-  constructor(private readonly enforcement: EnforcementService) {}
+  constructor(
+    private readonly enforcement: EnforcementService,
+    private readonly assetMarket: EnforcementAssetMarketService,
+  ) {}
 
   @Patch(":id")
   update(
@@ -250,5 +284,35 @@ export class AssetsController {
     @Body(new ZodValidationPipe(updateAssetSchema)) body: UpdateAssetInput,
   ) {
     return this.enforcement.updateAsset(user, id, body);
+  }
+
+  // ---------- D4 / A6: kıymet takdiri (İİK m.120) + satış (m.106+) ----------
+
+  @Get(":id/valuations")
+  listValuations(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.assetMarket.listValuations(user, id);
+  }
+
+  @Post(":id/valuations")
+  addValuation(
+    @CurrentUser() user: AuthUser,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(createValuationSchema)) body: CreateValuationInput,
+  ) {
+    return this.assetMarket.addValuation(user, id, body);
+  }
+
+  @Get(":id/sales")
+  listSales(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.assetMarket.listSales(user, id);
+  }
+
+  @Post(":id/sales")
+  addSale(
+    @CurrentUser() user: AuthUser,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(createSaleSchema)) body: CreateSaleInput,
+  ) {
+    return this.assetMarket.addSale(user, id, body);
   }
 }

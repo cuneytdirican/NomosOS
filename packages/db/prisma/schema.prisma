@@ -294,6 +294,7 @@ model Case {
 
   /// Arabuluculuk süreçleri (A2 — dava şartı arabuluculuk)
   mediations Mediation[]
+  concordatos ConcordatoProcess[]
 
   @@index([tenantId])
   @@index([tenantId, status])
@@ -1724,10 +1725,113 @@ model AssetRecord {
   status            AssetStatus     @default(TESPIT_EDILDI)
   discoveredAt      DateTime
   note              String?
+  /// D4 / A6: kıymet takdirleri (İİK m.120) ve satış kayıtları (m.106+).
+  valuations       AssetValuation[]
+  sales            AssetSale[]
 
   @@index([enforcementFileId])
   @@index([tenantId, status])
   @@index([tenantId, assetType])
+}
+
+// ===========================================================================
+// D4 / A6 — İCRA DERİNLİĞİ: kıymet takdiri + satış kademesi.
+//
+// Kıymet takdiri İİK m.120: haczedilen malın kıymeti, takdir bilirkişilerce
+// (taşınmaz/istisnai menkul) veya icra memurunca takdir edilir. Satış
+// m.106 ve devamı: açık artırma (m.111) veya posta ile teklif (m.114).
+//
+// DÜRÜSTLÜK: otomatik yasal süre üretimi YOKTUR — satış süre hükümleri
+// (m.106/3 altı ay) süreye bağlı ayrıntılar içerir ve uydurulmaz; süreleri
+// avukat Deadline ekranından elle kurar (mevcut süre motoru).
+// ===========================================================================
+
+/// Kıymet takdiri (İİK m.120) — mal başına, sürüm geçmişi korunur.
+model AssetValuation {
+  id             String      @id @default(uuid())
+  tenantId       String
+  assetId        String
+  asset          AssetRecord @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  /// Takdiri yapan: BILIRKISI | ICRA_MEMURU | ENCU_MEN — İİK m.120'a göre.
+  appraiserType  String
+  appraiserName  String?
+  /// Takdir bedeli (muhammen bedel — satışın çıkış noktası).
+  appraisedValue Decimal     @db.Decimal(18, 2)
+  appraisedAt    DateTime
+  note           String?
+  createdBy      String
+  createdAt      DateTime    @default(now())
+
+  @@index([assetId])
+  @@index([tenantId, appraisedAt])
+}
+
+/// Satış / artırma kaydı (İİK m.106+).
+model AssetSale {
+  id             String      @id @default(uuid())
+  tenantId       String
+  assetId        String
+  asset          AssetRecord @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  /// AÇIK_ARTIRMA (m.111) | POSTA_ILE_TEKLIF (m.114)
+  saleType       String
+  /// Artırma/satış günü.
+  saleDate       DateTime
+  /// Çıkış bedeli (muhammen/takdir bedeli).
+  minimumBid     Decimal?    @db.Decimal(18, 2)
+  /// Geçici teminat oranı (m.114/2 — posta ile teklifte %25).
+  depositRatio   Decimal?    @db.Decimal(5, 2)
+  /// SATILDI | KATILAN_YOK | ERTELENDI | IPTAL
+  result         String
+  /// SATILDI ise gerçekleşen bedel.
+  soldAmount     Decimal?    @db.Decimal(18, 2)
+  buyerName      String?
+  note           String?
+  createdBy      String
+  createdAt      DateTime    @default(now())
+
+  @@index([assetId])
+  @@index([tenantId, result])
+}
+
+// ===========================================================================
+// D4 / A6 — KONKORDATO / İFLAS SÜREÇ TAKİBİ.
+//
+// Konkordato: İİK m.285-302 (7101 s.K. düzenlemesi). Aşama zinciri:
+//   BASVURU → ÖN_INCELEME → GECICI_ERTELEME → KESIN_ERTELEME →
+//   (ONAYLANDI | REDDEDILDI | ALACAKLILARCA_RED)
+// İflas: İİK m.154-168 (iflasın istenmesi/kararı/idaresi).
+//   TALEP → GECIKME (m.166: talep öncesi geçici erteleme) → KARAR →
+//   IDARE → (INFIS | SONUC)
+//
+// DÜRÜSTLÜK: otomatik yasal süre üretimi YOKTUR — konkordato süre hükümleri
+// (m.286-293) koşullu ve içtihatlıdır; aşama tarihlerini avukat girer,
+// süreleri mevcut süre motorundan elle kurar.
+// ===========================================================================
+
+/// Konkordato / iflas süreç kaydı.
+model ConcordatoProcess {
+  id        String   @id @default(uuid())
+  tenantId  String
+  caseId    String?
+  case      Case?    @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  /// CONCORDATO | IFLAS
+  processType String @default("CONCORDATO")
+  /// CONCORDATO: BASVURU|ÖN_INCELEME|GECICI_ERTELEME|KESIN_ERTELEME|ONAYLANDI|REDD EDILDI...
+  /// Aşama etiketleri service katında tanımlı (sözlü değil, kod tarafında).
+  status    String   @default("BASVURU")
+  /// Mahkeme/daire adı.
+  court     String?
+  /// Esas/merkeze kayıt no.
+  fileNo    String?
+  /// Aşama tarihi (her geçişte güncellenir; tarih GEÇMİŞİ transitions'ta yok —
+  /// güncel tarih yeterli, süreç günlüğü denetim izinde).
+  stageAt   DateTime?
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, status])
+  @@index([tenantId, caseId])
 }
 
 enum CollectionMethod {

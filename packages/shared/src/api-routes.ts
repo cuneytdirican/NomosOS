@@ -538,6 +538,20 @@ export const METRICS_ROUTES = {
   metrics: "/metrics",
 } as const;
 
+/** Kıymet takdiri (İİK m.120) + satış kaydı (m.106+) — D4 / A6. */
+export const ASSET_MARKET_ROUTES = {
+  valuations: (assetId: string) => `/assets/${assetId}/valuations`,
+  sales: (assetId: string) => `/assets/${assetId}/sales`,
+} as const;
+
+/** Konkordato / iflas süreç takibi (D4 / A6). */
+export const CONCORDATO_ROUTES = {
+  list: "/concordatos",
+  create: "/concordatos",
+  detail: (id: string) => `/concordatos/${id}`,
+  transition: (id: string) => `/concordatos/${id}/transition`,
+} as const;
+
 /** Portal self-servis uçları (E9 randevu + E8 ödeme — token yetkidir). */
 export const PORTAL_SELF_ROUTES = {
   randevular: "/portal/randevular",

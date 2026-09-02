@@ -38,6 +38,7 @@ import { MediationModule } from "./mediation/mediation.module";
 import { AiTrainingModule } from "./ai-training/ai-training.module";
 import { LegislationModule } from "./legislation/legislation.module";
 import { MetricsModule } from "./metrics/metrics.module";
+import { ConcordatoModule } from "./concordato/concordato.module";
 import { PlatformModule } from "./platform/platform.module";
 // --- Faz 4 modülleri ---
 import { ConflictModule } from "./conflict/conflict.module";
@@ -166,6 +167,8 @@ function requireJwtSecret(config: ConfigService): string {
     LegislationModule,
     // İzleme metrikleri (D3 / C6) — GET /metrics, Prometheus metin biçimi.
     MetricsModule,
+    // Konkordato/iflas süreç takibi (D4 / A6) — şerit denetimli aşamalar.
+    ConcordatoModule,
     // Platform yönetim paneli (Modül 25).
     // AYRI DÜNYA: kendi kimlik tablosu (PlatformUser), kendi imza anahtarı,
     // kendi audience'ı (`aud: "platform"`) ve kendi yol öneki (/api/admin/v1).

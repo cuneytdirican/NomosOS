@@ -5,6 +5,7 @@ import { EnforcementBalanceService } from "./balance.service";
 import { CollectionScoreService } from "./collection-score.service";
 import { EnforcementCopilotService } from "./copilot.service";
 import { EnforcementDeadlinesService } from "./enforcement-deadlines.service";
+import { EnforcementAssetMarketService } from "./enforcement-asset-market.service";
 import {
   AssetsController,
   EnforcementActionsController,
@@ -34,6 +35,7 @@ import { EnforcementService } from "./enforcement.service";
     CollectionScoreService,
     EnforcementDeadlinesService,
     EnforcementCopilotService,
+    EnforcementAssetMarketService,
   ],
   exports: [EnforcementService, EnforcementBalanceService, CollectionScoreService],
 })

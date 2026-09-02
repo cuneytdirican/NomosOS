@@ -169,6 +169,16 @@ degisiklik; plana alindi.
 
 **DALGA 4 — P3 "Ölçek"**
 15. İcra kademe akışı + iflas (A6), pgvector (C5), çoklu örnek doğrulama.
+    — **A6 TAMAM:** kıymet takdiri (İİK m.120 — bilirkişi/icra memuru/
+    encümen), satış kaydı (m.106+ — açık artırma m.111 / posta ile teklif
+    m.114, SATILDI'da mal durum şeridi korunur), konkordato (m.285-302) +
+    iflas (m.154-168) süreç şeritleri + /app/konkordato; hepsi canlı
+    doğrulandı. Otomatik yasal süre üretimi bilinçli YOK (süre hükümleri
+    koşullu — süreler süre motorundan kurulur).
+    — **Çoklu örnek:** SSE tek-örnek sınırı + zamanlayıcı tekil koşu kilidi
+    AÇIKÇA belgeli ve testli (job-runner-lock). replicas>1'de Redis pub/sub
+    gerekir — sınırlar kodda yazılı.
+    — **C5 pgvector:** bilinçli ertelenmiş (belgeli karar; 100k+ parça üstünde).
 
 ## 6. Yapılmayacaklar (dürüstlük)
 

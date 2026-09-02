@@ -19,7 +19,25 @@
 
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ApiError, fetchPaged, SERVER_MAX_PAGE_SIZE } from "@/lib/api";
+import { ApiError, api, fetchPaged, SERVER_MAX_PAGE_SIZE } from "@/lib/api";
+
+/** D4 / A6 — kıymet takdiri + satış kaydı biçimleri. */
+interface MarketValuation {
+  id: string;
+  appraiserType: string;
+  appraiserName: string | null;
+  appraisedValue: number;
+  appraisedAt: string;
+}
+
+interface MarketSale {
+  id: string;
+  saleType: string;
+  saleDate: string;
+  result: string;
+  soldAmount: number | null;
+  buyerName: string | null;
+}
 import { errText, isMissingEndpoint } from "@/lib/faz2";
 import {
   changeStage,
@@ -633,6 +651,90 @@ function AssetsTab({
     }
   }
 
+  /* ---------- D4 / A6: kıymet takdiri (m.120) + satış (m.106+) ---------- */
+
+  const [marketAsset, setMarketAsset] = useState<AssetRecord | null>(null);
+  const [valuations, setValuations] = useState<MarketValuation[]>([]);
+  const [sales, setSales] = useState<MarketSale[]>([]);
+  const [marketLoading, setMarketLoading] = useState(false);
+  const [marketBusy, setMarketBusy] = useState<"valuation" | "sale" | null>(null);
+  const [marketError, setMarketError] = useState<string | null>(null);
+  const [valForm, setValForm] = useState({ appraiserType: "BILIRKISI", appraiserName: "", appraisedValue: "", appraisedAt: toIsoDate(new Date()), note: "" });
+  const [saleForm, setSaleForm] = useState({ saleType: "ACIK_ARTIRMA", saleDate: toIsoDate(new Date()), minimumBid: "", depositRatio: "", result: "SATILDI", soldAmount: "", buyerName: "", note: "" });
+
+  async function openMarket(asset: AssetRecord) {
+    setMarketAsset(asset);
+    setMarketError(null);
+    setMarketLoading(true);
+    try {
+      const [v, s] = await Promise.all([
+        api<MarketValuation[]>(`/assets/${asset.id}/valuations`),
+        api<MarketSale[]>(`/assets/${asset.id}/sales`),
+      ]);
+      setValuations(Array.isArray(v) ? v : []);
+      setSales(Array.isArray(s) ? s : []);
+    } catch (err) {
+      setMarketError(err instanceof ApiError ? err.message : "Kayıtlar yüklenemedi.");
+    } finally {
+      setMarketLoading(false);
+    }
+  }
+
+  async function addValuation(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!marketAsset) return;
+    setMarketBusy("valuation");
+    setMarketError(null);
+    try {
+      await api(`/assets/${marketAsset.id}/valuations`, {
+        method: "POST",
+        body: {
+          appraiserType: valForm.appraiserType,
+          ...(valForm.appraiserName.trim() ? { appraiserName: valForm.appraiserName.trim() } : {}),
+          appraisedValue: Number(valForm.appraisedValue.replace(",", ".")),
+          appraisedAt: new Date(valForm.appraisedAt).toISOString(),
+          ...(valForm.note.trim() ? { note: valForm.note.trim() } : {}),
+        },
+      });
+      onNotify("Kıymet takdiri kaydedildi (İİK m.120).");
+      await openMarket(marketAsset);
+      await load();
+    } catch (err) {
+      setMarketError(err instanceof ApiError ? err.message : "Takdir kaydedilemedi.");
+    } finally {
+      setMarketBusy(null);
+    }
+  }
+
+  async function addSale(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!marketAsset) return;
+    setMarketBusy("sale");
+    setMarketError(null);
+    try {
+      await api(`/assets/${marketAsset.id}/sales`, {
+        method: "POST",
+        body: {
+          saleType: saleForm.saleType,
+          saleDate: new Date(saleForm.saleDate).toISOString(),
+          ...(saleForm.minimumBid.trim() ? { minimumBid: Number(saleForm.minimumBid.replace(",", ".")) } : {}),
+          ...(saleForm.depositRatio.trim() ? { depositRatio: Number(saleForm.depositRatio.replace(",", ".")) } : {}),
+          result: saleForm.result,
+          ...(saleForm.soldAmount.trim() ? { soldAmount: Number(saleForm.soldAmount.replace(",", ".")) } : {}),
+          ...(saleForm.buyerName.trim() ? { buyerName: saleForm.buyerName.trim() } : {}),
+          ...(saleForm.note.trim() ? { note: saleForm.note.trim() } : {}),
+        },
+      });
+      onNotify("Satış kaydı işlendi; mal durumu güncellendi.");
+      await openMarket(marketAsset);
+      await load();
+    } catch (err) {
+      setMarketError(err instanceof ApiError ? err.message : "Satış kaydedilemedi.");
+    } finally {
+      setMarketBusy(null);
+    }
+  }
+
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSaving(true);
@@ -719,6 +821,13 @@ function AssetsTab({
                         </option>
                       ))}
                     </Select>
+                    {/* D4 / A6: kıymet takdiri (m.120) + satış kaydı (m.106+) */}
+                    <button
+                      className="mt-1 text-xs font-medium text-navy-700 hover:underline"
+                      onClick={() => void openMarket(a)}
+                    >
+                      Takdir / Satış
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -731,6 +840,180 @@ function AssetsTab({
         Tahmini değer bir tespit notudur; takip bakiyesine dâhil edilmez. Satış geliri ancak
         Tahsilatlar sekmesine kaydedildiğinde bakiyeye yansır.
       </p>
+
+      {/* D4 / A6 — kıymet takdiri + satış kaydı iletişim kutusu */}
+      <Modal
+        open={!!marketAsset}
+        title={marketAsset ? `Takdir / Satış — ${marketAsset.description.slice(0, 60)}` : ""}
+        onClose={() => setMarketAsset(null)}
+      >
+        {marketAsset ? (
+          <div className="space-y-5">
+            {marketError ? <ErrorBox message={marketError} /> : null}
+            {marketLoading ? (
+              <Spinner />
+            ) : (
+              <>
+                {/* Mevcut takdirler */}
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-800">
+                    Kıymet Takdirleri (İİK m.120)
+                  </h4>
+                  {valuations.length === 0 ? (
+                    <p className="mt-1 text-xs text-slate-500">Henüz takdir kaydı yok.</p>
+                  ) : (
+                    <ul className="mt-2 space-y-1">
+                      {valuations.map((v) => (
+                        <li key={v.id} className="text-xs text-slate-600">
+                          {fmtDate(v.appraisedAt)} — {fmtAmount(v.appraisedValue, currency)} —{" "}
+                          {v.appraiserType === "BILIRKISI"
+                            ? "Bilirkişi"
+                            : v.appraiserType === "ICRA_MEMURU"
+                              ? "İcra memuru"
+                              : "Encümen"}
+                          {v.appraiserName ? ` (${v.appraiserName})` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <form onSubmit={addValuation} className="mt-3 space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <Select
+                        value={valForm.appraiserType}
+                        onChange={(e) => setValForm({ ...valForm, appraiserType: e.target.value })}
+                        aria-label="Takdiri yapan"
+                        className="!py-1 text-xs"
+                      >
+                        <option value="BILIRKISI">Bilirkişi</option>
+                        <option value="ICRA_MEMURU">İcra memuru</option>
+                        <option value="ENCUMEN">Encümen</option>
+                      </Select>
+                      <Input
+                        type="date"
+                        value={valForm.appraisedAt}
+                        onChange={(e) => setValForm({ ...valForm, appraisedAt: e.target.value })}
+                        required
+                        aria-label="Takdir tarihi"
+                        className="!py-1 text-xs"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        inputMode="decimal"
+                        value={valForm.appraisedValue}
+                        onChange={(e) => setValForm({ ...valForm, appraisedValue: e.target.value })}
+                        placeholder="Takdir bedeli (₺)"
+                        required
+                        aria-label="Takdir bedeli"
+                        className="!py-1 text-xs"
+                      />
+                      <Input
+                        value={valForm.appraiserName}
+                        onChange={(e) => setValForm({ ...valForm, appraiserName: e.target.value })}
+                        placeholder="Bilirkişi adı (opsiyonel)"
+                        aria-label="Bilirkişi adı"
+                        className="!py-1 text-xs"
+                      />
+                    </div>
+                    <Button size="sm" type="submit" disabled={marketBusy === "valuation"}>
+                      {marketBusy === "valuation" ? "Kaydediliyor…" : "Takdir Ekle"}
+                    </Button>
+                  </form>
+                </div>
+
+                {/* Mevcut satışlar */}
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-800">Satış / Artırma Kayıtları (m.106+)</h4>
+                  {sales.length === 0 ? (
+                    <p className="mt-1 text-xs text-slate-500">Henüz satış kaydı yok.</p>
+                  ) : (
+                    <ul className="mt-2 space-y-1">
+                      {sales.map((s) => (
+                        <li key={s.id} className="text-xs text-slate-600">
+                          {fmtDate(s.saleDate)} —{" "}
+                          {s.saleType === "POSTA_ILE_TEKLIF" ? "Posta ile teklif" : "Açık artırma"} —{" "}
+                          {s.result === "SATILDI"
+                            ? `Satıldı ${fmtAmount(s.soldAmount, currency)}`
+                            : s.result === "KATILAN_YOK"
+                              ? "Katılan olmadı"
+                              : s.result === "ERTELENDI"
+                                ? "Ertelendi"
+                                : "İptal"}
+                          {s.buyerName ? ` — ${s.buyerName}` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <form onSubmit={addSale} className="mt-3 space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <Select
+                        value={saleForm.saleType}
+                        onChange={(e) => setSaleForm({ ...saleForm, saleType: e.target.value })}
+                        aria-label="Satış türü"
+                        className="!py-1 text-xs"
+                      >
+                        <option value="ACIK_ARTIRMA">Açık artırma (m.111)</option>
+                        <option value="POSTA_ILE_TEKLIF">Posta ile teklif (m.114)</option>
+                      </Select>
+                      <Input
+                        type="date"
+                        value={saleForm.saleDate}
+                        onChange={(e) => setSaleForm({ ...saleForm, saleDate: e.target.value })}
+                        required
+                        aria-label="Satış tarihi"
+                        className="!py-1 text-xs"
+                      />
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <Input
+                        inputMode="decimal"
+                        value={saleForm.minimumBid}
+                        onChange={(e) => setSaleForm({ ...saleForm, minimumBid: e.target.value })}
+                        placeholder="Çıkış bedeli"
+                        aria-label="Çıkış bedeli"
+                        className="!py-1 text-xs"
+                      />
+                      <Input
+                        inputMode="decimal"
+                        value={saleForm.soldAmount}
+                        onChange={(e) => setSaleForm({ ...saleForm, soldAmount: e.target.value })}
+                        placeholder="Satış bedeli"
+                        aria-label="Satış bedeli"
+                        className="!py-1 text-xs"
+                      />
+                      <Input
+                        value={saleForm.buyerName}
+                        onChange={(e) => setSaleForm({ ...saleForm, buyerName: e.target.value })}
+                        placeholder="Alıcı"
+                        aria-label="Alıcı"
+                        className="!py-1 text-xs"
+                      />
+                    </div>
+                    <Select
+                      value={saleForm.result}
+                      onChange={(e) => setSaleForm({ ...saleForm, result: e.target.value })}
+                      aria-label="Sonuç"
+                      className="!py-1 text-xs"
+                    >
+                      <option value="SATILDI">Satıldı (mal durumu: Satıldı)</option>
+                      <option value="KATILAN_YOK">Katılan olmadı</option>
+                      <option value="ERTELENDI">Ertelendi</option>
+                      <option value="IPTAL">İptal</option>
+                    </Select>
+                    <Button size="sm" type="submit" disabled={marketBusy === "sale"}>
+                      {marketBusy === "sale" ? "Kaydediliyor…" : "Satış Kaydı Ekle"}
+                    </Button>
+                  </form>
+                </div>
+                <p className="text-[11px] leading-5 text-slate-500">
+                  Otomatik yasal süre hesaplanmaz — satış süre hükümleri (İİK m.106/3) koşulludur;
+                  süreleri Süreler ekranından elle kurun.
+                </p>
+              </>
+            )}
+          </div>
+        ) : null}
+      </Modal>
 
       <Modal open={open} title="Yeni Malvarlığı Kaydı" onClose={() => setOpen(false)}>
         <form onSubmit={submit} className="space-y-4">
