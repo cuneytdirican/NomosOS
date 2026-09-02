@@ -19,23 +19,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { Button, Card, EmptyState, ErrorBox, Input, Spinner } from "@/components/ui";
 
-interface Citation {
-  kind?: string;
-  label?: string;
-  quote?: string;
-}
-
 interface ChatAnswer {
-  answer: string;
-  citations?: Citation[];
-  noSource?: boolean;
-  followUpSuggestions?: string[];
+  /** /ai/chat sözleşmesi: yanıt metni `content` alanındadır (F2-Ö-12: advisory bayrağı da döner). */
+  content: string;
+  model?: string;
+  advisory?: boolean;
+  disclaimer?: string;
 }
 
 interface Turn {
   role: "user" | "assistant";
   text: string;
-  citations?: Citation[];
 }
 
 /** Web Speech API tipleri — tarayıcı destekliyorsa dolar. */
@@ -115,11 +109,13 @@ export default function AsistanPage() {
       setQuestion("");
       try {
         const res = await api<ChatAnswer>("/ai/chat", { method: "POST", body: { message: q } });
+        // SÖZLEŞME: /ai/chat yanıtı metni `content` alanında taşır; `answer`
+        // DEĞİLDİR (eski okuma boş balon üretiyordu).
         setTurns((prev) => [
           ...prev,
-          { role: "assistant", text: res.answer, citations: res.citations },
+          { role: "assistant", text: res.content },
         ]);
-        speak(res.answer);
+        speak(res.content);
       } catch (err) {
         const msg = err instanceof ApiError ? err.message : "Asistan yanıtlamadı.";
         setError(msg);
@@ -190,15 +186,10 @@ export default function AsistanPage() {
                   }`}
                 >
                   <p className="whitespace-pre-wrap">{t.text}</p>
-                  {t.citations && t.citations.length > 0 && (
-                    <div className="mt-2 space-y-1 border-t border-slate-200 pt-1.5">
-                      {t.citations.map((c, j) => (
-                        <p key={j} className="text-[11px] text-slate-500">
-                          📄 {c.label ?? c.kind ?? "Kaynak"}
-                          {c.quote ? ` — "${c.quote.slice(0, 80)}…"` : ""}
-                        </p>
-                      ))}
-                    </div>
+                  {t.role === "assistant" && (
+                    <p className="mt-1.5 border-t border-slate-200 pt-1 text-[10px] leading-4 text-slate-500">
+                      AI çıktısıdır — öneridir; nihai değerlendirme ve sorumluluk avukatındır.
+                    </p>
                   )}
                 </div>
               </div>

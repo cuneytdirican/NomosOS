@@ -139,6 +139,12 @@ function str(value: unknown): string | null {
 function firstArray(source: Record<string, unknown>): unknown[] {
   for (const value of Object.values(source)) {
     if (Array.isArray(value) && value.length > 0) return value;
+    // İÇ İÇE: sarmalayıcı {result: {arguments: [...]}} — ilk seviye nesne
+    // değerlerinin içinde de dizi ara (mod verisi orada yaşar).
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const nested = firstArray(value as Record<string, unknown>);
+      if (nested.length > 0) return nested;
+    }
   }
   return [];
 }
@@ -301,13 +307,44 @@ export function getSimulation(runId: string): Promise<SimulationRun> {
 
 export function simulationOutput(run: SimulationRun | null | undefined): Record<string, unknown> {
   if (!run) return {};
+  // SÖZLEŞME (AUDIT A2): liste ve detay uçları parse edilmiş `output` NESNESİ
+  // döner; eski kayıtlar/akışlar dize `outputJson` da taşıyabilir. Önce nesne.
+  const out = (run as unknown as { output?: unknown }).output;
+  if (out !== undefined && out !== null) return obj(out);
   return obj(parsed(run.outputJson));
+}
+
+/**
+ * Modun ASIL çıktısı — sunucu `outputJson`'ı {result: {...}} SARMALAYICISIYLA
+ * saklar (simulation.service.ts: output = { result: run.data, ... }).
+ * Bu yardımcı sarmalayıcıyı çözer: {result} varken üst düzey alanlar
+ * (droppedFindings) korunur, mod verisi result içinden okunur.
+ */
+export function simulationResultData(run: SimulationRun | null | undefined): Record<string, unknown> {
+  const out = simulationOutput(run);
+  const inner = obj(out.result);
+  // Sarmalayıcı var mı? result bir nesne VEYA mod çıktısı doğrudan üstte olabilir.
+  if (Object.keys(inner).length > 0) return inner;
+  return out;
 }
 
 /** HAKIM_GOZU modunun genel eğilimi (varsa) — çıktı kartında şerit olarak gösterilir. */
 export function simulationLeaning(run: SimulationRun | null | undefined): string | null {
-  const out = simulationOutput(run);
-  return str(out.overall_leaning ?? out.overallLeaning ?? out.genel_egilim);
+  const data = simulationResultData(run);
+  return str(data.overall_leaning ?? data.overallLeaning ?? data.genel_egilim);
+}
+
+/**
+ * Modelin genel değerlendirmesi (KARSI_TARAF_AVUKATI: overallAssessment) —
+ * bulgu ÇIKMAYINCA boş koşunun NEDEN boş kaldığını açıklayan dürüst metindir.
+ * Boş liste + açıklama, savunma hattının beklenen davranışıdır (kaynak yoksa
+ * uydurma argüman ÜRETİLMEZ); açıklama ekranda görünmelidir.
+ */
+export function simulationAssessment(run: SimulationRun | null | undefined): string | null {
+  const data = simulationResultData(run);
+  return str(
+    data.overallAssessment ?? data.overall_assessment ?? data.genel_degerlendirme,
+  );
 }
 
 /**
@@ -319,7 +356,8 @@ export function simulationLeaning(run: SimulationRun | null | undefined): string
  */
 export function simulationFindings(run: SimulationRun | null | undefined): SimFinding[] {
   if (!run) return [];
-  const out = simulationOutput(run);
+  // Sarmalayıcı çözülmüş mod verisi (bkz. simulationResultData).
+  const out = simulationResultData(run);
   const mode = String(run.mode ?? "");
 
   const push = (

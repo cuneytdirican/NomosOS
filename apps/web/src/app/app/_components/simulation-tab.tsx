@@ -44,6 +44,7 @@ import type { DocumentItem } from "@/lib/types";
 import {
   listSimulations,
   runSimulation,
+  simulationAssessment,
   simulationFindings,
   simulationLeaning,
 } from "../_lib/faz4";
@@ -319,6 +320,7 @@ export function SimulationTab({
 function RunResult({ run }: { run: SimulationRun }) {
   const findings = simulationFindings(run);
   const leaning = simulationLeaning(run);
+  const assessment = simulationAssessment(run);
   const mode = String(run.mode);
 
   return (
@@ -346,7 +348,35 @@ function RunResult({ run }: { run: SimulationRun }) {
         )}
 
         {findings.length === 0 ? (
-          <EmptyState message="Bu koşu görüntülenebilir bir bulgu üretmedi." />
+          <div className="space-y-3">
+            {/* Model kaynak bulamadıysa ARGÜMAN UYDURMAZ (çekirdek prompt kuralı
+                1-2) — boş liste dürüst yanıttır. Modelin NEDEN boş bıraktığını
+                anlatan overallAssessment bu yüzden gösterilir; "boş koşu"nun
+                kendisi bir bilgi değil, eksik veri işaretidir. */}
+            {assessment ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="text-xs font-semibold text-amber-900">
+                  Bu koşu kaynak temelli bulgu üretmedi — modelin değerlendirmesi:
+                </p>
+                <p className="mt-1.5 whitespace-pre-wrap text-xs leading-5 text-amber-900">
+                  {assessment}
+                </p>
+              </div>
+            ) : null}
+            <EmptyState
+              message={
+                assessment
+                  ? "Bulgu üretilmedi — yukarıdaki değerlendirmeye bakın."
+                  : "Bu koşu görüntülenebilir bir bulgu üretmedi."
+              }
+            />
+            <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-[11px] leading-4 text-slate-600">
+              Simülasyon, dosyadaki BELGE METİNLERİYLE (dilekçe, karar, tutanak)
+              çalışır — kaynaksız argüman üretemez. Dosyaya metni okunabilir
+              belgeler yükleyip yeniden deneyin; OCR henüz çalışmadıysası
+              birkaç dakika sonra tekrar deneyin.
+            </p>
+          </div>
         ) : (
           <ul className="space-y-3">
             {findings.map((f) => (

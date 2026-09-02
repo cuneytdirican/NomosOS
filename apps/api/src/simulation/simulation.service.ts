@@ -292,6 +292,9 @@ export class SimulationService {
           createdBy: true,
           createdAt: true,
           inputSnapshotJson: true,
+          // AUDIT (A2): listede outputJson DA döner — liste satırları bulgu
+          // taşımıyordu ve koşu yenilendiğinde ekrandaki bulgular KAYBOLUYORDU.
+          outputJson: true,
           case: { select: { title: true, fileNumber: true } },
         },
       }),
@@ -312,6 +315,8 @@ export class SimulationService {
           createdBy: r.createdBy,
           createdAt: r.createdAt,
           inputSnapshot: safeParse(r.inputSnapshotJson),
+          /** Detay ucuyla AYNI biçim: parse edilmiş çıktı ({result: {...}, droppedFindings}). */
+          output: safeParse(r.outputJson),
         })),
         total,
         page,

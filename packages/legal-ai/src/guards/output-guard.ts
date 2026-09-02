@@ -20,6 +20,7 @@ import { AI_ADVISORY_NOTICE } from "../prompts/system-core";
 import type { CitationLookupResult } from "../prompts/citation-verify";
 import type { CitationVerifyOutput, VerifiedCitation } from "../schemas";
 import { dedupeCitations, extractCitations, type ExtractedCitation } from "./citation-patterns";
+import { normalizeLlmOutput } from "./llm-normalize";
 
 /** Bir bulgunun "kaynaklı" sayılması için dolu olması gereken alanlar. */
 export const DEFAULT_SOURCE_FIELDS = [
@@ -322,6 +323,16 @@ export function guardOutput<TSchema extends ZodTypeAny>(
     issues.push({ code: "EMPTY_OUTPUT", message: "Model boş yanıt döndürdü." });
     return { ok: false, issues, droppedFindings: [], citations: [], advisory };
   }
+
+  // 1.5) BİÇİM ONARIMI (llm-normalize) — şemadan ÖNCE.
+  //
+  // Modelin biçim sapması ANLAM kaybı değilse API düzeltir, reddetmez:
+  //   - tarih: "01.01.2023" / ISO+saat → YYYY-AA-GG; yalnız yıl/ay → DÜŞÜR
+  //   - atıf source: kanun kısaltması ("TCK") → statuteRef'e taşınır;
+  //     "YARGITAY 9. HD" → source=YARGITAY + chamber=9. HD
+  // Sahadan gelen üç hatanın (içtihat arama tarih regex'i, dilekçe atıf
+  // enum'u) kök çözümüdür: şema SÖZLEŞME kalır, biçim onarımı guard'dadır.
+  normalizeLlmOutput(parsed);
 
   // 2) Kaynaksız bulguları ele (şemadan ÖNCE)
   const { value: pruned, dropped } = dropSourcelessFindings(parsed, findingPaths, sourceFields);

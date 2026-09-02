@@ -106,6 +106,8 @@ export interface SimulationRun {
   caseId?: string;
   mode: SimulationMode | string;
   inputSnapshotJson?: unknown;
+  /** Parse edilmiş çıktı nesnesi — liste ve detay uçlarının standart alanı (AUDIT A2). */
+  output?: unknown;
   outputJson?: unknown;
   model?: string | null;
   durationMs?: number | null;

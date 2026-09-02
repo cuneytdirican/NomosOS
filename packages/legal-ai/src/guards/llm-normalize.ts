@@ -53,8 +53,9 @@ export function normalizeDateValue(value: string): string | null | undefined {
   const isoWithTime = /^(\d{4}-\d{2}-\d{2})[T ]/.exec(v);
   if (isoWithTime) return isoWithTime[1];
 
-  // GG.AA.YYYY veya GG/AA/YYYY → YYYY-AA-GG.
-  const dotted = /^(\d{1,2})[./](\d{1,2})[./](\d{4})$/.exec(v);
+  // GG.AA.YYYY veya GG/AA/YYYY (+ isteğe bağlı saat bileşeni) → YYYY-AA-GG.
+  // Sahada görülen iki biçim de karşılanır: "01.01.2023" ve "31.12.2024T00:00:00".
+  const dotted = /^(\d{1,2})[./](\d{1,2})[./](\d{4})(?:[T ].*)?$/.exec(v);
   if (dotted) {
     const [, d, m, y] = dotted;
     const dd = d.padStart(2, "0");
@@ -62,8 +63,8 @@ export function normalizeDateValue(value: string): string | null | undefined {
     return `${y}-${mm}-${dd}`;
   }
 
-  // YYYY.AA.GG (nadiren) → YYYY-AA-GG.
-  const yFirst = /^(\d{4})[./](\d{1,2})[./](\d{1,2})$/.exec(v);
+  // YYYY.AA.GG (nadiren, + saat bileşeni) → YYYY-AA-GG.
+  const yFirst = /^(\d{4})[./](\d{1,2})[./](\d{1,2})(?:[T ].*)?$/.exec(v);
   if (yFirst) {
     const [, y, m, d] = yFirst;
     return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;

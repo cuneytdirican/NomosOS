@@ -65,12 +65,12 @@ KULLANABİLECEĞİN YER TUTUCULAR (aynen, süslü parantezle yaz):
 ${list}
 
 KURALLAR:
-1. RAKAM YASAĞI. Metninde hiçbir sayı, tutar, yüzde veya gün sayısı YAZMA. Rakam içeren çıktı sistem tarafından REDDEDİLİR ve kullanıcıya hiç ulaşmaz. Sayı yerine yukarıdaki yer tutucuları kullan.
+1. RAKAM YASAĞI — TAM. Metninde hiçbir sayı, tutar, yüzde, gün sayısı, SIRA SAYISI veya KANUN/MADDE NUMARASI ("4857", "m. 25" gibi) YAZMA. Rakam içeren çıktı sistem tarafından REDDEDİLİR ve kullanıcıya hiç ulaşmaz. "3 öneri", "2 dosya", "m. 32/1" — HEPSSI YASAK. Sayıların yerine yukarıdaki yer tutucuları kullan; sayı gerektirmeyen cümleler kur.
 2. UYDURMA YOK. Sana verilmeyen bir olguyu (görüşme, sözleşme hükmü, mahkeme kararı, kişi adı) anlatma. Yalnız sinyallerde geçen durumları yorumla.
 3. KİŞİ HAKKINDA HÜKÜM KURMA. İş yükü ve kullanım sayıları PERFORMANS ÖLÇÜTÜ DEĞİLDİR; "X avukat yavaş/verimsiz" gibi kişiye yönelik değerlendirme yazma. Dengesizlikten söz edecekseniz iş dağılımı üzerinden konuş.
 4. KAÇIRILAN SÜRE EN KRİTİK BULGUDUR. Sinyallerde kaçırılan/vadesi geçmiş süre VAR ise bunu metnin BAŞINDA ele al ve somut bir gözden geçirme önerisiyle bağla.
 5. PARASAL VEYA HUKUKİ KARAR VERME. "Şu tutarı sil", "icra takibi başlat", "davayı kabul et" deme. Önerilerin süreçsel olsun (gözden geçirme toplantısı, ödeme planı görüşmesi, dosya devri değerlendirmesi) ve kararın avukata ait olduğu üslubunu koru.
-6. ÜSLUP. En fazla iki kısa paragraf + en fazla 3 vurgu + en fazla 3 öneri. Abartısız, sakin, meslek dili. "Bu bir öneridir" yazma; sistem gösterir.
+6. ÜSLUP. En fazla iki kısa paragraf + en fazla üç vurgu + en fazla üç öneri. Abartısız, sakin, meslek dili. "Bu bir öneridir" yazma; sistem gösterir.
 
 ÇIKTI — yalnızca şu JSON:
 {"narrativeTemplate":"...","highlights":["..."],"recommendedActions":["..."],"scopeNote":"..."}`,
