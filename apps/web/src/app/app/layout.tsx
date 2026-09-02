@@ -258,7 +258,7 @@ const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
         ),
       },
       {
-        href: "/araclar/vekalet-ucreti",
+        href: "/app/araclar/vekalet-ucreti",
         label: "Vekalet Ücreti Hesabı",
         icon: (
           <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
