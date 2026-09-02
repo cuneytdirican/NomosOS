@@ -53,6 +53,17 @@ yöneticiler, demo talepleri, AI sağlayıcılar sayfaları ZATEN VARDI. M1'in
   ajanda PLANLANDI) ve `replayed` sayısını döndürüyor; web sayfası sayıyı
   kullanıcıya gösteriyor. Canlı doğrulandı: 3 sahnelenmiş olay → resolve
   200/replayed:3 → timeline +2 safahat + 1 PLANLANDI duruşma ajandada.
+- **M4 TAMAM:** Fine-tuning iş yönetimi — FineTuneJob modeli + migration
+  20260903090000; iş açılışı ONAYLANMIŞ havuzun ANLIK GÖRÜNTÜSÜNÜ alır
+  (sayı + görev tipi kırılımı), manifest (JSONL) üretir, şerit denetimli
+  durum geçişleri (HAZIRLANDI→GONDERILDI→EGITILIYOR→TAMAMLANDI;
+  TAMAMLANDI sonuç model adı ZORUNLU), her adım denetim izine yazılır.
+  DÜRÜSTLÜK: sağlayıcıya otomatik gönderim YOKTUR — manifest operatör
+  tarafından ELLE yüklenir (kodda ve panelde yazılı). Panel: /egitim
+  sayfası (havuz kartları, iş tablosu, manifest indirme, geçiş düğmeleri).
+  Canlı doğrulandı: boş havuz 400 → 3 onaylı örnekle iş 201 (anlık görüntü
+  3) → manifest 3 satır JSONL → şerit dışı 400 → geçiş zinciri 200 →
+  TAMAMLANDI'sız 400 → model adıyla 200 → terminal durumda manifest/geçiş 400.
 
 ## 1. Eksikler (öncelik sırasıyla)
 

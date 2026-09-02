@@ -30,6 +30,14 @@
  */
 
 export const EP = {
+  /** D5 / M4 — fine-tuning iş yönetimi (platform AI eğitim hattı). */
+  fineTune: {
+    list: "/fine-tune-jobs",
+    create: "/fine-tune-jobs", // POST — iş açılır; sağlayıcıya OTOMATİK gönderim yok
+    manifest: (id: string) => `/fine-tune-jobs/${encodeURIComponent(id)}/manifest`,
+    status: (id: string) => `/fine-tune-jobs/${encodeURIComponent(id)}/status`,
+    samples: "/ai-training/samples",
+  },
   auth: {
     login: "/auth/login",
     /** 2FA ikinci adımı — { challengeToken, code } → { accessToken, user }. */

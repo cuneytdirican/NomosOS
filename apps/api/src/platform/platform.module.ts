@@ -4,6 +4,8 @@ import { PlatformJwtGuard } from "./guards/platform-jwt.guard";
 import { PlatformPermissionGuard } from "./guards/platform-permission.guard";
 import { SupportGrantGuard } from "./guards/support-grant.guard";
 import { PlatformAuditService } from "./platform-audit.service";
+import { FineTuneController } from "./fine-tune/fine-tune.controller";
+import { FineTuneService } from "./fine-tune/fine-tune.service";
 import { PlatformAuthController } from "./auth/platform-auth.controller";
 import { PlatformAuthService } from "./auth/platform-auth.service";
 import { PlatformApprovalExecutorService } from "./approvals/platform-approval-executor.service";
@@ -78,6 +80,7 @@ import { PlatformUsersService } from "./users/platform-users.service";
     PlatformAuditController,
     PlatformDemoRequestsController,
     PlatformUsersController,
+    FineTuneController,
   ],
   providers: [
     PlatformJwtGuard,
@@ -87,6 +90,7 @@ import { PlatformUsersService } from "./users/platform-users.service";
     LoginThrottleGuard,
     PlatformAuditService,
     PlatformAuthService,
+    FineTuneService,
     PlatformApprovalsService,
     PlatformApprovalExecutorService,
     PlatformTenantsService,

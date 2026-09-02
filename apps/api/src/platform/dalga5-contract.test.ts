@@ -115,6 +115,80 @@ describe("M6: UYAP eşleşme sonrası otomatik yeniden senkron", () => {
   });
 });
 
+describe("M4: fine-tuning iş yönetimi", () => {
+  const svc = () => read("src", "platform", "fine-tune", "fine-tune.service.ts");
+  const schemas = () => read("src", "platform", "fine-tune", "fine-tune.schemas.ts");
+
+  it("model + migration: FineTuneJob (PlatformUser ilişkisi, anlık görüntü alanları)", () => {
+    const schema = read("..", "..", "packages", "db", "prisma", "schema.prisma");
+    expect(schema).toContain("model FineTuneJob");
+    expect(schema).toContain("fineTuneJobs FineTuneJob[]");
+    expect(schema).toContain("sampleCount");
+    expect(schema).toContain("taskTypesJson");
+    expect(schema).toContain("resultModelName");
+    const sql = read(
+      "..", "..", "packages", "db", "prisma", "migrations",
+      "20260903090000_dalga5_finetune_isleri", "migration.sql"
+    );
+    expect(sql).toContain("CREATE TABLE \"FineTuneJob\"");
+  });
+
+  it("DÜRÜSTLÜK: sağlayıcıya otomatik gönderim YOK — manifest elle yüklenir", () => {
+    const s = svc();
+    expect(s).toContain("sağlayıcıya HİÇBİR ŞEY GÖNDERMEZ");
+    expect(s).toContain("ELLE");
+    // Uygulamada sağlayıcıya HTTP çağrısı yoktur.
+    expect(s).not.toContain("fetch(");
+    expect(s).not.toContain("axios");
+  });
+
+  it("iş açılışı ONAYLANMIŞ havuz anlık görüntüsü alır; boş havuz reddedilir", () => {
+    const s = svc();
+    expect(s).toContain("exportStatus: \"ONAYLANDI\"");
+    expect(s).toContain("poolSnapshot()");
+    expect(s).toContain("ONAYLANMIŞ örnek yok");
+  });
+
+  it("şerit: geçiş kataloğu; TAMAMLANDI sonuç model adı ZORUNLU", () => {
+    const sc = schemas();
+    expect(sc).toContain("FINE_TUNE_TRANSITIONS");
+    expect(sc).toContain('HAZIRLANDI: ["GONDERILDI", "IPTAL"]');
+    expect(sc).toContain('EGITILIYOR: ["TAMAMLANDI", "BASARISIZ"]');
+    expect(svc()).toContain("sonuç model adı ZORUNLUDUR");
+  });
+
+  it("manifest yalnız ONAYLANMIŞ örnekleri içerir; geç durumda reddedilir", () => {
+    const s = svc();
+    expect(s).toContain("exportStatus: \"ONAYLANDI\"");
+    expect(s).toContain("Manifest yalnız HAZIRLANDI/GONDERILDI durumunda indirilebilir");
+  });
+
+  it("uçlar: /fine-tune-jobs (GET/POST) + /:id/manifest + /:id/status — aiProvider izinleri", () => {
+    const c = read("src", "platform", "fine-tune", "fine-tune.controller.ts");
+    expect(c).toContain('@ReadPermission("aiProvider.view")');
+    expect((c.match(/@WritePermission\("aiProvider.manage"\)/g) ?? []).length).toBeGreaterThanOrEqual(3);
+    expect(c).toContain("fine-tune-jobs");
+  });
+
+  it("denetim izi: açılış + geçiş + manifest loglanır", () => {
+    const s = svc();
+    expect(s).toContain("FINE_TUNE_JOB_CREATE");
+    expect(s).toContain("FINE_TUNE_JOB_STATUS");
+    expect(s).toContain("FINE_TUNE_MANIFEST_EXPORT");
+  });
+
+  it("panel: eğitim sayfası + nav + uç tanımları", () => {
+    const page = read("..", "admin", "src", "app", "(panel)", "egitim", "page.tsx");
+    expect(page).toContain("otomatik");
+    expect(page).toContain("Manifest");
+    expect(page).toContain("TAMAMLANDI");
+    const nav = read("..", "admin", "src", "lib", "nav.ts");
+    expect(nav).toContain('"/egitim"');
+    const ep = read("..", "admin", "src", "lib", "endpoints.ts");
+    expect(ep).toContain('"/fine-tune-jobs"');
+  });
+});
+
 describe("M3: askıda kiracı GİRİŞ engeli (abonelik → login)", () => {
   it("login: SUSPENDED ve CANCELED abonelik 403 ile reddedilir", () => {
     const s = read("src", "auth", "auth.service.ts");
