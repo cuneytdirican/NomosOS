@@ -28,6 +28,10 @@ import { BillingModule } from "./billing/billing.module";
 import { VekaletUcretiModule } from "./vekalet-ucreti/vekalet-ucreti.module";
 import { DemoTalepModule } from "./demo-talep/demo-talep.module";
 import { RandevuModule } from "./randevu/randevu.module";
+import { UyapModule } from "./uyap/uyap.module";
+import { ChatModule } from "./chat/chat.module";
+import { DiskQuotaModule } from "./disk-quota/disk-quota.module";
+import { JudicialModule } from "./judicial/judicial.module";
 import { PlatformModule } from "./platform/platform.module";
 // --- Faz 4 modülleri ---
 import { ConflictModule } from "./conflict/conflict.module";
@@ -135,6 +139,14 @@ function requireJwtSecret(config: ConfigService): string {
     // Demo talepleri (pazarlama formu → DemoRequest kaydı; panel izler).
     DemoTalepModule,
     RandevuModule,
+    // UYAP Köprüsü arka ucu (docs/05-uyap-entegrasyonu.md).
+    UyapModule,
+    // Büro içi mesajlaşma (WhatsApp tarzı) — presence, ekler, video arama.
+    ChatModule,
+    // Disk kotası — plan dahil + satın alınan; yükleme kapısı.
+    DiskQuotaModule,
+    // Yargı organları + noterler — referans katalog (formlarda seçim listesi).
+    JudicialModule,
     // Platform yönetim paneli (Modül 25).
     // AYRI DÜNYA: kendi kimlik tablosu (PlatformUser), kendi imza anahtarı,
     // kendi audience'ı (`aud: "platform"`) ve kendi yol öneki (/api/admin/v1).

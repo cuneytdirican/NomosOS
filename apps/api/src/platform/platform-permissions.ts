@@ -134,7 +134,11 @@ export type AdminAction =
   /** Kredi fiyat listesi ve model fiyat tablosu — yazma (SUPER_ADMIN). */
   | "credits.pricing.write"
   /** Maliyet / gelir / marj raporu — ANALYST_READONLY takma adlı görür. */
-  | "credits.margin.view";
+  | "credits.margin.view"
+  /** Yargı organları + noterler referans kataloğu — okuma (panel listesi). */
+  | "judicial.view"
+  /** Katalog yönetimi: ekleme/düzeltme, senkron ayarı ve tetikleme. */
+  | "judicial.manage";
 
 type Matrix = Record<AdminAction, Record<AdminRole, PermissionLevel>>;
 
@@ -538,6 +542,20 @@ export const PERMISSION_MATRIX: Matrix = {
     // Tenant kimliği takma adla döner (Pseudonymizer).
     ANALYST_READONLY: "masked",
   },
+  "judicial.view": {
+    SUPER_ADMIN: "full",
+    OPS_ADMIN: "read",
+    BILLING_ADMIN: N,
+    SUPPORT_AGENT: "read",
+    ANALYST_READONLY: N,
+  },
+  "judicial.manage": {
+    SUPER_ADMIN: "full",
+    OPS_ADMIN: "full",
+    BILLING_ADMIN: N,
+    SUPPORT_AGENT: N,
+    ANALYST_READONLY: N,
+  },
 };
 
 export const ACTION_LABELS: Record<AdminAction, string> = {
@@ -594,6 +612,8 @@ export const ACTION_LABELS: Record<AdminAction, string> = {
   "credits.pricing.view": "Kredi ve model fiyat listesi görüntüleme",
   "credits.pricing.write": "Kredi ve model fiyat listesi düzenleme",
   "credits.margin.view": "AI maliyet / gelir / marj raporu",
+  "judicial.view": "Yargı organları + noter kataloğunu görüntüleme",
+  "judicial.manage": "Yargı organları + noter kataloğu yönetimi",
 };
 
 /** Rol için işlem seviyesi. Bilinmeyen rol → hiçbir şey. */

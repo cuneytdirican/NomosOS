@@ -240,6 +240,8 @@ export const CASELAW_ROUTES = {
 export const PETITION_ROUTES = {
   templates: "/petition-templates",
   create: "/petitions",
+  /** Dilekçe Stüdyosu — büro geneli liste (dosya/durum/ürün süzgeçli). */
+  list: "/petitions",
   detail: (id: string) => `/petitions/${id}`,
   status: (id: string) => `/petitions/${id}/status`,
   verify: (id: string) => `/petitions/${id}/verify`,
@@ -437,6 +439,58 @@ export const RANDEVU_ROUTES = {
   list: "/randevular",
   create: "/randevular",
   detail: (id: string) => `/randevular/${id}`,
+} as const;
+
+/** Büro içi mesajlaşma (WhatsApp tarzı — SİLME UCU YOKTUR). */
+export const CHAT_ROUTES = {
+  contacts: "/chat/contacts",
+  threads: "/chat/threads",
+  messages: "/chat/messages",
+  messagePresign: "/chat/messages/presign",
+  read: "/chat/read",
+  heartbeat: "/chat/heartbeat",
+  typing: "/chat/typing",
+  avatarPresign: "/chat/avatar/presign",
+  avatarSet: "/chat/avatar",
+  userAvatar: (id: string) => `/chat/users/${id}/avatar`,
+  startCall: "/chat/calls",
+  incomingCalls: "/chat/calls/incoming",
+  call: (id: string) => `/chat/calls/${id}`,
+  callAccept: (id: string) => `/chat/calls/${id}/accept`,
+  callReject: (id: string) => `/chat/calls/${id}/reject`,
+  callEnd: (id: string) => `/chat/calls/${id}/end`,
+  callSignals: (id: string) => `/chat/calls/${id}/signals`,
+} as const;
+
+/** Disk kotası — plan dahili + satın alınan ek paketler. */
+export const DISK_QUOTA_ROUTES = {
+  status: "/disk-quota",
+  packages: "/disk-quota/packages",
+  purchase: "/disk-quota/purchase",
+} as const;
+
+/** UYAP Köprüsü — eklenti uçları (extension token) + web yönetim uçları. */
+export const UYAP_ROUTES = {
+  pair: "/uyap/pair",
+  pairRefresh: "/uyap/pair/refresh",
+  syncFiles: "/uyap/sync/files",
+  syncEvents: "/uyap/sync/events",
+  presign: "/uyap/documents/presign",
+  commit: "/uyap/documents/commit",
+  status: "/uyap/status",
+  // Web (büro) tarafı
+  pairingCode: "/uyap/pairing-code",
+  devices: "/uyap/devices",
+  deviceRevoke: (id: string) => `/uyap/devices/${id}/revoke`,
+  matchQueue: "/uyap/match-queue",
+  matchResolve: (id: string) => `/uyap/match-queue/${id}/resolve`,
+} as const;
+
+/** Yargı organları + noterler — referans katalog (formlarda seçim listesi). */
+export const JUDICIAL_ROUTES = {
+  iller: "/judicial/iller",
+  bodies: "/judicial/bodies",
+  notaries: "/judicial/notaries",
 } as const;
 
 /** Portal self-servis uçları (E9 randevu + E8 ödeme — token yetkidir). */

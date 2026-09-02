@@ -13,6 +13,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { StorageService } from "../storage/storage.service";
 import { PipelineService } from "../pipeline/pipeline.service";
+import { DiskQuotaService } from "../disk-quota/disk-quota.service";
 import { PipelineQueueService } from "../pipeline/pipeline-queue.service";
 import { CLASS_SOURCE } from "../pipeline/pipeline.types";
 import type { AuthUser } from "../common/types";
@@ -60,7 +61,9 @@ export class DocumentsService {
     private readonly storage: StorageService,
     private readonly pipeline: PipelineService,
     // F2 · B1: asenkron kuyruk (Redis yoksa yumuşak düşüş yukarıda).
-    private readonly pipelineQueue: PipelineQueueService
+    private readonly pipelineQueue: PipelineQueueService,
+    // DİSK KAPISI — yükleme öncesi kota kontrolü ve kullanım sayacı.
+    private readonly diskQuota: DiskQuotaService
   ) {}
 
   /* ------------------------------------------------------------------ *
@@ -78,6 +81,8 @@ export class DocumentsService {
         `Dosya boyutu ${(file.size / 1024 / 1024).toFixed(1)} MB; üst sınır 50 MB.`
       );
     }
+    // DİSK KAPISI — kota dolmadan önce reddet; kayıtla birlikte sayaca işle.
+    await this.diskQuota.assertCanStore(user.tenantId, file.size);
 
     const originalName = decodeUploadName(file.originalname);
     const validation = validateUpload(originalName, file.mimetype);
@@ -131,6 +136,7 @@ export class DocumentsService {
     });
 
     await this.storage.putObject(storageKey, file.buffer, file.mimetype);
+    await this.diskQuota.recordUsage(user.tenantId, file.size);
 
     let document;
     try {

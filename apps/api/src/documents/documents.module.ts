@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { PipelineModule } from "../pipeline/pipeline.module";
 import { StorageModule } from "../storage/storage.module";
+import { DiskQuotaModule } from "../disk-quota/disk-quota.module";
 import { DocumentsController } from "./documents.controller";
 import { DocumentsService } from "./documents.service";
 import { ProposalsController } from "./proposals.controller";
@@ -14,7 +15,7 @@ import { ProposalsService } from "./proposals.service";
  * öneriler belgenin yaşam döngüsünün bir parçasıdır.
  */
 @Module({
-  imports: [StorageModule, PipelineModule],
+  imports: [StorageModule, PipelineModule, DiskQuotaModule],
   controllers: [DocumentsController, ProposalsController],
   providers: [DocumentsService, ProposalsService],
   exports: [DocumentsService],

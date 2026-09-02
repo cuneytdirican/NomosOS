@@ -46,6 +46,18 @@ export class CasePetitionsController {
 export class PetitionsController {
   constructor(private readonly petitions: PetitionsService) {}
 
+  /** Dilekçe Stüdyosu — büro genesi liste (dosya/ürün/durum/arama süzgeçli). */
+  @Get()
+  listStudio(
+    @CurrentUser() user: AuthUser,
+    @Query("caseId") caseId?: string,
+    @Query("status") status?: string,
+    @Query("type") type?: string,
+    @Query("q") q?: string,
+  ) {
+    return this.petitions.listStudio(user.tenantId, { caseId, status, type, q });
+  }
+
   @Post()
   create(
     @CurrentUser() user: AuthUser,

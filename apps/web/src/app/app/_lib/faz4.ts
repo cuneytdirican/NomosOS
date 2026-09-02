@@ -55,7 +55,8 @@ export const FAZ4_ROUTES = {
   strategyNode: (strategyId: string, nodeId: string) =>
     `/strategies/${strategyId}/nodes/${nodeId}`,
 
-  // Simülasyon (Modül 16)
+  // Simülasyon (Modül 16) — POST ucunun adı /simulate'dir; /simulations YALNIZ listeledir.
+  simulate: (caseId: string) => `/cases/${caseId}/simulate`,
   simulations: (caseId: string) => `/cases/${caseId}/simulations`,
   simulation: (runId: string) => `/simulations/${runId}`,
 
@@ -278,10 +279,20 @@ export function runSimulation(
   params: Record<string, unknown> = {},
   piiApproved = false,
 ): Promise<SimulationRun> {
+  // Sunucu şeması (simulation.dto.ts) gövdede EN ÜST DÜZEYDE alan bekler:
+  // { mode, question?, documentId?, argumentCount?, piiApproved? } — "params"
+  // zarfı YOKTUR. Eski çağrı { params: {...} } gönderiyor ve Zod bilinmeyen
+  // anahtarı sessizce attığı için mod parametreleri sunucuya HİÇ gitmiyordu.
   const body: Record<string, unknown> = { mode };
-  if (Object.keys(params).length > 0) body.params = params;
+  if (typeof params.question === "string") body.question = params.question;
+  if (typeof params.argumentCount === "number") body.argumentCount = params.argumentCount;
+  // Eski isim uyumluluğu: target_document_id → documentId.
+  const docId =
+    params.documentId ?? params.target_document_id ?? params.targetDocumentId;
+  if (typeof docId === "string" && docId) body.documentId = docId;
   if (piiApproved) body.piiApproved = true;
-  return api<SimulationRun>(FAZ4_ROUTES.simulations(caseId), { method: "POST", body });
+  // POST ucu /simulate'dir — /simulations GET listesidir (404 hatasının kaynağı buydu).
+  return api<SimulationRun>(FAZ4_ROUTES.simulate(caseId), { method: "POST", body });
 }
 
 export function getSimulation(runId: string): Promise<SimulationRun> {

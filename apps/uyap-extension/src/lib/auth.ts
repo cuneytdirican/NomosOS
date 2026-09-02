@@ -28,12 +28,9 @@ const REFRESH_MARGIN_MS = 60_000;
 /**
  * NomosOS API yolları — UYAP ARKA UCU SÖZLEŞMESİ.
  *
- * ⚠️ DÜRÜST DURUM (denetim bulgusu F2-K-02): sunucuda `@Controller("uyap")`
- * YOKTUR — bu uçlar henüz hiçbir yerde yayınlanmaz. UYAP arka ucu NomosOS
- * yol haritasının B4 kalemidir (geliştirme aşamasında). Bu sabitler, arka uç
- * yazıldığında eklentinin BAĞLANACAĞI sözleşmeyi önceden sabitler; eklenti
- * tarafı hazır tutulur. Arka uç dağıtılmadan eşleştirme 404 alır ve popup
- * kullanıcıya gerçeği söyler ("arka uç geliştirme aşamasında").
+ * Arka uç YAYINDA: `apps/api/src/uyap/uyap.controller.ts` bu uçları sunar
+ * (pair, refresh, sync, belge aktarımı, status). Bu sabitler sunucu
+ * denetleyicisiyle BİREBİR eşleşir — değişiklik iki tarafta birlikte yapılır.
  *
  * (Yol öneki `api/v1`'dir: `apps/api/src/main.ts` `setGlobalPrefix("api/v1")`
  * kurar; eski `/api/uyap/*` değerleri her çağrıda 404 alırdı.)

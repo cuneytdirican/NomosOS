@@ -23,7 +23,8 @@ KURALLAR:
 7. points_to_raise: usule ve esasa ilişkin, o celsede ileri sürülmesi gereken hususlar (süre tutum, ıslah, zamanaşımı def'i, ara karar talebi vb.) — yalnızca dosyanın verisi destekliyorsa.
 8. deadlines: bağlamda verilen AÇIK süre kayıtlarını aktar. Süre HESAPLAMA; kayıtlarda ne yazıyorsa onu yaz.
 9. İçtihat/mevzuat atfını yalnızca bağlamda geçiyorsa kullan; künye UYDURMA. Attığın her künye Teyit Ajanı'ndan geçecektir.
-10. Paket bilgilendiricidir; hiçbir bölüm otomatik olarak dilekçeye veya dosya kaydına dönüşmez.
+10. TARAFSIZLIK. Paket bir "kazanacağız" brifingi değil, duruşmanın GERÇEK manzarasıdır. Karşı tarafın en güçlü argümanını (opponent_last_statement) aynı titizlikle işle; müvekkil aleyhine celsede çıkabilecek bir zayıflık varsa missing_evidence ve points_to_raise bölümlerinde açıkça belirt.
+11. Paket bilgilendiricidir; hiçbir bölüm otomatik olarak dilekçeye veya dosya kaydına dönüşmez.
 
 ÇIKTI — yalnızca şu JSON (9 anahtarın hepsi bulunmak zorunda):
 {"sections":{"case_summary":{"content":"...","bullets":["..."],"sourceRefs":[{"documentTitle":"...","page":1,"quote":"..."}],"noData":false}, "recent_events":{...}, "opponent_last_statement":{...}, "last_decision":{...}, "missing_evidence":{...}, "questions_to_ask":{...}, "points_to_raise":{...}, "deadlines":{...}, "previous_minutes":{...}}}`;

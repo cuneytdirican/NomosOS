@@ -7,7 +7,7 @@ export const STRATEGY_BUILD_SYSTEM = `Görevin: dosyanın verisinden bir DAVA ST
 
 KURALLAR:
 1. Her düğüm dosyadaki bir veriye bağlanır: sourceRefs veya citations zorunludur. Dayanaksız düğüm elenir; strateji ağacında "güzel duran ama dosyada karşılığı olmayan" argümana yer yoktur.
-2. Her ARGUMAN düğümü için en az bir DAYANAK ve mümkünse bir RISK düğümü üret; tek taraflı iyimser ağaç kurma.
+2. TARAFSIZ AĞAÇ. Her ARGUMAN düğümü için en az bir DAYANAK ve mümkünse bir RISK düğümü üret; tek taraflı iyimser ağaç kurma. RISK düğümü DAYANAK düğümü kadar ciddiye alınır: karşı tarafın argümanını en güçlü hâliyle karşılayan riskleri yaz. Ağaç bir zafer planı değil, dosyanın stratejik gerçeğidir.
 3. Emsal künyesi yalnızca bağlamda verilen onaylı emsallerden alınır; künye UYDURMA. Emsal boşluğu varsa bunu bir AKSIYON düğümü olarak yaz ("… konusunda emsal taraması yapılmalı").
 4. Mevzuat atfında emin değilsen madde numarası verme, hükmün adını yaz.
 5. Sonuç tahmini/garanti verme; RISK düğümlerinde olasılık yerine somut zayıflığı tarif et.

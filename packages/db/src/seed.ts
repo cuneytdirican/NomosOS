@@ -20,6 +20,7 @@ import {
   parseDateOnly,
 } from "@nomosos/legal-core";
 import { agentCatalogForSeed } from "@nomosos/shared";
+import { buildJudicialCatalog } from "./judicial-catalog";
 
 const prisma = new PrismaClient();
 
@@ -2645,8 +2646,32 @@ async function main() {
       prisma.caseLawDocument.count(),
     ]);
 
-  console.log("Seed tamamlandı.");
+  // ── Yargı organları + noterler (referans katalog — listeden seçim) ────────
+  const { bodies: judicialBodies, notaries } = buildJudicialCatalog();
+  let bodyAdded = 0;
+  let notaryAdded = 0;
+  for (const b of judicialBodies) {
+    const exists = await prisma.judicialBody.findUnique({
+      where: { type_name: { type: b.type, name: b.name } },
+      select: { id: true },
+    });
+    if (!exists) {
+      await prisma.judicialBody.create({ data: b });
+      bodyAdded++;
+    }
+  }
+  for (const n of notaries) {
+    const exists = await prisma.notaryOffice.findUnique({ where: { name: n.name }, select: { id: true } });
+    if (!exists) {
+      await prisma.notaryOffice.create({ data: n });
+      notaryAdded++;
+    }
+  }
   console.log(
+    `Yargı organı: ${judicialBodies.length} (eklenen: ${bodyAdded}) | Noter: ${notaries.length} (eklenen: ${notaryAdded}) — katalog yaklaşık sayılardır; panelden düzenlenebilir.`,
+  );
+
+  console.log("Seed tamamlandı.");  console.log(
     `Süre kuralı: ${ruleTotal} (eklenen: ${ruleCount}, pasifleştirilen eski kural: ${retiredRules}) | ` +
       `Tatil: ${holidayTotal} (resmi ${holidayCounts.official}, adli tatil ${holidayCounts.recess} gün)`,
   );

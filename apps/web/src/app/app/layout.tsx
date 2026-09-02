@@ -54,6 +54,33 @@ const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
       </svg>
     ),
   },
+  {
+    href: "/app/dosyalar",
+    label: "Dosyalar",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h4.379a1.5 1.5 0 0 1 1.06.44l3.122 3.12a1.5 1.5 0 0 1 .44 1.061V16.5A1.5 1.5 0 0 1 12 18H4.5A1.5 1.5 0 0 1 3 16.5v-13ZM4.5 3.5v13h7.5V7h-3V3.5H4.5Z" />
+      </svg>
+    ),
+  },
+  {
+    href: "/app/asistan",
+    label: "Asistan",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path d="M10 2a6 6 0 0 1 6 6v2.586l1.707 1.707A1 1 0 0 1 17 14h-2.268A2 2 0 0 1 13 15.732v.002a3 3 0 0 1-5.998 0A2 2 0 0 1 5.266 14H3a1 1 0 0 1-.707-1.707L4 10.586V8a6 6 0 0 1 6-6Z" />
+      </svg>
+    ),
+  },
+  {
+    href: "/app/mesajlar",
+    label: "Mesajlar",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path d="M3.5 3A1.5 1.5 0 0 0 2 4.5v9A1.5 1.5 0 0 0 3.5 15H6v2.25a.75.75 0 0 0 1.22.583L11.24 15h5.26A1.5 1.5 0 0 0 18 13.5v-9A1.5 1.5 0 0 0 16.5 3h-13Z" />
+      </svg>
+    ),
+  },
       {
         href: "/app/durusmalar",
         label: "Duruşmalar",
@@ -295,6 +322,16 @@ const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
         <path d="M15.98 1.804a1 1 0 0 0-1.196.15l-9.5 9.5A1 1 0 0 0 6 13.25h3.19l-1.16 4.63a1 1 0 0 0 1.68.97l9.5-9.5A1 1 0 0 0 18.5 7.75h-3.19l1.16-4.63a1 1 0 0 0-.49-1.316Z" />
+      </svg>
+    ),
+  },
+  {
+    // Disk kotası — plan dahili + satın alınan ek paketler.
+    href: "/app/ayarlar/disk-kotasi",
+    label: "Disk Kotası",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path d="M10 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm0 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6Zm0-4a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z" />
       </svg>
     ),
   },

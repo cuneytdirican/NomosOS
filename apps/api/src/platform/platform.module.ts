@@ -108,6 +108,6 @@ import { PlatformUsersService } from "./users/platform-users.service";
   // tahsisi için DÖRT-GÖZ talebi açar. Yalnız TALEP açma yönü dışarı verilir;
   // onaylanan talebi uygulayan executor kimseyi geri çağırmadığı için modüller
   // arasında döngü doğmaz.
-  exports: [UsageSnapshotService, PlatformApprovalsService],
+  exports: [UsageSnapshotService, PlatformApprovalsService, PlatformAuditService],
 })
 export class PlatformModule {}

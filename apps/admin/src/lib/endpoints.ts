@@ -116,4 +116,14 @@ export const EP = {
     update: (id: string) => `/platform-users/${encodeURIComponent(id)}`,
     remove: (id: string) => `/platform-users/${encodeURIComponent(id)}`,
   },
+  /** Yargı organları + noterler referans kataloğu. */
+  judicial: {
+    bodies: "/judicial/bodies",
+    body: (id: string) => `/judicial/bodies/${encodeURIComponent(id)}`,
+    notaries: "/judicial/notaries",
+    notary: (id: string) => `/judicial/notaries/${encodeURIComponent(id)}`,
+    syncSettings: "/judicial/sync/settings",
+    syncNow: "/judicial/sync",
+    syncLogs: "/judicial/sync/logs",
+  },
 } as const;

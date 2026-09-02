@@ -66,27 +66,26 @@ describe("K-01: admin girişi sunucu sözleşmesini uygular", () => {
   });
 });
 
-describe("K-02: eklenti arka uç yokluğunu dürüstçe söyler", () => {
-  it("popup eşleştirme DENEMESİNDEN ÖNCE arka uç durumunu gösterir", () => {
+describe("K-02: eklenti arka ucu eşleştirme akışı dürüstçe çalışır", () => {
+  it("popup eşleştirme talimatı günceldir — arka uç artık yayında", () => {
     const html = read(EXT_ROOT, "popup", "popup.html");
-    expect(html).toContain("geliştirme aşamasında");
-    expect(html).toContain("eşleştirme yapılamaz");
+    expect(html).toContain("eşleştirme kodu üretin");
+    expect(html).not.toContain("geliştirme aşamasında");
   });
 
-  it("eşleştirme 404'si gerçeği söyler: arka uç dağıtılmamış", () => {
+  it("eşleştirme 404'si gerçek nedeni söyler: adres yanlış veya sürüm eski", () => {
     const popup = read(EXT_ROOT, "popup", "popup.ts");
-    expect(popup).toContain("arka ucu henüz dağıtılmamış");
+    expect(popup).toContain("sunmuyor");
+    expect(popup).not.toContain("henüz dağıtılmamış");
   });
 
-  it("auth.ts yorumu arka ucun YOK olduğunu yazar (F2-K-02 düzeltmesi)", () => {
+  it("auth.ts sözleşme yorumu arka ucun YAYINDA olduğunu yazar", () => {
     const auth = read(EXT_ROOT, "lib", "auth.ts");
-    expect(auth).toContain("YOKTUR");
-    expect(auth).toContain("geliştirme aşamasında");
-    // Eski yanıltıcı iddia kaldırıldı.
-    expect(auth).not.toContain("gerçekte `/api/v1/uyap/*` altında yayınlanır");
+    expect(auth).toContain("Arka uç YAYINDA");
+    expect(auth).not.toContain("YOKTUR — bu uçlar henüz hiçbir yerde yayınlanmaz");
   });
 
-  it("şemada UYAP controller'ı hâlâ yok — iddia gerçekle eşleşiyor", async () => {
+  it("şemada UYAP controller'ı VAR — iddia gerçekle eşleşiyor", async () => {
     const { readdirSync, readFileSync: rf } = await import("node:fs");
     const dir = join(process.cwd(), "src");
     const files: string[] = [];
@@ -98,9 +97,25 @@ describe("K-02: eklenti arka uç yokluğunu dürüstçe söyler", () => {
       }
     };
     walk(dir);
-    const uyap = files.filter((f) => rf(f, "utf-8").includes('@Controller("uyap")'));
-    // Arka uç yazıldığında bu test kırmızıya döner — o zaman popup'taki uyarı
-    // metni de güncellenmelidir (test bilinçli kanıt taşır).
-    expect(uyap).toEqual([]);
+    const uyapFiles = files.filter((f) => rf(f, "utf-8").includes('@Controller("uyap")'));
+    // İki ayrı controller (eklenti uçları + web uçları) TEK dosyada yaşar —
+    // dosya sayısı 1'dir; sözleşme iki SINIF bildirimini arar.
+    expect(uyapFiles.length).toBeGreaterThanOrEqual(1);
+    const content = uyapFiles.map((f) => rf(f, "utf-8")).join("\n");
+    expect(content).toContain("UyapExtensionController");
+    expect(content).toContain("UyapWebController");
+  });
+
+  it("eklentinin çağırdığı uçlar denetleyicide birebir var (sözleşme taahhüdü)", async () => {
+    const { readFileSync: rf } = await import("node:fs");
+    const controller = rf(join(process.cwd(), "src", "uyap", "uyap.controller.ts"), "utf-8");
+    const authPaths = read(EXT_ROOT, "lib", "auth.ts");
+    // Eklentinin sabitleri ile sunucu yolları eşleşmeli.
+    for (const path of ["/uyap/pair", "/uyap/pair/refresh", "/uyap/sync/files", "/uyap/sync/events", "/uyap/documents/presign", "/uyap/documents/commit", "/uyap/status"]) {
+      expect(authPaths).toContain(`"/api/v1${path}"`);
+      // Denetleyicideki alt yol: "/uyap/pair" → '"pair"'.
+      const sub = path.replace(/^\/uyap\/?/, "");
+      expect(controller).toContain(`"${sub}"`);
+    }
   });
 });

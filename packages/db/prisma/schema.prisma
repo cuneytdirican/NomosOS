@@ -92,6 +92,12 @@ model User {
   /// `passwordHash` yazmaktı ve o bile açık token'ı düşürmüyordu.
   sessionsValidFrom DateTime?
 
+  /// ── BÜRO İÇİ MESAJLAŞMA ──────────────────────────────────────────────────
+  /// Profil fotoğrafı — MinIO nesne anahtarı (avatarlar/ öneki).
+  avatarStorageKey String?
+  /// Son kalp atışı anı — 60 sn içinde vuruş varsa "çevrimiçi" görünür.
+  lastSeenAt       DateTime?
+
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -107,6 +113,13 @@ model User {
   taskStatusLogs   TaskStatusLog[]
   aiUsageLogs      AiUsageLog[]
   timeEntries      TimeEntry[]
+
+  /// Büro içi mesajlaşma (Office* modelleri — AI sohbeti ChatMessage'dır)
+  officeSentMessages     OfficeMessage[] @relation("OfficeSent")
+  officeReceivedMessages OfficeMessage[] @relation("OfficeReceived")
+  officeReadStates       OfficeReadState[]
+  officeCallsMade        OfficeCall[]    @relation("OfficeCaller")
+  officeCallsReceived    OfficeCall[]    @relation("OfficeCallee")
 
   @@index([tenantId])
 }
@@ -269,6 +282,9 @@ model Case {
   inboundMessages   InboundMessage[]
   poaScopeChecks    PoaScopeCheck[]
   contracts         Contract[]
+
+  /// UYAP Köprüsü — UYAP dosya numarası ↔ NomosOS dosyası bağlantısı
+  uyapLinks UyapCaseLink[]
 
   @@index([tenantId])
   @@index([tenantId, status])
@@ -618,6 +634,8 @@ model Document {
   chunks    DocumentChunk[]
   pipelines PipelineRun[]
   proposals DocumentActionProposal[]
+  /// Büro içi mesajlaşma ekleri
+  officeAttachments OfficeMessage[] @relation("OfficeAttachment")
 
   @@index([tenantId])
   @@index([caseId])
@@ -820,6 +838,213 @@ model TimelineEvent {
   createdAt DateTime @default(now())
 
   @@index([caseId, date])
+}
+
+// ===========================================================================
+// BÜRO İÇİ MESAJLAŞMA (WhatsApp tarzı) — Office* öneki AI sohbetinin
+// ChatMessage modeliyle KARIŞMAZ.
+//
+// ÜRÜN İLKESİ — MESAJ SİLME YOK: OfficeMessage'da deletedAt alanı YOKTUR ve
+// bu varlık için delete ucu YAYINLANMAZ. Büro içi yazışma denetim izidir.
+// ===========================================================================
+
+/// Büro içi 1:1 mesaj. Sohbetler (senderId, recipientId) çiftiyle gruplanır.
+model OfficeMessage {
+  id          String    @id @default(uuid())
+  tenantId    String
+  senderId    String
+  sender      User      @relation("OfficeSent", fields: [senderId], references: [id])
+  recipientId String
+  recipient   User      @relation("OfficeReceived", fields: [recipientId], references: [id])
+  /// Metin içeriği; yalnız-ekli mesajda null.
+  content     String?
+  /// Ek dosyası — Document olarak saklanır (disk kotasına işler).
+  attachmentId String?
+  attachment  Document? @relation("OfficeAttachment", fields: [attachmentId], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, senderId, recipientId, createdAt])
+  @@index([tenantId, recipientId, createdAt])
+}
+
+/// Kullanıcının bir kişiyle olan sohbeti son okuduğu mesaj.
+model OfficeReadState {
+  id                String   @id @default(uuid())
+  tenantId          String
+  userId            String
+  user              User     @relation(fields: [userId], references: [id])
+  peerId            String
+  /// Son okunan mesaj kimliği — bu id'ye kadarki mesajlar "okundu" sayılır.
+  lastReadMessageId String?
+  lastReadAt        DateTime @default(now())
+
+  @@unique([tenantId, userId, peerId])
+  @@index([tenantId, userId])
+}
+
+/// Video arama kaydı — WebRTC sinyalleşmesi polling ile taşınır.
+model OfficeCall {
+  id         String    @id @default(uuid())
+  tenantId   String
+  callerId   String
+  caller     User      @relation("OfficeCaller", fields: [callerId], references: [id])
+  calleeId   String
+  callee     User      @relation("OfficeCallee", fields: [calleeId], references: [id])
+  /// RINGING | ACTIVE | ENDED | REJECTED | MISSED
+  status     String    @default("RINGING")
+  startedAt  DateTime?
+  endedAt    DateTime?
+  createdAt  DateTime  @default(now())
+
+  signals    OfficeCallSignal[]
+
+  @@index([tenantId, calleeId, createdAt])
+  @@index([tenantId, callerId, createdAt])
+}
+
+/// WebRTC sinyal kuyruğu — offer / answer / ICE candidate.
+model OfficeCallSignal {
+  id          String     @id @default(uuid())
+  callId      String
+  call        OfficeCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+  /// Gönderen kullanıcı (karşı taraf alır).
+  fromUserId  String
+  /// OFFER | ANSWER | CANDIDATE
+  kind        String
+  /// SDP / aday JSON'u.
+  payloadJson String
+  createdAt   DateTime   @default(now())
+
+  @@index([callId, createdAt])
+}
+
+// ===========================================================================
+// DİSK KOTASI — lisans planına dahil kota + satın alınan ek kota.
+// Kredi cüzdanını izler: satın alınan kota devreder. Kullanım sayacı Document
+// eklendiğinde artar; yumuşak silinen belge depoda yer tuttuğu için düşmez.
+// ===========================================================================
+
+/// Büronun disk kotası — tenant başına tek kayıt.
+model DiskQuota {
+  id             String   @id @default(uuid())
+  tenantId       String   @unique
+  /// Abonelik planının dahil kotası (bayt) — planın diskQuotaGb alanından.
+  includedBytes  BigInt   @default(0)
+  /// Satın alınan ek kota (bayt) — devreder, süresi dolmaz.
+  purchasedBytes BigInt   @default(0)
+  /// Kullanılan bayt — Document kayıtlarının sizeBytes toplamı.
+  usedBytes      BigInt   @default(0)
+  /// Sayacın son yeniden hesaplanma anı (düzeltme koşusu).
+  recomputedAt   DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+/// Kota değişikliği kaydı — satın alma ve düzeltmeler denetim iziyle işler.
+/// Uygulama DÖRT-GÖZ onayına tabidir (PlatformApprovalRequest üzerinden).
+model DiskQuotaAdjustment {
+  id             String   @id @default(uuid())
+  tenantId       String
+  /// +bayt (satın alma) / -bayt (düzeltme).
+  deltaBytes     BigInt
+  reason         String
+  /// Açan platform kullanıcısı.
+  createdBy      String
+  approvalStatus String   @default("BEKLIYOR") // BEKLIYOR | ONAYLANDI | REDDEDILDI
+  createdAt      DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+}
+
+// ===========================================================================
+// UYAP KÖPRÜSÜ (docs/05-uyap-entegrasyonu.md) — eklentinin arka ucu.
+// ===========================================================================
+
+/// Web arayüzünde avukatın ürettiği kısa ömürlü eşleştirme kodu.
+model UyapPairing {
+  id        String    @id @default(uuid())
+  tenantId  String
+  userId    String
+  /// "AB12-CD34" biçiminde 8 haneli kod.
+  code      String    @unique
+  expiresAt DateTime
+  /// Kod kullanıldığında eklenti token'ının id'si yazılır.
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([tenantId, createdAt])
+}
+
+/// Eşleştirilmiş tarayıcı eklentisi — iptal edilebilir extension token.
+/// Erişim jetonu 12 saat; yenileme jetonu rotasyonlu.
+model UyapExtensionToken {
+  id               String    @id @default(uuid())
+  tenantId         String
+  userId           String
+  deviceName       String
+  extensionVersion String
+  /// SHA-256 (hex) — ham token asla saklanmaz.
+  accessTokenHash  String    @unique
+  refreshTokenHash String    @unique
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  lastUsedAt       DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([tenantId, userId])
+}
+
+/// UYAP dosya numarası ↔ NomosOS dosyası bağlantısı.
+model UyapCaseLink {
+  id          String   @id @default(uuid())
+  tenantId    String
+  uyapDosyaNo String
+  caseId      String
+  case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  /// Eşleştirmeyi yapan kullanıcı (otomatik eşleşmede null).
+  matchedBy   String?
+  createdAt   DateTime @default(now())
+
+  @@unique([tenantId, uyapDosyaNo])
+}
+
+/// Eşleşmeyen UYAP dosyaları — avukatın eşleştirme kuyruğu.
+model UyapMatchQueue {
+  id             String    @id @default(uuid())
+  tenantId       String
+  uyapDosyaNo   String
+  /// SyncFileDto — eklentiden gelen ham özet.
+  payloadJson    String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  resolvedAt     DateTime?
+  resolvedCaseId String?
+
+  @@unique([tenantId, uyapDosyaNo])
+}
+
+/// UYAP'tan gelen safahat/duruşma kaydı — externalHash ile idempotent.
+model UyapEventRecord {
+  id           String   @id @default(uuid())
+  tenantId     String
+  caseId       String?
+  uyapDosyaNo  String
+  /// SAFAHAT | DURUSMA
+  kind         String
+  externalHash String
+  tarih        DateTime
+  islem        String
+  aciklama     String?
+  birim        String?
+  sira        Int?
+  salon        String?
+  createdAt    DateTime @default(now())
+
+  @@unique([tenantId, externalHash])
+  @@index([tenantId, caseId])
+  @@index([tenantId, createdAt])
 }
 
 // ---------- Dosya notları ----------
@@ -2823,6 +3048,84 @@ model CreditPackage {
   price    Decimal @db.Decimal(18, 2)
   currency String  @default("TRY")
   isActive Boolean @default(true)
+}
+
+/// Satılabilir ek disk paketi — CreditPackage desenini izler.
+model DiskPackage {
+  id       String  @id @default(uuid())
+  key      String  @unique // "DISK_10GB" | "DISK_50GB" | "DISK_100GB"
+  gb       Int
+  price    Decimal @db.Decimal(18, 2)
+  currency String  @default("TRY")
+  isActive Boolean @default(true)
+}
+
+// ===========================================================================
+// YARGI ORGANLARI + NOTERLER — referans veri kataloğu (kullanıcı talebi:
+// "icra dairesini elle girmesin, listeden seçsin").
+//
+// Kaynak hiyerarşisi: SEED (kurulumdaki katalog) → SYNC (yapılandırılmış
+// kaynaktan periyodik güncelleme) → MANUAL (panelde elle düzeltme).
+// Liste yaklaşıklardır; bağlam sayısı/daire sayıları değişebilir — panelden
+// düzeltilebilir ve senkron kaynağı tanımlıysa periyodik güncellenir.
+// ===========================================================================
+
+/// Mahkeme veya icra dairesi — il/ilçe bazında kategorize.
+model JudicialBody {
+  id       String   @id @default(uuid())
+  /// MAHKEME | ICRA_DAIRESI
+  type     String
+  /// Mahkeme kategorisi: ASLIYE_HUKUK, ASLIYE_CEZA, SULH_HUKUK, SULH_CEZA,
+  /// IS, AILE, TUKETICI, KADASTRO, ICRA_HUKUK, FIKRI_SINAI, ISTINAF.
+  /// İcra dairelerinde "ICRA".
+  category String
+  /// Tam ad, örn. "İstanbul (Bakırköy) 3. Asliye Hukuk Mahkemesi".
+  name     String
+  il       String
+  ilce     String?
+  isActive Boolean  @default(true)
+  /// SEED | SYNC | MANUAL
+  source   String   @default("SEED")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([type, name])
+  @@index([type, category, il])
+  @@index([il, ilce])
+}
+
+/// Noterlik — vekaletname kaydında listeden seçilir.
+model NotaryOffice {
+  id        String   @id @default(uuid())
+  /// Tam ad, örn. "İstanbul (Bakırköy) 5. Noterliği".
+  name      String
+  il        String
+  ilce      String?
+  isActive  Boolean  @default(true)
+  /// SEED | SYNC | MANUAL
+  source    String   @default("SEED")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name])
+  @@index([il, ilce])
+}
+
+/// Katalog senkron günlüğü — periyodik/elle senkron denemeleri kayıt altında.
+model JudicialSyncLog {
+  id          String   @id @default(uuid())
+  /// MAHKEME | ICRA | NOTER | TUMU
+  kind        String
+  /// BASARILI | BASARISIZ | ATLANDI (kaynak yapılandırılmamış)
+  status      String
+  added       Int      @default(0)
+  updated     Int      @default(0)
+  detail      String?
+  /// Tetikleyen: PlatformUser id veya "zamanlayici".
+  triggeredBy String?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 // ===========================================================================

@@ -85,13 +85,14 @@ BÖLÜMLER (hepsi doldurulmalı; dayanak yoksa boş dizi bırak, uydurma):
 - summary: dosyanın 3-6 cümlelik özeti.
 - parties: taraflar ve rolleri.
 - claims: ileri sürülen talepler/iddialar.
-- strengths: lehimize olan noktalar.
-- weaknesses: aleyhimize olan noktalar, riskler.
+- strengths: müvekkil lehine olan noktalar.
+- weaknesses: müvekkil aleyhine olan noktalar, riskler.
 - gaps: eksik belge/delil/bilgi ve indekslenmemiş belgeler.
 - recommendations: somut, yapılabilir öneriler.
 
 KURALLAR:
 1. HER MADDE KAYNAKLI. Her maddede sourceRefs dizisine, sana verilen parçanın künyesini (ör. "Cevap Dilekçesi — s.3 ¶2-4") birebir yaz. Kaynaksız madde sistem tarafından ELENİR; elenmiş madde avukata hiç ulaşmaz.
+2. TARAFSIZ ANALİZ. strengths ve weaknesses AYNI titizlikle yazılır; bu rapor müvekkilin övgüsü değil, dosyanın gerçek durumudur. strengths'i weaknesses'ten uzun/ayrıntılı tutmak, aleyhte bulguyu tek cümleye indirgemek TARAF TUTMAKTIR. Karşı tarafın argümanını en güçlü hâliyle al; dosyada aleyhte ciddi bir bulgu varsa onu görmezden gelme veya yumuşatma. Aleyhte bulgu yoksa weaknesses boş kalabilir — ama "yok" ile "bakmadım" aynı şey değildir.
 2. SÜRE HESABI YAPMA. Süre bilgilerini yalnızca bağlamdaki [AÇIK SÜRELER] kayıtlarından aktar; gün sayma, son gün belirleme.
 3. UYDURMA YASAĞI. Madde numarası, esas/karar numarası, tarih, tutar veya taraf adını bağlamda yoksa yazma. Bağlam yetersizse gaps bölümüne "şu bilgi dosyada bulunamadı" maddesi ekle.
 4. Bağlam tamamen boşsa summary alanına "${NO_SOURCE_NOTICE}" yaz ve noSource=true yap.

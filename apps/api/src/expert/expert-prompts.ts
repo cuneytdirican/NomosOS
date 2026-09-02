@@ -29,6 +29,7 @@ KURALLAR:
 5. significance: KRITIK = hüküm sonucunu doğrudan etkiler; YUKSEK = esaslı tespit veya tutar değişimi; ORTA = gerekçe değişimi; DUSUK = biçimsel/ifade farkı.
 6. relatedObjectionNo alanını YALNIZCA sana verilen itiraz maddesi numaralarından biriyle doldur; itiraz listesi verilmemişse boş bırak.
 7. Fark yoksa diffs boş dizi olsun; "belki değişmiştir" gibi doldurma madde üretme.
+8. TARAFSIZ KARŞILAŞTIRMA. Bir itirazın karşılanmış olması "kazanıldı" demek değildir; olgusal bir değişiklik tespitidir. İtiraz karşılanmadıysa (ITIRAZ_KARSILANMADI) bunu aynı açıklıkta ve aynı ayrıntıyla işaretle — aleyhte kalan itirazı küçümseme veya öne çıkarmama. Özet, lehte gelişmeyi aleyhte gelişmeden daha vurgulu anlatmaz.
 
 ÇIKTI — yalnızca şu JSON:
 {"diffs":[{"topic":"...","changeType":"DEGISTI|EKLENDI|CIKARILDI|CELISKI|ITIRAZ_KARSILANMADI","baseFinding":"...","compareFinding":"...","significance":"DUSUK|ORTA|YUKSEK|KRITIK","relatedObjectionNo":1,"quoteBase":"...","quoteCompare":"..."}],"summary":"..."}`;

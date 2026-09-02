@@ -18,13 +18,14 @@ import {
   Spinner,
 } from "@/components/ui";
 import { RemoteSelect } from "@/components/remote-select";
+import { JudicialBodyPicker } from "@/components/judicial-picker";
 import {
   CASE_STATUS_LABELS,
   CASE_STATUS_TONES,
   CASE_TYPE_LABELS,
   labelOf,
 } from "@/lib/labels";
-import { CASE_TYPES, COURT_TYPES, type CaseType } from "@nomosos/shared";
+import { CASE_TYPES, type CaseType } from "@nomosos/shared";
 
 interface NewCaseForm {
   clientId: string;
@@ -250,18 +251,12 @@ export default function DosyalarPage() {
               required
             />
           </Field>
-          <Field label="Mahkeme / Daire" hint="Örn. İstanbul 12. İş Mahkemesi">
-            <Input
-              list="court-types"
+          <Field label="Mahkeme / Daire" hint="İl seçin, katalogdan seçin; listede yoksa elle yazabilirsiniz.">
+            <JudicialBodyPicker
+              type="MAHKEME"
               value={form.courtName}
-              onChange={(e) => setForm({ ...form, courtName: e.target.value })}
-              placeholder="Mahkeme veya icra dairesi adı"
+              onChange={(courtName) => setForm({ ...form, courtName })}
             />
-            <datalist id="court-types">
-              {COURT_TYPES.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
           </Field>
           <Field label="Esas / Dosya No" hint="Örn. 2026/145">
             <Input

@@ -199,6 +199,56 @@ export class PetitionsService {
   // CRUD
   // ------------------------------------------------------------------ //
 
+  /**
+   * Dilekçe Stüdyosu büro geneli listesi — tüm dosyaların dilekçeleri tek
+   * ekranda (avukat geri bildirimi: "avukat nereden dilekçe yazacak?").
+   */
+  async listStudio(
+    tenantId: string,
+    filters: { caseId?: string; status?: string; type?: string; q?: string },
+  ) {
+    const rows = await this.prisma.client.petition.findMany({
+      where: {
+        tenantId,
+        ...(filters.caseId ? { caseId: filters.caseId } : {}),
+        ...(filters.status ? { status: filters.status as Petition["status"] } : {}),
+        ...(filters.type ? { type: filters.type as Petition["type"] } : {}),
+        ...(filters.q
+          ? { title: { contains: filters.q, mode: "insensitive" as const } }
+          : {}),
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 200,
+      include: {
+        case: {
+          select: {
+            id: true,
+            title: true,
+            fileNumber: true,
+            status: true,
+            client: { select: { id: true, name: true } },
+          },
+        },
+        versions: {
+          select: { versionNo: true },
+          orderBy: { versionNo: "desc" },
+          take: 1,
+        },
+      },
+    });
+    return rows.map((p) => ({
+      id: p.id,
+      caseId: p.caseId,
+      case: p.case,
+      type: p.type,
+      title: p.title,
+      status: p.status,
+      latestVersionNo: p.versions[0]?.versionNo ?? 0,
+      createdAt: p.createdAt,
+      updatedAt: p.updatedAt,
+    }));
+  }
+
   async listForCase(tenantId: string, caseId: string) {
     await this.assertCase(tenantId, caseId);
     const petitions = await this.prisma.client.petition.findMany({

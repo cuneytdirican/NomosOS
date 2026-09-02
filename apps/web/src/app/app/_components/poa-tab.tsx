@@ -38,6 +38,7 @@ import {
 } from "@/components/ui";
 import { AiDisclaimer, FeatureUnavailable, PiiApprovalBox, SourceQuote } from "@/components/ai-ui";
 import { CreditBadge, useCreditCosts } from "@/components/credits";
+import { NotaryPicker } from "@/components/judicial-picker";
 import { errText } from "@/lib/faz2";
 import { SERVER_MAX_PAGE_SIZE } from "@/lib/api";
 import {
@@ -456,11 +457,7 @@ function CreatePoaModal({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Noter">
-            <Input
-              value={notary}
-              onChange={(e) => setNotary(e.target.value)}
-              placeholder="Örn. Beyoğlu 14. Noterliği"
-            />
+            <NotaryPicker value={notary} onChange={setNotary} />
           </Field>
           <Field label="Yevmiye numarası">
             <Input value={number} onChange={(e) => setNumber(e.target.value)} />

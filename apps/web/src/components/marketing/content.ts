@@ -261,7 +261,7 @@ export const pipeline = {
 export const ai = {
   kicker: "YAPAY ZEKÂ",
   title: "Yapay zekâ önerir. Kararı siz verirsiniz.",
-  lead: "NomosOS'ta yapay zekâ, dosyanızın bütün verisi üzerinde çalışan bir katmandır — ayrı bir sohbet penceresi değil.",
+  lead: "NomosOS'ta yapay zekâ, dosyanızın bütün verisi üzerinde çalışan bir katmandır — ayrı bir sohbet penceresi değil. Analizleri TARAFSIZ yürütür: lehte bulguları abartmaz, aleyhte bulguları gizlemez.",
   cards: [
     {
       title: "Dosya Asistanı",

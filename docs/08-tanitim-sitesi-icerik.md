@@ -230,7 +230,8 @@ Siz onaylarsınız — sistem uygular
 > **Başlık:** Yapay zekâ önerir. Kararı siz verirsiniz.
 >
 > NomosOS'ta yapay zekâ, dosyanızın bütün verisi üzerinde çalışan bir katmandır — ayrı
-> bir sohbet penceresi değil.
+> bir sohbet penceresi değil. Analizleri TARAFSIZ yürütür: lehte bulguları abartmaz,
+> aleyhte bulguları gizlemez.
 
 Dört kart:
 

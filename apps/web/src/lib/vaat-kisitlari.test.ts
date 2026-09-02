@@ -211,3 +211,36 @@ describe("F2-Ö-28: 429 mesajı ölü adres göstermez", () => {
     expect(codeOnly(CONTENT)).not.toContain("aktarımının nasıl kurulduğu");
   });
 });
+
+describe("TARAFSIZLIK vaadi (avukat geri bildirimi) — AI objektiftir", () => {
+  it("AI bölümü tarafsızlığı açıkça söylüyor", () => {
+    expect(codeOnly(CONTENT)).toContain("TARAFSIZ yürütür");
+    expect(codeOnly(CONTENT)).toContain("aleyhte bulguları gizlemez");
+  });
+
+  it("kaynak doküman da aynı vaadi taşıyor (birebir kuralı)", () => {
+    expect(MARKETING_DOC).toContain("TARAFSIZ yürütür");
+    expect(MARKETING_DOC).toContain("aleyhte bulguları gizlemez");
+  });
+
+  it("AI 'sizin adınıza savunur' gibi avukatlık vaadi yok", () => {
+    // AI analizcidir, avukat değildir — savunma vaadi verilemez.
+    expect(codeOnly(CONTENT)).not.toMatch(/adınıza savunur|yerine savunur|sizin avukatınız/);
+  });
+
+  it("çekirdek prompt sözleşmesi tarafsızlık kuralını taşıyor (kaynak taahhüdü)", () => {
+    // Arayüz vaadi prompt sözleşmesiyle destekleniyor olmalı — vaat yalnız
+    // pazarlama metninde kalırsa boş bir sözdür.
+    const core = read(
+      "..", "..", "packages", "legal-ai", "src", "prompts", "system-core.ts",
+    );
+    expect(core).toContain("TARAFSIZLIK — OBJEKTİF DEĞERLENDİRME");
+    expect(core).toContain("EN GÜÇLÜ hâliyle ele alırsın");
+
+    // Sözleşme testleri de duruyor olmalı:
+    const promptsTest = read(
+      "..", "..", "packages", "legal-ai", "src", "__tests__", "prompts.test.ts",
+    );
+    expect(promptsTest).toContain("tarafsızlık sözleşmesi");
+  });
+});

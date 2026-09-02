@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ApiError, DEFAULT_PAGE_SIZE } from "@/lib/api";
 import { RemoteSelect } from "@/components/remote-select";
+import { JudicialBodyPicker } from "@/components/judicial-picker";
 import { errText, isMissingEndpoint } from "@/lib/faz2";
 import {
   createEnforcementFile,
@@ -431,11 +432,10 @@ function NewEnforcementModal({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="İcra dairesi">
-            <Input
+            <JudicialBodyPicker
+              type="ICRA_DAIRESI"
               value={form.officeName}
-              onChange={(e) => setForm({ ...form, officeName: e.target.value })}
-              placeholder="İstanbul 9. İcra Dairesi"
-              required
+              onChange={(officeName) => setForm({ ...form, officeName })}
             />
           </Field>
           <Field label="Dosya no">

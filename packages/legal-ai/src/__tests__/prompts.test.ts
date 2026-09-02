@@ -27,10 +27,45 @@ describe("prompt katmanı", () => {
     expect(AI_ADVISORY_NOTICE).toContain("ÖNERİDİR");
   });
 
-  it("her görev promptu çekirdeğin üzerine eklenir", () => {
-    const composed = composeSystemPrompt("Göreve özel talimat.");
-    expect(composed.startsWith(NOMOSOS_SYSTEM_CORE_PROMPT)).toBe(true);
-    expect(composed).toContain("GÖREVE ÖZEL TALİMAT");
+  /* ---------------------------------------------------------------- *
+   * TARAFSIZLIK SÖZLEŞMESİ (avukat geri bildirimi):
+   * "AI objektif olmalı; kendi dosyası diye taraflı davranmamalı."
+   * Çekirdek kural 2 her görevde zorunludur; bu blok o taahhüdü
+   * test eder — kural silinir/zyıflarsa burası kırmızıya döner.
+   * ---------------------------------------------------------------- */
+  describe("tarafsızlık sözleşmesi (çekirdek kural 2)", () => {
+    it("çekirdek prompt TARAFSIZLIK kuralını taşır", () => {
+      expect(NOMOSOS_SYSTEM_CORE_PROMPT).toContain("TARAFSIZLIK — OBJEKTİF DEĞERLENDİRME");
+      // Kuralın dört taahhüdü de açıkça yazılı olmalı:
+      expect(NOMOSOS_SYSTEM_CORE_PROMPT).toContain("dava avukatı DEĞİLSİN"); // rol tanımı
+      expect(NOMOSOS_SYSTEM_CORE_PROMPT).toContain("EN GÜÇLÜ hâliyle ele alırsın"); // steelman
+      expect(NOMOSOS_SYSTEM_CORE_PROMPT).toContain("Aleyhte bulgu, lehte bulgu kadar açık"); // eşit görünürlük
+      expect(NOMOSOS_SYSTEM_CORE_PROMPT).toContain("Müvekkil haklıdır"); // varsayım yasağı
+    });
+
+    it("her görev promptu çekirdeğin üzerine eklenir", () => {
+      const composed = composeSystemPrompt("Göreve özel talimat.");
+      expect(composed.startsWith(NOMOSOS_SYSTEM_CORE_PROMPT)).toBe(true);
+      expect(composed).toContain("GÖREVE ÖZEL TALİMAT");
+      // TARAFSIZLIK kuralı composed çıktıda da aynen bulunur:
+      expect(composed).toContain("TARAFSIZLIK — OBJEKTİF DEĞERLENDİRME");
+    });
+
+    it("kayıtlı HER görev promptu tarafsızlık kuralıyla birleşir", () => {
+      for (const [taskType, spec] of Object.entries(PROMPT_REGISTRY)) {
+        if (!spec) continue;
+        const messages = buildMessages(spec, "içerik");
+        const system = messages[0].content;
+        expect(
+          system.includes("TARAFSIZLIK — OBJEKTİF DEĞERLENDİRME"),
+          `${taskType} görevi tarafsızlık kuralını içermiyor`,
+        ).toBe(true);
+      }
+    });
+
+    it("tarafsızlık kapsam dışı talep reddine de bağlı (kural 10)", () => {
+      expect(NOMOSOS_SYSTEM_CORE_PROMPT).toContain("taraf tutman");
+    });
   });
 
   it("süre tespiti promptu hesaplama yasağını açıkça yazar", () => {
