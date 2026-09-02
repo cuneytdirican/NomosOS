@@ -1,5 +1,5 @@
 /**
- * /durusma/[id] — duruşma detayı ve DURUŞMA SONRASI HIZLI NOT.
+ * /durusma/[id] — duruşma detayı ve DURUŞMA SONRASI HIZLI NOT + HIZLI SONUÇ.
  *
  * Sahadaki asıl senaryo bu ekrandır: avukat salondan çıkar, telefonu açar,
  * ara kararı iki cümleyle yazar. Bu yüzden not alanı ekranın en üstüne yakın
@@ -10,10 +10,10 @@
  * bunun KVKK ve meslek sırrı bakımından savunulabilir bir hâli yok. Metin
  * girişi bu riski taşımaz.
  *
- * DURUŞMA SONUCU (`PATCH /hearings/:id/result`) mobilde YOKTUR: sonuç kaydı
- * safahat açar, dosya durumunu değiştirir ve erteleme hâlinde yeni duruşma
- * yaratır. Geri alınması zor bir işlemi tek elle, acele ederken yapmak
- * istemiyoruz. Mobil yalnızca `note` alanını günceller.
+ * D2 A7 — HIZLI SONUÇ ARTIK VAR (iki adımlı onayla): sonuç kaydı safahat
+ * açar, dosya durumunu değiştirir ve erteleme hâlinde yeni duruşma yaratır.
+ * Bu yüzden yalnız PLANLANDI duruşmasında, HUKUKI/OPERASYON rolüyle ve
+ * ÖZET ONAYINDAN sonra işler. Not alanı tek dokunuşla hızlı kalır.
  */
 
 import React, { useCallback, useEffect, useState } from "react";
@@ -21,6 +21,7 @@ import { RefreshControl, StyleSheet, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { errorMessage } from "@/api/client";
 import { fetchHearing, saveHearingNote } from "@/api/endpoints";
+import { saveHearingResult } from "@/api/quick-result";
 import { useSession } from "@/auth/session";
 import { useOnline } from "@/net/connectivity";
 import { useLoad } from "@/hooks/use-load";
@@ -50,6 +51,7 @@ import {
   Section,
 } from "@/ui/components";
 import { NoteDialog } from "@/ui/note-dialog";
+import { QuickResultDialog } from "@/ui/quick-result-dialog";
 import { colors, font, radius, space } from "@/ui/theme";
 
 export default function HearingDetailScreen(): React.JSX.Element {
@@ -66,6 +68,10 @@ export default function HearingDetailScreen(): React.JSX.Element {
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  // D2 A7 — hızlı sonuç iletişim kutusu.
+  const [resultOpen, setResultOpen] = useState(false);
+  const [resultBusy, setResultBusy] = useState(false);
+  const [resultError, setResultError] = useState<string | null>(null);
 
   // Yeni bir duruşmaya geçildiğinde önceki kaydetme onayı ekranda kalmasın.
   useEffect(() => {
@@ -93,6 +99,29 @@ export default function HearingDetailScreen(): React.JSX.Element {
         setActionError(errorMessage(caught));
       } finally {
         setSaving(false);
+      }
+    },
+    [hearingId, online, reload],
+  );
+
+  // D2 A7 — hızlı sonuç kaydet: iki adımlı onaydan geçmiş girdiyle çağrılır.
+  const submitResult = useCallback(
+    async (input: { status: "YAPILDI" | "ERTELENDI" | "IPTAL"; note: string; nextDate?: string }) => {
+      if (!online) {
+        setResultError("Bağlantı gerekli — sonuç kaydı çevrimdışı yapılamaz.");
+        return;
+      }
+      setResultBusy(true);
+      setResultError(null);
+      try {
+        await saveHearingResult(hearingId, input);
+        setResultOpen(false);
+        setSavedAt(new Date().toISOString());
+        reload();
+      } catch (caught) {
+        setResultError(errorMessage(caught));
+      } finally {
+        setResultBusy(false);
       }
     },
     [hearingId, online, reload],
@@ -179,6 +208,25 @@ export default function HearingDetailScreen(): React.JSX.Element {
               <Muted>Rolünüz duruşma notu yazma yetkisi taşımıyor.</Muted>
             )}
           </Card>
+
+          {/* D2 A7 — HIZLI SONUÇ: yalnız PLANLANDI duruşmasında ve rol yeterliyse. */}
+          {data.status === "PLANLANDI" && canWriteNote ? (
+            <Card accent={colors.gold}>
+              <Body style={styles.resultTitle}>Duruşma sonucunu işle</Body>
+              <Muted style={styles.resultHint}>
+                Yapıldı / ertelendi / iptal — safahata işlenir, ertelemede yeni duruşma açılır.
+                İki adımda onaylanır.
+              </Muted>
+              <Button
+                title="Sonuç kaydet"
+                onPress={() => {
+                  setResultError(null);
+                  setResultOpen(true);
+                }}
+                style={styles.noteButton}
+              />
+            </Card>
+          ) : null}
         </Section>
 
         <DesktopOnlyNote what="Duruşma sonucu işleme (yapıldı/ertelendi/iptal), yeni duruşma günü verme ve safahat kaydı" />
@@ -200,6 +248,16 @@ export default function HearingDetailScreen(): React.JSX.Element {
         onCancel={() => setEditing(false)}
         onConfirm={(note) => void save(note)}
       />
+
+      {/* D2 A7 — hızlı sonuç iletişim kutusu (iki adımlı onay). */}
+      <QuickResultDialog
+        visible={resultOpen}
+        busy={resultBusy}
+        hearingLabel={`${formatTime(data.date)} · ${formatLocalDateLong(data.date)}`}
+        error={resultError}
+        onCancel={() => setResultOpen(false)}
+        onConfirm={(input) => void submitResult(input)}
+      />
     </>
   );
 }
@@ -213,6 +271,8 @@ const styles = StyleSheet.create({
   prepMeta: { marginTop: space.md },
   noteText: { lineHeight: 24 },
   noteButton: { marginTop: space.md },
+  resultTitle: { fontWeight: "700", color: colors.navy },
+  resultHint: { marginTop: space.xs, marginBottom: space.sm },
   actionError: { backgroundColor: colors.dangerBg, borderRadius: radius.md, padding: space.md, marginBottom: space.md },
   actionErrorText: { color: "#7F1D1D", fontSize: font.small, lineHeight: 20 },
   saved: { backgroundColor: colors.okBg, borderRadius: radius.md, padding: space.md, marginBottom: space.md },

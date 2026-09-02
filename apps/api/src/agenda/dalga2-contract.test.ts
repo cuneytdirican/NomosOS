@@ -114,6 +114,45 @@ describe("A3: hesap araçları (legal-core, deterministik)", () => {
   });
 });
 
+describe("B3: kârlılık raporuna gider modülü tablosu", () => {
+  it("kârlılık raporu CaseExpense tablosunu da gösterir", () => {
+    const s = read("src", "reports", "builders", "karlilik.report.ts");
+    expect(s).toContain("CaseExpense");
+    expect(s).toContain("giderModulu");
+    expect(s).toContain("iadeEdilebilir");
+  });
+
+  it("ÇİFT SAYIM uyarısı zorunludur (finans MASRAF/HARC + gider modülü)", () => {
+    const s = read("src", "reports", "builders", "karlilik.report.ts");
+    expect(s).toContain("çift sayım");
+    expect(s).toContain("EKLENMEMİŞTİR");
+  });
+});
+
+describe("A7: mobil duruşma hızlı sonuç", () => {
+  it("sunucu ucu hazır: PATCH /hearings/:id/result", () => {
+    const c = read("src", "hearings", "hearings.controller.ts");
+    expect(c).toContain('Patch(":id/result")');
+  });
+
+  it("mobil API istemcisi + iki adımlı onay iletişim kutusu", () => {
+    const api = read("..", "mobile", "src", "api", "quick-result.ts");
+    expect(api).toContain("/hearings");
+    expect(api).toContain("result");
+    const dialog = read("..", "mobile", "src", "ui", "quick-result-dialog.tsx");
+    expect(dialog).toContain("step");
+    expect(dialog).toContain("Onaylıyorum");
+    expect(dialog).toContain("ERTELENDI");
+  });
+
+  it("ekran entegrasyonu: yalnız PLANLANDI + rol kapısı + özet onayı", () => {
+    const screen = read("..", "mobile", "app", "durusma", "[id].tsx");
+    expect(screen).toContain('data.status === "PLANLANDI"');
+    expect(screen).toContain("QuickResultDialog");
+    expect(screen).toContain("saveHearingResult");
+  });
+});
+
 describe("C3: AI eğitim verisi (KVKK opt-in)", () => {
   it("model + Tenant.aiTrainingOptIn (varsayılan KAPALI)", () => {
     const schema = read("..", "..", "packages", "db", "prisma", "schema.prisma");

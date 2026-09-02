@@ -100,6 +100,17 @@ interface TimeRow {
   minuteswithoutrate: number;
 }
 
+/** D2 B3: gider modülü (CaseExpense) satırı. */
+interface ExpenseRow {
+  groupId: string;
+  groupName: string;
+  subName: string;
+  currency: string;
+  total: Prisma.Decimal | null;
+  items: number;
+  refundable: Prisma.Decimal | null;
+}
+
 export const karlilikReport: ReportBuilder = async (ctx): Promise<ReportBody> => {
   const { user, prisma, params } = ctx;
   // İKİNCİ KAPI: çerçeve zaten katalogdan rol kontrolü yapar, ama bu rapor
@@ -617,5 +628,82 @@ export const karlilikReport: ReportBuilder = async (ctx): Promise<ReportBody> =>
     Math.max(currencyRows.length, 1),
   );
 
-  return { metrics, tables: [table, currencyTable], warnings };
+  // ── D2 B3: GİDER MODÜLÜ (CaseExpense) — dosya giderleri tablosu ────────────
+  //
+  // FinancialEntry'deki MASRAF/HARC satırları ile CaseExpense tablosu İKİ AYRI
+  // kaynak sistemidir. ÇİFT SAYIM uyarısı zorunludur: masrafını her iki yerde
+  // de tutan büro aynı kalemi iki kez görür. Bu tablo yalnızca GİDER MODÜLÜNDE
+  // tutulan kayıtları gösterir ve brüt katkıya EKLENMEZ (karar, muhasebenin).
+  const expenseRows =
+    breakdown === "DOSYA"
+      ? await db.$queryRaw<ExpenseRow[]>`
+          SELECT c.id AS "groupId", c.title AS "groupName",
+                 COALESCE(NULLIF(c."fileNumber", ''), cl.name) AS "subName",
+                 ce.currency AS currency,
+                 SUM(ce.amount) AS total,
+                 COUNT(*)::int AS items,
+                 SUM(ce.amount) FILTER (WHERE ce.refundable) AS refundable
+            FROM "CaseExpense" ce
+            JOIN "Case" c ON c.id = ce."caseId"
+            JOIN "Client" cl ON cl.id = c."clientId"
+           WHERE ce."tenantId" = ${tenantId}
+             AND ce."spentAt" >= ${from} AND ce."spentAt" < ${end}
+           GROUP BY c.id, cl.name, ce.currency
+           ORDER BY SUM(ce.amount) DESC
+        `
+      : await db.$queryRaw<ExpenseRow[]>`
+          SELECT cl.id AS "groupId", cl.name AS "groupName",
+                 COALESCE(cl."referenceCode", '') AS "subName",
+                 ce.currency AS currency,
+                 SUM(ce.amount) AS total,
+                 COUNT(*)::int AS items,
+                 SUM(ce.amount) FILTER (WHERE ce.refundable) AS refundable
+            FROM "CaseExpense" ce
+            JOIN "Case" c ON c.id = ce."caseId"
+            JOIN "Client" cl ON cl.id = c."clientId"
+           WHERE ce."tenantId" = ${tenantId}
+             AND ce."spentAt" >= ${from} AND ce."spentAt" < ${end}
+           GROUP BY cl.id, ce.currency
+           ORDER BY SUM(ce.amount) DESC
+        `;
+
+  const caseExpenseTable = finishTable(
+    {
+      key: "giderModulu",
+      title: breakdown === "DOSYA" ? "Dosya giderleri (gider modülü)" : "Müvekkil giderleri (gider modülü)",
+      definition:
+        "Gider modülünde (Dosya → Giderler) tutulan harç/bilirkişi/tebligat/yol kayıtları. " +
+        "İİK m.202 iade edilebilir kolonu ayrıca gösterilir. Bu tutarlar YUKARIDAKİ brüt katkıya " +
+        "EKLENMEMİŞTİR — MASRAF/HARC finans satırlarıyla ÇİFT SAYIM riski nedeniyle bu tablo " +
+        "bilgi amaçlıdır. Giderleri ya finans modülünde ya gider modülünde tutun; ikisinde birden " +
+        "tutmak aynı kalemi iki kez gösterir.",
+      columns: [
+        { key: "ad", label: breakdown === "DOSYA" ? "Dosya" : "Müvekkil", type: "text" },
+        { key: "alt", label: breakdown === "DOSYA" ? "Esas no / müvekkil" : "Referans kodu", type: "text" },
+        { key: "paraBirimi", label: "Para birimi", type: "text" },
+        { key: "toplamGider", label: "Toplam gider", type: "money", currencyKey: "paraBirimi" },
+        { key: "kalemSayisi", label: "Kalem", type: "number" },
+        { key: "iadeEdilebilir", label: "İİK m.202 iade edilebilir", type: "money", currencyKey: "paraBirimi" },
+      ],
+    },
+    expenseRows.map((r) => ({
+      ad: r.groupName,
+      alt: r.subName,
+      paraBirimi: r.currency,
+      toplamGider: moneyOut(decOf(r.total)),
+      kalemSayisi: intOf(r.items),
+      iadeEdilebilir: moneyOut(decOf(r.refundable)),
+    })),
+    params.limit,
+  );
+
+  if (expenseRows.length > 0) {
+    warnings.push(
+      `Gider modülünde dönem içinde ${expenseRows.length} ${breakdown === "DOSYA" ? "dosyaya" : "müvekkile"} ` +
+        "gider kaydı girilmiş. Bu tutarlar brüt katkıya EKLENMEDİ (çift sayım riski). Masraflarınızı " +
+        "finans modülünde tutuyorsanız gider modülünü yalnızca İİK m.202 takibi için kullanın.",
+    );
+  }
+
+  return { metrics, tables: [table, currencyTable, caseExpenseTable], warnings };
 };
