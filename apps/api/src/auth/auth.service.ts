@@ -1,4 +1,5 @@
 import {
+  ForbiddenException,
   HttpException,
   HttpStatus,
   Injectable,
@@ -95,6 +96,24 @@ export class AuthService {
     }
 
     await this.clearFailures(user.id);
+
+    // KİRAÇI ASKI DENETİMİ (D5 / M3): `Tenant` tablosunda status alanı yoktur;
+    // askı durumu tek yazıcı olan ABONELİK üzerinden ifade edilir. Askıya
+    // alınan veya aboneliği iptal edilmiş büronun KULLANICIÇI girişi burada
+    // kesilir (yürütücü yorumundaki "Faz 4'te bağlanacak" borcu kapanıyor).
+    // Veri SİLİNMEZ — salt-okunur değildir ama API'ye giriş yoktur.
+    const subscription = await this.prisma.client.subscription.findUnique({
+      where: { tenantId: user.tenantId },
+      select: { status: true },
+    });
+    if (subscription && (subscription.status === "SUSPENDED" || subscription.status === "CANCELED")) {
+      await this.logFailedLogin(user.tenantId, user.id, input.email, "büro askıda/iptal");
+      throw new ForbiddenException(
+        subscription.status === "SUSPENDED"
+          ? "Büronuzun aboneliği askıya alınmış. Destek için bizimle iletişime geçin."
+          : "Büronuzun aboneliği sona ermiş. Yeniden açtırmak için bizimle iletişime geçin."
+      );
+    }
 
     const payload: JwtPayload = { sub: user.id, tenantId: user.tenantId, role: user.role };
     // GÜVENLİK: token'a audience damgası basılır (`aud: "tenant"`).

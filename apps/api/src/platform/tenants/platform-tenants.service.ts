@@ -1,11 +1,14 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import * as bcrypt from "bcryptjs";
 import type { Prisma, SubscriptionStatus } from "@nomosos/db";
 import { PrismaService } from "../../prisma/prisma.service";
+import { PASSWORD_HASH_ROUNDS } from "../../auth/auth.constants";
 import { normalizeQuery, paged, resolvePage } from "../../common/pagination";
 import { PlatformAuditService } from "../platform-audit.service";
 import { PlatformApprovalsService } from "../approvals/platform-approvals.service";
@@ -15,6 +18,7 @@ import { isAnalyst } from "../platform-permissions";
 import type { PlatformAuthUser } from "../platform.types";
 import type {
   SupportAccessInput,
+  TenantCreateInput,
   TenantNoteInput,
   TenantStatusInput,
   TenantUpdateInput,
@@ -364,6 +368,55 @@ export class PlatformTenantsService {
   }
 
   // --------------------------------------------------------------- mutasyon
+
+  /**
+   * KİRAÇI AÇMA TALEBİ (D5 / M2) — dört-göz TENANT_CREATE.
+   *
+   * Burada yalnızca TALEP açılır; kiracı + ilk ADMIN kullanıcı + TRIAL
+   * abonelik, ikinci imza geldiğinde executor'da TEK İŞLEMDE kurulur.
+   * Parola talep anında HASH'lenir; payloadJson düz parola taşımaz.
+   */
+  async requestCreate(user: PlatformAuthUser, input: TenantCreateInput) {
+    const [emailTaken, nameTaken, plan] = await Promise.all([
+      this.prisma.client.user.findUnique({ where: { email: input.adminEmail } }),
+      this.prisma.client.tenant.findFirst({ where: { name: { equals: input.name, mode: "insensitive" } } }),
+      this.prisma.client.planTier.findUnique({ where: { key: input.planKey } }),
+    ]);
+    if (emailTaken) {
+      throw new ConflictException("Bu e-posta sistemde zaten kayıtlı; ilk yönetici e-postası tekil olmalıdır.");
+    }
+    if (nameTaken) {
+      throw new ConflictException(`"${input.name}" adında bir büro zaten var.`);
+    }
+    if (!plan) {
+      throw new BadRequestException(`Plan bulunamadı: ${input.planKey} (PlanTier.key).`);
+    }
+    if (!plan.isActive) {
+      throw new BadRequestException(`Plan "${plan.key}" pasif; yeni kiracı açılamaz.`);
+    }
+    if (plan.maxUsers !== null && input.seats > plan.maxUsers) {
+      throw new BadRequestException(
+        `"${plan.key}" planı en fazla ${plan.maxUsers} koltuk tanır; ${input.seats} istendi.`
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(input.password, PASSWORD_HASH_ROUNDS);
+    return this.approvals.request(user, {
+      action: APPROVAL_ACTIONS.TENANT_CREATE,
+      tenantId: null,
+      payload: {
+        name: input.name,
+        planKey: plan.key,
+        seats: input.seats,
+        adminEmail: input.adminEmail,
+        adminFullName: input.adminFullName,
+        passwordHash,
+      },
+      summary:
+        `YENİ BÜRO: "${input.name}" — plan ${plan.key}, ${input.seats} koltuk. ` +
+        `İlk yönetici: ${input.adminFullName} <${input.adminEmail}>. Gerekçe: ${input.reason}`,
+    });
+  }
 
   async update(user: PlatformAuthUser, tenantId: string, input: TenantUpdateInput) {
     const tenant = await this.prisma.client.tenant.findUnique({ where: { id: tenantId } });

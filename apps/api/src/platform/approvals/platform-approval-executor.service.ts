@@ -25,6 +25,7 @@ import {
   type SubscriptionPlanChangePayload,
   type SuperAdminPayload,
   type SupportAccessPayload,
+  type TenantCreatePayload,
   type TenantDeletePayload,
   type TenantStatusPayload,
 } from "./approval-actions";
@@ -64,6 +65,9 @@ export class PlatformApprovalExecutorService {
       // denetim bulgusu O-28 -> spec dort-goz listesinin 1. ve 8. maddeleri.
       case APPROVAL_ACTIONS.TENANT_DELETE:
         return this.deleteTenant(payload as TenantDeletePayload, approver);
+      // D5 / M2 — kiracı açma: tenant + ilk ADMIN kullanıcı + TRIAL abonelik.
+      case APPROVAL_ACTIONS.TENANT_CREATE:
+        return this.createTenant(payload as TenantCreatePayload, approver);
       case APPROVAL_ACTIONS.AUDIT_EXPORT:
         return this.authorizeAuditExport(request.id, payload as AuditExportPayload, approver);
       // denetim bulgusu K-11 -> fiyatli yeni plan tek imzayla yaratilamaz.
@@ -114,6 +118,87 @@ export class PlatformApprovalExecutorService {
   }
 
   // -------------------------------------------------------------------------
+
+  /**
+   * KİRAÇI AÇMA (D5 / M2) — onay anında TEK İŞLEMDE üç kayıt kurulur:
+   * Tenant + ilk ADMIN kullanıcı + TRIAL abonelik.
+   *
+   * Yeniden doğrulama: talep ile onay arasında plan pasifleşebilir, e-posta
+   * veya büro adı başkası tarafından alınabilir; yürütme anı KAYNAK
+   * GERÇEĞİDİR — eski doğrulamaya güvenilmez.
+   *
+   * Düz parola payload'da YOKTUR; talep anında HASH'lenmişti. Parolayı bilen
+   * tek kişi talebi açan yöneticidir; kiracıya açılışta iletilmesi onun
+   * sorumluluğudur (denetim izi bu belgeler).
+   */
+  private async createTenant(
+    payload: TenantCreatePayload,
+    approver: PlatformAuthUser
+  ): Promise<string> {
+    const [emailTaken, nameTaken, plan] = await Promise.all([
+      this.prisma.client.user.findUnique({ where: { email: payload.adminEmail } }),
+      this.prisma.client.tenant.findFirst({
+        where: { name: { equals: payload.name, mode: "insensitive" } },
+      }),
+      this.prisma.client.planTier.findUnique({ where: { key: payload.planKey } }),
+    ]);
+    if (emailTaken) {
+      throw new BadRequestException(
+        `İlk yönetici e-postası (${payload.adminEmail}) onay beklerken başkası tarafından alındı; talep reddedilmelidir.`
+      );
+    }
+    if (nameTaken) {
+      throw new BadRequestException(
+        `"${payload.name}" adında bir büro onay beklerken açıldı; talep reddedilmelidir.`
+      );
+    }
+    if (!plan || !plan.isActive) {
+      throw new BadRequestException(
+        `Plan "${payload.planKey}" artık aktif değil; talep reddedilmeli, geçerli planla yeniden açılmalıdır.`
+      );
+    }
+
+    const now = new Date();
+    const trialEndsAt = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+    const created = await this.prisma.client.$transaction(async (tx) => {
+      const tenant = await tx.tenant.create({ data: { name: payload.name } });
+      const admin = await tx.user.create({
+        data: {
+          tenantId: tenant.id,
+          email: payload.adminEmail,
+          passwordHash: payload.passwordHash,
+          fullName: payload.adminFullName,
+          role: "ADMIN",
+        },
+      });
+      const subscription = await tx.subscription.create({
+        data: {
+          tenantId: tenant.id,
+          planKey: plan.key,
+          status: "TRIAL",
+          seats: payload.seats,
+          trialEndsAt,
+          currentPeriodStart: now,
+          currentPeriodEnd: trialEndsAt,
+        },
+      });
+      return { tenant, admin, subscription };
+    });
+
+    await this.audit.log({
+      actor: approver,
+      action: "TENANT_CREATE",
+      entity: "Tenant",
+      entityId: created.tenant.id,
+      tenantId: created.tenant.id,
+      detail:
+        `"${created.tenant.name}" bürosu açıldı (plan ${created.subscription.planKey}, ` +
+        `${created.subscription.seats} koltuk, TRIAL → ${trialEndsAt.toLocaleDateString("tr-TR")}). ` +
+        `İlk yönetici: ${created.admin.email} (ADMIN). Parola talebi açan yöneticiye aittir.`,
+    });
+    return `"${created.tenant.name}" bürosu açıldı; ilk yönetici ${created.admin.email}.`;
+  }
 
   /**
    * Tenant askıya alma / aktifleştirme.

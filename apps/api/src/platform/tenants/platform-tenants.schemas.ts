@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PASSWORD_MAX_LENGTH } from "../../auth/auth.constants";
 import { SUPPORT_GRANT_DEFAULT_HOURS, SUPPORT_GRANT_MAX_HOURS } from "../platform.constants";
 
 /** Gerekçe alanı — dört-göz ve destek erişiminde ZORUNLUDUR (spec §İş Kuralları 6). */
@@ -43,6 +44,45 @@ export const tenantDeleteSchema = z.object({
   reason: reasonField,
 });
 export type TenantDeleteInput = z.infer<typeof tenantDeleteSchema>;
+
+/**
+ * KİRAÇI AÇMA (D5 / M2) — dört-göz TENANT_CREATE talebinin gövdesi.
+ *
+ * Parola talep anında HASH'lenir; payloadJson düz parola ASLA taşımaz
+ * (PLATFORM_USER_CREATE ile aynı kural). İlk yönetici ADMIN rolüyle açılır.
+ * Abonelik TRIAL olarak başlar; plan anahtarı yürütme anında yeniden
+ * doğrulanır (silinmiş/pasif planla talep açılamaz).
+ */
+export const tenantCreateSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(2, "Büro adı en az 2 karakter olmalıdır.")
+    .max(200, "Büro adı en fazla 200 karakter olabilir."),
+  planKey: z
+    .string()
+    .trim()
+    .min(2, "Plan anahtarı zorunludur (örn. SOLO, BURO, ENTERPRISE).")
+    .max(50, "Plan anahtarı en fazla 50 karakter olabilir."),
+  seats: z.coerce
+    .number()
+    .int("Koltuk sayısı tam sayı olmalıdır.")
+    .min(1, "Koltuk sayısı en az 1 olmalıdır.")
+    .max(1000, "Koltuk sayısı en fazla 1000 olabilir.")
+    .default(1),
+  adminEmail: z.string().trim().toLowerCase().email("Geçerli bir e-posta girin."),
+  adminFullName: z
+    .string()
+    .trim()
+    .min(3, "Yönetici adı en az 3 karakter olmalıdır.")
+    .max(200, "Yönetici adı en fazla 200 karakter olabilir."),
+  password: z
+    .string()
+    .min(10, "Parola en az 10 karakter olmalıdır.")
+    .max(PASSWORD_MAX_LENGTH, `Parola en fazla ${PASSWORD_MAX_LENGTH} karakter olabilir.`),
+  reason: reasonField,
+});
+export type TenantCreateInput = z.infer<typeof tenantCreateSchema>;
 export type TenantStatusInput = z.infer<typeof tenantStatusSchema>;
 
 /**

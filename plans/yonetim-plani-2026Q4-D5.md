@@ -1,6 +1,6 @@
 # NomosOS — Dalga 5: Platform Yönetimi ve Ölçekleme Planı (2026Q4-D5)
 
-Tarih: 2026-09-02 · Durum: PLANLANAN · Öncelendirme: P0 yönetim panyosu
+Tarih: 2026-09-02 · Durum: 5-A KISMEN TAMAM (M2+M3 bitti; panel envanteri düzeltildi)
 
 ## 0. Mevcut durum (kanıtlı envanter — 02.09.2026)
 
@@ -24,6 +24,29 @@ Tarih: 2026-09-02 · Durum: PLANLANAN · Öncelendirme: P0 yönetim panyosu
 
 **Sonuç:** Sistem yöneticisi bugün ürünü yalnızca `curl` ile yönetiyor. Bu planın amacı
 yönetimin tamamını panele taşımak ve eksik uçları (kiracı açma başta) kapatmak.
+
+**ÖNEMLİ DÜZELTME (02.09.2026, uygulama sırasında):** Panel `apps/web` altında
+değil, ayrı `apps/admin` uygulamasıdır (port 3002, `/api/admin/v1`) — kiracılar,
+abonelikler, ödemeler, onaylar, sistem+bakım kilidi, denetim, krediler,
+yöneticiler, demo talepleri, AI sağlayıcılar sayfaları ZATEN VARDI. M1'in
+"14 sayfa" kısmı hatalı envanterden geliyordu; gerçek eksikler M2+M3'tü.
+
+## 1.5 Uygulananlar (02.09.2026 — commit geçmişine işlendi)
+
+- **M2 TAMAM:** `POST /api/admin/v1/tenants` — dört-göz TENANT_CREATE:
+  talep anında bcrypt hash'lenmiş parola, tekil e-posta/ad + AKTİF plan +
+  koltuk tavanı doğrulaması; yürütücüde TEK İŞLEMDE tenant + ilk ADMIN
+  kullanıcı + 14 gün TRIAL abonelik + denetim izi (yürütme anı yeniden
+  doğrulamasıyla). Panel: "Yeni Kiracı" düğmesi + modal (tenantlar sayfası).
+  Canlı doğrulandı: talep 201 → kendi talebini onaylama 403 → ikinci imza
+  200 → yeni kiracı girişi 200.
+- **M3 TAMAM:** Askı/iptal artık GİRİŞİ KESİYOR — auth.login abonelik
+  durumunu denetler; SUSPENDED/CANCELED 403 ("büro askıda/abonelik sona
+  ermiş"), denetim izine yazılır. Yürütücüdeki "Faz 4'te bağlanacak" borcu
+  kapandı. Canlı doğrulandı: askı sonrası giriş 403.
+- Matris değişiklikleri: `tenant.create` dört-göz (iki matriste de — ikiz
+  değişmezi testli); büro adı düzeltmesi yeni `tenant.update` eylemine
+  taşındı (katalog taraması onay beyanı zorunlu kıldı).
 
 ## 1. Eksikler (öncelik sırasıyla)
 

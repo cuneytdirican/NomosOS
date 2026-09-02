@@ -13,11 +13,13 @@ import type { PlatformAuthUser } from "../platform.types";
 import { PlatformTenantsService } from "./platform-tenants.service";
 import {
   supportAccessSchema,
+  tenantCreateSchema,
   tenantDeleteSchema,
   tenantNoteSchema,
   tenantStatusSchema,
   tenantUpdateSchema,
   type SupportAccessInput,
+  type TenantCreateInput,
   type TenantDeleteInput,
   type TenantNoteInput,
   type TenantStatusInput,
@@ -36,6 +38,19 @@ export class PlatformTenantsController {
     @Query() query: { q?: string; plan?: string; status?: string; page?: string; limit?: string }
   ) {
     return this.tenants.list(user, query);
+  }
+
+  /**
+   * KİRAÇI AÇMA (D5 / M2) — dört-göz TENANT_CREATE talebi.
+   * Kiracı, ilk ADMIN kullanıcı ve TRIAL abonelik ikinci imzayla kurulur.
+   */
+  @Post()
+  @ApprovalWritePermission("tenant.create")
+  requestCreate(
+    @CurrentPlatformUser() user: PlatformAuthUser,
+    @Body(new ZodValidationPipe(tenantCreateSchema)) body: TenantCreateInput
+  ) {
+    return this.tenants.requestCreate(user, body);
   }
 
   /**
@@ -79,9 +94,9 @@ export class PlatformTenantsController {
     return this.tenants.usage(user, id, query);
   }
 
-  /** Büro adı gibi üstveri — yalnız SUPER_ADMIN / OPS_ADMIN (tenant.create). */
+  /** Büro adı gibi üstveri — yalnız SUPER_ADMIN / OPS_ADMIN (tenant.update). */
   @Patch(":id")
-  @WritePermission("tenant.create")
+  @WritePermission("tenant.update")
   update(
     @CurrentPlatformUser() user: PlatformAuthUser,
     @Param("id") id: string,

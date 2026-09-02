@@ -12,6 +12,16 @@ import type { AdminAction } from "../platform-permissions";
  */
 export const APPROVAL_ACTIONS = {
   /**
+   * TENANT AÇMA — kiracı yaşam döngüsünün İLK HALKASI.
+   *
+   * D5 planı (M2): askı/etkinleştirme/silme uçları vardı ama AÇMA ucu yoktu —
+   * kiracı ancak seed betiğiyle kurulabiliyordu. Açma da diğer yaşam döngüsü
+   * adımları gibi dört-göze tabidir: talebi açan kişi parolayı bilir
+   * (HASH'lenmiş olarak payload'a girer), ikinci imza kiracıyı canlıya alır.
+   * Yalnız SUPER_ADMIN ve OPS_ADMIN talep/onaylayabilir (matris tenant.create).
+   */
+  TENANT_CREATE: "TENANT_CREATE",
+  /**
    * TENANT KALICI SİLME / VERİ İMHASI — spec §Roller dört-göz listesi MADDE 1.
    *
    * denetim bulgusu Ö-28: katalog spec'in 1. ve 8. maddesini kapsamıyordu,
@@ -101,6 +111,7 @@ export type ApprovalActionKey = (typeof APPROVAL_ACTIONS)[keyof typeof APPROVAL_
  * SUPPORT_AGENT iade talebini onaylayamaz (payment.refund → none).
  */
 export const APPROVAL_REQUIRED_PERMISSION: Record<ApprovalActionKey, AdminAction> = {
+  TENANT_CREATE: "tenant.create",
   TENANT_DELETE: "tenant.delete",
   TENANT_SUSPEND: "tenant.suspend",
   TENANT_ACTIVATE: "tenant.reactivate",
@@ -123,6 +134,7 @@ export const APPROVAL_REQUIRED_PERMISSION: Record<ApprovalActionKey, AdminAction
 };
 
 export const APPROVAL_LABELS: Record<ApprovalActionKey, string> = {
+  TENANT_CREATE: "Yeni kiracı (büro) açma",
   TENANT_DELETE: "Tenant kalıcı silme / veri imhası",
   TENANT_SUSPEND: "Tenant askıya alma",
   TENANT_ACTIVATE: "Tenant aktifleştirme",
@@ -152,6 +164,16 @@ export function isApprovalAction(value: string): value is ApprovalActionKey {
 export interface TenantStatusPayload {
   tenantId: string;
   reason: string;
+}
+
+/** D5 / M2 — kiracı açma. Parola HASH'lenmiş olarak taşınır (düz metin yok). */
+export interface TenantCreatePayload {
+  name: string;
+  planKey: string;
+  seats: number;
+  adminEmail: string;
+  adminFullName: string;
+  passwordHash: string;
 }
 
 export interface SubscriptionPlanChangePayload {

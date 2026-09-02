@@ -101,6 +101,7 @@ export type AdminAction =
   | "support_grant.revoke"
   | "tenant.usage.view"
   | "tenant.notes"
+  | "tenant.update"
   | "announcement.view"
   | "approval.view"
   | "approval.decide"
@@ -151,8 +152,9 @@ export const PERMISSION_MATRIX: Matrix = {
   },
   // | Tenant oluştur (manuel onboarding) | ✅ | ✅ | ❌ | ❌ | ❌ |
   "tenant.create": {
-    SUPER_ADMIN: "full",
-    OPS_ADMIN: "full",
+    // D5 / M2 — kiracı açma uç üzerinden dört-göz talep üretir (API matrisiyle ikiz).
+    SUPER_ADMIN: "four_eyes",
+    OPS_ADMIN: "four_eyes",
     BILLING_ADMIN: N,
     SUPPORT_AGENT: N,
     ANALYST_READONLY: N,
@@ -488,6 +490,14 @@ export const PERMISSION_MATRIX: Matrix = {
     SUPPORT_AGENT: "full",
     ANALYST_READONLY: N,
   },
+  // D5 — büro adı düzeltmesi (üstveri); kiracı açmanın dört-gözünde değildir.
+  "tenant.update": {
+    SUPER_ADMIN: "full",
+    OPS_ADMIN: "full",
+    BILLING_ADMIN: N,
+    SUPPORT_AGENT: N,
+    ANALYST_READONLY: N,
+  },
   // GET /announcements → S O B D
   "announcement.view": {
     SUPER_ADMIN: "full",
@@ -590,6 +600,7 @@ export const ACTION_LABELS: Record<AdminAction, string> = {
   "tenant.view": "Tenant listesi/detayı görüntüle",
   "tenant.users.view": "Tenant personel listesi",
   "tenant.create": "Tenant oluştur (manuel onboarding)",
+  "tenant.update": "Büro adı düzeltmesi (üstveri)",
   "tenant.suspend": "Tenant askıya al",
   "tenant.reactivate": "Tenant aktifleştir",
   "tenant.delete": "Tenant kalıcı sil / veri imhası",

@@ -40,6 +40,7 @@ export const EP = {
   },
   tenants: {
     list: "/tenants",
+    create: "/tenants", // POST — dört-göz TENANT_CREATE talebi (D5 / M2)
     detail: (id: string) => `/tenants/${encodeURIComponent(id)}`,
     suspend: (id: string) => `/tenants/${encodeURIComponent(id)}/suspend`,
     activate: (id: string) => `/tenants/${encodeURIComponent(id)}/activate`,
