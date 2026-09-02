@@ -185,3 +185,4 @@ export const caseChatSchema = z.object({
   /** KVKK maskeleme onayı: dış sağlayıcıya giden metinde PII bulunduysa true gönderilmeli. */
   piiApproved: z.boolean().default(false),
 });
+export type CaseChatInput = z.infer<typeof caseChatSchema>;

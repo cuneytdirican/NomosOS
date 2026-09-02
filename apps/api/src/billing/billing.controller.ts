@@ -177,10 +177,12 @@ export class BillingController {
     @Query("clientId") clientId?: string,
     @Query("from") from?: string,
     @Query("to") to?: string,
+    // İ-34: e-belge durumu süzgesi (YOK/BEKLIYOR/GONDERILDI/KABUL/RED/IPTAL).
+    @Query("eInvoiceStatus") eInvoiceStatus?: string,
     @Query("page") page?: string,
     @Query("limit") limit?: string,
   ) {
-    return this.invoices.list(user, { status, clientId, from, to, page, limit });
+    return this.invoices.list(user, { status, clientId, from, to, eInvoiceStatus, page, limit });
   }
 
   /** Sabit yol — `invoices/:id` kalıbından önce. */
