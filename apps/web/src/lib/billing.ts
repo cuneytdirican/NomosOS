@@ -227,6 +227,22 @@ export function sendInvoice(id: string): Promise<EInvoiceSendResult> {
   });
 }
 
+/**
+ * A6 (rakip analizi): e-SMM (Serbest Meslek Makbuzu) gönderimi.
+ * e-Fatura ile AYRI belge türüdür; sağlayıcı altyapısı ortaktır.
+ */
+export function sendESmm(id: string): Promise<Invoice> {
+  return api<Invoice>(BILLING_ROUTES.invoiceSendESmm(id), { method: "POST", body: {} });
+}
+
+/**
+ * E8 (rakip analizi): fatura için TEK KULLANIMLIK ödeme bağlantısı üretir.
+ * Bağlantı token'lı URL'dir; müvekkil portaldan öder.
+ */
+export function createOdemeLinki(id: string): Promise<{ token: string; amount: string; currency: string; expiresAt: string; odemeUrl: string }> {
+  return api(`/billing/invoices/${id}/odeme-linki`, { method: "POST", body: {} });
+}
+
 export interface CreatePaymentBody {
   amount: string;
   date: string;

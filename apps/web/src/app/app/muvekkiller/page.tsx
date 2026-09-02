@@ -38,6 +38,17 @@ export default function MuvekkillerPage() {
   const [form, setForm] = useState<NewClientForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  /** A1 (rakip analizi): CSV içe aktarma durumu. */
+  const [importOpen, setImportOpen] = useState(false);
+  const [importCsv, setImportCsv] = useState("");
+  const [importBusy, setImportBusy] = useState(false);
+  const [importResult, setImportResult] = useState<{
+    total: number;
+    added: number;
+    failed: number;
+    results: { row: number; status: string; message?: string }[];
+  } | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
 
   /**
    * ÇATIŞMA ÖN TARAMASI (Modül 11).
@@ -111,6 +122,27 @@ export default function MuvekkillerPage() {
     setSaveError(null);
   }
 
+  /** A1: CSV içe aktarma — POST /clients/import. */
+  async function handleImport() {
+    if (!importCsv.trim()) return;
+    setImportBusy(true);
+    setImportError(null);
+    setImportResult(null);
+    try {
+      const res = await api<{ total: number; added: number; failed: number; results: { row: number; status: string; message?: string }[] }>(
+        "/clients/import",
+        { method: "POST", body: { csv: importCsv } },
+      );
+      setImportResult(res);
+      setImportCsv("");
+      await load("", 1);
+    } catch (err) {
+      setImportError(err instanceof ApiError ? err.message : "İçe aktarma başarısız.");
+    } finally {
+      setImportBusy(false);
+    }
+  }
+
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSaving(true);
@@ -146,6 +178,10 @@ export default function MuvekkillerPage() {
         </div>
         <Button variant="gold" onClick={() => setModalOpen(true)}>
           + Yeni Müvekkil
+        </Button>
+        {/* A1 (rakip analizi): CSV toplu içe aktarma. */}
+        <Button variant="secondary" onClick={() => setImportOpen(true)}>
+          CSV İçe Aktar
         </Button>
       </div>
 
@@ -314,6 +350,42 @@ export default function MuvekkillerPage() {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* A1 (rakip analizi): CSV içe aktarma modal'ı */}
+      <Modal open={importOpen} onClose={() => { setImportOpen(false); setImportResult(null); setImportError(null); }} title="CSV İçe Aktar">
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            CSV metnini aşağıya yapıştırın. Başlık satırı: <code className="rounded bg-slate-100 px-1 text-xs">ad;e-posta;telefon;tckn;vkn;adres</code>
+          </p>
+          <textarea
+            className="h-40 w-full rounded-md border border-slate-300 p-3 font-mono text-xs focus:border-amber-500 focus:outline-none"
+            placeholder={"ad;e-posta;telefon;tckn;vkn;adres\nAhmet Yılmaz;ahmet@x.com;05321234567;12345678902;;;İstanbul\nABC A.Ş.;;;9876543210;İstanbul Büyük Cadde 5"}
+            value={importCsv}
+            onChange={(e) => setImportCsv(e.target.value)}
+          />
+          {importError && <ErrorBox message={importError} />}
+          {importResult && (
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm">
+              <p className="font-medium text-slate-800">
+                {importResult.added} eklendi · {importResult.failed} hata (toplam {importResult.total})
+              </p>
+              {importResult.failed > 0 && (
+                <ul className="mt-2 max-h-32 overflow-y-auto text-xs text-slate-600">
+                  {importResult.results.filter((r) => r.status === "hata").map((r) => (
+                    <li key={r.row}>Satır {r.row}: {r.message}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setImportOpen(false)}>Kapat</Button>
+            <Button disabled={importBusy || !importCsv.trim()} onClick={() => void handleImport()}>
+              {importBusy ? "Aktarılıyor…" : "İçe Aktar"}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

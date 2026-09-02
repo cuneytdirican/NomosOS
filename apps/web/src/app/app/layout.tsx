@@ -54,15 +54,28 @@ const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
       </svg>
     ),
   },
-  {
-    href: "/app/dosyalar",
-    label: "Dosyalar",
-    icon: (
-      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
-        <path d="M3.75 3A1.75 1.75 0 0 0 2 4.75v3.26a3.235 3.235 0 0 1 1.75-.51h12.5c.644 0 1.245.188 1.75.51V6.75A1.75 1.75 0 0 0 16.25 5h-4.836a.25.25 0 0 1-.177-.073L9.823 3.513A1.75 1.75 0 0 0 8.586 3H3.75ZM3.75 9A1.75 1.75 0 0 0 2 10.75v4.5c0 .966.784 1.75 1.75 1.75h12.5A1.75 1.75 0 0 0 18 15.25v-4.5A1.75 1.75 0 0 0 16.25 9H3.75Z" />
-      </svg>
-    ),
-  },
+      {
+        href: "/app/durusmalar",
+        label: "Duruşmalar",
+        icon: (
+          <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+            <path d="M5.25 3A2.25 2.25 0 0 0 3 5.25v9.5A2.25 2.25 0 0 0 5.25 17h9.5A2.25 2.25 0 0 0 17 14.75v-9.5A2.25 2.25 0 0 0 14.75 3h-9.5ZM6 5h1.5v1.5H6V5Zm3.25 0h1.5v1.5h-1.5V5Zm3.25 0H12v1.5h-.5V5ZM6 8h1.5v1.5H6V8Zm3.25 0h1.5v1.5h-1.5V8ZM12 8h1.5v1.5H12V8ZM6 11h1.5v1.5H6V11Zm3.25 0h1.5v1.5h-1.5V11Zm3.25 0H12v1.5h.5V11Z" />
+          </svg>
+        ),
+      },
+      {
+        href: "/app/randevular",
+        label: "Randevular",
+        icon: (
+          <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+            <path
+              fillRule="evenodd"
+              d="M5.75 2a.75.75 0 0 1 .75.75V4h7V2.75a.75.75 0 0 1 1.5 0V4h.25A2.25 2.25 0 0 1 17.5 6.25v9.5A2.25 2.25 0 0 1 15.25 18H4.75A2.25 2.25 0 0 1 2.5 15.75v-9.5A2.25 2.25 0 0 1 4.75 4H5V2.75A.75.75 0 0 1 5.75 2ZM4 7.5v8.25c0 .414.336.75.75.75h10.5a.75.75 0 0 0 .75-.75V7.5H4Z"
+              clipRule="evenodd"
+            />
+          </svg>
+        ),
+      },
   {
     href: "/app/icra",
     label: "İcra",

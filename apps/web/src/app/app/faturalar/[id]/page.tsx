@@ -26,8 +26,10 @@ import {
   approveInvoice,
   cancelInvoice,
   createInvoicePayment,
+  createOdemeLinki,
   getInvoice,
   linesOf,
+  sendESmm,
   sendInvoice,
 } from "@/lib/billing";
 import type { EInvoiceSendResult, Invoice } from "@/lib/faz3-types";
@@ -220,6 +222,24 @@ export default function FaturaDetayPage({ params }: { params: Promise<{ id: stri
             onClick={() => void handleSend()}
           >
             {busy === "send" ? "Gönderiliyor…" : "e-Fatura Gönder"}
+          </Button>
+          {/* A6 (rakip analizi): e-SMM — Serbest Meslek Makbuzu gönderimi. */}
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={busy !== null || isDraft}
+            onClick={() => void act("esmm", () => sendESmm(id), "e-SMM gönderimi için sağlayıcı yapılandırması gerekir (Noop 503).")}
+          >
+            {busy === "esmm" ? "Gönderiliyor…" : "e-SMM Gönder"}
+          </Button>
+          {/* E8 (rakip analizi): portal ödeme bağlantısı üret. */}
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={busy !== null || isDraft}
+            onClick={() => void act("odeme-linki", () => createOdemeLinki(id), "Ödeme bağlantısı üretildi; linki müvekkile iletebilirsiniz.")}
+          >
+            {busy === "odeme-linki" ? "Üretiliyor…" : "Ödeme Bağlantısı Üret"}
           </Button>
           {canPay && (
             <Button size="sm" variant="secondary" onClick={() => setPaymentOpen(true)}>
