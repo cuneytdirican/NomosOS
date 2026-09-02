@@ -187,13 +187,44 @@ export class AssistantLlmService {
   /**
    * Gömme üretimi. Çağıran metinleri MASKELİ göndermelidir (DocumentChunk.content
    * zaten maskelidir; soru metni de maskelenerek gönderilir).
+   *
+   * KULLANIM KAYDI (AI-AUDIT A1): gömme çağrıları burada AiUsageLog'a yazılır —
+   * tek boğum noktası; indeksleme (indexing.service) ve soru gömmesi (retrieval)
+   * aynı kayıttan geçer. Sağlayıcı token bildirmezse (OLLAMA) satır YİNE yazılır;
+   * token alanları boş kalır, çağrının OLDUĞU görünür olur.
    */
-  async embed(resolved: ResolvedEmbedding, texts: string[]): Promise<number[][]> {
+  async embed(
+    resolved: ResolvedEmbedding,
+    texts: string[],
+    ctx?: { tenantId: string; userId?: string },
+  ): Promise<number[][]> {
     if (texts.length === 0) return [];
     if (!supportsEmbeddings(resolved.config.type)) {
       throw new UnprocessableEntityException(EMBEDDING_UNSUPPORTED_MESSAGE);
     }
-    return embedTexts(resolved.config, texts, resolved.model);
+    const result = await embedTexts(resolved.config, texts, resolved.model);
+    if (ctx) {
+      await this.prisma.client.aiUsageLog
+        .create({
+          data: {
+            tenantId: ctx.tenantId,
+            userId: ctx.userId ?? null,
+            providerConfigId: resolved.providerConfigId,
+            taskType: "EMBEDDING",
+            model: resolved.model,
+            inputTokens: result.inputTokens,
+            outputTokens: 0,
+            durationMs: 0,
+            // Gömmeye giden metin ÇAĞIRAN SÖZLEŞMESİ gereği maskelidir.
+            piiMasked: true,
+          },
+        })
+        .catch((err: unknown) => {
+          // Kullanım kaydı ana akışı bozmaz (agent-run deseni).
+          this.logger.warn(`Gömme kullanım kaydı yazılamadı: ${(err as Error).message}`);
+        });
+    }
+    return result.vectors;
   }
 
   /**

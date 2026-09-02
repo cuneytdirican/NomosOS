@@ -122,9 +122,10 @@ export class RetrievalService {
 
     let queryVector: number[];
     try {
-      // KVKK: soru metni de gömmeye MASKELİ gider.
+      // KVKK: soru metni de gömmeye MASKELİ gider. Kullanım kaydı (AI-AUDIT A1):
+      // soru gömmesi de AiUsageLog'a yazılır (tenant bağlamıyla).
       const masked = scanPii(question).maskedText;
-      const [vector] = await this.llm.embed(embedding, [masked]);
+      const [vector] = await this.llm.embed(embedding, [masked], { tenantId });
       if (!vector) return null;
       queryVector = vector;
     } catch (err) {

@@ -78,7 +78,7 @@ async function embedOpenAiCompat(
   config: ResolvedProviderConfig,
   texts: string[],
   model: string,
-): Promise<number[][]> {
+): Promise<{ vectors: number[][]; inputTokens?: number }> {
   const baseUrl = normalizeBaseUrl(config.baseUrl, "https://api.openai.com/v1");
   const res = await fetchWithTimeout(`${baseUrl}/embeddings`, {
     method: "POST",
@@ -90,6 +90,9 @@ async function embedOpenAiCompat(
   }
   const data = (await res.json()) as {
     data?: Array<{ index?: number; embedding?: number[] }>;
+    // DENETİM (AI-AUDIT A1): sağlayıcının bildirdiği GERÇEK token sayısı
+    // eskiden okunmuyordu — gömme maliyeti kullanım raporlarında görünmezdi.
+    usage?: { prompt_tokens?: number; total_tokens?: number };
   };
   const rows = data.data ?? [];
   // Sağlayıcı sırayı garanti etmeyebilir; index alanı varsa ona göre yerleştir.
@@ -98,14 +101,17 @@ async function embedOpenAiCompat(
     const at = typeof row.index === "number" ? row.index : i;
     ordered[at] = row.embedding;
   });
-  return assertVectors(ordered, texts.length);
+  return {
+    vectors: assertVectors(ordered, texts.length),
+    inputTokens: data.usage?.prompt_tokens ?? data.usage?.total_tokens,
+  };
 }
 
 async function embedOllama(
   config: ResolvedProviderConfig,
   texts: string[],
   model: string,
-): Promise<number[][]> {
+): Promise<{ vectors: number[][]; inputTokens?: number }> {
   const baseUrl = normalizeBaseUrl(config.baseUrl, "http://localhost:11434");
 
   // Önce toplu uç (/api/embed, yeni Ollama sürümleri) denenir.
@@ -118,7 +124,7 @@ async function embedOllama(
     if (res.ok) {
       const data = (await res.json()) as { embeddings?: number[][] };
       if (Array.isArray(data.embeddings) && data.embeddings.length === texts.length) {
-        return assertVectors(data.embeddings, texts.length);
+        return { vectors: assertVectors(data.embeddings, texts.length) };
       }
     }
   } catch {
@@ -139,20 +145,29 @@ async function embedOllama(
     const data = (await res.json()) as { embedding?: number[] };
     vectors.push(data.embedding as number[]);
   }
-  return assertVectors(vectors, texts.length);
+  return { vectors: assertVectors(vectors, texts.length) };
 }
 
 /**
- * Metin listesini vektörlere çevirir. Dönen dizi girdiyle AYNI SIRADADIR.
+ * Metin listesini vektörlere çevirir.
+ *
+ * @returns `vectors` girdiyle AYNI SIRADADIR; `inputTokens` sağlayıcı bildirdiyse
+ *   gerçek token sayısıdır (OpenAI-uyumlu) — kullanım kaydı/AI Kullanım raporları
+ *   bunu okur. OLLAMA/CUSTOM bildirmez: `undefined` ≠ 0.
  *
  * @throws Sağlayıcı gömme desteklemiyorsa `EMBEDDING_UNSUPPORTED_MESSAGE`.
  */
+export interface EmbedCallResult {
+  vectors: number[][];
+  inputTokens?: number;
+}
+
 export async function embedTexts(
   config: ResolvedProviderConfig,
   texts: string[],
   model: string,
-): Promise<number[][]> {
-  if (texts.length === 0) return [];
+): Promise<EmbedCallResult> {
+  if (texts.length === 0) return { vectors: [] };
   if (!supportsEmbeddings(config.type)) {
     throw new Error(EMBEDDING_UNSUPPORTED_MESSAGE);
   }

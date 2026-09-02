@@ -158,7 +158,10 @@ export class IndexingService {
         let vectors: number[][] = [];
         if (embedding && embeddingUsable) {
           try {
-            vectors = await this.embedInBatches(embedding, maskedContents);
+            vectors = await this.embedInBatches(embedding, maskedContents, {
+            tenantId: user.tenantId,
+            userId: user.userId,
+          });
           } catch (err) {
             embeddingUsable = false;
             embeddingFailure = (err as Error).message;
@@ -292,6 +295,7 @@ export class IndexingService {
   private async embedInBatches(
     embedding: NonNullable<Awaited<ReturnType<AssistantLlmService["resolveEmbedding"]>>>,
     texts: string[],
+    ctx: { tenantId: string; userId?: string },
   ): Promise<number[][]> {
     const batches: string[][] = [];
     for (let i = 0; i < texts.length; i += EMBED_BATCH_SIZE) {
@@ -301,7 +305,9 @@ export class IndexingService {
     const results: number[][][] = new Array(batches.length);
     for (let i = 0; i < batches.length; i += EMBED_CONCURRENCY) {
       const window = batches.slice(i, i + EMBED_CONCURRENCY);
-      const settled = await Promise.all(window.map((batch) => this.llm.embed(embedding, batch)));
+      const settled = await Promise.all(
+        window.map((batch) => this.llm.embed(embedding, batch, ctx)),
+      );
       settled.forEach((vectors, offset) => {
         results[i + offset] = vectors;
       });
