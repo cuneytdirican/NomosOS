@@ -180,6 +180,17 @@ degisiklik; plana alindi.
     gerekir — sınırlar kodda yazılı.
     — **C5 pgvector:** bilinçli ertelenmiş (belgeli karar; 100k+ parça üstünde).
 
+**DALGA 5 — P0/P1 "Platform yönetimi" (plans/yonetim-plani-2026Q4-D5.md)**
+16. Kiracı açma ucu + onay akışı; kiracı kapatma/arşiv yaşam döngüsü. — **PLANLI**
+17. Yönetim paneli `/yonetim` (14 platform alanının UI'sı: kiracılar, abonelik/
+    plan, ödemeler, platform kullanıcıları, onaylar, sistem+bakım kilidi, denetim,
+    metrik/sağlık, demo talepleri, destek erişimi, krediler, duyurular, bayraklar).
+    — **PLANLI**
+18. Eğitim iş yönetimi (fine-tune: iş aç → sağlayıcı durumu → model kaydet →
+    AiTaskRoute'a bağla). — **PLANLI (P1)**
+19. Cila: UYAP eşleşme sonrası otomatik yeniden senkron; dilekçe sürüm farkı;
+    portal e-postası; mobil ajanda/mesajlar. — **PLANLI (P2)**
+
 ## 6. Yapılmayacaklar (dürüstlük)
 
 - RG'den otomatik mevzuat senkronu vaadi — kaynak entegrasyonu olmadan.
