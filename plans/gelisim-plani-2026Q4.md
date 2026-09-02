@@ -157,10 +157,15 @@ degisiklik; plana alindi.
 10. Mobil duruşma hızlı sonuç (A7).
 
 **DALGA 3 — P2 "Entegrasyon ve olgunlaşma" (dış bağımlılıklı)**
-11. Mevzuat kütüphanesi (yerel yükleme modeliyle başlangıç) (A4).
-12. e-Tebligat UETS (A5) — PTT sözleşmesi şart.
-13. POS/GİB/SMS gerçek sağlayıcılar — satış sözleşmesi şart.
-14. SSE gerçek zamanlı iletişim (C4) + izleme/DR (C6) + İ-46 (C7).
+11. Mevzuat kütüphanesi (yerel yükleme modeliyle başlangıç) (A4). — **TAMAM**
+    (Legislation modeli + CRUD + tam metin arama + /app/mevzuat + sürüm notu
+    disiplini; canlı doğrulandı.)
+12. e-Tebligat UETS (A5) — PTT sözleşmesi şart. — **DIŞ BAĞIMLILIKTA BEKLİYOR**
+13. POS/GİB/SMS gerçek sağlayıcılar — satış sözleşmesi şart. — **DIŞ BAĞIMLILIKTA BEKLİYOR**
+14. SSE gerçek zamanlı iletişim (C4) + izleme/DR (C6) + İ-46 (C7). — **TAMAM**
+    (GET /chat/stream + olay veriyolu, polling yedekte; GET /metrics
+    (Prometheus) + docs/yedekleme-ve-felaket-kurtarma.md; JWT httpOnly çerez
+    — localStorage'dan token KALDIRILDI; hepsi canlı doğrulandı.)
 
 **DALGA 4 — P3 "Ölçek"**
 15. İcra kademe akışı + iflas (A6), pgvector (C5), çoklu örnek doğrulama.

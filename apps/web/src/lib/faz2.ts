@@ -21,7 +21,6 @@ import {
   asList,
   clearToken,
   fetchPaged,
-  getToken,
   type PagedResult,
 } from "@/lib/api";
 import type {
@@ -228,8 +227,8 @@ export function uploadDocument(opts: UploadOptions): Promise<DocumentItem> {
 
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${API_BASE}/api/v1/documents`);
-    const token = getToken();
-    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    // İ-46: kimlik httpOnly çerezle taşınır — çerez istekle birlikte gider.
+    xhr.withCredentials = true;
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && opts.onProgress) {

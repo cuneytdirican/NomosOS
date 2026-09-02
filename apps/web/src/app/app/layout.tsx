@@ -360,6 +360,21 @@ const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
           </svg>
         ),
       },
+      {
+        // D3 A4: mevzuat kütüphanesi — büronun kendi yüklediği metinler,
+        // tam metin arama. RG otomatik senkron YOKTUR (vaat kısıtı).
+        href: "/app/mevzuat",
+        label: "Mevzuat",
+        icon: (
+          <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+            <path
+              fillRule="evenodd"
+              d="M4 2.75A.75.75 0 0 1 4.75 2h10.5a.75.75 0 0 1 0 1.5H13v11.75a.75.75 0 0 1-1.28.53L10 14.06l-1.72 1.72A.75.75 0 0 1 7 15.25V3.5H4.75A.75.75 0 0 1 4 2.75ZM8.5 3.5v9.94l.97-.97a.75.75 0 0 1 1.06 0l.97.97V3.5h-3Z"
+              clipRule="evenodd"
+            />
+          </svg>
+        ),
+      },
     ],
   },
   {

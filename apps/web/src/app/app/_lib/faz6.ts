@@ -55,7 +55,7 @@
  * ╚══════════════════════════════════════════════════════════════════════════╝
  */
 
-import { API_BASE, ApiError, api, asList, getToken } from "@/lib/api";
+import { API_BASE, ApiError, api, asList } from "@/lib/api";
 import { isMissingEndpoint } from "@/lib/faz2";
 import { toKurus } from "@/lib/money";
 import { metricDirection, notificationHref, type ReportColumnType } from "@/lib/labels";
@@ -583,13 +583,11 @@ export async function downloadReportCsv(
   if (params.table) qs.set("tablo", params.table);
 
   const url = `${API_BASE}/api/v1${FAZ6_ROUTES.reportExport(reportKey)}?${qs.toString()}`;
-  const token = getToken();
 
   let res: Response;
   try {
-    res = await fetch(url, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
+    // İ-46: kimlik httpOnly çerezle taşınır (credentials: "include").
+    res = await fetch(url, { credentials: "include" });
   } catch {
     throw new ApiError("API sunucusuna ulaşılamadı.", 0, null);
   }

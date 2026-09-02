@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, API_BASE } from "@/lib/api";
 import { Button, Card, EmptyState, ErrorBox, Input, Spinner } from "@/components/ui";
 import { useVideoCall } from "@/components/video-call";
 import { Avatar, AvatarUploadButton, useAvatar } from "@/components/chat-avatar";
@@ -146,6 +146,30 @@ export default function MesajlarPage() {
     return () => clearInterval(t);
   }, [loadThreads]);
 
+  /**
+   * D3 / C4 — SSE: sunucu "bir şey değişti" sinyali yollar; bu sayfa sinyali
+   * alınca sohbet listesini VE açık sohbeti hemen yeniden çeker. Sinyal
+   * içerik taşımaz (KVKK); polling YEDEK olarak kalır — SSE koparsa sayfa
+   * yine çalışır, sadece 3-10 sn gecikir.
+   */
+  useEffect(() => {
+    const source = new EventSource(`${API_BASE}/api/v1/chat/stream`, { withCredentials: true });
+    source.onmessage = (ev) => {
+      try {
+        const data = JSON.parse(ev.data) as { type?: string };
+        if (data.type === "chat.ping") return;
+      } catch {
+        /* bozuk gövde yoksayılır */
+      }
+      void loadThreads();
+      window.dispatchEvent(new Event("nomosos-chat-refresh"));
+    };
+    source.onerror = () => {
+      // EventSource kendini yeniden bağlar; hata penceresinde polling devrede.
+    };
+    return () => source.close();
+  }, [loadThreads]);
+
   /* ------------------------------ Sohbet açma ------------------------------ */
 
   const openChat = useCallback(async (peerId: string) => {
@@ -201,7 +225,13 @@ export default function MesajlarPage() {
       }
     };
     const t = setInterval(() => void poll(), 3_000);
-    return () => clearInterval(t);
+    // D3 / C4: SSE sinyali gelince poll beklemeksizin çalışsın (polling yedek).
+    const onSse = () => void poll();
+    window.addEventListener("nomosos-chat-refresh", onSse);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener("nomosos-chat-refresh", onSse);
+    };
   }, [activePeerId]);
 
   useEffect(() => {

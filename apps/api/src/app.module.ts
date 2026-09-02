@@ -36,6 +36,8 @@ import { AgendaModule } from "./agenda/agenda.module";
 import { CaseExpensesModule } from "./case-expenses/case-expenses.module";
 import { MediationModule } from "./mediation/mediation.module";
 import { AiTrainingModule } from "./ai-training/ai-training.module";
+import { LegislationModule } from "./legislation/legislation.module";
+import { MetricsModule } from "./metrics/metrics.module";
 import { PlatformModule } from "./platform/platform.module";
 // --- Faz 4 modülleri ---
 import { ConflictModule } from "./conflict/conflict.module";
@@ -159,6 +161,11 @@ function requireJwtSecret(config: ConfigService): string {
     MediationModule,
     // AI eğitim verisi (C3) — opt-in kiracı, maskeli örnekler, JSONL dışa aktarım.
     AiTrainingModule,
+    // Mevzuat kütüphanesi (D3 / A4) — büronun kendi yüklediği metinler,
+    // tam metin arama; RG otomatik senkron YOKTUR (vaat kısıtı).
+    LegislationModule,
+    // İzleme metrikleri (D3 / C6) — GET /metrics, Prometheus metin biçimi.
+    MetricsModule,
     // Platform yönetim paneli (Modül 25).
     // AYRI DÜNYA: kendi kimlik tablosu (PlatformUser), kendi imza anahtarı,
     // kendi audience'ı (`aud: "platform"`) ve kendi yol öneki (/api/admin/v1).

@@ -3172,6 +3172,47 @@ model Mediation {
 }
 
 // ===========================================================================
+// MEVZUAT KÜTÜPHANESİ (geliştirme planı A4) — büronun KENDİ yüklediği metinler.
+//
+// DÜRÜSTLÜK (vaat kısıtı): Resmî Gazete'den otomatik senkron YOKTUR — kaynak
+// entegrasyonu olmadan bu vaat edilemez. Büro, kullandığı mevzuat metnini
+// kendisi yükler ve güncel tutar. Tam metin arama yereldir (içerik şemasına
+// göre: kapsam sınırlı, tüm satırlar taranır, tavan 500).
+// ===========================================================================
+
+/// Mevzuat kaydı — kanun / KHK / yönetmelik / tebliğ tam metni.
+model Legislation {
+  id          String   @id @default(uuid())
+  tenantId    String
+  /// MEVZUAT_TURU enum değeri: KANUN | KHK | YONETMELIK | TEBLIG | GENELGE | DIGER
+  docType     String
+  /// Resmî başlık (örn. "Türk Borçlar Kanunu").
+  title       String
+  /// Kanun no / KKK no (örn. "6098").
+  number      String?
+  /// Kabul yılı.
+  year        Int?
+  /// Kabul / yürürlük tarihi (varsa).
+  enactedAt   DateTime? @db.Date
+  /// Tam metin — arama bu alanda yapılır.
+  fullText    String
+  /// İlk 2000 karakter — liste görünümü tam metni taşımaz.
+  preview     String   @default("")
+  /// Etiketler (virgülle ayrılmış, örn. "borçlar, sözleşme, temerrüt").
+  tags        String?
+  /// Yükleyen kullanıcı — denetim izi.
+  uploadedBy  String
+  /// Yerel sürüm etiketi (örn. "2026-08 itibarıyla yürürlükte").
+  versionNote String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId, docType])
+  @@index([tenantId, title])
+}
+
+// ===========================================================================
 // AI EĞİTİM VERİSİ (geliştirme planı C3) — avukat onay/ret/düzeltmelerinden.
 // YALNIZCA opt-in kiracı verisi toplanır (Tenant.aiTrainingOptIn, varsayılan
 // KAPALI); toplanan örnekler PII kapısından MASKELİ geçer; dışa aktarım

@@ -1,45 +1,70 @@
 /**
  * NomosOS API istemcisi.
  * - Taban adres: NEXT_PUBLIC_API_URL (varsayılan http://localhost:3001), yollar /api/v1/...
- * - JWT token localStorage("nomosos_token") içinde tutulur.
- * - 401 yanıtında token temizlenir ve /giris sayfasına yönlendirilir.
+ * - İ-46: oturum JWT'si localStorage'da TUTULMAZ. Girişte API oturum
+ *   çerezini httpOnly yazar; bu istemci tüm istekleri
+ *   `credentials: "include"` ile atar — tarayıcı çerezi kendisi gönderir.
+ *   XSS bu belirteci OKUYAMAZ (httpOnly). İstemcide yalnızca "oturum var"
+ *   sinyal çerezi (`nomosos_session`) okunur — bu bir kimlik DEĞİLDİR.
+ * - Mobil uygulama gövdeden gelen accessToken ile Authorization başlığı
+ *   kullanır (çerez tarayıcı kavramıdır).
+ * - 401 yanıtında oturum sinyali temizlenir ve /giris sayfasına yönlendirilir.
  */
 
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
-const TOKEN_KEY = "nomosos_token";
+/** İ-55: middleware'in /app kabuğunu koruyabilmesi için sinyal çerezi. */
+const SESSION_COOKIE = "nomosos_session";
+
 const USER_KEY = "nomosos_user";
 
-export function getToken(): string | null {
-  if (typeof window === "undefined") return null;
+/** İstemci tarafından okunabilen oturum sinyali ("1") — kimlik değildir. */
+function readSessionCookie(): string | null {
+  if (typeof document === "undefined") return null;
   try {
-    return window.localStorage.getItem(TOKEN_KEY);
+    for (const part of document.cookie.split(";")) {
+      const idx = part.indexOf("=");
+      if (idx < 0) continue;
+      if (part.slice(0, idx).trim() === SESSION_COOKIE) return part.slice(idx + 1).trim() || "1";
+    }
+    return null;
   } catch {
     return null;
   }
 }
 
-export function setToken(token: string): void {
+/**
+ * Oturum VAR MI sinyali — kimlik/belirteç DEĞİLDİR.
+ *
+ * İ-46 öncesi JWT'yi döndürüyordu; artık yalnız sinyal çerezinin varlığını
+ * bildirir (truthiness). Gerçek yetki denetimi her istekte API'dedir.
+ */
+export function getToken(): string | null {
+  return readSessionCookie();
+}
+
+/**
+ * İ-46: girişte çağrılır — JWT artık localStorage'a YAZILMAZ (XSS çalabilir).
+ * Yalnızca oturum-sinyal çerezi bırakılır; gerçek belirteç API'nin yazdığı
+ * httpOnly çerezdedir.
+ */
+export function setToken(_token: string): void {
   try {
-    window.localStorage.setItem(TOKEN_KEY, token);
-    // İ-55: Middleware'in /app kabuğunu koruyabilmesi için bir PROXY çerezi
-    // bırakılır. Bu çerez TOKEN DEĞİLDİR — yalnızca "oturum var" sinyalidir
-    // (httpOnly değil; middleware okur). Gerçek yetki denetimi API'dedir.
-    document.cookie = "nomosos_session=1; path=/; SameSite=Lax";
+    document.cookie = `${SESSION_COOKIE}=1; path=/; SameSite=Lax`;
   } catch {
-    /* localStorage kapalı olabilir */
+    /* çerezler kapalı olabilir */
   }
 }
 
 export function clearToken(): void {
   try {
-    window.localStorage.removeItem(TOKEN_KEY);
     window.localStorage.removeItem(USER_KEY);
     // Demo gezinti bayrağı da oturumla birlikte düşer.
     window.localStorage.removeItem(DEMO_ROLE_KEY);
-    // İ-55: proxy çerezi de temizlenir.
-    document.cookie = "nomosos_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    // İ-55: sinyal çerezi de temizlenir (httpOnly çerez API'de /auth/logout
+    // çağrısıyla düşer — bkz. layout çıkış akışı).
+    document.cookie = `${SESSION_COOKIE}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
   } catch {
     /* yoksay */
   }
@@ -153,15 +178,16 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
 
   const headers: Record<string, string> = {};
   if (options.body !== undefined) headers["Content-Type"] = "application/json";
-  const token = getToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
 
   let res: Response;
   try {
+    // İ-46: kimlik httpOnly çerezle taşınır — tarayıcı çerezi `credentials:
+    // "include"` ile gönderir; Authorization başlığı (ve localStorage) yok.
     res = await fetch(url, {
       method: options.method ?? "GET",
       headers,
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      credentials: "include",
     });
   } catch {
     throw new ApiError(

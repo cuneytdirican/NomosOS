@@ -521,6 +521,23 @@ export const AI_TRAINING_ROUTES = {
   samples: "/ai-training/samples",
 } as const;
 
+/** Mevzuat kütüphanesi (büronun kendi yüklediği metinler; RG senkronu YOK). */
+export const LEGISLATION_ROUTES = {
+  list: "/legislation",
+  create: "/legislation",
+  detail: (id: string) => `/legislation/${id}`,
+  update: (id: string) => `/legislation/${id}`,
+  remove: (id: string) => `/legislation/${id}`,
+} as const;
+
+/**
+ * İzleme metrikleri (D3 / C6) — Prometheus metin biçimi.
+ * NOT: genel önek DIŞINDADIR (standart /metrics yolu; global önek yok).
+ */
+export const METRICS_ROUTES = {
+  metrics: "/metrics",
+} as const;
+
 /** Portal self-servis uçları (E9 randevu + E8 ödeme — token yetkidir). */
 export const PORTAL_SELF_ROUTES = {
   randevular: "/portal/randevular",

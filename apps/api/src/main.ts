@@ -149,7 +149,11 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   app.set("trust proxy", proxy.hops);
   app.setGlobalPrefix(TENANT_ROUTE_PREFIX, {
-    exclude: [{ path: ADMIN_PREFIX_EXCLUDE_PATTERN, method: RequestMethod.ALL }],
+    exclude: [
+      { path: ADMIN_PREFIX_EXCLUDE_PATTERN, method: RequestMethod.ALL },
+      // D3 / C6: Prometheus /metrics — standart yol, önek YOK.
+      { path: "metrics", method: RequestMethod.GET },
+    ],
   });
 
   app.use(securityHeaders());

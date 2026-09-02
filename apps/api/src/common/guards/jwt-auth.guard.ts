@@ -6,6 +6,7 @@ import { IS_PUBLIC_KEY } from "../decorators/public.decorator";
 import { PrismaService } from "../../prisma/prisma.service";
 import type { AuthUser, JwtPayload } from "../types";
 import { TENANT_JWT_AUDIENCE } from "../jwt-audience";
+import { AUTH_COOKIE_NAME } from "../auth-cookie";
 
 /**
  * Kullanıcı doğrulama önbelleği ömrü (ms).
@@ -25,6 +26,27 @@ interface CachedUser {
 
 const SESSION_REVOKED_MESSAGE =
   "Oturumunuz sonlandırılmış (çıkış yapıldı veya parola değiştirildi). Lütfen tekrar giriş yapın.";
+
+/**
+ * İ-46: `Cookie` başlığından adlandırılmış çerezi okur (cookie-parser
+ * bağımlılığı EKLENMEZ — ayrıştırma açık ve küçük tutulur).
+ */
+function readCookie(request: Request, name: string): string | undefined {
+  const header = request.headers.cookie;
+  if (!header) return undefined;
+  for (const part of header.split(";")) {
+    const idx = part.indexOf("=");
+    if (idx < 0) continue;
+    if (part.slice(0, idx).trim() === name) {
+      try {
+        return decodeURIComponent(part.slice(idx + 1).trim());
+      } catch {
+        return part.slice(idx + 1).trim();
+      }
+    }
+  }
+  return undefined;
+}
 
 /**
  * Token, oturum iptal damgasından ÖNCE mi üretilmiş?
@@ -59,7 +81,10 @@ export class JwtAuthGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<Request & { user?: AuthUser }>();
     const authHeader = request.headers.authorization;
-    const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined;
+    // İ-46: öncelik Authorization başlığı (mobil/portal); tarayıcı oturumu
+    // httpOnly çerezle taşınır — XSS belirteci okuyamaz, çerezi tarayıcı gönderir.
+    const token =
+      authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : readCookie(request, AUTH_COOKIE_NAME);
     if (!token) {
       throw new UnauthorizedException("Oturum bulunamadı. Lütfen giriş yapın.");
     }

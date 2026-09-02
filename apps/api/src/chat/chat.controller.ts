@@ -33,21 +33,25 @@ import {
   ForbiddenException,
   Get,
   HttpCode,
+  MessageEvent,
   NotFoundException,
   Param,
   Patch,
   Post,
   Query,
+  Sse,
   UploadedFile,
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import { Observable } from "rxjs";
 import { z } from "zod";
 import { randomBytes } from "node:crypto";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe";
 import type { AuthUser } from "../common/types";
 import { ChatService, ONLINE_WINDOW_MS, TYPING_TTL_MS } from "./chat.service";
+import { ChatEventsService } from "./chat-events.service";
 import { StorageService } from "../storage/storage.service";
 import { DiskQuotaService } from "../disk-quota/disk-quota.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -105,6 +109,7 @@ export class ChatController {
     private readonly storage: StorageService,
     private readonly diskQuota: DiskQuotaService,
     private readonly prisma: PrismaService,
+    private readonly events: ChatEventsService,
   ) {}
 
   @Get("contacts")
@@ -131,14 +136,51 @@ export class ChatController {
 
   @Post("messages")
   @UseInterceptors(FileInterceptor("file"))
-  send(
+  async send(
     @CurrentUser() user: AuthUser,
     @Body(new ZodValidationPipe(sendMessageSchema)) body: SendMessageInput,
     @UploadedFile() file?: Express.Multer.File,
   ) {
     // Ek DOĞRUDAN yüklemeyi de destekler (multipart): presign atlamak isteyen
     // istemci için. Gövdede attachment varsa oradan, yoksa dosyadan gelir.
-    return this.chat.send(user, body, file);
+    const sent = await this.chat.send(user, body, file);
+    // D3 / C4: bağlı istemcilere "yeni mesaj" sinyali — polling beklemesine
+    // düşmeden sohbet listesi tazelenir. Sinyal içerik taşımaz (KVKK).
+    this.events.publish(user.tenantId, {
+      type: "chat.message",
+      by: user.userId,
+      to: body.peerId,
+      at: Date.now(),
+    });
+    return sent;
+  }
+
+  /**
+   * D3 / C4 — SSE AKIŞI: GET /chat/stream.
+   *
+   * KİMLİK: EventSource başlık GÖNDEREMEZ; İ-46 httpOnly oturum çerezi
+   * tarayıcı tarafından otomatik taşınır (guard çerezden okur — bkz.
+   * jwt-auth.guard.ts). Mobil istemci akışı kullanmaz; polling sürer.
+   *
+   * YENİDEN BAĞLANMA: EventSource yerel olarak yeniden bağlanır; sunucu
+   * tarafında 55 sn'de bir yorum satırı (keep-alive) gönderilir ki ters
+   * vekil (nginx 60 sn) boşta bağlantıyı kapatmasın.
+   */
+  @Sse("stream")
+  stream(@CurrentUser() user: AuthUser): Observable<MessageEvent> {
+    return new Observable<MessageEvent>((subscriber) => {
+      const unsubscribe = this.events.subscribe(user.tenantId, (event) => {
+        subscriber.next({ data: event } as MessageEvent);
+      });
+      // Keep-alive: 25 sn'de bir yorum — vekil zaman aşımından önce.
+      const keepAlive = setInterval(() => {
+        subscriber.next({ data: { type: "chat.ping", at: Date.now() } } as MessageEvent);
+      }, 25_000);
+      return () => {
+        clearInterval(keepAlive);
+        unsubscribe();
+      };
+    });
   }
 
   /** Ek için ön-imzalı yükleme adresi — istemci önce baytı yazar, sonra gönderir. */
