@@ -174,6 +174,18 @@ export const modules = {
       text: "Yedi boyutta deterministik risk skoru; yapay zekâ katkısı sınırlı ve her zaman görünür. Skorların kural tabanı her gece otomatik tazelenir.",
     },
     {
+      title: "Randevu Yönetimi",
+      text: "Büro ajandası ve müvekkil portalında self-servis randevu. Müvekkiliniz portalından 30 dakikalık randevu alır; sistem çakışan saatleri otomatik engeller.",
+    },
+    {
+      title: "Vekalet Ücreti Hesabı",
+      text: "AAÜT asgari ücret tarifesi üzerinden maktu/nispi hesaplama. Kademe, tekrar dilimi, asgari kuralı ve KDV — hesabın her adımı görünür. Tarife rakamlarını siz girersiniz, motor uydurmaz.",
+    },
+    {
+      title: "Banka Haciz Cevabı Ajanı",
+      text: "İİK m.89/2 banka cevap belgesi yüklendiğinde banka adı, IBAN, bakiye ve tarih otomatik tespit edilir. İcra dosyasına bağlıysa malvarlığı kaydı önerilir — kaydı yine siz onaylarsınız.",
+    },
+    {
       title: "UYAP Köprüsü (geliştirme aşamasında)",
       text: "Tarayıcı eklentisiyle dosya, safahat ve evrak aktarımı hedefleniyor. UYAP'ın yerine geçmez; üzerine bir operasyon katmanı kurar.",
     },
@@ -387,6 +399,30 @@ export const faq = {
     {
       q: "Ekibimizin farklı yetkileri olabilir mi?",
       a: "Evet. Partner, avukat, stajyer ve sekreter rolleri için ayrı yetki düzeyleri tanımlıdır ve sunucu tarafında uygulanır.",
+    },
+    {
+      q: "Müvekkilim portaldan randevu alabilir mi?",
+      a: "Evet. Müvekkil portalınızdan 30 dakikalık randevu alabilir. Sistem çakışan saatleri otomatik engeller; randevuyu avukat onaylar.",
+    },
+    {
+      q: "Vekalet ücreti hesabı yapılabilir mi?",
+      a: "Evet. AAÜT asgari ücret tarifesi üzerinden maktu/nispi hesaplama yapılır; hesabın her adımı görünür. Tarife rakamlarını yılda bir (Resmî Gazete'den) siz girersiniz — sistem rakam uydurmaz.",
+    },
+    {
+      q: "e-SMM (Serbest Meslek Makbuzu) düzenleyebilir miyim?",
+      a: "e-Fatura/e-Arşiv altyapısı e-SMM gönderimini de destekler. GİB entegratörü sözleşmeniz bağlandığında e-SMM gönderimi aktif olur; bağlanana kadar sistem dürüstçe 'yapılandırılmadı' der.",
+    },
+    {
+      q: "Müvekkillerim online ödeme yapabilir mi?",
+      a: "Faturaya tek kullanımlık ödeme bağlantısı üretebilirsiniz. Müvekkil portaldan öder; tahsilat faturaya otomatik işlenir. Bu özellik büronuzun sanal POS/ödeme kuruluşu sözleşmesi gerektirir.",
+    },
+    {
+      q: "Mevcut müşteri listemi aktarabilir miyim?",
+      a: "Evet. CSV formatındaki müşteri listenizi (ad, e-posta, TCKN, telefon) tek seferde içe aktarabilirsiniz. Mükerrer TCKN kontrolü otomatik yapılır.",
+    },
+    {
+      q: "Banka haciz cevapları otomatik okunuyor mu?",
+      a: "Metin katmanı olan banka cevap PDF'lerinde banka adı, IBAN ve bakiye otomatik tespit edilir. İcra dosyasına bağlıysa malvarlığı kaydı önerilir — onay avukata aittir. Taranmış (OCR gerektiren) belgelerde bu özellik henüz çalışmaz.",
     },
     {
       q: "İnternet olmadan çalışır mı?",

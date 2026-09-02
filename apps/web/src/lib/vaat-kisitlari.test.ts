@@ -119,7 +119,7 @@ describe("F2 özellikleri tanıtım sitesinde anlatılıyor", () => {
   it("modül kart sayısı 14 — yeni kartlar eklendi", () => {
     const titles = (CONTENT.match(/title: "([^"]+)",\n {6}text:/g) ?? []).length;
     expect(titles).toBeGreaterThanOrEqual(14);
-    expect(MARKETING_DOC).toContain("Modüller (14 kart)");
+    expect(MARKETING_DOC).toContain("Modüller (17 kart)");
   });
 
   it("DOCX/UDF desteği belge hattı adımında sayılıyor (B2)", () => {
@@ -142,6 +142,60 @@ describe("F2 özellikleri tanıtım sitesinde anlatılıyor", () => {
   it("SSS'de ajan izleri ve müvekkil veri dışa aktarma soruları var", () => {
     expect(codeOnly(CONTENT)).toContain("Yapay zekânın ne yaptığını görebilir miyiz?");
     expect(codeOnly(CONTENT)).toContain("Müvekkil verilerini talep üzerine alabilir miyiz?");
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * YENİ RAKİP FARKLARI ÖZELLİKLERİ — E7/E8/E9/D7/A6/A1/B7
+ * ------------------------------------------------------------------ */
+
+describe("Rakip farkları tanıtım sitesinde anlatılıyor", () => {
+  it("Randevu Yönetimi kartı var (E9)", () => {
+    expect(codeOnly(CONTENT)).toContain('"Randevu Yönetimi"');
+    expect(codeOnly(CONTENT)).toContain("self-servis randevu");
+    expect(MARKETING_DOC).toContain("**Randevu Yönetimi**");
+  });
+
+  it("Vekalet Ücreti Hesabı kartı var (D7)", () => {
+    expect(codeOnly(CONTENT)).toContain('"Vekalet Ücreti Hesabı"');
+    expect(codeOnly(CONTENT)).toContain("motor uydurmaz");
+    expect(MARKETING_DOC).toContain("**Vekalet Ücreti Hesabı**");
+  });
+
+  it("Banka Haciz Cevabı Ajanı kartı var (B7)", () => {
+    expect(codeOnly(CONTENT)).toContain('"Banka Haciz Cevabı Ajanı"');
+    expect(codeOnly(CONTENT)).toContain("siz onaylarsınız");
+    expect(MARKETING_DOC).toContain("**Banka Haciz Cevabı Ajanı**");
+  });
+
+  it("modül kart sayısı 17 — yeni kartlar eklendi", () => {
+    const titles = (CONTENT.match(/title: "([^"]+)",\n {6}text:/g) ?? []).length;
+    expect(titles).toBeGreaterThanOrEqual(17);
+    expect(MARKETING_DOC).toContain("Modüller (17 kart)");
+  });
+
+  it("SSS'de randevu, vekalet ücreti, e-SMM, online ödeme, CSV, banka soruları var", () => {
+    expect(codeOnly(CONTENT)).toContain("portaldan randevu alabilir");
+    expect(codeOnly(CONTENT)).toContain("Vekalet ücreti hesabı");
+    expect(codeOnly(CONTENT)).toContain("e-SMM");
+    expect(codeOnly(CONTENT)).toContain("online ödeme");
+    expect(codeOnly(CONTENT)).toContain("CSV formatındaki müşteri");
+    expect(codeOnly(CONTENT)).toContain("Banka haciz cevapları");
+  });
+
+  it("e-SMM dürüst: bağlanana kadar 'yapılandırılmadı' der", () => {
+    // Vaat kısıtı: sahte entegrasyon yok.
+    expect(codeOnly(CONTENT)).toContain("yapılandırılmadı");
+  });
+
+  it("online ödeme dürüst: sanal POS sözleşmesi gerektiğini söyler", () => {
+    expect(codeOnly(CONTENT)).toContain("sanal POS");
+    expect(codeOnly(CONTENT)).toContain("ödeme kuruluşu sözleşmesi");
+  });
+
+  it("banka cevabı dürüst: OCR gerektiren belgelerde çalışmaz der", () => {
+    expect(codeOnly(CONTENT)).toContain("OCR gerektiren");
+    expect(codeOnly(CONTENT)).toContain("henüz çalışmaz");
   });
 });
 

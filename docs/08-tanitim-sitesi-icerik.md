@@ -138,7 +138,7 @@ kağıt zemine oturmuş.
 2. **Dağınık bilgi** — "Müvekkil aradığında 15 dakika dosya incelemek zorunda kalıyorsunuz."
 3. **Görünmeyen tahsilat** — "Hangi müvekkilden ne kadar alacağınız var, tek ekranda görünmüyor."
 
-### 3.3 Modüller (14 kart)
+### 3.3 Modüller (17 kart)
 
 > **Üst etiket:** MODÜLLER
 > **Başlık:** Büronun tamamı, tek sistemde.
@@ -158,6 +158,9 @@ kağıt zemine oturmuş.
 | **İçtihat Araştırma** | Karar arama, özetleme ve dosyaya emsal olarak bağlama. Her içtihat atfı kayıt üzerinden doğrulanır. |
 | **Delil Matrisi** | İddia × delil matrisi: her bağın yönü (destekler mi, çürütür mü) ve gücü kayda geçer. Bizim sunduğumuz delili kendi iddiamıza çürütücü olarak bağlamazsınız — tutarlılık kuralı. |
 | **Risk Değerlendirmesi** | Yedi boyutta deterministik risk skoru; yapay zekâ katkısı sınırlı ve her zaman görünür. Skorların kural tabanı her gece otomatik tazelenir. |
+| **Randevu Yönetimi** | Büro ajandası ve müvekkil portalında self-servis randevu. Müvekkiliniz portalından 30 dakikalık randevu alır; sistem çakışan saatleri otomatik engeller. |
+| **Vekalet Ücreti Hesabı** | AAÜT asgari ücret tarifesi üzerinden maktu/nispi hesaplama. Kademe, tekrar dilimi, asgari kuralı ve KDV — hesabın her adımı görünür. Tarife rakamlarını siz girersiniz, motor uydurmaz. |
+| **Banka Haciz Cevabı Ajanı** | İİK m.89/2 banka cevap belgesi yüklendiğinde banka adı, IBAN, bakiye ve tarih otomatik tespit edilir. İcra dosyasına bağlıysa malvarlığı kaydı önerilir — kaydı yine siz onaylarsınız. |
 | **UYAP Köprüsü (geliştirme aşamasında)** | Tarayıcı eklentisiyle dosya, safahat ve evrak aktarımı hedefleniyor. UYAP'ın yerine geçmez; üzerine bir operasyon katmanı kurar. |
 
 ### 3.4 Öne çıkan: Süre Motoru
@@ -389,9 +392,27 @@ Alt not: *Fiyatlar için demo talebi oluşturun; büronuzun büyüklüğüne gö
    ve evrak aktarımı yapılır; ayrıca toplu veri aktarımı için destek sağlanır.
 10. **Ekibimizin farklı yetkileri olabilir mi?** — Evet. Partner, avukat, stajyer ve
     sekreter rolleri için ayrı yetki düzeyleri tanımlıdır ve sunucu tarafında uygulanır.
-11. **İnternet olmadan çalışır mı?** — NomosOS bulut tabanlıdır. Kurumsal planda büro
+11. **Müvekkilim portaldan randevu alabilir mi?** — Evet. Müvekkil portalınızdan 30 dakikalık
+    randevu alabilir. Sistem çakışan saatleri otomatik engeller; randevuyu avukat onaylar.
+12. **Vekalet ücreti hesabı yapılabilir mi?** — Evet. AAÜT asgari ücret tarifesi üzerinden
+    maktu/nispi hesaplama yapılır; hesabın her adımı görünür. Tarife rakamlarını yılda bir
+    (Resmî Gazete'den) siz girersiniz — sistem rakam uydurmaz.
+13. **e-SMM (Serbest Meslek Makbuzu) düzenleyebilir miyim?** — e-Fatura/e-Arşiv altyapısı
+    e-SMM gönderimini de destekler. GİB entegratörü sözleşmeniz bağlandığında e-SMM gönderimi
+    aktif olur; bağlanana kadar sistem dürüstçe "yapılandırılmadı" der.
+14. **Müvekkillerim online ödeme yapabilir mi?** — Faturaya tek kullanımlık ödeme bağlantısı
+    üretebilirsiniz. Müvekkil portaldan öder; tahsilat faturaya otomatik işlenir. Bu özellik
+    büronuzun sanal POS/ödeme kuruluşu sözleşmesi gerektirir.
+15. **Mevcut müşteri listemi aktarabilir miyim?** — Evet. CSV formatındaki müşteri listenizi
+    (ad, e-posta, TCKN, telefon) tek seferde içe aktarabilirsiniz. Mükerrer TCKN kontrolü
+    otomatik yapılır.
+16. **Banka haciz cevapları otomatik okunuyor mu?** — Metin katmanı olan banka cevap
+    PDF'lerinde banka adı, IBAN ve bakiye otomatik tespit edilir. İcra dosyasına bağlıysa
+    malvarlığı kaydı önerilir — onay avukata aittir. Taranmış (OCR gerektiren) belgelerde
+    bu özellik henüz çalışmaz.
+17. **İnternet olmadan çalışır mı?** — NomosOS bulut tabanlıdır. Kurumsal planda büro
     içi kurulum seçeneği değerlendirilir.
-12. **Sözleşmeyi istediğimiz zaman sonlandırabilir miyiz?** — Evet. Sonlandırma
+18. **Sözleşmeyi istediğimiz zaman sonlandırabilir miyiz?** — Evet. Sonlandırma
     durumunda bütün dosya ve belge verileriniz standart biçimde dışa aktarılır.
 
 ### 3.12 Kapanış / Demo
