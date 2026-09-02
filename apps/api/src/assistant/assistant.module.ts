@@ -6,6 +6,8 @@ import { CaseContextBuilder } from "./case-context.builder";
 import { IndexingService } from "./indexing.service";
 import { RetrievalService } from "./retrieval.service";
 import { OfficeQueryService } from "./office-query.service";
+// D1.3: BYO yetkisi + platform sağlayıcı yedeği için.
+import { AiModule } from "../ai/ai.module";
 
 /**
  * AI Dosya Asistanı (Modül 24) — RAG indeksleme, dosya sohbeti, tam dosya
@@ -18,6 +20,7 @@ import { OfficeQueryService } from "./office-query.service";
  * (Modül 06 pipeline) yükleme sonrası indeksleme adımını çağırabilmesi içindir.
  */
 @Module({
+  imports: [AiModule],
   controllers: [AssistantController],
   providers: [
     AssistantService,

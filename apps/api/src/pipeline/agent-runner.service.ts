@@ -19,6 +19,7 @@ import {
   type GuardIssue,
 } from "@nomosos/legal-ai";
 import { PrismaService } from "../prisma/prisma.service";
+import { PlatformAiService } from "../ai/platform-ai.service";
 import { assertAiPolicyAllows, tenantAiPolicy } from "../common/ai-policy";
 import { sanitizeExternalError } from "../common/errors";
 import { readProviderHeaders } from "../common/provider-headers";
@@ -101,7 +102,11 @@ function maskOutboundMessages(
 export class AgentRunnerService {
   private readonly logger = new Logger(AgentRunnerService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // D1.3: platform AI sağlayıcı yedeği + BYO plan yetkisi.
+    private readonly platformAi: PlatformAiService,
+  ) {}
 
   async run<T>(params: {
     agentKey: AgentKey;
@@ -236,12 +241,25 @@ export class AgentRunnerService {
   /**
    * Görev tipi → sağlayıcı rotası. Rota yoksa tenant'ın ilk aktif sağlayıcısı.
    * (AiService'teki çözümle aynı sözleşme; belge hattı ai modülüne bağımlı olmasın
-   * diye burada tekrarlanır.)
+   * diye burada tekrarlanır.) D1.3: BYO izni yoksa / kiracı sağlayıcısı yoksa
+   * PLATFORM sağlayıcısına düşer.
    */
   private async resolveRoute(
     tenantId: string,
     taskType: string
   ): Promise<{ config: AiProviderConfig; model: string }> {
+    if (await this.platformAi.byoRestricted(tenantId)) {
+      const platform = await this.platformAi.resolveForTenant(tenantId);
+      if (platform) {
+        await assertAiPolicyAllows(this.prisma, tenantId, platform);
+        return { config: platform, model: platform.defaultModel };
+      }
+      throw new Error(
+        "Plan bu büronun kendi AI sağlayıcısını tanımlamasına izin vermiyor ve " +
+          "NomosOS platform sağlayıcısı atanmamış. Belge işlenemedi."
+      );
+    }
+
     const route = await this.prisma.client.aiTaskRoute.findUnique({
       where: { tenantId_taskType: { tenantId, taskType } },
       include: { providerConfig: true },
@@ -257,14 +275,21 @@ export class AgentRunnerService {
       where: { tenantId, isActive: true },
       orderBy: { createdAt: "asc" },
     });
-    if (!fallback) {
-      throw new Error(
-        "Büronuz için tanımlı bir AI sağlayıcısı yok. Ayarlar → AI Sağlayıcı ekranından " +
-          "sağlayıcı ekledikten sonra bu belgeyi yeniden işleyebilirsiniz."
-      );
+    if (fallback) {
+      await assertAiPolicyAllows(this.prisma, tenantId, fallback);
+      return { config: fallback, model: fallback.defaultModel };
     }
-    await assertAiPolicyAllows(this.prisma, tenantId, fallback);
-    return { config: fallback, model: fallback.defaultModel };
+
+    // Kiracı sağlayıcısı yok — platform yedeği (D1.3).
+    const platform = await this.platformAi.resolveForTenant(tenantId);
+    if (platform) {
+      await assertAiPolicyAllows(this.prisma, tenantId, platform);
+      return { config: platform, model: platform.defaultModel };
+    }
+    throw new Error(
+      "Büronuz için tanımlı bir AI sağlayıcısı yok. Ayarlar → AI Sağlayıcı ekranından " +
+        "sağlayıcı ekledikten sonra bu belgeyi yeniden işleyebilirsiniz."
+    );
   }
 
   private async logUsage(entry: {

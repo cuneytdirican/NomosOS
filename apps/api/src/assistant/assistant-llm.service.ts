@@ -28,6 +28,7 @@ import type { TypeOf, ZodTypeAny } from "zod";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { AgentRunService } from "../agents/agent-run.service";
+import { PlatformAiService } from "../ai/platform-ai.service";
 import { assertAiPolicyAllows } from "../common/ai-policy";
 import { creditRunContext } from "../credits/credit-context";
 import { providerUnreachable } from "../common/errors";
@@ -104,6 +105,8 @@ export class AssistantLlmService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly agentRuns: AgentRunService,
+    // D1.3: platform AI sağlayıcı yedeği + BYO plan yetkisi.
+    private readonly platformAi: PlatformAiService,
   ) {}
 
   /** DB kaydını @nomosos/ai için çözülmüş yapılandırmaya çevirir. */
@@ -123,6 +126,19 @@ export class AssistantLlmService {
     tenantId: string,
     routeKeys: readonly string[],
   ): Promise<{ config: AiProviderConfig; model: string }> {
+    // D1.3 — PLATFORM AI: plan BYO izni vermiyorsa kiracı sağlayıcıları YOK SAYILIR.
+    if (await this.platformAi.byoRestricted(tenantId)) {
+      const platform = await this.platformAi.resolveForTenant(tenantId);
+      if (platform) {
+        await assertAiPolicyAllows(this.prisma, tenantId, platform);
+        return { config: platform, model: platform.defaultModel };
+      }
+      throw new BadRequestException(
+        "Planınız kendi AI sağlayıcınızı tanımlamayı kapsamıyor ve NomosOS platform " +
+          "sağlayıcısı henüz atanmamış. Destek ile görüşün.",
+      );
+    }
+
     for (const key of routeKeys) {
       const route = await this.prisma.client.aiTaskRoute.findUnique({
         where: { tenantId_taskType: { tenantId, taskType: key } },
@@ -139,13 +155,20 @@ export class AssistantLlmService {
       where: { tenantId, isActive: true },
       orderBy: { createdAt: "asc" },
     });
-    if (!fallback) {
-      throw new BadRequestException(
-        "AI sağlayıcı tanımlı değil. Önce Ayarlar → AI Sağlayıcı ekranından bir sağlayıcı ekleyin.",
-      );
+    if (fallback) {
+      await assertAiPolicyAllows(this.prisma, tenantId, fallback);
+      return { config: fallback, model: fallback.defaultModel };
     }
-    await assertAiPolicyAllows(this.prisma, tenantId, fallback);
-    return { config: fallback, model: fallback.defaultModel };
+
+    // Kiracı sağlayıcısı yok — platform yedeği (D1.3).
+    const platform = await this.platformAi.resolveForTenant(tenantId);
+    if (platform) {
+      await assertAiPolicyAllows(this.prisma, tenantId, platform);
+      return { config: platform, model: platform.defaultModel };
+    }
+    throw new BadRequestException(
+      "AI sağlayıcı tanımlı değil. Önce Ayarlar → AI Sağlayıcı ekranından bir sağlayıcı ekleyin.",
+    );
   }
 
   /**

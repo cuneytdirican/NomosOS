@@ -925,6 +925,40 @@ model OfficeCallSignal {
 // eklendiğinde artar; yumuşak silinen belge depoda yer tuttuğu için düşmez.
 // ===========================================================================
 
+// ===========================================================================
+// PLATFORM AI SAĞLAYICISI — NomosOS tarafından işletilen sağlayıcılar.
+//
+// Plan hiyerarşisi (kullanıcı talebi): kiracının kendi LLM tanımlama YETKİSİ
+// planın featuresJson.allowBYOLLM alanındadır (yoksa İZİNLİ sayılır — geriye
+// dönük uyumluluk). Yetki yoksa kiracı yalnız platform sağlayıcılarını kullanır:
+//   kiracı rotası (yetki VARsa) → plan defaultPlatformProviderKey →
+//   isDefault platform sağlayıcısı → ilk aktif platform sağlayıcısı.
+// ===========================================================================
+
+/// Platform AI sağlayıcı tanımı — anahtar AES-256-GCM ile şifreli saklanır.
+model PlatformAiProvider {
+  id              String    @id @default(uuid())
+  name            String    @unique
+  /// ANTHROPIC | OPENAI_COMPAT | GEMINI | OLLAMA | CUSTOM
+  type            String
+  /// AES-256-GCM (crypto.ts) — ham anahtar ASLA saklanmaz.
+  encryptedApiKey String?
+  baseUrl         String?
+  /// Varsayılan model kimliği (görev rotası atanmamışsa kullanılır).
+  defaultModel    String
+  headersJson     String?
+  mappingJson     String?
+  /// Varsayılan sağlayıcı — plan düzeyinde atama yoksa öncelik sırası budur.
+  isDefault       Boolean   @default(false)
+  isActive        Boolean   @default(true)
+  notes           String?
+  createdBy       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([isActive, isDefault])
+}
+
 /// Büronun disk kotası — tenant başına tek kayıt.
 model DiskQuota {
   id             String   @id @default(uuid())

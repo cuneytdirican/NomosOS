@@ -10,6 +10,8 @@ import { AiRunnerService } from "./ai-runner.service";
 import { CaseLawAdapterRegistry } from "./adapters/registry.service";
 import { LocalDbCaseLawAdapter } from "./adapters/local-db.adapter";
 import { ManualEntryCaseLawAdapter } from "./adapters/manual-entry.adapter";
+// D1.3: BYO yetkisi + platform sağlayıcı yedeği için.
+import { AiModule } from "../ai/ai.module";
 
 /**
  * İçtihat & Mevzuat modülü (Modül 23).
@@ -22,6 +24,7 @@ import { ManualEntryCaseLawAdapter } from "./adapters/manual-entry.adapter";
  * NOT: NestJS modül kaydı (app.module.ts) Entegrasyon ajanının işidir.
  */
 @Module({
+  imports: [AiModule],
   controllers: [CaselawController, CaseCaselawController, CaseLawReferencesController],
   providers: [
     CaselawService,

@@ -126,4 +126,12 @@ export const EP = {
     syncNow: "/judicial/sync",
     syncLogs: "/judicial/sync/logs",
   },
+  /** Platform AI sağlayıcıları (D1.3). */
+  platformAi: {
+    list: "/ai/providers",
+    create: "/ai/providers",
+    item: (id: string) => `/ai/providers/${encodeURIComponent(id)}`,
+    test: (id: string) => `/ai/providers/${encodeURIComponent(id)}/test`,
+    models: (id: string) => `/ai/providers/${encodeURIComponent(id)}/models`,
+  },
 } as const;

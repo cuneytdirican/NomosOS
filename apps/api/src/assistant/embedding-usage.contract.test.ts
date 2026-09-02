@@ -15,7 +15,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const read = (root, ...parts) => readFileSync(join(process.cwd(), root, ...parts), "utf-8");
+const read = (root: string, ...parts: string[]): string =>
+  readFileSync(join(process.cwd(), root, ...parts), "utf-8");
 
 describe("A1: gömme kullanımı görünürdür", () => {
   it("embedTexts gerçek token kullanımını okur (EmbedCallResult sözleşmesi)", () => {

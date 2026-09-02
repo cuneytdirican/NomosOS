@@ -30,6 +30,7 @@ import type {
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { AgentRunService } from "../agents/agent-run.service";
+import { PlatformAiService } from "./platform-ai.service";
 import { assertAiPolicyAllows, tenantAiPolicy } from "../common/ai-policy";
 import { creditRunContext } from "../credits/credit-context";
 import { providerUnreachable } from "../common/errors";
@@ -124,8 +125,10 @@ export class AiService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     // F2-Ö-11: /ai/chat de ajan izine bağlanır — "her LLM çağrısı izlenir"
-    // sözleşmesi bu yürütücüde eksikti.
-    private readonly agentRuns: AgentRunService
+    // sözleşmesi bu yürütücülerde eksikti.
+    private readonly agentRuns: AgentRunService,
+    // D1.3: platform AI sağlayıcı yedeği + BYO plan yetkisi kapısı.
+    private readonly platformAi: PlatformAiService
   ) {}
 
   /**
@@ -146,6 +149,16 @@ export class AiService {
 
   async createProvider(user: AuthUser, input: AiProviderConfigInput) {
     assertRole(user, ROLE_SETS.ONAY, "AI sağlayıcı tanımlama");
+
+    // D1.3 — BYO PLAN KAPISI: plan kendi LLM tanımlamayı kapsamıyorsa kiracı
+    // sağlayıcı EKLEYEMEZ; yalnız platform sağlayıcılarını kullanır.
+    if (!(await this.platformAi.byoAllowed(user.tenantId))) {
+      throw new ConflictException(
+        "Planınız kendi AI sağlayıcınızı tanımlamayı kapsamıyor. AI görevleri NomosOS " +
+          "platform sağlayıcılarından yürütülür; kendi sağlayıcınızı bağlamak için " +
+          "paketinizi yükseltin.",
+      );
+    }
 
     // SSRF KAPISI: sunucu bu adrese KENDİ AĞINDAN istek atar. Bulut metadata
     // uçları (169.254.169.254) ve http/https dışı şemalar reddedilir.
@@ -211,6 +224,45 @@ export class AiService {
       entityId: id,
     });
     return { deleted: true };
+  }
+
+  /**
+   * POST /ai/providers/:id/models — sağlayıcıdan model listesini ÇEK (D1.3b).
+   * Model adı elle YAZILMAZ; sağlayıcının listModels() ucu çağrılır ve arayüz
+   * seçim listesi sunar. BYO kısıtlı planda kirıcı sağlayıcısı zaten olamaz;
+   * kayıt yoksa 404 döner.
+   */
+  async fetchProviderModels(user: AuthUser, id: string) {
+    assertRole(user, ROLE_SETS.ONAY, "AI model listesi çekme");
+    const config = await this.prisma.client.aiProviderConfig.findFirst({
+      where: { id, tenantId: user.tenantId },
+    });
+    if (!config) {
+      throw new NotFoundException("AI sağlayıcı yapılandırması bulunamadı.");
+    }
+    const provider = createProvider(this.resolveConfig(config));
+    const models = await provider.listModels();
+    return { models };
+  }
+
+  /**
+   * POST /ai/providers/models-preview — KAYDETMEDEN model listesi (D1.3b).
+   * Form doldurulurken çağrılır: verilen tür/anahtar/adresle sağlayıcı
+   * örneği kurulur ve listModels() çağrılır. Anahtar SAKLANMAZ.
+   */
+  async previewProviderModels(
+    user: AuthUser,
+    input: { type: string; apiKey?: string; baseUrl?: string },
+  ) {
+    assertRole(user, ROLE_SETS.ONAY, "AI model listesi çekme");
+    const provider = createProvider({
+      type: input.type as AiProviderType,
+      apiKey: input.apiKey || undefined,
+      baseUrl: input.baseUrl || undefined,
+      defaultModel: "preview",
+    });
+    const models = await provider.listModels();
+    return { models };
   }
 
   async testProvider(user: AuthUser, id: string) {
@@ -501,6 +553,20 @@ export class AiService {
     tenantId: string,
     taskType: string
   ): Promise<{ config: AiProviderConfig; model: string }> {
+    // D1.3 — PLATFORM AI: plan BYO izni vermiyorsa kiracı sağlayıcıları YOK SAYILIR,
+    // görev platform sağlayıcısından çözülür.
+    if (await this.platformAi.byoRestricted(tenantId)) {
+      const platform = await this.platformAi.resolveForTenant(tenantId);
+      if (platform) {
+        await assertAiPolicyAllows(this.prisma, tenantId, platform);
+        return { config: platform, model: platform.defaultModel };
+      }
+      throw new BadRequestException(
+        "Planınız kendi AI sağlayıcınızı tanımlamayı kapsamıyor ve NomosOS platform " +
+          "sağlayıcısı henüz atanmamış. Destek ile görüşün.",
+      );
+    }
+
     const route = await this.prisma.client.aiTaskRoute.findUnique({
       where: { tenantId_taskType: { tenantId, taskType } },
       include: { providerConfig: true },
@@ -514,11 +580,18 @@ export class AiService {
       where: { tenantId, isActive: true },
       orderBy: { createdAt: "asc" },
     });
-    if (!fallback) {
-      throw new BadRequestException("Önce Ayarlar → AI Sağlayıcı'dan bir sağlayıcı ekleyin.");
+    if (fallback) {
+      await assertAiPolicyAllows(this.prisma, tenantId, fallback);
+      return { config: fallback, model: fallback.defaultModel };
     }
-    await assertAiPolicyAllows(this.prisma, tenantId, fallback);
-    return { config: fallback, model: fallback.defaultModel };
+
+    // Kiracı sağlayıcısı yok — platform yedeği (D1.3).
+    const platform = await this.platformAi.resolveForTenant(tenantId);
+    if (platform) {
+      await assertAiPolicyAllows(this.prisma, tenantId, platform);
+      return { config: platform, model: platform.defaultModel };
+    }
+    throw new BadRequestException("Önce Ayarlar → AI Sağlayıcı'dan bir sağlayıcı ekleyin.");
   }
 
   /**

@@ -32,6 +32,7 @@ import { UyapModule } from "./uyap/uyap.module";
 import { ChatModule } from "./chat/chat.module";
 import { DiskQuotaModule } from "./disk-quota/disk-quota.module";
 import { JudicialModule } from "./judicial/judicial.module";
+import { AgendaModule } from "./agenda/agenda.module";
 import { PlatformModule } from "./platform/platform.module";
 // --- Faz 4 modülleri ---
 import { ConflictModule } from "./conflict/conflict.module";
@@ -147,6 +148,8 @@ function requireJwtSecret(config: ConfigService): string {
     DiskQuotaModule,
     // Yargı organları + noterler — referans katalog (formlarda seçim listesi).
     JudicialModule,
+    // Birleşik ajanda — duruşma/randevu/süre/görev tek takvimde.
+    AgendaModule,
     // Platform yönetim paneli (Modül 25).
     // AYRI DÜNYA: kendi kimlik tablosu (PlatformUser), kendi imza anahtarı,
     // kendi audience'ı (`aud: "platform"`) ve kendi yol öneki (/api/admin/v1).

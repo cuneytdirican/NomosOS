@@ -74,6 +74,16 @@ export default function AiSaglayiciPage() {
   const [error, setError] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
   const [tests, setTests] = useState<Record<string, TestState>>({});
+  /** D1.3 — BYO izni yoksa kilitli görünüm verisi. */
+  const [platformStatus, setPlatformStatus] = useState<{
+    byoAllowed: boolean;
+    platformProvider: { name: string; type: string; defaultModel: string } | null;
+    note?: string;
+  } | null>(null);
+  /** D1.3b — sağlayıcıdan çekilen model listesi (form seçici için). */
+  const [modelOptions, setModelOptions] = useState<string[]>([]);
+  const [modelsBusy, setModelsBusy] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<ProviderForm>(EMPTY_FORM);
@@ -90,6 +100,22 @@ export default function AiSaglayiciPage() {
   const loadProviders = useCallback(async () => {
     setLoading(true);
     setError(null);
+    // D1.3 — BYO plan yetkisi: platform durumu her açılışta sorgulanır.
+    try {
+      const status = await api<{
+        byoAllowed: boolean;
+        platformProvider: { name: string; type: string; defaultModel: string } | null;
+        note?: string;
+      } | null>("/ai/platform-status");
+      if (status && status.byoAllowed === false) {
+        setPlatformStatus(status);
+        setLoading(false);
+        return;
+      }
+      setPlatformStatus(null);
+    } catch {
+      /* durum alınamazsa yönetim görünümü denemeye devam eder */
+    }
     try {
       const data = await api<unknown>("/ai/providers");
       setProviders(asList<AiProvider>(data));
@@ -225,6 +251,31 @@ export default function AiSaglayiciPage() {
     });
   }
 
+  /** D1.3b — kaydetmeden model önizleme: formdaki tür/anahtar/adresle sağlayıcıdan model listesi. */
+  async function fetchModels() {
+    setModelsBusy(true);
+    setModelsError(null);
+    try {
+      const res = await api<{ models: string[] }>("/ai/providers/models-preview", {
+        method: "POST",
+        body: {
+          type: form.type,
+          ...(form.apiKey.trim() ? { apiKey: form.apiKey.trim() } : {}),
+          ...(form.baseUrl.trim() ? { baseUrl: form.baseUrl.trim() } : {}),
+        },
+      });
+      if (res.models.length === 0) {
+        setModelsError("Sağlayıcı model listesi döndürmedi.");
+      } else {
+        setModelOptions(res.models);
+      }
+    } catch (err) {
+      setModelsError(err instanceof ApiError ? err.message : "Model listesi alınamadı.");
+    } finally {
+      setModelsBusy(false);
+    }
+  }
+
   async function handleSaveRoutes() {
     setRoutesSaving(true);
     setRoutesError(null);
@@ -239,6 +290,60 @@ export default function AiSaglayiciPage() {
     } finally {
       setRoutesSaving(false);
     }
+  }
+
+  // D1.3 — BYO PLAN KISIDI: plan kendi sağlayıcı tanımlamayı kapsamıyorsa
+  // bu ekran YÖNETİM ekranı değildir; yalnız platform sağlayıcı bilgisi görünür.
+  if (platformStatus && platformStatus.byoAllowed === false) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">AI Sağlayıcı Ayarları</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            BYO-LLM: kendi modelinizi bağlayın. Ollama veya özel endpoint seçerseniz verileriniz
+            büronuzdan çıkmaz.
+          </p>
+        </div>
+        <Card>
+          <div className="space-y-3 p-6">
+            <p className="text-sm font-semibold text-slate-800">
+              Planınız kendi AI sağlayıcınızı tanımlamayı kapsamıyor
+            </p>
+            <p className="text-sm leading-6 text-slate-600">
+              AI görevleriniz NomosOS platform sağlayıcılarından yürütülür — anahtar yönetimi,
+              güncelleme ve maliyet NomosOS tarafındadır.
+            </p>
+            {platformStatus.platformProvider ? (
+              <dl className="grid grid-cols-3 gap-3 text-sm">
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <dt className="text-xs text-slate-500">Kullanılan sağlayıcı</dt>
+                  <dd className="mt-1 font-semibold text-slate-800">{platformStatus.platformProvider.name}</dd>
+                </div>
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <dt className="text-xs text-slate-500">Tür</dt>
+                  <dd className="mt-1 font-semibold text-slate-800">{platformStatus.platformProvider.type}</dd>
+                </div>
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <dt className="text-xs text-slate-500">Varsayılan model</dt>
+                  <dd className="mt-1 font-semibold text-slate-800">{platformStatus.platformProvider.defaultModel}</dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+                {platformStatus.note ?? "Platform sağlayıcısı henüz atanmamış; destek ile görüşün."}
+              </p>
+            )}
+            <p className="text-xs text-slate-500">
+              Kendi sağlayıcınızı bağlamak için paketinizi{" "}
+              <Link href="/app/ayarlar/ai-kullanim" className="underline">
+                AI Kullanımı
+              </Link>{" "}
+              üzerinden veya satış ekibimizle görüşün.
+            </p>
+          </div>
+        </Card>
+      </div>
+    );
   }
 
   // İ-38: yetkisiz rol için açık rol kartı — ham hata metni yerine.
@@ -504,13 +609,41 @@ export default function AiSaglayiciPage() {
             </Field>
           )}
 
-          <Field label="Varsayılan Model">
-            <Input
-              value={form.defaultModel}
-              onChange={(e) => setForm({ ...form, defaultModel: e.target.value })}
-              placeholder={MODEL_PLACEHOLDERS[form.type]}
-              required
-            />
+          <Field
+            label="Varsayılan Model"
+            hint="Model adını elle yazmayın — sağlayıcıdan çekin ve listeden seçin."
+          >
+            {/* D1.3b — model listesi SAĞLAYICIDAN çekilir; seçim listesi sunulur. */}
+            {modelOptions.length > 0 ? (
+              <Select
+                value={form.defaultModel}
+                onChange={(e) => setForm({ ...form, defaultModel: e.target.value })}
+                required
+              >
+                <option value="">Model seçin…</option>
+                {modelOptions.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </Select>
+            ) : (
+              <Input
+                value={form.defaultModel}
+                onChange={(e) => setForm({ ...form, defaultModel: e.target.value })}
+                placeholder={MODEL_PLACEHOLDERS[form.type]}
+                required
+              />
+            )}
+            <Button
+              variant="secondary"
+              className="mt-2"
+              disabled={modelsBusy || (!rules.apiKey && !rules.baseUrl)}
+              onClick={() => void fetchModels()}
+            >
+              {modelsBusy ? "Modeller çekiliyor…" : "Modelleri Sağlayıcıdan Çek"}
+            </Button>
+            {modelsError && <p className="mt-1 text-[11px] text-red-700">{modelsError}</p>}
           </Field>
 
           {rules.custom && (

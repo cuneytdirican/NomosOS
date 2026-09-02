@@ -17,6 +17,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { Button, Card, EmptyState, ErrorBox, Input, Spinner } from "@/components/ui";
+import { useVideoCall } from "@/components/video-call";
+import { Avatar, AvatarUploadButton, useAvatar } from "@/components/chat-avatar";
+
+/** Sohbet avatarı — foto varsa foto, yoksa baş harfler + çevrimiçi noktası. */
+function ThreadAvatar({ peer }: { peer: { id: string; fullName: string; hasAvatar: boolean; online: boolean } }) {
+  const url = useAvatar(peer.id, peer.hasAvatar);
+  return <Avatar fullName={peer.fullName} url={url} online={peer.online} size={40} />;
+}
 
 /* ------------------------------- Tipler ------------------------------- */
 
@@ -85,6 +93,8 @@ export default function MesajlarPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activePeerId, setActivePeerId] = useState<string | null>(null);
+  /** D1.4 — kendi kullanıcı kimliğimiz (gelen arama yoklaması için). */
+  const [myUserId, setMyUserId] = useState<string | undefined>(undefined);
 
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [peerInfo, setPeerInfo] = useState<(ChatPeer & { typing: boolean }) | null>(null);
@@ -99,12 +109,19 @@ export default function MesajlarPage() {
 
   const lastMsgIdRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // D1.4 — görüntülü arama kancası (WebRTC + sinyalleşme yoklaması).
+  const call = useVideoCall(myUserId);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   /* ------------------------- Kalp atışı + yoklama ------------------------- */
 
   useEffect(() => {
     void api("/chat/heartbeat", { method: "POST" }).catch(() => undefined);
+    // D1.4 — kendi kimliğimiz (gelen arama yakalama + me dışında avatar).
+    void api<{ userId?: string }>("/me")
+      .then((me) => setMyUserId(me?.userId))
+      .catch(() => undefined);
     const hb = setInterval(() => {
       void api("/chat/heartbeat", { method: "POST" }).catch(() => undefined);
     }, 30_000);
@@ -298,6 +315,9 @@ export default function MesajlarPage() {
           <p className="mt-1 text-sm text-slate-500">
             Büro içi yazışma — mesajlar silinemez, denetim izi olarak saklanır.
           </p>
+          <div className="mt-1">
+            <AvatarUploadButton />
+          </div>
         </div>
       </div>
 
@@ -330,17 +350,7 @@ export default function MesajlarPage() {
                     activePeerId === t.peer.id ? "bg-amber-50" : "hover:bg-slate-50"
                   }`}
                 >
-                  <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-200 text-sm font-semibold text-slate-600">
-                    {t.peer.fullName
-                      .split(" ")
-                      .map((w) => w[0])
-                      .slice(0, 2)
-                      .join("")
-                      .toUpperCase()}
-                    {t.peer.online && (
-                      <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-500" />
-                    )}
-                  </span>
+                  <ThreadAvatar peer={t.peer} />
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center justify-between gap-2">
                       <span className="truncate text-sm font-medium text-slate-900">{t.peer.fullName}</span>
@@ -383,17 +393,7 @@ export default function MesajlarPage() {
             <>
               {/* Sohbet başlığı */}
               <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3">
-                <span className="relative flex h-10 w-10 items-center justify-center rounded-full bg-slate-200 text-sm font-semibold text-slate-600">
-                  {peerInfo?.fullName
-                    .split(" ")
-                    .map((w) => w[0])
-                    .slice(0, 2)
-                    .join("")
-                    .toUpperCase()}
-                  {peerInfo?.online && (
-                    <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-500" />
-                  )}
-                </span>
+                {peerInfo && <ThreadAvatar peer={peerInfo} />}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-slate-900">{peerInfo?.fullName}</p>
                   <p className="text-xs text-slate-500">
@@ -406,7 +406,60 @@ export default function MesajlarPage() {
                     )}
                   </p>
                 </div>
+                {/* D1.4 — görüntülü arama düğmesi */}
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    if (peerInfo) void call.startCall(peerInfo.id, peerInfo.fullName);
+                  }}
+                  aria-label="Görüntülü ara"
+                >
+                  📹
+                </Button>
               </div>
+
+              {/* Görüntülü arama paneli (aktifken) */}
+              {call.phase && (
+                <div className="border-b border-slate-100 bg-slate-900 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-white">
+                      {call.phase === "ringing-out" && `${call.peerName} aranıyor…`}
+                      {call.phase === "active" && `${call.peerName} ile görüşme sürüyor`}
+                      {call.phase === "ended" && "Arama sonlandı"}
+                      {call.phase === "failed" && "Arama kurulamadı"}
+                    </p>
+                    <Button variant="danger" onClick={() => void call.endCall()}>
+                      Kapat
+                    </Button>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <video ref={call.localVideoRef} autoPlay muted playsInline className="h-36 w-full rounded-lg bg-black object-cover" />
+                    <video ref={call.remoteVideoRef} autoPlay playsInline className="h-36 w-full rounded-lg bg-slate-800 object-cover" />
+                  </div>
+                  {call.error && <p className="mt-1.5 text-[11px] text-red-300">{call.error}</p>}
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    Görüntü ve ses doğrudan iki taraf arasında akar (P2P, STUN). Sıkı ağlarda
+                    bağlanılamazsa mesajlaşmayı kullanın.
+                  </p>
+                </div>
+              )}
+
+              {/* Gelen arama bandı */}
+              {call.incoming && !call.phase && (
+                <div className="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2.5">
+                  <p className="text-sm font-medium text-amber-900">
+                    📞 {call.incoming.from.fullName} sizi görüntülü arıyor…
+                  </p>
+                  <div className="flex gap-2">
+                    <Button variant="gold" onClick={() => void call.acceptCall(call.incoming!)}>
+                      Aç
+                    </Button>
+                    <Button variant="secondary" onClick={() => void call.rejectCall(call.incoming!)}>
+                      Reddet
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {/* Mesaj akışı */}
               <div className="flex-1 space-y-1 overflow-y-auto bg-slate-50 px-4 py-3">

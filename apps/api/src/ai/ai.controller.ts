@@ -9,6 +9,7 @@ import {
   type CaseChatInput,
 } from "@nomosos/shared";
 import { AiService } from "./ai.service";
+import { PlatformAiService } from "./platform-ai.service";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AiThrottle } from "../common/guards/ai-rate-limit.guard";
 import { AiCredits } from "../credits/ai-credits.decorator";
@@ -32,9 +33,29 @@ const updateAiPolicySchema = z
   });
 type UpdateAiPolicyInput = z.infer<typeof updateAiPolicySchema>;
 
+/** Model önizleme girişi (kaydetmeden) — D1.3b. */
+const previewModelsSchema = z.object({
+  type: z.enum(["ANTHROPIC", "OPENAI_COMPAT", "GEMINI", "OLLAMA", "CUSTOM"]),
+  apiKey: z.string().trim().max(500).optional(),
+  baseUrl: z.string().trim().max(500).optional(),
+});
+
 @Controller("ai")
 export class AiController {
-  constructor(private readonly aiService: AiService) {}
+  constructor(
+    private readonly aiService: AiService,
+    private readonly platformAi: PlatformAiService,
+  ) {}
+
+  /**
+   * GET /ai/platform-status — büronun AI yetki durumu (D1.3):
+   * BYO izni var mı; yoksa kullanılacak platform sağlayıcısı (ANAHTARSIZ).
+   * Arayüz kilitli görünümü bu uçtan beslenir.
+   */
+  @Get("platform-status")
+  platformStatus(@CurrentUser() user: AuthUser) {
+    return this.platformAi.tenantStatus(user.tenantId);
+  }
 
   /** Büronun AI veri politikası (KVKK). */
   @Get("policy")
@@ -72,6 +93,26 @@ export class AiController {
   @HttpCode(200)
   testProvider(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.aiService.testProvider(user, id);
+  }
+
+  /**
+   * POST /ai/providers/:id/models — sağlayıcıdan model listesini ÇEK (D1.3b):
+   * model adı ELLE yazılmaz, seçilir. Kiracı kendi sağlayıcısından çeker.
+   */
+  @Post("providers/:id/models")
+  @HttpCode(200)
+  fetchProviderModels(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.aiService.fetchProviderModels(user, id);
+  }
+
+  /** POST /ai/providers/models-preview — KAYDETMEDEN model listesi (D1.3b). */
+  @Post("providers/models-preview")
+  @HttpCode(200)
+  previewProviderModels(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(previewModelsSchema)) body: z.infer<typeof previewModelsSchema>,
+  ) {
+    return this.aiService.previewProviderModels(user, body);
   }
 
   @Get("task-routes")
