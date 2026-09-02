@@ -189,6 +189,40 @@ describe("M4: fine-tuning iş yönetimi", () => {
   });
 });
 
+describe("Cila: dilekçe sürüm fark görünümü", () => {
+  it("uçlar: diff yolu :versionNo'dan ÖNCE bildirilir", () => {
+    const c = read("src", "petitions", "petitions.controller.ts");
+    const diffIdx = c.indexOf('@Get(":id/versions/diff")');
+    const verIdx = c.indexOf('@Get(":id/versions/:versionNo")');
+    expect(diffIdx).toBeGreaterThan(-1);
+    expect(verIdx).toBeGreaterThan(diffIdx);
+    expect(c).toContain("versionDiff");
+    expect(c).toContain("versionDetail");
+  });
+
+  it("diff motoru: LCS satır farkı + anahtar eşleşmesi + özet — testli", () => {
+    const engine = read("src", "petitions", "petition-version-diff.ts");
+    expect(engine).toContain("diffLines");
+    expect(engine).toContain("diffSections");
+    expect(engine).toContain("summarizeDiff");
+    expect(read("src", "petitions", "petition-version-diff.test.ts")).toContain("UNCHANGED");
+  });
+
+  it("sürümler değiştirilemez — diff YALNIZCA okur", () => {
+    const engine = read("src", "petitions", "petition-version-diff.ts");
+    expect(engine).not.toContain("prisma");
+    expect(engine).not.toContain("update");
+  });
+
+  it("web: sürüm seçimi + fark çizimi (eklenen yeşil / çıkarılan kırmızı)", () => {
+    const page = read("..", "web", "src", "app", "app", "dilekceler", "page.tsx");
+    expect(page).toContain("versions/diff");
+    expect(page).toContain("Farkı Göster");
+    expect(page).toContain("bg-emerald-50");
+    expect(page).toContain("bg-red-50");
+  });
+});
+
 describe("M3: askıda kiracı GİRİŞ engeli (abonelik → login)", () => {
   it("login: SUSPENDED ve CANCELED abonelik 403 ile reddedilir", () => {
     const s = read("src", "auth", "auth.service.ts");

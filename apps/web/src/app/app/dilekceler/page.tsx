@@ -88,7 +88,32 @@ interface PetitionDetail {
     versionNo: number;
     sections: PetitionSection[];
   } | null;
+  versions?: Array<{ id: string; versionNo: number; createdAt: string }>;
   readyGate?: { ready: boolean; reasons?: string[] };
+}
+
+/** D5 / cila — sürüm farkı yanıtı (GET /petitions/:id/versions/diff). */
+interface VersionDiffSection {
+  key: string;
+  title: string;
+  change: "ADDED" | "REMOVED" | "CHANGED" | "UNCHANGED";
+  lines: Array<{ op: "same" | "added" | "removed"; text: string }>;
+  addedLines: number;
+  removedLines: number;
+}
+
+interface VersionDiff {
+  from: { versionNo: number; createdAt: string };
+  to: { versionNo: number; createdAt: string };
+  summary: {
+    addedSections: number;
+    removedSections: number;
+    changedSections: number;
+    unchangedSections: number;
+    addedLines: number;
+    removedLines: number;
+  };
+  sections: VersionDiffSection[];
 }
 
 const PETITION_TYPE_LABELS: Record<string, string> = {
@@ -148,6 +173,14 @@ export default function DilekceStudyoPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+
+  // D5 / cila — sürüm fark görünümü
+  const [diffFrom, setDiffFrom] = useState<number | null>(null);
+  const [diffTo, setDiffTo] = useState<number | null>(null);
+  const [diffData, setDiffData] = useState<VersionDiff | null>(null);
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [diffError, setDiffError] = useState<string | null>(null);
+  const [diffShowAll, setDiffShowAll] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [udfUrl, setUdfUrl] = useState<string | null>(null);
 
@@ -212,6 +245,23 @@ export default function DilekceStudyoPage() {
       setDetailError(err instanceof ApiError ? err.message : "Dilekçe açılamadı.");
     } finally {
       setDetailLoading(false);
+    }
+  }
+
+  /** D5 / cila — iki sürüm arasındaki farkı sunucudan çeker (LCS sunucuda). */
+  async function loadDiff() {
+    if (!detail || diffFrom === null || diffTo === null) return;
+    setDiffLoading(true);
+    setDiffError(null);
+    try {
+      const data = await api<VersionDiff>(`/petitions/${detail.id}/versions/diff`, {
+        query: { from: String(diffFrom), to: String(diffTo) },
+      });
+      setDiffData(data);
+    } catch (err) {
+      setDiffError(err instanceof ApiError ? err.message : "Sürüm farkı alınamadı.");
+    } finally {
+      setDiffLoading(false);
     }
   }
 
@@ -469,7 +519,14 @@ export default function DilekceStudyoPage() {
       {/* ---------- Dilekçe detay modalı ---------- */}
       <Modal
         open={detail !== null}
-        onClose={() => setDetail(null)}
+        onClose={() => {
+          setDetail(null);
+          setDiffFrom(null);
+          setDiffTo(null);
+          setDiffData(null);
+          setDiffError(null);
+          setDiffShowAll(false);
+        }}
         title={detail?.title ?? "Dilekçe"}
       >
         {detailLoading ? (
@@ -583,6 +640,118 @@ export default function DilekceStudyoPage() {
                     )}
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* ---------- Sürüm farkı (D5 / cila) ---------- */}
+            {(detail.versions?.length ?? 0) > 1 && (
+              <div className="rounded-lg border border-slate-200 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-slate-800">
+                    Sürümler ({detail.versions!.length}) — fark karşılaştırması
+                  </p>
+                  {diffData && (
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="secondary" onClick={() => setDiffShowAll(!diffShowAll)}>
+                        {diffShowAll ? "Yalnız değişenler" : "Tüm bölümler"}
+                      </Button>
+                      <Button size="sm" variant="secondary" onClick={() => { setDiffData(null); setDiffError(null); }}>
+                        Kapat
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+                  {detail.versions!.map((v) => (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => {
+                        if (diffFrom === null) { setDiffFrom(v.versionNo); return; }
+                        if (diffTo === null && v.versionNo !== diffFrom) setDiffTo(v.versionNo);
+                      }}
+                      className={[
+                        "rounded-full border px-2.5 py-1 transition",
+                        diffFrom === v.versionNo || diffTo === v.versionNo
+                          ? "border-amber-500 bg-amber-50 font-semibold text-amber-800"
+                          : "border-slate-300 text-slate-600 hover:border-amber-400",
+                      ].join(" ")}
+                      title={new Date(v.createdAt).toLocaleString("tr-TR")}
+                    >
+                      v{v.versionNo}
+                    </button>
+                  ))}
+                  <span className="ml-1 text-slate-500">
+                    {diffFrom === null
+                      ? "— önce ilk sürümü seçin"
+                      : diffTo === null
+                        ? "— sonra karşılaştırılacak sürümü seçin"
+                        : `v${diffFrom} → v${diffTo}`}
+                  </span>
+                  {diffFrom !== null && (
+                    <button
+                      type="button"
+                      className="text-amber-700 underline"
+                      onClick={() => { setDiffFrom(null); setDiffTo(null); setDiffData(null); }}
+                    >
+                      sıfırla
+                    </button>
+                  )}
+                  <Button
+                    size="sm"
+                    disabled={diffLoading || diffFrom === null || diffTo === null}
+                    onClick={() => void loadDiff()}
+                  >
+                    {diffLoading ? "Hesaplanıyor…" : "Farkı Göster"}
+                  </Button>
+                </div>
+
+                {diffError && <ErrorBox message={diffError} />}
+
+                {diffData && (
+                  <div className="mt-3 space-y-2">
+                    <p className="text-xs text-slate-600">
+                      v{diffData.from.versionNo} → v{diffData.to.versionNo}:{" "}
+                      <strong>{diffData.summary.changedSections}</strong> bölüm değişti,{" "}
+                      <strong>{diffData.summary.addedSections}</strong> eklendi,{" "}
+                      <strong>{diffData.summary.removedSections}</strong> çıkarıldı ·{" "}
+                      <span className="text-emerald-700">+{diffData.summary.addedLines} satır</span>{" "}
+                      <span className="text-red-700">−{diffData.summary.removedLines} satır</span>
+                    </p>
+                    <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+                      {diffData.sections
+                        .filter((s) => diffShowAll || s.change !== "UNCHANGED")
+                        .map((s) => (
+                          <div key={s.key} className="rounded-lg border border-slate-200 p-2">
+                            <div className="mb-1 flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-semibold text-slate-800">{s.title}</p>
+                              {s.change === "ADDED" && <Badge tone="green">eklendi</Badge>}
+                              {s.change === "REMOVED" && <Badge tone="red">çıkarıldı</Badge>}
+                              {s.change === "CHANGED" && <Badge tone="yellow">değişti</Badge>}
+                              {s.change === "UNCHANGED" && <Badge tone="gray">değişmedi</Badge>}
+                            </div>
+                            <pre className="overflow-x-auto rounded bg-slate-50 p-2 text-[11px] leading-5">
+                              {s.lines.map((l, i) => (
+                                <span
+                                  key={i}
+                                  className={
+                                    l.op === "added"
+                                      ? "block bg-emerald-50 text-emerald-800"
+                                      : l.op === "removed"
+                                        ? "block bg-red-50 text-red-800 line-through decoration-red-300"
+                                        : "block text-slate-600"
+                                  }
+                                >
+                                  {l.op === "added" ? "+ " : l.op === "removed" ? "− " : "  "}
+                                  {l.text}
+                                </span>
+                              ))}
+                            </pre>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

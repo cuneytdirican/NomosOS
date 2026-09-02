@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
 import { PetitionsService } from "./petitions.service";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AiThrottle } from "../common/guards/ai-rate-limit.guard";
@@ -84,6 +84,40 @@ export class PetitionsController {
     @Body(new ZodValidationPipe(createPetitionVersionSchema)) body: CreatePetitionVersionInput,
   ) {
     return this.petitions.createVersion(user, id, body);
+  }
+
+  /**
+   * SÜRÜM FARKI (D5 / cila) — ?from=N&to=M. NOT: bu yol `:versionNo`
+   * parametresinden ÖNCE bildirilir; aksi hâlde "diff" sürüm numarası
+   * sanılırdı.
+   */
+  @Get(":id/versions/diff")
+  versionDiff(
+    @CurrentUser() user: AuthUser,
+    @Param("id") id: string,
+    @Query("from") from: string,
+    @Query("to") to: string,
+  ) {
+    const fromNo = Number(from);
+    const toNo = Number(to);
+    if (!Number.isInteger(fromNo) || !Number.isInteger(toNo) || fromNo < 1 || toNo < 1) {
+      throw new BadRequestException("from ve to 1'den büyük tam sürüm numaraları olmalıdır.");
+    }
+    return this.petitions.versionDiff(user, id, fromNo, toNo);
+  }
+
+  /** Eski sürümün salt-okunur görünümü. */
+  @Get(":id/versions/:versionNo")
+  versionDetail(
+    @CurrentUser() user: AuthUser,
+    @Param("id") id: string,
+    @Param("versionNo") versionNo: string,
+  ) {
+    const no = Number(versionNo);
+    if (!Number.isInteger(no) || no < 1) {
+      throw new BadRequestException("Sürüm numarası 1'den büyük bir tam sayı olmalıdır.");
+    }
+    return this.petitions.versionDetail(user, id, no);
   }
 
   /**

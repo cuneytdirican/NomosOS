@@ -57,6 +57,7 @@ import {
   toUdfPetitionInput,
   type PetitionSectionBody,
 } from "./petition-sections";
+import { diffSections, summarizeDiff } from "./petition-version-diff";
 import { PetitionExportStorage } from "./petition-export.storage";
 import {
   buildPetitionSectionRewriteMessages,
@@ -408,6 +409,55 @@ export class PetitionsService {
     });
 
     return { ...(await this.detail(user, id)), verification };
+  }
+
+  /**
+   * SÜRÜM GÖRÜNÜMÜ (D5 / cila) — eski bir sürümün salt-okunur içeriği.
+   * Sürümler değiştirilemez; bu uç YALNIZCA okur.
+   */
+  async versionDetail(user: AuthUser, id: string, versionNo: number) {
+    const petition = await this.loadPetition(user.tenantId, id);
+    const version = await this.prisma.client.petitionVersion.findFirst({
+      where: { petitionId: petition.id, versionNo },
+      orderBy: { versionNo: "desc" },
+    });
+    if (!version) throw new NotFoundException(`Bu dilekçenin v${versionNo} sürümü yok.`);
+    return {
+      petitionId: petition.id,
+      versionNo: version.versionNo,
+      note: version.note,
+      createdBy: version.createdBy,
+      createdAt: version.createdAt,
+      sections: parseVersionSections(version.sectionsJson),
+      plainText: version.plainText,
+    };
+  }
+
+  /**
+   * SÜRÜM FARKI (D5 / cila) — iki sürüm arasındaki bölüm + satır farkı.
+   * Karşılaştırma sunucuda LCS ile yapılır; istemci yalnız sonucu çizer.
+   */
+  async versionDiff(user: AuthUser, id: string, fromNo: number, toNo: number) {
+    const petition = await this.loadPetition(user.tenantId, id);
+    const [from, to] = await Promise.all([
+      this.prisma.client.petitionVersion.findFirst({
+        where: { petitionId: petition.id, versionNo: fromNo },
+      }),
+      this.prisma.client.petitionVersion.findFirst({
+        where: { petitionId: petition.id, versionNo: toNo },
+      }),
+    ]);
+    const missing = [fromNo, from].some((v) => !v) ? `v${fromNo}` : [toNo, to].some((v) => !v) ? `v${toNo}` : null;
+    if (missing) throw new NotFoundException(`Bu dilekçenin ${missing} sürümü yok.`);
+
+    const diffs = diffSections(parseVersionSections(from!.sectionsJson), parseVersionSections(to!.sectionsJson));
+    return {
+      petitionId: petition.id,
+      from: { versionNo: from!.versionNo, note: from!.note, createdAt: from!.createdAt },
+      to: { versionNo: to!.versionNo, note: to!.note, createdAt: to!.createdAt },
+      summary: summarizeDiff(diffs),
+      sections: diffs,
+    };
   }
 
   async remove(user: AuthUser, id: string) {

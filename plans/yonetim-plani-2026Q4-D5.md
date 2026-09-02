@@ -64,6 +64,15 @@ yöneticiler, demo talepleri, AI sağlayıcılar sayfaları ZATEN VARDI. M1'in
   Canlı doğrulandı: boş havuz 400 → 3 onaylı örnekle iş 201 (anlık görüntü
   3) → manifest 3 satır JSONL → şerit dışı 400 → geçiş zinciri 200 →
   TAMAMLANDI'sız 400 → model adıyla 200 → terminal durumda manifest/geçiş 400.
+- **M5 DEĞERLENDİRİLDİ (karşılanmış):** Panel özet sayfası /metrics/overview +
+  /health + onay kuyruğu uçlarına zaten bağlı; ayrı pano sayfası gerekmez.
+- **Cila (dilekçe sürüm farkı) TAMAM:** GET /petitions/:id/versions/:versionNo
+  (eski sürüm salt-okunur) + GET /petitions/:id/versions/diff?from=&to= —
+  sunucuda LCS satır farkı + anahtar eşleşmeli bölüm farkı (diffLines/
+  diffSections/summarizeDiff, 11 birim testi); web dilekçe detayında sürüm
+  seçimi + renkli fark çizimi (eklenen yeşil / çıkarılan kırmızı).
+  Canlı doğrulandı: yeni sürüm 201 → v1 görünümü 200 (5 bölüm) → v1→v2 fark
+  200 (1 bölüm değişti, +3 satır) → olmayan sürüm 404, geçersiz parametre 400.
 
 ## 1. Eksikler (öncelik sırasıyla)
 
