@@ -9,7 +9,7 @@
  *  5. Ödeme, bağlantı ile faturanın KÜÇÜK tutarı üzerinden yapılır (fazla ödeme yok).
  */
 
-import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { describe, expect, it, afterEach } from "vitest";
 import { ConflictException, NotFoundException } from "@nestjs/common";
 import { OdemeLinkiService } from "./odeme-linki.service";
 import { OdemeSaglayici, odemeSaglayiciTuru } from "./odeme-saglayici";

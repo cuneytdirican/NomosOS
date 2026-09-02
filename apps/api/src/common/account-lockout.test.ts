@@ -20,8 +20,8 @@ import {
   type LockoutPolicy,
 } from "./account-lockout";
 
-/** auth.constants.ts'teki TENANT_LOCKOUT_POLICY ile aynı değerler. */
-const POLICY: LockoutPolicy = { maxFailedAttempts: 5, failureWindowMinutes: 15, lockoutMinutes: 30 };
+/** auth.constants.ts'teki TENANT_LOCKOUT_POLICY ile birebir aynı tutulur (İ-07). */
+const POLICY: LockoutPolicy = { maxFailedAttempts: 10, failureWindowMinutes: 15, lockoutMinutes: 15 };
 
 const NOW = new Date("2026-08-31T12:00:00.000Z");
 const S = (over: Partial<{ failedAttempts: number; failureWindowEndsAt: Date | null; lockedUntil: Date | null }> = {}) => ({
@@ -32,9 +32,9 @@ const S = (over: Partial<{ failedAttempts: number; failureWindowEndsAt: Date | n
 });
 
 describe("K-03: kilit mantığı — kiracı tarafında portalkiyle AYNI çalışır", () => {
-  it("5 ardışık hata kilidi kurar; sayaç 5. hatada sıfırlanır", () => {
+  it("10 ardışık hata kilidi kurar; sayaç 10. hatada sıfırlanır", () => {
     let state = S();
-    for (let i = 1; i <= 4; i++) {
+    for (let i = 1; i <= 9; i++) {
       state = recordFailure(state, POLICY, NOW);
       expect(state.failedAttempts).toBe(i);
       expect(state.lockedUntil).toBeNull();
@@ -42,23 +42,23 @@ describe("K-03: kilit mantığı — kiracı tarafında portalkiyle AYNI çalı�
     const locked = recordFailure(state, POLICY, NOW);
     expect(locked.lockedUntil).not.toBeNull();
     expect(locked.failedAttempts).toBe(0);
-    expect(lockRemainingSeconds(locked, NOW)).toBe(30 * 60);
+    expect(lockRemainingSeconds(locked, NOW)).toBe(15 * 60);
   });
 
   it("kilitliyken giriş denemesi reddedilir; kilit süresi dolunca geçer", () => {
     const locked = recordFailure(
-      S({ failedAttempts: 4, failureWindowEndsAt: new Date(NOW.getTime() + 60_000) }),
+      S({ failedAttempts: 9, failureWindowEndsAt: new Date(NOW.getTime() + 60_000) }),
       POLICY,
       NOW,
     );
     expect(locked.lockedUntil).not.toBeNull();
     expect(lockRemainingSeconds(locked, NOW)).toBeGreaterThan(0);
-    const after = new Date(NOW.getTime() + 30 * 60_000 + 1000);
+    const after = new Date(NOW.getTime() + 15 * 60_000 + 1000);
     expect(lockRemainingSeconds(locked, after)).toBe(0);
   });
 
   it("pencere dolmuşsa sayaç yeniden başlar — aylara yayılmış hatalar kilitlemez", () => {
-    const stale = S({ failedAttempts: 4, failureWindowEndsAt: new Date(NOW.getTime() - 60_000) });
+    const stale = S({ failedAttempts: 9, failureWindowEndsAt: new Date(NOW.getTime() - 60_000) });
     const next = recordFailure(stale, POLICY, NOW);
     expect(next.failedAttempts).toBe(1);
     expect(next.lockedUntil).toBeNull();
@@ -66,6 +66,15 @@ describe("K-03: kilit mantığı — kiracı tarafında portalkiyle AYNI çalı�
 
   it("CLEARED_LOCKOUT parola değişiminde/sıfırlamada tam temizlik verir", () => {
     expect(CLEARED_LOCKOUT).toEqual({ failedAttempts: 0, failureWindowEndsAt: null, lockedUntil: null });
+  });
+
+  it("İ-07: test eşikleri ÜRETİM sabitleriyle senkron kalır (kaynak taahhüdü)", () => {
+    // Sabitler auth.constants.ts'ten OKUNUR — test kopyası bayatlayınca bu
+    // assertion düşer, sessiz uyumsuzluk kalmaz.
+    const CONSTANTS = readFileSync(join(process.cwd(), "src", "auth", "auth.constants.ts"), "utf-8");
+    expect(CONSTANTS).toContain("export const TENANT_ACCOUNT_MAX_FAILED_ATTEMPTS = 10;");
+    expect(CONSTANTS).toContain("export const TENANT_FAILURE_WINDOW_MINUTES = 15;");
+    expect(CONSTANTS).toContain("export const TENANT_LOCKOUT_MINUTES = 15;");
   });
 });
 

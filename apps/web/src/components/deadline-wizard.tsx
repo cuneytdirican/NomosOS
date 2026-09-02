@@ -98,17 +98,24 @@ export function DeadlineWizard({
   const effectiveCaseId = caseId ?? pickedCaseId;
   const effectiveCaseType = caseType ?? pickedCaseType;
 
-  /** Dosya türüne uyan kurallar önce; caseTypes boşsa kural tüm türler için geçerlidir. */
+  /**
+   * Dosya türüne uyan kurallar önce; caseTypes boşsa kural tüm türler için geçerlidir.
+   * İ-51: hiç tür eşleşmesi yoksa eskiden SESSİCE tüm kurallar listeleniyordu —
+   * kullanıcı, dosyasına uymayan bir kuralı seçebiliyordu. Artık açıkça
+   * işaretlenir.
+   */
   const applicableRules = useMemo(() => {
-    if (!effectiveCaseType) return rules;
+    if (!effectiveCaseType) return { rules, widened: false };
     const matches = rules.filter(
       (r) => !r.caseTypes || r.caseTypes.length === 0 || r.caseTypes.includes(effectiveCaseType),
     );
-    return matches.length > 0 ? matches : rules;
+    return matches.length > 0
+      ? { rules: matches, widened: false }
+      : { rules, widened: true };
   }, [rules, effectiveCaseType]);
 
   const selectedRule = useMemo(
-    () => applicableRules.find((r) => r.key === ruleKey) ?? null,
+    () => applicableRules.rules.find((r) => r.key === ruleKey) ?? null,
     [applicableRules, ruleKey],
   );
 
@@ -221,11 +228,17 @@ export function DeadlineWizard({
             )}
 
             <Field label="1. Süre kuralı" hint="Sistem kuralları mevzuat dayanağıyla gelir.">
+              {applicableRules.widened && (
+                <p className="mb-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-4 text-amber-800">
+                  Bu dosya türüne özel süre kuralı bulunamadı; TÜM kurallar listeleniyor —
+                  seçtiğiniz kuralın dosya türünüze uygunluğunu kendiniz doğrulayın.
+                </p>
+              )}
               <Select value={ruleKey} onChange={(e) => pickRule(e.target.value)} required>
                 <option value="" disabled>
                   Kural seçin…
                 </option>
-                {applicableRules.map((r) => (
+                {applicableRules.rules.map((r) => (
                   <option key={r.id ?? r.key} value={r.key}>
                     {r.name} — {r.durationValue}{" "}
                     {labelOf(DURATION_UNIT_LABELS, r.durationUnit)} ({r.legalBasis})

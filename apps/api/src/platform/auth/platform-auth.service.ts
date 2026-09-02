@@ -680,7 +680,7 @@ export class PlatformAuthService {
   private async markTotpUsed(
     userId: string,
     counter: number,
-    lastUsed: number | null
+    _lastUsed: number | null
   ): Promise<void> {
     // İ-02 (İYİLEŞTİRME): koşullu UPDATE — lastTotpCounter < counter olduğu
     // sürece yaz. İki eşzamanlı istek aynı adımı geçmeye çalışırsa yalnız biri

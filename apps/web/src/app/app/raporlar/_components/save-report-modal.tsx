@@ -17,7 +17,7 @@
  * kimse paylaşımı bir yetki devri sansın.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Field, Input, Modal, Select } from "@/components/ui";
 import { REPORT_SCOPE_HINTS, REPORT_SCOPE_LABELS, periodLabel } from "@/lib/labels";
 import type { ReportParams, ReportScope } from "../../_lib/faz6-types";
@@ -41,6 +41,12 @@ export function SaveReportModal({
 }) {
   const [name, setName] = useState(defaultName);
   const [scope, setScope] = useState<ReportScope>("KISISEL");
+
+  // İ-44: modal AÇIKKEN defaultName değişirse (rapor/dönem değişir) isim
+  // alanı takılı kalmıyordu — kapalıyken senkron, açılışta güncelle.
+  useEffect(() => {
+    if (open) setName(defaultName);
+  }, [open, defaultName]);
 
   return (
     <Modal open={open} title="Bu raporu kaydet" onClose={onClose}>

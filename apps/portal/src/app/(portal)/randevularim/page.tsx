@@ -11,7 +11,7 @@
  * randevu varsa istek 409 alır ve kullanıcı başka saat seçer.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { EP } from "@/lib/endpoints";
 import { useListResource } from "@/lib/useResource";
 import { portalApi, errorMessage } from "@/lib/api";
@@ -19,10 +19,8 @@ import { fmtDayHeading } from "@/lib/labels";
 import {
   Badge,
   Button,
-  Field,
   Input,
   PageHeader,
-  PrivacyNote,
   ResourceView,
 } from "@/components/ui";
 

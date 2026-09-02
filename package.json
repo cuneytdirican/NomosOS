@@ -12,7 +12,7 @@
     "dev": "turbo run dev",
     "typecheck": "turbo run typecheck",
     "test": "pnpm -r test",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings 0",
     "db:generate": "pnpm --filter @nomosos/db generate",
     "db:migrate": "pnpm --filter @nomosos/db migrate:dev",
     "db:deploy": "pnpm --filter @nomosos/db migrate:deploy",

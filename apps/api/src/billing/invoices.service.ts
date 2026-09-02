@@ -511,12 +511,6 @@ export class InvoicesService {
          * kullanıcı bu kalemleri faturadan bilerek çıkarmıştır; o hâlde kayıtlar
          * gerçekten serbest bırakılır (aksi hâlde kalıcı olarak kilitli kalır).
          */
-        const previousTimeEntries = await tx.timeEntry.findMany({
-          where: { tenantId: user.tenantId, invoiceId: id },
-          select: { id: true },
-        });
-        const keepsTimeEntryLines = input.lines.some((l) => l.sourceType === "TIME_ENTRY");
-
         await this.releaseSources(tx, user.tenantId, id);
         await tx.invoiceLine.deleteMany({ where: { invoiceId: id } });
         await tx.invoiceLine.createMany({

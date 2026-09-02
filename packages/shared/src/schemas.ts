@@ -20,6 +20,13 @@ export function isValidTckn(value: string): boolean {
 }
 
 /**
+ * İ-63: TÜM Zod mesajları Türkçedir. Zod'un öntanımlı İngilizce metinleri
+ * ("String must contain at least 2 character(s)") doğrulama hatası olarak
+ * avukata ulaşıyordu. Aşağıdaki her alanda mesaj AÇIKÇA verilmiştir; yeni
+ * alan eklerken mesajsız bırakmayın.
+ */
+
+/**
  * KİRACI (BÜRO) GİRİŞİ — denetim bulgusu Ö-07.
  *
  * E-posta NORMALİZE EDİLİR: `.trim().toLowerCase()`. Eskiden ham geçiyordu ve
@@ -36,8 +43,16 @@ export function isValidTckn(value: string): boolean {
  * her istekte pahalı bir karma hesabı tetikleyen ucuz bir DoS yüzeyidir.
  */
 export const loginSchema = z.object({
-  email: z.string().trim().toLowerCase().max(200).email(),
-  password: z.string().min(8).max(200),
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .max(200, "E-posta en fazla 200 karakter olabilir.")
+    .email("Geçerli bir e-posta adresi girin."),
+  password: z
+    .string()
+    .min(8, "Parola en az 8 karakter olmalıdır.")
+    .max(200, "Parola en fazla 200 karakter olabilir."),
 });
 export type LoginInput = z.infer<typeof loginSchema>;
 
@@ -57,56 +72,83 @@ export const changePasswordSchema = z
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 
 export const createClientSchema = z.object({
-  type: z.enum(CLIENT_TYPES),
-  name: z.string().min(2).max(300),
+  type: z.enum(CLIENT_TYPES, {
+    errorMap: () => ({ message: "Geçersiz müvekkil türü." }),
+  }),
+  name: z
+    .string()
+    .min(2, "Müvekkil adı/unvanı en az 2 karakter olmalıdır.")
+    .max(300, "Müvekkil adı/unvanı en fazla 300 karakter olabilir."),
   tckn: z.string().optional().refine((v) => !v || isValidTckn(v), "Geçersiz TC Kimlik No"),
-  taxNumber: z.string().regex(/^\d{10}$/).optional(),
-  taxOffice: z.string().max(120).optional(),
-  email: z.string().email().optional(),
-  phone: z.string().max(30).optional(),
-  address: z.string().max(1000).optional(),
-  notes: z.string().max(5000).optional(),
+  taxNumber: z
+    .string()
+    .regex(/^\d{10}$/, "Vergi Kimlik No 10 haneli olmalıdır.")
+    .optional(),
+  taxOffice: z.string().max(120, "Vergi dairesi en fazla 120 karakter olabilir.").optional(),
+  email: z.string().email("Geçerli bir e-posta adresi girin.").optional(),
+  phone: z.string().max(30, "Telefon en fazla 30 karakter olabilir.").optional(),
+  address: z.string().max(1000, "Adres en fazla 1000 karakter olabilir.").optional(),
+  notes: z.string().max(5000, "Notlar en fazla 5000 karakter olabilir.").optional(),
 });
 export type CreateClientInput = z.infer<typeof createClientSchema>;
 
 export const createCaseSchema = z.object({
-  clientId: z.string().uuid(),
-  type: z.enum(CASE_TYPES),
-  title: z.string().min(3).max(300),
-  courtName: z.string().max(200).optional(),
-  fileNumber: z.string().max(50).optional(), // örn. 2026/145
-  judgeName: z.string().max(150).optional(),
-  subject: z.string().max(2000).optional(),
-  responsibleUserId: z.string().uuid().optional(),
+  clientId: z.string().uuid("Geçersiz müvekkil kimliği."),
+  type: z.enum(CASE_TYPES, { errorMap: () => ({ message: "Geçersiz dosya türü." }) }),
+  title: z
+    .string()
+    .min(3, "Dosya başlığı en az 3 karakter olmalıdır.")
+    .max(300, "Dosya başlığı en fazla 300 karakter olabilir."),
+  courtName: z.string().max(200, "Mahkeme adı en fazla 200 karakter olabilir.").optional(),
+  fileNumber: z.string().max(50, "Esas no en fazla 50 karakter olabilir.").optional(), // örn. 2026/145
+  judgeName: z.string().max(150, "Hakim adı en fazla 150 karakter olabilir.").optional(),
+  subject: z.string().max(2000, "Dava konusu en fazla 2000 karakter olabilir.").optional(),
+  responsibleUserId: z.string().uuid("Geçersiz sorumlu avukat kimliği.").optional(),
 });
 export type CreateCaseInput = z.infer<typeof createCaseSchema>;
 
 export const createTaskSchema = z.object({
-  caseId: z.string().uuid().optional(),
-  title: z.string().min(3).max(300),
-  description: z.string().max(5000).optional(),
-  assigneeId: z.string().uuid(),
-  reviewerId: z.string().uuid().optional(),
-  dueDate: z.coerce.date().optional(),
-  priority: z.enum(TASK_PRIORITIES).default("NORMAL"),
+  caseId: z.string().uuid("Geçersiz dosya kimliği.").optional(),
+  title: z
+    .string()
+    .min(3, "Görev başlığı en az 3 karakter olmalıdır.")
+    .max(300, "Görev başlığı en fazla 300 karakter olabilir."),
+  description: z.string().max(5000, "Görev açıklaması en fazla 5000 karakter olabilir.").optional(),
+  assigneeId: z.string().uuid("Geçersiz atanan kullanıcı kimliği."),
+  reviewerId: z.string().uuid("Geçersiz kontrolcü kullanıcı kimliği.").optional(),
+  dueDate: z.coerce.date({ invalid_type_error: "Son tarih geçerli bir tarih olmalıdır." }).optional(),
+  priority: z
+    .enum(TASK_PRIORITIES, { errorMap: () => ({ message: "Geçersiz öncelik." }) })
+    .default("NORMAL"),
 });
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 
 export const createUserSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-  fullName: z.string().min(2).max(200),
-  role: z.enum(USER_ROLES),
+  email: z.string().email("Geçerli bir e-posta adresi girin."),
+  password: z.string().min(8, "Parola en az 8 karakter olmalıdır."),
+  fullName: z
+    .string()
+    .min(2, "Ad soyad en az 2 karakter olmalıdır.")
+    .max(200, "Ad soyad en fazla 200 karakter olabilir."),
+  role: z.enum(USER_ROLES, { errorMap: () => ({ message: "Geçersiz kullanıcı rolü." }) }),
 });
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 
 /** AI sağlayıcı yapılandırması (Ayarlar → AI Sağlayıcı). */
 export const aiProviderConfigSchema = z.object({
-  name: z.string().min(2).max(100),
-  type: z.enum(AI_PROVIDER_TYPES),
-  apiKey: z.string().max(500).optional(),
-  baseUrl: z.string().url().optional(),
-  defaultModel: z.string().min(1).max(200),
+  name: z
+    .string()
+    .min(2, "Sağlayıcı adı en az 2 karakter olmalıdır.")
+    .max(100, "Sağlayıcı adı en fazla 100 karakter olabilir."),
+  type: z.enum(AI_PROVIDER_TYPES, {
+    errorMap: () => ({ message: "Geçersiz sağlayıcı türü." }),
+  }),
+  apiKey: z.string().max(500, "API anahtarı en fazla 500 karakter olabilir.").optional(),
+  baseUrl: z.string().url("Geçerli bir URL girin.").optional(),
+  defaultModel: z
+    .string()
+    .min(1, "Varsayılan model adı zorunludur.")
+    .max(200, "Model adı en fazla 200 karakter olabilir."),
   /** CUSTOM tipi için: isteğe eklenecek ek header'lar. */
   headers: z.record(z.string()).optional(),
   /** CUSTOM tipi için: istek/yanıt alan eşlemesi. */
@@ -125,16 +167,21 @@ export type AiProviderConfigInput = z.infer<typeof aiProviderConfigSchema>;
 
 /** Görev tipi → sağlayıcı/model eşlemesi. */
 export const aiTaskRouteSchema = z.object({
-  taskType: z.enum(AI_TASK_TYPES),
-  providerConfigId: z.string().uuid(),
-  model: z.string().min(1).max(200),
+  taskType: z.enum(AI_TASK_TYPES, { errorMap: () => ({ message: "Geçersiz görev tipi." }) }),
+  providerConfigId: z.string().uuid("Geçersiz sağlayıcı kimliği."),
+  model: z
+    .string()
+    .min(1, "Model adı zorunludur.")
+    .max(200, "Model adı en fazla 200 karakter olabilir."),
 });
 export type AiTaskRouteInput = z.infer<typeof aiTaskRouteSchema>;
 
 export const caseChatSchema = z.object({
-  caseId: z.string().uuid().optional(),
-  message: z.string().min(1).max(20000),
+  caseId: z.string().uuid("Geçersiz dosya kimliği.").optional(),
+  message: z
+    .string()
+    .min(1, "Mesaj boş olamaz.")
+    .max(20000, "Mesaj en fazla 20000 karakter olabilir."),
   /** KVKK maskeleme onayı: dış sağlayıcıya giden metinde PII bulunduysa true gönderilmeli. */
   piiApproved: z.boolean().default(false),
 });
-export type CaseChatInput = z.infer<typeof caseChatSchema>;

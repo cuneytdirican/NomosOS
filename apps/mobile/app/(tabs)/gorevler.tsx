@@ -34,8 +34,17 @@ import { TaskRow } from "@/ui/list-items";
 import { NoteDialog } from "@/ui/note-dialog";
 import { colors, font, radius, space } from "@/ui/theme";
 
-/** Ret/geri gönderme geçişlerinde sunucu gerekçe ister; pencere açılır. */
-const NOTE_REQUIRED_TARGETS = new Set(["ACIK", "DEVAM_EDIYOR", "IPTAL"]);
+/**
+ * İ-57: gerekçe zorunluluğu SUNUCU SÖZLEŞMESİNE göre — api/src/tasks/task-status.ts
+ * REJECTION_TRANSITIONS: yalnız KONTROLDE/ONAY_BEKLIYOR → DEVAM_EDIYOR geri
+ * göndermesi gerekçe ister. (Eski istemci sabiti hedef durumları sayıyordu ve
+ * normal başlangıçta da gerekçe isteyordu.) Sunucu değişirse bu kopya da
+ * güncellenmelidir — sözleşme testi apps/api'de izler.
+ */
+function noteRequiredFor(from: string | null | undefined, to: string): boolean {
+  if (from !== "KONTROLDE" && from !== "ONAY_BEKLIYOR") return false;
+  return to === "DEVAM_EDIYOR";
+}
 
 export default function TasksScreen(): React.JSX.Element {
   const { user } = useSession();
@@ -176,7 +185,7 @@ export default function TasksScreen(): React.JSX.Element {
                               variant={status === "TAMAMLANDI" ? "primary" : "secondary"}
                               disabled={busy}
                               onPress={() => {
-                                if (NOTE_REQUIRED_TARGETS.has(status)) {
+                                if (noteRequiredFor(task.status, status)) {
                                   setNoteTarget({ task, status });
                                 } else {
                                   void applyStatus(task, status);

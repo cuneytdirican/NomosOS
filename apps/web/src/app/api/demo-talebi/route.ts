@@ -37,6 +37,14 @@ const RATE_LIMIT_WINDOW_MS = 10 * 60_000;
 
 const hits = new Map<string, number[]>();
 
+/** İ-53: kayıt YAPMAZ — yalnızca sayacı okur (doğrulama hatası kota yakmaz). */
+function isOverLimit(ip: string): boolean {
+  const now = Date.now();
+  const recent = (hits.get(ip) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+  return recent.length >= RATE_LIMIT_MAX;
+}
+
+/** Doğrulanmış talebi sayaca YAZAR; sınırı aşıyorsa true döner. */
 function rateLimited(ip: string): boolean {
   const now = Date.now();
   const recent = (hits.get(ip) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
@@ -70,12 +78,14 @@ function text(value: unknown, max: number): string {
 }
 
 export async function POST(request: Request) {
-  // HIZ SINIRI en başta: gövdeyi okumadan reddet (İ-25).
+  // HIZ SINIRI en başta OKUNUR (gövde okumadan reddet, İ-25) ama SAYILMAZ —
+  // kayıt yalnız doğrulanmış talepte yazılır (İ-53): üç yanlış e-posta
+  // deneyen kullanıcı kotadan düşmez.
   const ip =
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     request.headers.get("x-real-ip") ||
     "bilinmeyen";
-  if (rateLimited(ip)) {
+  if (isOverLimit(ip)) {
     return NextResponse.json(
       {
         ok: false,
@@ -126,6 +136,20 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { ok: false, hata: "Ad soyad ve e-posta zorunludur." },
       { status: 400 },
+    );
+  }
+
+  // İ-53: DOĞRULANMIŞ talep şimdi sayaca yazılır — yukarıdaki 400'ler kotadan
+  // düşmez; gerçek gönderim denemesi düşer.
+  if (rateLimited(ip)) {
+    return NextResponse.json(
+      {
+        ok: false,
+        hata:
+          "Kısa sürede çok fazla talep gönderildi. Lütfen 10 dakika sonra tekrar deneyin " +
+          "veya doğrudan demo@nomosos.com adresine yazın.",
+      },
+      { status: 429 },
     );
   }
 

@@ -138,12 +138,22 @@ export function asRequestTooLarge(err: unknown): RequestTooLargeBody | null {
 // Uçlar
 // ---------------------------------------------------------------------------
 
-/** Uç yoksa/erişilemezse `null` döner — gösterge sessizce gizlenir. */
+/**
+ * Uç yoksa/erişilemezse `null` döner — gösterge sessizce gizlenir.
+ *
+ * İ-52: "uç yok" (404/501) ile GERÇEK ARIZA ayrılır. 500/ağ hatasında da null
+ * dönülüyordu ve kredi göstergesi, altyapı çökmüşken "kredi hattı yok"
+ * görünüyordu — avukat limitsiz modda sanıp harcayabiliyordu. Arıza artık
+ * fırlar; yalnız BİLİNÇLI "yok" yanıtları gizlenir.
+ */
 export async function fetchWallet(): Promise<CreditWalletResponse | null> {
   try {
     return await api<CreditWalletResponse>("/credits/wallet");
-  } catch {
-    return null;
+  } catch (err) {
+    if (err instanceof ApiError && (err.status === 404 || err.status === 501)) {
+      return null;
+    }
+    throw err;
   }
 }
 

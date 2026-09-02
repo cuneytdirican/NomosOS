@@ -27,6 +27,7 @@ import {
   toDateInput,
 } from "@/lib/labels";
 import { exportCsv } from "@/lib/csv";
+import { adminApi, errorMessage } from "@/lib/api";
 import type { AdminAuditEntry } from "@/lib/types";
 import {
   Badge,
@@ -35,6 +36,7 @@ import {
   Field,
   InfoBox,
   Input,
+  Modal,
   PageHeader,
   ResourceView,
   Select,
@@ -61,6 +63,75 @@ function AuditLogViewer() {
   const [to, setTo] = useState(toDateInput(new Date()));
   const [onlyCritical, setOnlyCritical] = useState(false);
   const search = useDebounced(searchInput);
+
+  // İ-59: SUNUCU TARAFI dışa aktarım durumu (dört-göz akışı).
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportReason, setExportReason] = useState("");
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportResult, setExportResult] = useState<{ approvalId: string } | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [dlApprovalId, setDlApprovalId] = useState("");
+  const [dlBusy, setDlBusy] = useState(false);
+  const [dlError, setDlError] = useState<string | null>(null);
+
+  async function requestServerExport() {
+    setExportBusy(true);
+    setExportError(null);
+    setExportResult(null);
+    try {
+      const res = await adminApi<{
+        approvalRequired: boolean;
+        approvalRequest?: { id?: string } | { approvalId?: string };
+        message?: string;
+      }>(`${EP.audit}/export`, {
+        method: "POST",
+        body: {
+          from: from || undefined,
+          to: to || undefined,
+          action: action || undefined,
+          reason: exportReason.trim(),
+        },
+      });
+      const raw = res.approvalRequest as { id?: string; approvalId?: string } | undefined;
+      const approvalId = raw?.id ?? raw?.approvalId ?? "";
+      setExportResult({ approvalId });
+    } catch (err) {
+      setExportError(errorMessage(err, "Dışa aktarım talebi açılamadı."));
+    } finally {
+      setExportBusy(false);
+    }
+  }
+
+  async function downloadApprovedExport() {
+    setDlBusy(true);
+    setDlError(null);
+    try {
+      // Sunucu sözleşmesi: { approvalId, rowCount, truncated, csv, note }.
+      const res = await adminApi<{ approvalId: string; rowCount: number; truncated: boolean; csv: string; note?: string }>(
+        `${EP.audit}/export/${encodeURIComponent(dlApprovalId.trim())}`,
+      );
+      if (res.csv) {
+        const blob = new Blob(["\ufeff" + res.csv], { type: "text/csv;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `denetim-izi-${dlApprovalId.trim().slice(0, 8)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        if (res.truncated) {
+          setDlError(
+            `Dosya satır sınırında kesildi (${res.rowCount} satır). Tam kapsam için tarih aralığını daraltıp yeni talep açın.`,
+          );
+        }
+      } else {
+        setDlError("Sunucu dosya içeriği döndürmedi.");
+      }
+    } catch (err) {
+      setDlError(errorMessage(err, "İndirme başarısız."));
+    } finally {
+      setDlBusy(false);
+    }
+  }
 
   const res = useListResource<AdminAuditEntry>(EP.audit, {
     query: {
@@ -192,7 +263,18 @@ function AuditLogViewer() {
                   ])
                 }
               >
-                CSV dışa aktar
+                Ekrandan CSV (limitli)
+              </Button>
+              {/* İ-59: kapsamlı dışa aktarım SUNUCUDA — dört-göz talebi */}
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setExportOpen(true);
+                  setExportResult(null);
+                  setExportError(null);
+                }}
+              >
+                Sunucu dışa aktarımı (dört-göz)
               </Button>
             </span>
           </RoleGate>
@@ -200,9 +282,10 @@ function AuditLogViewer() {
       />
 
       <WarningBox title="Dışa aktarım hakkında">
-        Buradaki CSV, <strong>ekranda listelenen ve sunucunun rol filtresinden geçmiş</strong>{" "}
-        kayıtları istemcide dosyaya yazar. Kapsamlı, dört-göz onaylı ve filigranlı sunucu tarafı
-        dışa aktarımı ayrı bir uçtur; hazır olduğunda bu düğme o uca bağlanacaktır.
+        <strong>Ekrandan CSV</strong> yalnız listelenen ilk 200 kaydı içerir (hızlı bakış).
+        Kapsamlı, filigranlı ve dört-göz onaylı dışa aktarım için{" "}
+        <strong>Sunucu dışa aktarımı</strong> düğmesini kullanın: talep onay kuyruğuna düşer,
+        ikinci bir yetkili onayladıktan sonra dosyayı YALNIZ siz, TEK SEFER indirirsiniz.
       </WarningBox>
 
       {scoped && (
@@ -281,6 +364,97 @@ function AuditLogViewer() {
           <Table columns={columns} rows={rows} rowKey={(l) => l.id} dense />
         </ResourceView>
       </Card>
+
+      {/* İ-59: sunucu tarafı dışa aktarım talebi — dört-göz akışı */}
+      <Modal
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        title="Sunucu dışa aktarımı (dört-göz)"
+      >
+        <div className="space-y-4">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            <p className="font-semibold text-slate-700">Dışa aktarılacak aralık (mevcut filtreler)</p>
+            <p className="mt-1">
+              {from || "başlangıç"} → {to || "bugün"}
+              {action ? ` · aksiyon: ${action}` : " · tüm aksiyonlar"}
+            </p>
+            <p className="mt-1 text-slate-500">
+              Dosya sunucuda, filigranlı üretilir; talep onay kuyruğuna düşer.
+            </p>
+          </div>
+
+          <Field label="Gerekçe" hint="Denetim izine yazılır; boş bırakılamaz.">
+            <Input
+              value={exportReason}
+              onChange={(e) => setExportReason(e.target.value)}
+              placeholder="Örn: 2026 Eylül finans mutabakatı"
+              maxLength={500}
+            />
+          </Field>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setExportOpen(false)}>
+              Vazgeç
+            </Button>
+            <Button
+              disabled={exportBusy || !exportReason.trim()}
+              onClick={() => void requestServerExport()}
+            >
+              {exportBusy ? "Talep açılıyor…" : "Dışa aktarım talebi aç"}
+            </Button>
+          </div>
+
+          {exportError && <p className="text-xs text-red-700">{exportError}</p>}
+
+          {exportResult && (
+            <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-xs text-emerald-800">
+              <p className="font-semibold">Dışa aktarım talebi açıldı (202).</p>
+              <p className="mt-1">
+                Onay kuyruğundan ikinci bir yetkilinin onayı bekleniyor. Onaylandığında
+                aşağıdaki indirme alanından <strong>yalnızca siz, tek sefer</strong>{" "}
+                indirebilirsiniz.
+                {exportResult.approvalId ? (
+                  <>
+                    {" "}Talep kimliği:{" "}
+                    <code className="rounded bg-white px-1 py-0.5">{exportResult.approvalId}</code>
+                  </>
+                ) : null}
+              </p>
+              <Link href="/onaylar" className="mt-1 inline-block font-medium underline">
+                Onay kuyruğuna git →
+              </Link>
+            </div>
+          )}
+
+          <div className="border-t border-slate-200 pt-3">
+            <p className="mb-1.5 text-xs font-medium text-slate-700">
+              Onaylanmış dışa aktarımı indir (tek seferlik)
+            </p>
+            <div className="flex gap-2">
+              <Input
+                value={dlApprovalId}
+                onChange={(e) => setDlApprovalId(e.target.value)}
+                placeholder="Onay talebi kimliği…"
+                className="flex-1"
+              />
+              <Button
+                variant="secondary"
+                disabled={dlBusy || !dlApprovalId.trim()}
+                onClick={() => void downloadApprovedExport()}
+              >
+                {dlBusy ? "İndiriliyor…" : "İndir"}
+              </Button>
+            </div>
+            {dlError && <p className="mt-1 text-xs text-red-700">{dlError}</p>}
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setExportOpen(false)}>
+              Kapat
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

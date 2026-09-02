@@ -88,9 +88,9 @@ export default function CaseDetailPage({
         empty={detail.loaded && !item}
         endpoint={detail.endpoint}
         onRetry={detail.reload}
-        loadingLabel="Dosya bilgileri getiriliyor…"
-        emptyMessage="Bu dosya portalda görüntülenemiyor."
-        emptyHint="Avukatınız dosyayı sizinle paylaştığında burada açılır."
+          loadingLabel="Dosya bilgileri getiriliyor…"
+          emptyMessage="Bu dosya portalda yayında değil."
+          emptyHint="Dosya henüz sizinle paylaşılmamış ya da paylaşımı avukatınız tarafından kaldırılmış olabilir. Dosya listesinden görünür dosyalarınıza göz atın."
       >
         {item && (
           <CaseDetail

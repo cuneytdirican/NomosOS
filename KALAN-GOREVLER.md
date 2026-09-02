@@ -4,6 +4,14 @@
 > durmadan çalışmamı istedi. Bağlam sıkışsa veya oturum yenilense bile buradan devam
 > edilir. Her adım bitiminde bu dosyadaki durum işaretlenir ve GitHub'a gönderilir.
 
+## Üretim Dağıtım Notu (İ-48)
+
+- `NEXT_PUBLIC_DISABLE_DEMO=1` üretim web build'inde MUTLAKA ayarlanmalıdır —
+  `/demo-giris` sayfasını kapatır. Derleme anında gömülür; çalışma zamanında
+  ayarlamak yetmez, build komutunda verilmesi gerekir.
+- Demo hesaplar yalnız demo seed'i çalıştıran ortamlarda geçerlidir; üretim
+  veritabanında demo kullanıcısı AÇILMAZ.
+
 ## Çalışma Kuralları (değiştirilemez)
 
 1. **Durma yok.** Bir aşama bitince bir sonraki aşama hemen başlatılır; onay beklenmez.

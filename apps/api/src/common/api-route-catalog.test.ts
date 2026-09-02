@@ -46,6 +46,13 @@ function scanController(source: string): Token[] {
 
 function collectControllerRoutes(): Set<string> {
   const routes = new Set<string>();
+  for (const r of collectControllerRoutesWithMethod()) routes.add(r.path);
+  return routes;
+}
+
+/** İ-60: yöntem + yol çiftleri — katalog metod doğrulamasının temeli. */
+function collectControllerRoutesWithMethod(): { method: string; path: string; file: string }[] {
+  const routes: { method: string; path: string; file: string }[] = [];
   const root = join(process.cwd(), "src");
   const walk = (dir: string) => {
     for (const entry of readdirSync(dir)) {
@@ -58,7 +65,11 @@ function collectControllerRoutes(): Set<string> {
           if (tk.t === "ctrl") current = tk.base ?? "";
           else if (current !== null) {
             const sub = tk.sub ? "/" + tk.sub.replace(/^\/+/, "") : "";
-            routes.add(`/${current}${sub}`.replace(/\/+$/, "") || "/");
+            routes.push({
+              method: (tk.method ?? "GET").toUpperCase(),
+              path: `/${current}${sub}`.replace(/\/+$/, "") || "/",
+              file: entry,
+            });
           }
         }
       }
@@ -147,7 +158,7 @@ describe("İ-27: katalogdaki her yol gerçek bir controller ucudur", () => {
 });
 
 describe("İ-27: katalog controller'ların temel öneklerini kapsıyor", () => {
-  it("her controller temel öneki katalogda temsil ediliyor", () => {
+  it("her controller temel öneği katalogda temsil ediliyor", () => {
     // Controller baz önekleri: yolun İLK statik segmenti (joker değil).
     const bases = new Set<string>();
     for (const shape of controllerShapes) {
@@ -162,5 +173,36 @@ describe("İ-27: katalog controller'ların temel öneklerini kapsıyor", () => {
       uncovered,
       `Katalogda hiç yolu olmayan controller önekleri: ${uncovered.join(", ")}`,
     ).toEqual([]);
+  });
+});
+
+describe("İ-60: HTTP metodu — yöntem çakışması ve metod envanteri", () => {
+  const withMethods = collectControllerRoutesWithMethod();
+
+  it("aynı YÖNTEM+YOL çifti iki controller'da TEKRAR KAYITLI değil", () => {
+    const seen = new Map<string, string>();
+    const duplicates: string[] = [];
+    for (const r of withMethods) {
+      const key = `${r.method} ${routeShape(r.path)}`;
+      const prev = seen.get(key);
+      if (prev && prev !== r.file) {
+        duplicates.push(`${key} — ${prev} ile ${r.file}`);
+      } else if (prev && prev === r.file) {
+        // Aynı dosyada da ikinci kayıt neredeyse her zaman hatadır.
+        duplicates.push(`${key} — ${r.file} içinde iki kez`);
+      }
+      seen.set(key, r.file);
+    }
+    expect(
+      duplicates,
+      `Aynı uç iki kez kayıtlı (Nest ilki ezer, sessizce): ${duplicates.join(" | ")}`,
+    ).toEqual([]);
+  });
+
+  it("yeni eklenen mutabakat ucu (İ-32) GET olarak kayıtlı", () => {
+    const status = withMethods.find(
+      (r) => routeShape(r.path) === "billing/invoices/*/e-invoice/status",
+    );
+    expect(status?.method).toBe("GET");
   });
 });

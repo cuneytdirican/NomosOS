@@ -32,7 +32,7 @@
       "js": ["content/inject.js"],
       "css": ["content/inject.css"],
       "run_at": "document_idle",
-      "all_frames": true
+      "all_frames": false
     }
   ],
   "action": {

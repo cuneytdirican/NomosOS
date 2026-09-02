@@ -15,7 +15,7 @@ import { useListResource } from "@/lib/useResource";
 import { useMutation } from "@/lib/useMutation";
 import { useAdminSession } from "@/lib/session";
 import { EP } from "@/lib/endpoints";
-import { can, canApproveRequest } from "@/lib/rbac";
+import { can, canApproveRequest, type AdminAction } from "@/lib/rbac";
 import { PageGate } from "@/components/RoleGate";
 import { ApprovalBadge, ApprovalStatusBadge } from "@/components/ApprovalBadge";
 import {
@@ -168,7 +168,11 @@ function ApprovalQueue() {
                         <Badge tone="steel" title="PlatformApprovalRequest.action">
                           {labelOf(APPROVAL_ACTION_LABELS, a.action)}
                         </Badge>
-                        <ApprovalBadge action="tenant.suspend" force />
+                        {/* İ-58: rozet satırın KENDİ eylemini taşır — eskiden
+                            her satıra sabit "tenant.suspend" basılıyordu ve
+                            örn. kredi değişikliği de "askıya alma" gibi
+                            görünüyordu. */}
+                        <ApprovalBadge action={a.action as AdminAction} force />
                         <ApprovalStatusBadge status={a.status} expiresAt={a.expiresAt} />
                         {isOwnRequest && (
                           <Badge tone="yellow" title="Talep eden ≠ onaylayan kuralı">

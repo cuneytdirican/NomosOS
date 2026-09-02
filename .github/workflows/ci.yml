@@ -127,11 +127,10 @@ jobs:
       # denetim bulgusu Ö-33b: CI'da lint adımı YOKTU ve `pnpm lint` hiçbir
       # şeyi denetlemiyordu. Adım DERLEMEDEN SONRA, testlerden ÖNCE koşar:
       # lint saniyeler sürer ve bir yazım/desen hatasını test paketinin
-      # dakikalarını harcamadan önce yakalar. `--max-warnings` BİLEREK
-      # VERİLMEZ: kurallar bu turda uyarı seviyesinde başlatıldı (bkz.
-      # eslint.config.mjs); uyarı tavanı koymak, CI'yı ilk günden kırardı.
-      # Uyarı sayısı düştükçe buraya `--max-warnings <n>` eklenmelidir.
-      - name: Lint (pnpm lint)
+      # dakikalarını harcamadan önce yakalar.
+      # İ-66: UYARI TAVANI ARTIK SIFIR — 10 birikmiş uyarı temizlendi;
+      # yeni uyarı CI'ı kırar. Bilinçli bir baskı: uyarı birikmesine geri dönülmez.
+      - name: Lint (pnpm lint --max-warnings 0)
         id: lint
         run: |
           set -o pipefail

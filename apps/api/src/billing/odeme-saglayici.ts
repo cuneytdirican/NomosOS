@@ -39,7 +39,7 @@ export class OdemeSaglayici {
    * Bağlantı tutarını sağlayıcıdan tahsil et. Yalnızca SIMULASYON modu
    * başarılı döner; aksi hâlde 503 — kullanıcıya asla sahte "ödendi" verilmez.
    */
-  async charge(input: { amount: string; currency: string }): Promise<OdemeSonucu> {
+  async charge(_input: { amount: string; currency: string }): Promise<OdemeSonucu> {
     const tur = odemeSaglayiciTuru();
     if (tur === "SIMULASYON") {
       // Simülasyon referansı: gerçek sağlayıcı yanıtı gibi benzersizdir.
