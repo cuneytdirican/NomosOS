@@ -61,7 +61,8 @@ Yatırımcı	analist@nomosos.local	Demo1234!	ANALYST_READONLY (maskeli görünü
 > **Dört-göz ilkesini denemek:** `superadmin` ile bir tenant'ı askıya alın →
 > işlem uygulanmaz, onay talebi oluşur. Aynı hesapla onaylamayı deneyin → **403**
 > ("kendi talebinizi karara bağlayamazsınız"). Sonra `superadmin2` ile giriş yapıp
-> onaylayın → işlem uygulanır. Plan oluşturma, iade ve kredi tahsisi de aynı akıştadır.
+> onaylayın → işlem uygulanır. **Yeni kiracı açma** (Tenantlar → «Yeni Kiracı»),
+> plan oluşturma, iade ve kredi tahsisi de aynı akıştadır.
 
 ### 2.3 Müvekkil portalı — http://localhost:3003/giris
 
@@ -168,6 +169,7 @@ pnpm dev                      # web 3000, api 3001, admin 3002, portal 3003
 | AI görev fiyatı | 31 | 6'sı ücretsiz (belge sınıflandırma, süre tespiti, atıf doğrulama, gömme) |
 | Kredi cüzdanı | 1 | 500 kredi, 200 belge kotası |
 | Zamanlanmış iş | 5 | Süre/duruşma hatırlatma, kullanım anlık görüntüsü, abonelik ve kredi dönemi |
+| AI eğitim örneği | 0 | ONAYLANMIŞ havuz bilinçli olarak boş başlar — fine-tune işi **400** verir; örnekler AI önerilerinin onaylanmasıyla birikir (C3) |
 
 ---
 
@@ -181,8 +183,11 @@ Telefonda **Expo Go** ile QR kodu okutun. API adresi olarak makinenizin yerel IP
 kullanın (`localhost` telefondan çözülmez).
 
 Mobil bilinçli olarak **salt-okur ağırlıklıdır**: bugünün duruşmaları, kritik süreler,
-görevler, dosya arama. Dosya oluşturma, finans ve dilekçe üretimi mobilde **yoktur** —
-bunlar masaüstüne aittir.
+görevler, dosya arama, **ajanda** (gün gezinmeli birleşik takvim) ve **mesajlar**
+(sohbet listesi + konuşma + mesaj gönderme; açık sohbet 15 sn'de bir yenilenir —
+mobilde SSE yoktur). Dosya oluşturma, finans ve dilekçe üretimi mobilde **yoktur** —
+bunlar masaüstüne aittir. Giriş noktaları: Bugün sekmesi başlığındaki takvim ve
+sohbet simgeleri.
 
 ---
 
@@ -225,6 +230,19 @@ Sistemin ayırt edici kararlarını görmek için:
    çağrılırsa 403 döner.
 6. **Risk motoru** — Dosya detayı → Risk. AI sağlayıcı bağlı olmasa bile skor üretilir;
    bant **daima kural tabanından** gelir, yapay zekâ bandı değiştiremez.
+7. **Kiracı yaşam döngüsü (dört-göz)** — Panel → Tenantlar → «Yeni Kiracı» ile talep
+   açın; ikinci süper yöneticinin onayıyla büro + ilk yönetici + 14 gün TRIAL abonelik
+   TEK işlemde kurulur. Sonra aynı akışla askıya alın — büronun kullanıcıları giriş
+   yapamaz (**403**, "aboneliği askıya alınmış"); veri silinmez.
+8. **Dilekçe sürüm farkı** — Bir dilekçede bölüm düzenleyip yeni sürüm kaydedin;
+   detay penceresindeki sürüm ciplerinden iki sürüm seçip fark görün: değişen
+   bölümler, eklenen (yeşil) / çıkarılan (kırmızı) satırlar.
+9. **Fine-tuning işi (dürüstlük ilkesi)** — Panel → AI Eğitim İşleri: iş açma,
+   manifest (JSONL) indirme ve şerit denetimli durum geçişleri vardır; sistemin
+   sağlayıcıya **otomatik gönderimi yoktur** — manifest elle yüklenir.
+10. **UYAP eşleşme sonrası yeniden senkron** — Eşleşmeyen UYAP dosyasına sahnelenen
+    olaylar, avukat eşleşmey çözdüğü anda dosyaya işlenir (safahat → zaman çizelgesi,
+    duruşma → ajanda).
 
 ---
 

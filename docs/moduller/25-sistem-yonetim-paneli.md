@@ -40,7 +40,7 @@ Gösterim: ✅ tam · 👁 salt-okur · 🔒 maskeli/agregat salt-okur · 4️�
 | İşlem | SUPER_ADMIN | OPS_ADMIN | BILLING_ADMIN | SUPPORT_AGENT | ANALYST_READONLY |
 |---|---|---|---|---|---|
 | Tenant listesi/detayı görüntüle | ✅ | ✅ | ✅ (finans odaklı) | ✅ | 🔒 (yalnız plan/segment agregatı) |
-| Tenant oluştur (manuel onboarding) | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Tenant oluştur (manuel onboarding) | 4️⃣ | 4️⃣ | ❌ | ❌ | ❌ |
 | Tenant askıya al / aktifleştir | ✅ | 4️⃣ | 4️⃣ (yalnız ödeme temerrüdü) | ❌ | ❌ |
 | Tenant kalıcı sil / veri imhası | 4️⃣ | ❌ | ❌ | ❌ | ❌ |
 | Plan değiştir / özel fiyat | ✅ / ✅ | ❌ | ✅ / 4️⃣ | ❌ | ❌ |
@@ -67,6 +67,9 @@ Gösterim: ✅ tam · 👁 salt-okur · 🔒 maskeli/agregat salt-okur · 4️�
 6. Bakım modu tam kilidi ve platform geneli flag/rate-limit değişikliği.
 7. Yeni SUPER_ADMIN atama / mevcut SUPER_ADMIN'i düşürme (iki SUPER_ADMIN).
 8. PlatformAuditLog dışa aktarımı.
+9. **Tenant AÇMA (D5 — `TENANT_CREATE`)**: talep ≠ onay; ilk yöneticinin parolası
+   talep anında hash'lenir, ikinci imzada tenant + ADMIN kullanıcı + TRIAL abonelik
+   tek işlemde kurulur.
 
 Sistemde her an **en az iki aktif SUPER_ADMIN** bulunmalıdır; tek kalınırsa dört-göz işlemleri kilitlenir (tasarım kararı, kurtarma prosedürü operasyon el kitabında).
 
@@ -101,6 +104,25 @@ KPI kartları (aktif tenant, MRR, deneme→ücretli dönüşüm, churn, DAU), 90
 
 ### 2. Tenant Yönetimi — `/admin/tenants` · `/admin/tenants/:id`
 Liste: arama (büro adı, e-posta, vergi no), filtre (plan, durum, il/baro, AI sağlayıcı tipi); kolonlar: büro adı, plan/durum/deneme bitişi, kullanıcı sayısı, dosya/belge/depolama sayaçları, son 30 gün AI çağrısı, son aktivite, MRR katkısı, açık bakiye. Detay sekmeleri: Özet · Kullanıcılar (metadata: rol, son giriş — içerik değil) · Abonelik & Ödemeler · Kullanım (UsageSnapshot trendleri) · AI Yapılandırması (**yalnız metadata**: tip, model, `hasApiKey`) · Notlar (`TenantNote`) · Denetim (o tenant'a yapılan platform işlemleri). Aksiyonlar: askıya al/aktifleştir (gerekçe zorunlu), plan değiştir, deneme uzat, kota override, destek erişimi başlat, kapatma/veri ihracı (dört-göz).
+
+**D5 güncellemesi — kiracı AÇMA (dört-göz `TENANT_CREATE`):** liste ekranında
+«Yeni Kiracı» düğmesi. Talep: büro adı + plan + koltuk sayısı + ilk yönetici
+(ad, e-posta, ilk parola — talep anında bcrypt ile hash'lenir, payload düz parola
+taşımaz) + gerekçe. Doğrulamalar: tekil e-posta/ad, AKTİF plan, plan koltuk tavanı.
+İkinci imzada executor TEK İŞLEMDE tenant + ilk ADMIN kullanıcı + 14 gün TRIAL
+abonelik + denetim izi kurar; yürütme anında doğrulamalar yeniden çalışır (talep ile
+onay arası yarış korunur). **Askıda/iptalli büro girişi kapalıdır:** tenant girişi
+abonelik durumunu denetler, SUSPENDED/CANCELED → 403 (denetim izine yazılır; veri
+silinmez). Yalnız SUPER_ADMIN ve OPS_ADMIN (matris: `tenant.create` dört-göz).
+
+**D5 güncellemesi — AI Eğitim İşleri (`/egitim`):** ONAYLANMIŞ AI eğitim örneği
+havuzundan fine-tuning işi yönetimi. İş açılışı havuzun ANLIK GÖRÜNTÜSÜNÜ alır
+(sayı + görev tipi kırılımı); manifest (JSONL) yalnız HAZIRLANDI/GONDERILDI
+durumunda iner; durum geçişleri şerit denetimlidir:
+`HAZIRLANDI → GONDERILDI → EGITILIYOR → TAMAMLANDI` (+BASARISIZ/IPTAL yan yolları),
+TAMAMLANDI için sonuç model adı ZORUNLU. **Dürüstlük ilkesi:** sağlayıcıya otomatik
+gönderim YOKTUR — manifesti sağlayıcıya operatör ELLE yükler; kod ve panelde
+açıkça yazılıdır. Tüm adımlar PlatformAuditLog'a düşer (`FINE_TUNE_*` eylemleri).
 
 ### 3. Abonelik — `/admin/subscriptions` · plan kataloğu `/admin/subscriptions/plans`
 Plan kademeleri: `TRIAL · SOLO · BURO · ENTERPRISE` (Private AI / Türkiye veri bölgesi opsiyonları Faz 5+ ile uyumlu). Abonelik tablosu (durum makinesiyle), yaklaşan yenilemeler, biten denemeler, iptal kuyruğu, kohort dönüşüm mini raporu. Aksiyonlar: yükselt/düşür (proration önizlemesi), deneme uzat, dondur, iptal (dönem sonunda/anında), özel fiyat (dört-göz).
@@ -187,6 +209,19 @@ Tenant tarafındaki Faz 3 `Invoice`/`Payment` (müvekkile kesilen) ile ad çakı
 | tenant_approved | bool | Tenant ADMIN'in uygulama içi onayı (yasal zorunluluk istisnası ayrıca işaretlenir) |
 | starts_at / expires_at / revoked_at | timestamptz | Varsayılan 4 saat, azami 24 saat; otomatik düşer |
 
+### FineTuneJob — fine-tuning iş kaydı (D5 / M4)
+| Alan | Tip | Açıklama |
+|------|-----|----------|
+| id, name, provider, base_model | | İşin kimliği ve hedefi (sağlayıcı serbest metin) |
+| status | enum benzeri | HAZIRLANDI → GONDERILDI → EGITILIYOR → TAMAMLANDI; BASARISIZ/IPTAL terminal |
+| sample_count, task_types_json | | AÇILIŞ ANINDAKİ ONAYLANMIŞ havuz anlık görüntüsü (sayı + kırılım) |
+| result_model_name | text nullable | TAMAMLANDI'da ZORUNLU — sağlayıcının döndürdüğü model kimliği |
+| requested_by_id | FK→PlatformUser | Talebi açan operatör |
+
+Sağlayıcıya otomatik gönderim YOKTUR: kayıt anlık görüntü + manifest (JSONL) üretir;
+yüklemeyi operatör elle yapar, durumu elle ilerletir. Her adım `PlatformAuditLog`'a
+düşer (`FINE_TUNE_JOB_CREATE / FINE_TUNE_JOB_STATUS / FINE_TUNE_MANIFEST_EXPORT`).
+
 ### PlatformAuditLog — tenant `AuditLog`'unun platform ikizi, ayrı tablo
 `id, platform_user_id FK, role, action ("TENANT_SUSPEND", "PLAN_CHANGE", "REFUND_APPROVE", "SETTING_UPDATE", "FLAG_TOGGLE", "SUPPORT_VIEW", "ANALYST_EXPORT", "ADMIN_LOGIN_FAILED"…), target_tenant_id?, entity?, entity_id?, detail (jsonb: eski→yeni, PII maskeli), approval_request_id?, ip, user_agent, created_at`. **Append-only**: uygulama DB rolünde UPDATE/DELETE yetkisi yoktur; kayıtlar zincirlenmiş hash veya periyodik WORM (S3 Object Lock) kopya ile korunur. Endeksler: `(created_at)`, `(target_tenant_id, created_at)`, `(platform_user_id, created_at)`.
 
@@ -248,11 +283,15 @@ Roller: **S**=SUPER_ADMIN, **O**=OPS_ADMIN, **B**=BILLING_ADMIN, **D**=SUPPORT_A
 | PATCH/DELETE | /platform-users/:id | Rol/durum değiştir / pasifleştir (hard delete yok; son SUPER_ADMIN korunur) | S |
 | GET | /tenants | Liste + filtre (durum, plan, il, arama) | S O B D |
 | GET | /tenants/:id | Detay (sayaçlar, abonelik, snapshot'lar) | S O B D |
-| POST | /tenants | Manuel tenant açılışı | S O |
+| POST | /tenants | Manuel tenant açılışı — D5: dört-göz `TENANT_CREATE` talebi; tenant+kullanıcı+TRIAL abonelik ikinci imzada kurulur | S O (4️⃣) |
 | PATCH | /tenants/:id | Metadata (billing_email, city, kota override) | S O |
 | POST | /tenants/:id/suspend · /reactivate | Askıya al (gerekçe zorunlu, dört-göz) / çıkar | S O B* |
 | DELETE | /tenants/:id | Soft-delete + anonimleştirme kuyruğu (dört-göz) | S |
 | GET | /tenants/:id/usage | UsageSnapshot serisi | S O B D |
+| GET | /fine-tune-jobs | Fine-tune işleri + ONAYLANMIŞ havuz anlık görüntüsü (D5) | S O D A |
+| POST | /fine-tune-jobs | İş açma — anlık görüntü alır; sağlayıcıya otomatik gönderim YOK | S O |
+| GET | /fine-tune-jobs/:id/manifest | Manifest (JSONL, yalnız ONAYLANMIŞ örnekler; HAZIRLANDI/GONDERILDI) | S O |
+| POST | /fine-tune-jobs/:id/status | Şerit denetimli durum geçişi; TAMAMLANDI'da model adı zorunlu | S O |
 | GET/POST | /tenants/:id/notes | TenantNote | S O B D |
 | GET · POST/PATCH | /plans | PlanTier kataloğu / tanımı (fiyat değişikliği mevcut aboneyi dönem sonuna dek etkilemez) | GET: S O B D A · yazma: S B |
 | GET | /subscriptions | Liste + durum filtresi (PAST_DUE kuyruğu) | S O B |

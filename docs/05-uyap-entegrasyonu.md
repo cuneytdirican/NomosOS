@@ -69,6 +69,11 @@ ve Modül 06'nın (Belge → Otomatik Aksiyon) event-driven pipeline'ına teslim
 
 1. Sınıflandırma: ara karar / gerekçeli karar / bilirkişi raporu / tebligat / dilekçe…
 2. Dosya eşleme: `uyapDosyaNo` → NomosOS dosyası (eşleşmezse "eşleştirme kuyruğu").
+   **Eşleşme çözülünce otomatik yeniden senkron (D5):** eşleşme yokken sahnelenen
+   olaylar (safahat, duruşma) `caseId: null` olarak bekler; avukat kuyruk kaydını bir
+   dosyaya bağladığı anda hepsi TEK işlemde dosyaya işlenir — safahat → zaman
+   çizelgesi, duruşma → ajanda (PLANLANDI). Yanıt işlenen kayıt sayısını (`replayed`)
+   döndürür; arayüz kullanıcıya gösterir.
 3. Tespitler: verilen süreler, istenen belgeler, duruşma tarihi değişiklikleri.
 4. Önerilen aksiyonlar (onay kuyruğuna düşer, **avukat onaylar**):
    görev oluştur · son tarih oluştur (süre motoru, deterministik hesap) ·
