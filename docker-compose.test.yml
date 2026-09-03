@@ -31,6 +31,14 @@ x-test-infra: &test-infra
   S3_REGION: "us-east-1"
 
 services:
+  # ── GÜVENLİK (2026-09-03 olayı) ─────────────────────────────────────────────
+  # Bu yığının portları eskiden 0.0.0.0'a yayınlanıyordu; internetten taranan
+  # parolasız Redis bulunup REPLICAOF ile dış bir adrese replica yapıldı
+  # (BullMQ "READONLY replica" hatalarıyla ortaya çıktı). Artık TÜM test
+  # portları YALNIZ 127.0.0.1'e bağlanır: yerel geliştirme etkilenmez
+  # (localhost aynı), dış erişim kapalı. Üretim yığını (prod) zaten
+  # 127.0.0.1'e bağlıydı. Parolasız servis (redis) ASLA dışa açılmaz.
+  # ────────────────────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: nomosos-test-postgres
@@ -39,7 +47,7 @@ services:
       POSTGRES_PASSWORD: nomosos
       POSTGRES_DB: nomosos
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - test-postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -52,7 +60,7 @@ services:
     image: redis:7-alpine
     container_name: nomosos-test-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -60,17 +68,20 @@ services:
       retries: 20
 
   minio:
-    image: minio/minio:RELEASE.2025-08-22T22-48-15Z
+    # NOT (2026-09-03): sabit RELEASE etiketi kayıt defterinden kalktığı için
+    # çekilemedi; yerelde zaten çalışmakta olan imajla aynı olan :latest
+    # kullanılır. Sürüm sabitlemesi üretim yığınında (prod) yapılır.
+    image: minio/minio:latest
     container_name: nomosos-test-minio
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: nomosos
       MINIO_ROOT_PASSWORD: nomosos-gizli-123
     ports:
-      - "9000:9000"
+      - "127.0.0.1:9000:9000"
       # Konsol test ortamında AÇIK (üretimde kapalıdır) — belgeleri gözle
       # doğrulayabilmek için: http://localhost:9001
-      - "9001:9001"
+      - "127.0.0.1:9001:9001"
     volumes:
       - test-minio-data:/data
     healthcheck:
@@ -141,7 +152,7 @@ services:
       # sanal POS sözleşmesi bağlanana kadar tanımsız bırakılır (dürüst 503).
       ODEME_SAGLAYICI: "SIMULASYON"
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
     depends_on:
       postgres:
         condition: service_healthy
@@ -170,7 +181,7 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: "http://localhost:3001"
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       api:
         condition: service_healthy
@@ -187,7 +198,7 @@ services:
     environment:
       NEXT_PUBLIC_ADMIN_API_URL: "http://localhost:3001"
     ports:
-      - "3002:3002"
+      - "127.0.0.1:3002:3002"
     depends_on:
       api:
         condition: service_healthy
@@ -204,7 +215,7 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: "http://localhost:3001"
     ports:
-      - "3003:3003"
+      - "127.0.0.1:3003:3003"
     depends_on:
       api:
         condition: service_healthy

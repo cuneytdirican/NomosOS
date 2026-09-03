@@ -143,19 +143,45 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
        * dağıtıma kadar süren geçici bir dilek olurdu.
        */
       const before = await this.prisma.client.scheduledJob.count({ where: { key: handler.key } });
-      await this.prisma.client.scheduledJob.upsert({
-        where: { key: handler.key },
-        create: {
-          key: handler.key,
-          name: handler.name,
-          cronExpression: handler.defaultCron,
-        },
-        update: {},
-      });
+      await this.upsertDefinition(handler);
       if (before === 0) created += 1;
     }
     if (created > 0) {
       this.logger.log(`${created} zamanlanmış iş tanımı oluşturuldu (varsayılan cron ile).`);
+    }
+  }
+
+  /**
+   * UPSERT + P2002 YARIŞ YENİDEN DENEMESİ — paralel test çalışanları (ve
+   * rolling deploy) aynı anahtarı aynı anda oluşturabilir; `key` benzersiz
+   * olduğu için kaybeden taraf P2002 alır. Bu zararsız bir yarıştır: TEKRAR
+   * denemede satır artık vardır ve boş `update` uygulanır. Yeniden deneme
+   * olmadan her yarış "iş tanımları eşitlenemedi" uyarısı üretiyordu —
+   * zamanlayıcı ayaktayken ve tanım ZATEN yazılmışken yanıltıcıydı.
+   */
+  private async upsertDefinition(handler: {
+    key: string;
+    name: string;
+    defaultCron: string;
+  }): Promise<void> {
+    const data = {
+      key: handler.key,
+      name: handler.name,
+      cronExpression: handler.defaultCron,
+    };
+    try {
+      await this.prisma.client.scheduledJob.upsert({
+        where: { key: handler.key },
+        create: data,
+        update: {},
+      });
+    } catch (err) {
+      if ((err as { code?: string }).code !== "P2002") throw err;
+      await this.prisma.client.scheduledJob.upsert({
+        where: { key: handler.key },
+        create: data,
+        update: {},
+      });
     }
   }
 

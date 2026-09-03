@@ -6,6 +6,10 @@
 > ⛔ **Bu hesaplar ve parolalar üretimde ASLA kullanılmaz.** Üretim kurulumu için
 > [uretim-dagitimi.md](uretim-dagitimi.md) dosyasına bakın: orada sırlar operatör tarafından
 > üretilir, `docker-compose.prod.yml` boş/varsayılan sır kabul etmez.
+>
+> ⚠ **Test portları yalnız `127.0.0.1`'e bağlıdır** (2026-09-03 olayı — §3'e bakın):
+> parolasız servislerin (Redis/MinIO) dışarıya açılması sorun doğurur; yerel
+> geliştirme için `localhost` aynı şekilde çalışır.
 
 ---
 
@@ -120,9 +124,19 @@ Yığın hazır olduğunda `http://localhost:3001/api/v1/health` → `{"status":
 | Sırlar | Dosyada sabit, hazır | Operatör üretir; varsayılan YOK, boş sır kabul edilmez |
 | Migration + seed | Otomatik (`migrate` servisi) | Elle, kontrollü (`scripts/prod-migrate.sh`) |
 | MinIO konsolu | Açık (`:9001`) | Kapalı, port yayınlanmaz |
-| Portlar | Hepsi dışarı açık | Yalnız `127.0.0.1`, dışarıya ters vekil bakar |
+| Portlar | **Yalnız `127.0.0.1`** (aşağıdaki olay notu) | Yalnız `127.0.0.1`, dışarıya ters vekil bakar |
 | Platform 2FA | Kapalı (hızlı giriş için) | Zorunlu |
 | `NODE_ENV` | `development` | `production` |
+
+> **OLAY NOTU (2026-09-03) — port yayınları 127.0.0.1'e bağlandı.** Bu yığının
+> portları eskiden `0.0.0.0`'a yayınlanıyordu. İnternetten taranan parolasız
+> Redis bulundu ve `REPLICAOF` ile dış bir adrese replica yapıldı; BullMQ
+> "READONLY replica" hatalarıyla ortaya çıktı. Kalıcı ya da kişisel veri
+> etkilenmedi (Redis yalnız geçici kuyruk/önbellek; Postgres/MinIO'da yetkisiz
+> yazım belirtisi yok) ve yığın yeniden kuruldu. Düzeltme: **tüm** test portları
+> artık `127.0.0.1`'e bağlı — yerel geliştirme etkilenmez (`localhost` aynı),
+> dış erişim kapalı. Ders: parolasız bir servis (Redis) ağdan ASLA erişilebilir
+> bırakılmaz; üretim yığını bu ilkeyle zaten kurulmuştu.
 
 > **2FA neden kapatılabiliyor?** API'de bir koruma var: `NODE_ENV=production` iken
 > `PLATFORM_REQUIRE_2FA=false` ile **açılmayı reddeder** — platform paneli tüm
@@ -259,4 +273,5 @@ entegrasyon yazmak yerine arayüz hazırlanmış, yapılandırılmamışsa anlam
 | Push bildirim (FCM/APNs) | Arayüz hazır; uygulama içi bildirimler çalışır |
 | Taranmış görüntü OCR'ı | PDF metin çıkarma çalışır; görüntü OCR'ı eklenmedi |
 | UYAP eklentisi | Kod ve fixture testleri hazır; **canlı UYAP'a karşı denenmedi** |
+| Video arama TURN relay | Yapılandırma hazır (`GET /chat/ice-servers`, `.env`: `STUN_URLS`/`TURN_*`); TURN sunucusu **kurulmamış** — sıkı NAT arkasında bağlantı kurulamayabilir |
 | Demo belgelerin dosya içeriği | Seed'deki belgelerin MinIO'da gerçek nesnesi yok — indirme için kendiniz yükleyin |
