@@ -1,8 +1,8 @@
 # NomosOS — Dalga 5: Platform Yönetimi ve Ölçekleme Planı (2026Q4-D5)
 
-Tarih: 2026-09-02 · Durum: **KOD TARAFI TAMAM** (M2+M3+M4+M5+M6 + cila kalemleri;
-dokümantasyon güncel). Kalanlar: dış sözleşmeler (SMTP, UETS, POS/GİB, SMS) ve
-ölçek tetikleyicileri (Redis pub/sub, pgvector, TURN — 5-C maddeleri).
+Tarih: 2026-09-02 · Durum: **KOD TARAFI TAMAM** (M2+M3+M4+M5+M6 + cila kalemleri +
+Redis pub/sub köprüsü; dokümantasyon güncel). Kalanlar: dış sözleşmeler (SMTP,
+UETS, POS/GİB, SMS) ve ölçek tetikleyicileri (pgvector, TURN — 5-C maddeleri).
 
 ## 0. Mevcut durum (kanıtlı envanter — 02.09.2026)
 
@@ -109,8 +109,12 @@ izleme/model kaydetme yok. Kabul: panelden onaylı örnek havuzundan iş açıl�
 durumu izlenir, çıkan model AiTaskRoute'a bağlanabilir.
 
 ### M5. Ölçekleme borcu — P2 (bilinçli ertelenmiş)
-SSE tek örnek (Redis pub/sub yok), pgvector yok, TURN yok. replicas>1'de engel;
-panel bunları DURUM SAYFASI olarak göstermeli (sürprayz değil bilinçli sınır).
+**Redis pub/sub (SSE çoklu örnek) TAMAM (D5 kapanışı):** ChatEventsService REDIS_URL
+tanımlıysa pub/sub köprüsüyle çalışır — yayıncı + abone ayrı bağlantılar, zarfta
+`origin` ile yankı önleme, zarif bozulma (Redis yoksa/bozuksa YEREL kip; mesaj
+gönderimi asla etkilenmez, uyarı anahtar başına bir kez). pgvector ve TURN hâlâ
+ertelenmiş. Canlı doğrulandı: SSE'de mesaj TAM OLARAK BİR olay (yankı yok), zarf
+Redis kanalında göründü (çapraz örnek yolu), akış 2/2 olay sağlıklı.
 
 ### M6. Tamamlanmış görünen modüllerdeki cila eksikleri — P2 (taşınan)
 UYAP eşleşme sonrası otomatik yeniden senkron; dilekçe sürüm fark görünümü; portal
@@ -137,7 +141,7 @@ bildirim e-postası (SMTP Noop); mobil ajanda/mesajlar ekranları.
 7. Cila maddeleri (M6) — UYAP yeniden senkron öncelikli.
 
 **DALGA 5-C — P2 (ölçek kararı sonrası)**
-8. Redis pub/sub (SSE çoklu örnek), pgvector, TURN — kiracı/parça sayımı tetikler.
+8. pgvector, TURN — kiracı/parça sayımı tetikler. (Redis pub/sub tamamlandı.)
 
 ## 3. Bilinçli yapılmayacaklar
 - Otomatik yasal süre üretimi (İİK koşullu hükümler) — süreler kural motorundan kurulur.
