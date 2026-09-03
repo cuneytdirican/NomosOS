@@ -94,6 +94,8 @@ export interface CaseParty {
   role: PartyRole;
   name: string;
   isClient?: boolean;
+  /** D8 — taraf büro müvekkiliyse kart bağlantısı (ad sunucuda karttan doldurulur). */
+  clientId?: string | null;
   lawyerName?: string | null;
 }
 

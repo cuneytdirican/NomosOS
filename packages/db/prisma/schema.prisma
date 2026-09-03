@@ -163,6 +163,7 @@ model Client {
 
   contacts         ClientContact[]
   cases            Case[]
+  caseParties      CaseParty[]
   powerOfAttorneys PowerOfAttorney[]
   financialEntries FinancialEntry[]
   feeAgreements    FeeAgreement[]
@@ -347,10 +348,16 @@ model CaseParty {
   role       PartyRole
   name       String
   isClient   Boolean   @default(false) // Bu taraf bizim müvekkilimiz mi
+  /// D8 — taraf BÜRO MÜVEKKİLİYSE kart bağlantısı (elle ad yazmak yerine
+  /// müvekkil kataloğundan SEÇİLİR; ad sunucuda karttan doldurulur).
+  /// Karşı taraf serbest metindir (herkes olabilir — katalog varlığı değildir).
+  clientId   String?
+  client     Client?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
   lawyerName String? // Karşı taraf vekili
   notes      String?
 
   @@index([caseId])
+  @@index([clientId])
 }
 
 // ---------- Duruşma ----------

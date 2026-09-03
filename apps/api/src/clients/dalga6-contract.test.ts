@@ -185,6 +185,40 @@ describe("D7/M3: müvekkil segment kataloğu (kiracı bazlı yönetilen liste)",
   });
 });
 
+describe("D8: dosya tarafı ↔ müvekkil kartı bağlantısı", () => {
+  it("model + migration: CaseParty.clientId (SetNull)", () => {
+    const schema = read("..", "..", "packages", "db", "prisma", "schema.prisma");
+    expect(schema).toMatch(/clientId\s+String\?/);
+    expect(schema).toContain("caseParties      CaseParty[]");
+    const sql = read(
+      "..", "..", "packages", "db", "prisma", "migrations",
+      "20260903140000_dalga8_taraf_muvekkil_baglantisi", "migration.sql"
+    );
+    expect(sql).toContain("ADD COLUMN \"clientId\"");
+    expect(sql).toContain("ON DELETE SET NULL");
+  });
+
+  it("müvekkil tarafın adı SUNUCUDA karttan doldurulur (elle yazılamaz)", () => {
+    const s = read("..", "..", "apps", "api", "src", "cases", "cases.service.ts");
+    expect(s).toContain("name = client.name");
+    expect(s).toContain("ad elle yazılamaz");
+  });
+
+  it("KARTSIZ 'müvekkilimiz' işareti REDDEDİLİR (kopuk kayıt engeli)", () => {
+    const s = read("..", "..", "apps", "api", "src", "cases", "cases.service.ts");
+    expect(s).toContain("Müvekkil taraf, müvekkil kartından SEÇİLEREK eklenir");
+  });
+
+  it("web: taraf ekleme diyaloğu — müvekkil RemoteSelect, karşı taraf serbest", () => {
+    const page = read("..", "web", "src", "app", "app", "dosyalar", "[id]", "page.tsx");
+    expect(page).toContain("Taraf Ekle");
+    expect(page).toContain("RemoteSelect");
+    expect(page).toContain("müvekkil kartından seçilir");
+    // müvekkil tarafı listede KART bağlantısıyla gösterilir
+    expect(page).toMatch(/p\.clientId \? \(/);
+  });
+});
+
 describe("D6: web — iki adımlı onay diyaloğu", () => {
   it("kaynak seçimi + sayı öngörüsü + açık onay kutusu", () => {
     const dialog = read("..", "web", "src", "components", "client-merge-dialog.tsx");

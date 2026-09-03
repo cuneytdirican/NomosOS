@@ -101,6 +101,9 @@ export const createCasePartySchema = z.object({
   role: z.enum(PARTY_ROLES, { errorMap: () => ({ message: "Geçersiz taraf sıfatı." }) }),
   name: z.string().min(2, "Taraf adı en az 2 karakter olmalıdır.").max(300, "Taraf adı en fazla 300 karakter olabilir."),
   isClient: z.boolean().optional().default(false),
+  /** D8 — taraf büro müvekkiliyse KART bağlantısı: ad sunucuda karttan doldurulur
+   * (kullanıcı adı elle yazamaz — seçim ilkesi). Karşı taraf serbest metindir. */
+  clientId: z.string().uuid("Müvekkil kimliği geçersiz.").nullable().optional(),
   lawyerName: nullableText(200, "Vekil adı"),
   notes: nullableText(2000, "Notlar"),
 });

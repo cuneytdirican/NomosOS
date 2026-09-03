@@ -110,7 +110,8 @@ import {
   urgencyRowClass,
   urgencyTone,
 } from "@/lib/labels";
-import { CASE_STATUSES, COURT_TYPES, type CaseStatus } from "@nomosos/shared";
+import { CASE_STATUSES, COURT_TYPES, PARTY_ROLES, type CaseStatus, type PartyRole } from "@nomosos/shared";
+import { RemoteSelect } from "@/components/remote-select";
 
 const TABS = [
   { key: "ozet", label: "Özet" },
@@ -292,6 +293,53 @@ export default function DosyaDetayPage({ params }: { params: Promise<{ id: strin
   }
 
   const parties = useMemo(() => detail?.parties ?? [], [detail]);
+  // D8 — taraf ekleme diyaloğu: müvekkil tarafı KATALOGDAN seçilir.
+  const [partyModalOpen, setPartyModalOpen] = useState(false);
+  const [partyRole, setPartyRole] = useState<PartyRole>("DAVACI");
+  const [partyIsClient, setPartyIsClient] = useState(false);
+  const [partyClientId, setPartyClientId] = useState("");
+  const [partyClientLabel, setPartyClientLabel] = useState("");
+  const [partyName, setPartyName] = useState("");
+  const [partyLawyer, setPartyLawyer] = useState("");
+  const [partyBusy, setPartyBusy] = useState(false);
+  const [partyError, setPartyError] = useState<string | null>(null);
+
+  function closePartyModal() {
+    setPartyModalOpen(false);
+    setPartyRole("DAVACI");
+    setPartyIsClient(false);
+    setPartyClientId("");
+    setPartyClientLabel("");
+    setPartyName("");
+    setPartyLawyer("");
+    setPartyError(null);
+  }
+
+  async function addParty() {
+    if (!detail) return;
+    setPartyBusy(true);
+    setPartyError(null);
+    try {
+      await api(`/cases/${detail.id}/parties`, {
+        method: "POST",
+        body: {
+          role: partyRole,
+          isClient: partyIsClient,
+          // Müvekkil taraf: ad SUNUCUDA karttan doldurulur (elle yazılmaz);
+          // karşı taraf: serbest ad.
+          name: partyIsClient ? partyClientLabel || "-" : partyName.trim(),
+          clientId: partyIsClient ? partyClientId : null,
+          ...(partyLawyer.trim() ? { lawyerName: partyLawyer.trim() } : {}),
+        },
+      });
+      closePartyModal();
+      await load();
+    } catch (err) {
+      setPartyError(err instanceof ApiError ? err.message : "Taraf eklenemedi.");
+    } finally {
+      setPartyBusy(false);
+    }
+  }
   const timeline = useMemo(
     () =>
       [...(detail?.timelineEvents ?? [])].sort((a, b) => (a.date < b.date ? 1 : -1)),
@@ -429,7 +477,18 @@ export default function DosyaDetayPage({ params }: { params: Promise<{ id: strin
       {/* ---------- Özet ---------- */}
       {tab === "ozet" && (
         <div className="grid gap-6 lg:grid-cols-2">
-          <Card title="Taraflar">
+          <Card
+            title="Taraflar"
+            action={
+              <button
+                type="button"
+                onClick={() => setPartyModalOpen(true)}
+                className="text-xs font-medium text-amber-600 hover:text-amber-500"
+              >
+                + Taraf Ekle
+              </button>
+            }
+          >
             {parties.length === 0 ? (
               <EmptyState message="Taraf kaydı yok." />
             ) : (
@@ -441,7 +500,13 @@ export default function DosyaDetayPage({ params }: { params: Promise<{ id: strin
                   >
                     <div>
                       <p className="text-sm font-medium text-slate-900">
-                        {p.name}
+                        {p.clientId ? (
+                          <Link href={`/app/muvekkiller/${p.clientId}`} className="hover:underline">
+                            {p.name}
+                          </Link>
+                        ) : (
+                          p.name
+                        )}
                         {p.isClient && (
                           <Badge tone="gold" className="ml-2">
                             Müvekkilimiz
@@ -979,6 +1044,91 @@ export default function DosyaDetayPage({ params }: { params: Promise<{ id: strin
         onClose={() => setEditOpen(false)}
         onSaved={load}
       />
+
+      {/* D8 — taraf ekleme: müvekkil tarafı müvekkil kartından SEÇİLİR (ad
+          sunucuda karttan doldurulur); karşı taraf serbest metindir. */}
+      <Modal
+        open={partyModalOpen}
+        onClose={closePartyModal}
+        title="Taraf Ekle"
+      >
+        {partyError && <ErrorBox message={partyError} />}
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void addParty();
+          }}
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Sıfat">
+              <Select value={partyRole} onChange={(e) => setPartyRole(e.target.value as PartyRole)}>
+                {PARTY_ROLES.map((r) => (
+                  <option key={r} value={r}>
+                    {labelOf(PARTY_ROLE_LABELS, r)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Vekil (karşı taraf vekili)">
+              <Input value={partyLawyer} onChange={(e) => setPartyLawyer(e.target.value)} placeholder="Av. …" />
+            </Field>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={partyIsClient}
+              onChange={(e) => {
+                setPartyIsClient(e.target.checked);
+                setPartyName("");
+                setPartyClientId("");
+                setPartyClientLabel("");
+              }}
+            />
+            Bu taraf bizim müvekkilimiz — müvekkil kartından seçilir
+          </label>
+
+          {partyIsClient ? (
+            <Field
+              label="Müvekkil"
+              hint="Ad, sunucuda seçilen karttan doldurulur — elle yazılmaz (kayıt kopukluğu önlenir)."
+            >
+              <RemoteSelect
+                path="/clients"
+                toOption={(c: { id: string; name: string }) => ({ id: c.id, label: c.name })}
+                value={partyClientId}
+                selectedLabel={partyClientLabel}
+                onChange={(_id, option) => {
+                  setPartyClientId(option?.id ?? "");
+                  setPartyClientLabel(option?.label ?? "");
+                }}
+                ariaLabel="Müvekkil ara ve seç"
+              />
+            </Field>
+          ) : (
+            <Field label="Taraf adı">
+              <Input
+                value={partyName}
+                onChange={(e) => setPartyName(e.target.value)}
+                placeholder="Örn. Deniz Tekstil A.Ş."
+              />
+            </Field>
+          )}
+
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="secondary" onClick={closePartyModal}>
+              Vazgeç
+            </Button>
+            <Button
+              type="submit"
+              disabled={partyBusy || (partyIsClient ? !partyClientId : partyName.trim().length < 2)}
+            >
+              {partyBusy ? "Ekleniyor…" : "Taraf Ekle"}
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       <ToastStack toasts={toasts} onDismiss={dismiss} />
       </div>

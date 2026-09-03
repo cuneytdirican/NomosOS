@@ -409,12 +409,33 @@ export class CasesService {
     assertRole(user, ROLE_SETS.OPERASYON, "taraf ekleme");
     await this.requireCase(user.tenantId, caseId);
 
+    // D8 — taraf büro müvekkiliyse KARTTAN bağlanır; ad SUNUCUDA karttan
+    // doldurulur (kullanıcı adı elle yazamaz — seçim ilkesi). Kartsız
+    // "müvekkilimiz" işaretiyle elle yazılan taraf, çatışma kontrolünü ve
+    // finans özetlerini kandıran sessiz bir kopukluk üretirdi.
+    const clientId = input.clientId ?? null;
+    let name = input.name.trim();
+    if (clientId) {
+      const client = await this.prisma.client.client.findFirst({
+        where: { id: clientId, tenantId: user.tenantId },
+        select: { id: true, name: true },
+      });
+      if (!client) throw new NotFoundException("Bağlanacak müvekkil kartı bulunamadı.");
+      name = client.name;
+    } else if (input.isClient) {
+      throw new BadRequestException(
+        "Müvekkil taraf, müvekkil kartından SEÇİLEREK eklenir (ad elle yazılamaz). " +
+          "Karşı taraf için müvekkil işaretini kaldırın."
+      );
+    }
+
     const party = await this.prisma.client.caseParty.create({
       data: {
         caseId,
         role: input.role,
-        name: input.name,
+        name,
         isClient: input.isClient,
+        clientId,
         lawyerName: input.lawyerName ?? undefined,
         notes: input.notes ?? undefined,
       },
@@ -425,7 +446,7 @@ export class CasesService {
       action: "CASE_PARTY_CREATE",
       entity: "CaseParty",
       entityId: party.id,
-      detail: `${party.role}: ${party.name}`,
+      detail: `${party.role}: ${party.name}${clientId ? " (müvekkil kartına bağlı)" : ""}`,
     });
     return party;
   }
