@@ -1,9 +1,9 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, BadRequestException, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import { createClientSchema, type CreateClientInput } from "@nomosos/shared";
 import { ClientsService } from "./clients.service";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe";
-import { importCsvSchema } from "./clients.dto";
+import { importCsvSchema, mergeClientSchema, type MergeClientInput } from "./clients.dto";
 import type { AuthUser } from "../common/types";
 import {
   createContactSchema,
@@ -83,6 +83,34 @@ export class ClientsController {
   @Get(":id/export")
   exportData(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.clientsService.exportClientData(user, id);
+  }
+
+  /**
+   * D6 — BİRLEŞTİRME ÖNGÖRÜSÜ: taşınacak kayıt sayıları (Modül 01 kural 10:
+   * onay diyaloğunda sayılar GÖSTERİLİR). Yalnız ADMIN/PARTNER.
+   */
+  @Get(":id/merge-preview")
+  mergePreview(
+    @CurrentUser() user: AuthUser,
+    @Param("id") id: string,
+    @Query("source") sourceId: string
+  ) {
+    if (!sourceId) throw new BadRequestException("source sorgu parametresi zorunludur.");
+    return this.clientsService.mergePreview(user, id, sourceId);
+  }
+
+  /**
+   * D6 — MÜKERRER KAYIT BİRLEŞTİRME (Modül 01 kural 10). GERİ ALINAMAZ:
+   * kaynak kartın tüm kayıtları bu karta taşınır, kaynak kart PASİFLEŞİR
+   * (silinmez). Yalnız ADMIN/PARTNER.
+   */
+  @Post(":id/merge")
+  merge(
+    @CurrentUser() user: AuthUser,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(mergeClientSchema)) body: MergeClientInput
+  ) {
+    return this.clientsService.merge(user, id, body.sourceClientId);
   }
 
   @Post(":id/contacts")

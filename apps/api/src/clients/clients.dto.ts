@@ -41,6 +41,15 @@ export const importCsvSchema = z.object({
 });
 export type ImportCsvInput = z.infer<typeof importCsvSchema>;
 
+/**
+ * D6 — mükerrer müvekkil birleştirme (Modül 01 kural 10).
+ * Hedef kart URL'dedir (:id); gövde taşınacak KAYNAK kartı verir.
+ */
+export const mergeClientSchema = z.object({
+  sourceClientId: z.string().uuid("Birleştirilecek (kaynak) müvekkil kimliği geçersiz."),
+});
+export type MergeClientInput = z.infer<typeof mergeClientSchema>;
+
 /** POST /clients/:id/contacts */
 export const createContactSchema = z.object({
   fullName: z.string().min(2, "İlgili kişi adı en az 2 karakter olmalıdır.").max(200, "İlgili kişi adı en fazla 200 karakter olabilir."),

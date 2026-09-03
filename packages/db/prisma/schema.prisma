@@ -170,6 +170,8 @@ model Client {
   timeEntries      TimeEntry[]
   invoices         Invoice[]
   payments         Payment[]
+  mergeLogsSurviving ClientMergeLog[] @relation("MergeSurviving")
+  mergeLogsMerged    ClientMergeLog[] @relation("MergeMerged")
 
   /// Faz 5 — müvekkil portalı, iletişim merkezi, sözleşmeler
   portalUsers        PortalUser[]
@@ -196,8 +198,30 @@ model ClientContact {
   email    String?
   phone    String?
   notes    String?
-
   @@index([clientId])
+}
+
+/// D6 — MÜKERRER MÜVEKKİL BİRLEŞTİRME GÜNLÜĞÜ (Modül 01 kural 10).
+/// Birleştirme GERİ ALINAMAZ: tüm bağlı kayıtlar KALAN karta taşınır,
+/// birleştirilen kart PASSIVE olur (SİLİNMEZ — KVKK saklama). Bu tablo
+/// birleştirme kanıtının append-only kaydıdır.
+model ClientMergeLog {
+  id                String   @id @default(uuid())
+  tenantId          String
+  /// KALAN kart — kayıtlar buraya taşındı.
+  survivingClientId String
+  survivingClient   Client   @relation("MergeSurviving", fields: [survivingClientId], references: [id])
+  /// BİRLEŞTİRİLEN (pasifleşen) kart.
+  mergedClientId    String
+  mergedClient      Client   @relation("MergeMerged", fields: [mergedClientId], references: [id])
+  /// Taşınan kayıt sayıları: {"cases": 3, "contacts": 2, …} (JSON).
+  countsJson        String
+  /// Birleştirmeyi yapan kullanıcı (ADMIN/PARTNER — Modül 01 kural 10).
+  mergedById        String
+  mergedAt          DateTime @default(now())
+
+  @@index([tenantId, mergedAt])
+  @@index([survivingClientId])
 }
 
 // ---------- Dosya (sistemin merkezi) ----------

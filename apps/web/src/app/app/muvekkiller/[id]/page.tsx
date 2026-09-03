@@ -52,6 +52,7 @@ import {
 } from "@/lib/labels";
 import { ClientFinanceTab } from "@/components/client-finance-tab";
 import { FeeAgreementsTab } from "@/components/fee-agreements-tab";
+import { ClientMergeDialog } from "@/components/client-merge-dialog";
 import { ToastStack, useToasts } from "@/components/ai-ui";
 import { CLIENT_TYPES, type ClientType } from "@nomosos/shared";
 // ---- Faz 5: portal, vekaletname, sözleşme, iletişim ----
@@ -158,6 +159,8 @@ export default function MuvekkilDetayPage({ params }: { params: Promise<{ id: st
    * iletilir).
    */
   const [exporting, setExporting] = useState(false);
+  // D6 — mükerrer kart birleştirme diyaloğu
+  const [mergeOpen, setMergeOpen] = useState(false);
   const exportClientData = useCallback(async () => {
     setExporting(true);
     try {
@@ -319,7 +322,7 @@ export default function MuvekkilDetayPage({ params }: { params: Promise<{ id: st
       {/* KVKK m.11 — veri özne erişim hakkı: tam dışa aktarma (F2 · A1).
           Rol kapısı sunucudadır (ADMIN/PARTNER); her indirme denetim kaydına
           yazılır. Politika matrisi: docs/kvkk-politika-matrisi.md */}
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <button
           type="button"
           onClick={() => void exportClientData()}
@@ -329,7 +332,24 @@ export default function MuvekkilDetayPage({ params }: { params: Promise<{ id: st
         >
           {exporting ? "Hazırlanıyor…" : "KVKK veri dışa aktarma (JSON)"}
         </button>
+        {/* D6 — mükerrer kayıt birleştirme (Modül 01 kural 10). Rol kapısı
+            sunucudadır (ADMIN/PARTNER); işlem geri alınamaz. */}
+        <button
+          type="button"
+          onClick={() => setMergeOpen(true)}
+          className="text-xs font-medium text-slate-500 underline decoration-dotted hover:text-slate-800"
+          title="Bu kartı başka bir müvekkil kartıyla birleştir: kaynak kartın tüm kayıtları buraya taşınır, kaynak kart pasifleşir. Geri alınamaz."
+        >
+          Mükerrer kartı birleştir
+        </button>
       </div>
+
+      <ClientMergeDialog
+        open={mergeOpen}
+        onClose={() => setMergeOpen(false)}
+        targetId={client.id}
+        targetName={client.name}
+      />
 
       <Tabs tabs={TABS} active={tab} onChange={setTab} ariaLabel="Müvekkil sekmeleri" idPrefix="musteri" />
 

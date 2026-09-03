@@ -417,6 +417,162 @@ export class ClientsService {
   }
 
   /* ================================================================== *
+   * D6 — MÜKERRER KAYIT BİRLEŞTİRME (Modül 01 kural 10)
+   *
+   * Birleştirme GERİ ALINAMAZ: tüm bağlı kayıtlar KALAN karta taşınır,
+   * birleştirilen kart PASSIVE olur (SİLİNMEZ — KVKK saklama). Yalnız
+   * ADMIN/PARTNER yapabilir (ROLE_SETS.ONAY — kural 10). Onay diyaloğunda
+   * taşınacak kayıt sayıları GÖSTERİLİR (kural 10): merge-preview ucu
+   * bunların verisidir.
+   * ================================================================== */
+
+  /** Taşınacak kayıt sayıları — onay diyaloğunun verisi. */
+  async mergePreview(user: AuthUser, targetId: string, sourceId: string) {
+    assertRole(user, ROLE_SETS.ONAY, "müvekkil birleştirme");
+    if (targetId === sourceId) {
+      throw new BadRequestException("Bir müvekkil kendisiyle birleştirilemez.");
+    }
+    const [target, source] = await Promise.all([
+      this.requireClient(user.tenantId, targetId),
+      this.requireClient(user.tenantId, sourceId),
+    ]);
+    const counts = await this.mergeCounts(sourceId);
+    return {
+      target: { id: target.id, name: target.name },
+      source: { id: source.id, name: source.name },
+      counts,
+      totalCount: Object.values(counts).reduce((a, b) => a + b, 0),
+      warning:
+        "Bu işlem geri alınamaz. Kaynak kartın tüm kayıtları kalıcı olarak hedef karta taşınır ve kaynak kart pasifleşir (silinmez).",
+    };
+  }
+
+  /** Birleştirme — TEK İŞLEMDE taşır, pasifleştirir, günlükler. */
+  async merge(user: AuthUser, targetId: string, sourceId: string) {
+    assertRole(user, ROLE_SETS.ONAY, "müvekkil birleştirme");
+    if (targetId === sourceId) {
+      throw new BadRequestException("Bir müvekkil kendisiyle birleştirilemez.");
+    }
+    const [target, source] = await Promise.all([
+      this.requireClient(user.tenantId, targetId),
+      this.requireClient(user.tenantId, sourceId),
+    ]);
+
+    // PortalUser e-postası GLOBALLY tekil: iki kartta da aynı e-postalı portal
+    // hesabı varsa taşıma tekil kısıtı ihlal eder. İşlemi ÖNCE yakala —
+    // yarı taşınmış bir birleştirme (transaction zaten geri alır) yerine
+    // anlaşılır hata ver.
+    const [targetPortalEmails, sourcePortalEmails] = await Promise.all([
+      this.prisma.client.portalUser.findMany({ where: { tenantId: user.tenantId, clientId: targetId }, select: { email: true } }),
+      this.prisma.client.portalUser.findMany({ where: { tenantId: user.tenantId, clientId: sourceId }, select: { email: true } }),
+    ]);
+    const targetEmails = new Set(targetPortalEmails.map((p) => p.email.toLowerCase()));
+    const clash = sourcePortalEmails.find((p) => targetEmails.has(p.email.toLowerCase()));
+    if (clash) {
+      throw new ConflictException(
+        `İki kartta da aynı e-postalı portal hesabı var (${clash.email}); birleştirme tekil kısıtı ihlal eder. ` +
+          "Önce çakışan portal hesabını temizleyin."
+      );
+    }
+
+    const counts = await this.mergeCounts(sourceId);
+
+    const merged = await this.prisma.client.$transaction(async (tx) => {
+      // 16 ilişki — hepsi clientId üzerinden karta bağlı (şemada kanıtlandı).
+      await tx.case.updateMany({ where: { tenantId: user.tenantId, clientId: sourceId }, data: { clientId: targetId } });
+      await tx.clientContact.updateMany({ where: { clientId: sourceId }, data: { clientId: targetId } });
+      await tx.powerOfAttorney.updateMany({ where: { tenantId: user.tenantId, clientId: sourceId }, data: { clientId: targetId } });
+      await tx.financialEntry.updateMany({ where: { tenantId: user.tenantId, clientId: sourceId }, data: { clientId: targetId } });
+      await tx.feeAgreement.updateMany({ where: { tenantId: user.tenantId, clientId: sourceId }, data: { clientId: targetId } });
+      await tx.randevu.updateMany({ where: { tenantId: user.tenantId, clientId: sourceId }, data: { clientId: targetId } });
+      await tx.timeEntry.updateMany({ where: { tenantId: user.tenantId, clientId: sourceId }, data: { clientId: targetId } });
+      await tx.invoice.updateMany({ where: { tenantId: user.tenantId, clientId: sourceId }, data: { clientId: targetId } });
+      await tx.payment.updateMany({ where: { tenantId: user.tenantId, clientId: sourceId }, data: { clientId: targetId } });
+      await tx.portalUser.updateMany({ where: { tenantId: user.tenantId, clientId: sourceId }, data: { clientId: targetId } });
+      await tx.portalInvite.updateMany({ where: { tenantId: user.tenantId, clientId: sourceId }, data: { clientId: targetId } });
+      await tx.portalPublication.updateMany({ where: { tenantId: user.tenantId, clientId: sourceId }, data: { clientId: targetId } });
+      await tx.communicationLog.updateMany({ where: { tenantId: user.tenantId, clientId: sourceId }, data: { clientId: targetId } });
+      await tx.outboundMessage.updateMany({ where: { tenantId: user.tenantId, clientId: sourceId }, data: { clientId: targetId } });
+      await tx.inboundMessage.updateMany({ where: { tenantId: user.tenantId, clientId: sourceId }, data: { clientId: targetId } });
+      await tx.contract.updateMany({ where: { tenantId: user.tenantId, clientId: sourceId }, data: { clientId: targetId } });
+
+      // Kaynak kart PASSIVE olur — SİLİNMEZ (KVKK saklama; kural 10).
+      await tx.client.update({
+        where: { id: sourceId },
+        data: {
+          isActive: false,
+          notes: `D6 birleştirme: "${source.name}" → "${target.name}" kartına birleştirildi (${new Date().toISOString()}); bu kart artık kullanılmamaktadır.`,
+        },
+      });
+
+      const log = await tx.clientMergeLog.create({
+        data: {
+          tenantId: user.tenantId,
+          survivingClientId: targetId,
+          mergedClientId: sourceId,
+          countsJson: JSON.stringify(counts),
+          mergedById: user.userId,
+        },
+      });
+      return log;
+    });
+
+    await this.audit.log({
+      tenantId: user.tenantId,
+      userId: user.userId,
+      action: "CLIENT_MERGE",
+      entity: "Client",
+      entityId: targetId,
+      detail:
+        `"${source.name}" kartı "${target.name}" kartına birleştirildi (geri alınamaz). ` +
+        `Taşınan kayıtlar: ${JSON.stringify(counts)}. Kaynak kart pasifleştirildi; ClientMergeLog ${merged.id.slice(0, 8)}.`,
+    });
+
+    return { ok: true, survivingClientId: targetId, mergedClientId: sourceId, counts };
+  }
+
+  /** Kaynak kartın taşınacak kayıt sayıları. */
+  private async mergeCounts(sourceId: string): Promise<Record<string, number>> {
+    const [cases, contacts, poas, financialEntries, feeAgreements, randevular, timeEntries, invoices, payments, portalUsers, portalInvites, portalPublications, communicationLogs, outboundMessages, inboundMessages, contracts] =
+      await Promise.all([
+        this.prisma.client.case.count({ where: { clientId: sourceId } }),
+        this.prisma.client.clientContact.count({ where: { clientId: sourceId } }),
+        this.prisma.client.powerOfAttorney.count({ where: { clientId: sourceId } }),
+        this.prisma.client.financialEntry.count({ where: { clientId: sourceId } }),
+        this.prisma.client.feeAgreement.count({ where: { clientId: sourceId } }),
+        this.prisma.client.randevu.count({ where: { clientId: sourceId } }),
+        this.prisma.client.timeEntry.count({ where: { clientId: sourceId } }),
+        this.prisma.client.invoice.count({ where: { clientId: sourceId } }),
+        this.prisma.client.payment.count({ where: { clientId: sourceId } }),
+        this.prisma.client.portalUser.count({ where: { clientId: sourceId } }),
+        this.prisma.client.portalInvite.count({ where: { clientId: sourceId } }),
+        this.prisma.client.portalPublication.count({ where: { clientId: sourceId } }),
+        this.prisma.client.communicationLog.count({ where: { clientId: sourceId } }),
+        this.prisma.client.outboundMessage.count({ where: { clientId: sourceId } }),
+        this.prisma.client.inboundMessage.count({ where: { clientId: sourceId } }),
+        this.prisma.client.contract.count({ where: { clientId: sourceId } }),
+      ]);
+    return {
+      dosya: cases,
+      yetkili: contacts,
+      vekaletname: poas,
+      finansKaydi: financialEntries,
+      ucretSozlesmesi: feeAgreements,
+      randevu: randevular,
+      zamanKaydi: timeEntries,
+      fatura: invoices,
+      odeme: payments,
+      portalHesabi: portalUsers,
+      portalDaveti: portalInvites,
+      portalYayini: portalPublications,
+      iletisimKaydi: communicationLogs,
+      gidenMesaj: outboundMessages,
+      gelenMesaj: inboundMessages,
+      sozlesme: contracts,
+    };
+  }
+
+  /* ================================================================== *
    * KVKK m.11 — VERİ ÖZNE ERİŞİM HAKKI: TAM DIŞA AKTARMA (F2 · A1)
    *
    * Politika matrisi (docs/kvkk-politika-matrisi.md) K1-K7 satırları:
