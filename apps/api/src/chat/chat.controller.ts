@@ -52,6 +52,7 @@ import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe";
 import type { AuthUser } from "../common/types";
 import { ChatService, ONLINE_WINDOW_MS, TYPING_TTL_MS } from "./chat.service";
 import { ChatEventsService } from "./chat-events.service";
+import { resolveIceConfig } from "./chat-ice";
 import { StorageService } from "../storage/storage.service";
 import { DiskQuotaService } from "../disk-quota/disk-quota.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -275,6 +276,16 @@ export class ChatController {
     @Body(new ZodValidationPipe(startCallSchema)) body: z.infer<typeof startCallSchema>,
   ) {
     return this.chat.startCall(user, body.calleeId);
+  }
+
+  /**
+   * WEBRTC ICE SUNUCULARI (D5 / 5-C) — STUN varsayılan, TURN ortamdan.
+   * Yapılandırma sunucudan gelir: istemciye gömülü adres YOKTUR; operatör
+   * coturn sağladığında kod değişikliği gerekmez.
+   */
+  @Get("ice-servers")
+  iceServers() {
+    return resolveIceConfig();
   }
 
   @Get("calls/incoming")

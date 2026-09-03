@@ -12,17 +12,36 @@
  *   POST /chat/calls/:id/signals   — OFFER/ANSWER/CANDIDATE gönder
  *   GET  /chat/calls/:id/signals?after= — sinyalleri çek (1.5 sn)
  *
- * SINIRLAR (dürüst): yalnız genel STUN (Google) kullanılır — TURN yoktur.
- * Sıkı NAT arkasındaki iki uç arasında bağlantı kurulamayabilir; sesli arama
- * hatası durumunda mesajlaşma kullanılabilir.
+ * ICE SUNUCULARI (D5 / 5-C): yapılandırma SUNUCUDAN gelir (GET /chat/ice-servers)
+ * — istemciye gömülü adres yoktur; operatör coturn sağladığında kod değişikliği
+ * gerekmez. Uç çekilemezse varsayılan genel STUN'a düşülür (mevcut davranış).
+ * SINIRLAR (dürüst): TURN yapılandırılmamışsa yalnız genel STUN geçerlidir —
+ * sıkı NAT arkasındaki uçlar arası bağlantı kurulamayabilir; sesli arama hatası
+ * durumunda mesajlaşma kullanılabilir.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 
-const RTC_CONFIG: RTCConfiguration = {
-  iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }],
-};
+/** Uç çekilemezse düşülecek varsayılan — sunucuyla aynı liste. */
+const FALLBACK_ICE_SERVERS: RTCIceServer[] = [
+  { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
+];
+
+/** Önbellek: oturumda bir kez çekilir; arama başına istek atılmaz. */
+let iceServersCache: RTCIceServer[] | null = null;
+
+async function loadIceServers(): Promise<RTCIceServer[]> {
+  if (iceServersCache) return iceServersCache;
+  try {
+    const cfg = await api<{ iceServers?: RTCIceServer[] }>("/chat/ice-servers");
+    iceServersCache = cfg.iceServers?.length ? cfg.iceServers : FALLBACK_ICE_SERVERS;
+  } catch {
+    // Yapılandırma ucu yoksa (eski sunucu) varsayılan STUN — arama engellenmez.
+    iceServersCache = FALLBACK_ICE_SERVERS;
+  }
+  return iceServersCache;
+}
 
 export interface IncomingCall {
   callId: string;
@@ -73,7 +92,7 @@ export function useVideoCall(myUserId: string | undefined) {
 
   /** Peer bağlantısı kur + yerel medyayı bağla. */
   const createPeer = useCallback(async (): Promise<RTCPeerConnection> => {
-    const pc = new RTCPeerConnection(RTC_CONFIG);
+    const pc = new RTCPeerConnection({ iceServers: await loadIceServers() });
     pcRef.current = pc;
 
     const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });

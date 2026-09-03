@@ -240,6 +240,8 @@ komutlar birebir çalıştırılabilir.
 | `EINVOICE_PROVIDER` | `noop` | e-Fatura entegratörü | `noop` GİB'e **hiçbir** bağlantı kurmaz; gönderim isteğinde 503 döner ve sahte "gönderildi" durumu üretmez |
 | `NODE_ENV` | — | `production` olmalı | `production` değilse 2FA zorlaması devreye girmez |
 | `TZ` | — | `UTC` önerilir | Tarih hesapları `process.env.TZ`'ye bağlı değildir (`common/dates.ts`), ama günlük zaman damgalarının tekdüze olması için konteynerleri UTC'de çalıştırın |
+| `STUN_URLS` | genel Google STUN | WebRTC STUN sunucuları (virgüllü) — `GET /chat/ice-servers` uçtan döner | Boşsa varsayılan genel STUN kullanılır (bugünkü davranış) |
+| `TURN_URLS` + `TURN_USERNAME` + `TURN_CREDENTIAL` | — | TURN relay (örn. coturn; `turn:host:port?transport=udp`) — sıkı NAT arkasında video arama için | Üçü BİRLİKTE tanımlı değilse TURN yok sayılır (yalnız STUN; uyarı yok, davranış bilinçli). Kimlikler statik paylaşımlıdır; kısa ömürlü (HMAC) kimlikler coturn kurulduktan sonra eklenir |
 
 ### 3.2.1 `TRUSTED_PROXY_HOPS` — üretimde ZORUNLU (denetim bulgusu Ö-08)
 

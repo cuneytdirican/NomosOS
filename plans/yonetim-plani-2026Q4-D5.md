@@ -141,7 +141,13 @@ bildirim e-postası (SMTP Noop); mobil ajanda/mesajlar ekranları.
 7. Cila maddeleri (M6) — UYAP yeniden senkron öncelikli.
 
 **DALGA 5-C — P2 (ölçek kararı sonrası)**
-8. pgvector, TURN — kiracı/parça sayımı tetikler. (Redis pub/sub tamamlandı.)
+8. pgvector, TURN sunucusu — kiracı/parça sayımı tetikler. (Redis pub/sub
+   tamamlandı.) **TURN HAZIRLIĞI tamam:** ICE yapılandırması istemciden sunucuya
+   taşındı — `GET /chat/ice-servers` ortamdan okur (`STUN_URLS`, `TURN_URLS` +
+   `TURN_USERNAME` + `TURN_CREDENTIAL`); operatör coturn sağladığında kod
+   değişikliği gerekmez. TURN KURULU DEĞİLDİR: varsayılan yalnız genel STUN
+   (mevcut davranış), eksik kimlikle TURN yok sayılır. Canlı doğrulandı:
+   uç varsayılan STUN döndü, yetkisiz istek 401; TURN dalları birim testli.
 
 ## 3. Bilinçli yapılmayacaklar
 - Otomatik yasal süre üretimi (İİK koşullu hükümler) — süreler kural motorundan kurulur.

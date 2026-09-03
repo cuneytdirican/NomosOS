@@ -453,6 +453,7 @@ export const CHAT_ROUTES = {
   avatarPresign: "/chat/avatar/presign",
   avatarSet: "/chat/avatar",
   userAvatar: (id: string) => `/chat/users/${id}/avatar`,
+  iceServers: "/chat/ice-servers",
   startCall: "/chat/calls",
   incomingCalls: "/chat/calls/incoming",
   call: (id: string) => `/chat/calls/${id}`,
