@@ -17,7 +17,13 @@ function digitsOnly(v: string): string {
 import type { AuthUser } from "../common/types";
 import { assertRole, ROLE_SETS } from "../common/roles";
 import { normalizeQuery, paged, resolvePage } from "../common/pagination";
-import type { CreateContactInput, UpdateClientInput, UpdateContactInput } from "./clients.dto";
+import type {
+  CreateContactInput,
+  CreateSegmentInput,
+  UpdateClientInput,
+  UpdateContactInput,
+  UpdateSegmentInput,
+} from "./clients.dto";
 
 /**
  * Müvekkil yanıtlarında okunan alanlar.
@@ -151,6 +157,91 @@ export class ClientsService {
       detail: client.name,
     });
     return maskClient(client);
+  }
+
+  /* ================================================================== *
+   * D7/M3 — MÜVEKKİL SEGMENT KATALOĞU (kiracı bazlı yönetilen liste).
+   *
+   * `Client.category` bu listeden seçilir — kullanıcı varlıkları elle
+   * girilmez ilkesi. Kod sabiti DEĞİLDİR: segmentasyon büronun kararıdır
+   * (ADMIN/PARTNER — ROLE_SETS.ONAY). Silme YOKTUR: pasifleştirilen segment
+   * seçim listesine girmez, mevcut müvekkil kayıtları bozulmaz.
+   * ================================================================== */
+
+  /** Aktif segmentler — seçim listesi (kategori yöneten herkes okur). */
+  async listSegments(user: AuthUser) {
+    assertRole(user, ROLE_SETS.OPERASYON, "müvekkil segment listesi");
+    return this.prisma.client.clientSegment.findMany({
+      where: { tenantId: user.tenantId, isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
+      select: { id: true, label: true, sortOrder: true },
+    });
+  }
+
+  /** Yeni segment ekleme — büronun segmentasyon kararı (ADMIN/PARTNER). */
+  async createSegment(user: AuthUser, input: CreateSegmentInput) {
+    assertRole(user, ROLE_SETS.ONAY, "müvekkil segment ekleme");
+    const existing = await this.prisma.client.clientSegment.findFirst({
+      where: { tenantId: user.tenantId, label: { equals: input.label, mode: "insensitive" } },
+      select: { id: true, isActive: true },
+    });
+    if (existing) {
+      throw new ConflictException(
+        existing.isActive
+          ? `"${input.label}" segmenti zaten var.`
+          : `"${input.label}" segmenti PASİF durumda — yeniden aktifleştirin.`
+      );
+    }
+    const segment = await this.prisma.client.clientSegment.create({
+      data: { tenantId: user.tenantId, label: input.label, sortOrder: input.sortOrder ?? 0 },
+    });
+    await this.audit.log({
+      tenantId: user.tenantId,
+      userId: user.userId,
+      action: "CLIENT_SEGMENT_CREATE",
+      entity: "ClientSegment",
+      entityId: segment.id,
+      detail: `Segment eklendi: "${segment.label}".`,
+    });
+    return segment;
+  }
+
+  /** Segment güncelleme — ad değişimi, sıra, pasifleştirme.
+   *
+   * AD DEĞİŞİMİ BİLİNÇLİ OLARAK MEVCUT KAYITLARA UĞRAMAZ: `Client.category`
+   * dize olarak saklanır; adı değişen segment eski adla işaretlenmiş
+   * müvekkilleri otomatik taşıMAZ (sessiz toplu veri değişimi yapılmaz).
+   * Kart güncellemesi avukatın kendi kararına bırakılır.
+   */
+  async updateSegment(user: AuthUser, id: string, input: UpdateSegmentInput) {
+    assertRole(user, ROLE_SETS.ONAY, "müvekkil segment güncelleme");
+    const existing = await this.prisma.client.clientSegment.findFirst({
+      where: { id, tenantId: user.tenantId },
+    });
+    if (!existing) throw new NotFoundException("Segment bulunamadı.");
+    const updated = await this.prisma.client.clientSegment.update({
+      where: { id },
+      data: {
+        ...(input.label !== undefined ? { label: input.label.trim() } : {}),
+        ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
+        ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+      },
+    });
+    await this.audit.log({
+      tenantId: user.tenantId,
+      userId: user.userId,
+      action: "CLIENT_SEGMENT_UPDATE",
+      entity: "ClientSegment",
+      entityId: id,
+      detail:
+        `Segment "${existing.label}" güncellendi` +
+        (input.label && input.label !== existing.label ? ` → "${input.label}"` : "") +
+        (input.isActive !== undefined ? ` (${input.isActive ? "aktif" : "pasif"})` : "") +
+        (input.label && input.label !== existing.label
+          ? ". NOT: adı değişen segment mevcut müvekkil kayıtlarını taşımaz."
+          : ""),
+    });
+    return updated;
   }
 
   /* ================================================================== *

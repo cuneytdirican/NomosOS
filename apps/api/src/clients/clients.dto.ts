@@ -63,6 +63,29 @@ export const duplicateCheckSchema = z.object({
 });
 export type DuplicateCheckInput = z.infer<typeof duplicateCheckSchema>;
 
+/**
+ * D7/M3 — müvekkil segment kataloğu (kiracı bazlı YÖNETİLEN liste).
+ * Client.category bu listeden seçilir; kod sabiti değil büronun segmentasyonu.
+ */
+export const createSegmentSchema = z.object({
+  label: z
+    .string()
+    .trim()
+    .min(2, "Segment adı en az 2 karakter olmalıdır.")
+    .max(60, "Segment adı en fazla 60 karakter olabilir."),
+  sortOrder: z.coerce.number().int().min(0).max(1000).optional(),
+});
+export type CreateSegmentInput = z.infer<typeof createSegmentSchema>;
+
+export const updateSegmentSchema = z
+  .object({
+    label: z.string().trim().min(2).max(60).optional(),
+    sortOrder: z.coerce.number().int().min(0).max(1000).optional(),
+    isActive: z.boolean().optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, "Güncellenecek en az bir alan gönderin.");
+export type UpdateSegmentInput = z.infer<typeof updateSegmentSchema>;
+
 /** POST /clients/:id/contacts */
 export const createContactSchema = z.object({
   fullName: z.string().min(2, "İlgili kişi adı en az 2 karakter olmalıdır.").max(200, "İlgili kişi adı en fazla 200 karakter olabilir."),

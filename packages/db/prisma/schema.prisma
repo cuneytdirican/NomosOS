@@ -3452,6 +3452,24 @@ model NotaryOffice {
   @@index([il, ilce])
 }
 
+/// D7/M3 — MÜVEKKİL SEGMENT KATALOĞU (kiracı bazlı YÖNETİLEN liste).
+/// `Client.category` serbest metin değil, BU listeden seçilir (kullanıcı
+/// varlıkları elle girilmez ilkesi). Büro kendi segmentasyonunu kurar; liste
+/// kiracıya aittir (kod sabiti DEĞİLDİR). Pasifleştirilen segment yeni seçim
+/// listesine girmez; mevcut müvekkil kayıtları bozulmaz.
+model ClientSegment {
+  id        String   @id @default(uuid())
+  tenantId  String
+  label     String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, label])
+  @@index([tenantId, isActive])
+}
+
 /// D7 — VERGİ DAİRESİ kataloğu (müvekkil kartında seçilir; elle giriş yedeğiyle).
 /// Kaynak hiyerarşisi yargı kataloğuyla AYNI: SEED (temsilî büyük şehir
 /// daireleri) → SYNC (resmî VD listesi yapılandırılmış kaynaktan) → MANUAL

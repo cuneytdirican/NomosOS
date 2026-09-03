@@ -45,7 +45,6 @@ import {
   CASE_STATUS_LABELS,
   CASE_STATUS_TONES,
   CASE_TYPE_LABELS,
-  CLIENT_CATEGORIES,
   CLIENT_TYPE_LABELS,
   fmtDate,
   labelOf,
@@ -478,6 +477,21 @@ function GeneralTab({ client, onSaved }: { client: Client; onSaved: () => Promis
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
+  // D7/M3 — yönetilen segment kataloğu (kiracı listesi); yüklenemezse seçim
+  // listesi boş kalır, mevcut değer seçenek olarak korunur.
+  const [segments, setSegments] = useState<Array<{ id: string; label: string; sortOrder: number }>>([]);
+
+  useEffect(() => {
+    let alive = true;
+    void api<unknown>("/clients/segments")
+      .then((data) => {
+        if (alive && Array.isArray(data)) setSegments(data as typeof segments);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     setForm(toForm(client));
@@ -599,18 +613,24 @@ function GeneralTab({ client, onSaved }: { client: Client; onSaved: () => Promis
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Segment / Kategori">
-              <Input
-                list="client-categories"
+            <Field label="Segment / Kategori" hint="Büronun segment listesinden seçilir — liste ADMIN/PARTNER tarafından yönetilir.">
+              {/* D7/M3 — segment KATALOGDAN seçilir (serbest metin değil);
+                  mevcut değer katalogda yoksa (eski/pasif segment) seçenek
+                  olarak korunur — sessiz veri kaybı olmaz. */}
+              <Select
                 value={form.category}
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
-                placeholder="Kurumsal / Bireysel"
-              />
-              <datalist id="client-categories">
-                {CLIENT_CATEGORIES.map((c) => (
-                  <option key={c} value={c} />
+              >
+                <option value="">— Kategorisiz —</option>
+                {segments.map((s) => (
+                  <option key={s.id} value={s.label}>
+                    {s.label}
+                  </option>
                 ))}
-              </datalist>
+                {form.category && !segments.some((s) => s.label === form.category) && (
+                  <option value={form.category}>{form.category} (listede yok)</option>
+                )}
+              </Select>
             </Field>
             <Field label="Büro referans kodu" hint="Örn. MV-2026-001">
               <Input

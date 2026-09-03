@@ -3,7 +3,7 @@ import { createClientSchema, type CreateClientInput } from "@nomosos/shared";
 import { ClientsService } from "./clients.service";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe";
-import { importCsvSchema, duplicateCheckSchema, mergeClientSchema, type MergeClientInput, type DuplicateCheckInput } from "./clients.dto";
+import { importCsvSchema, duplicateCheckSchema, mergeClientSchema, type MergeClientInput, type DuplicateCheckInput, createSegmentSchema, updateSegmentSchema, type CreateSegmentInput, type UpdateSegmentInput } from "./clients.dto";
 import type { AuthUser } from "../common/types";
 import {
   createContactSchema,
@@ -51,6 +51,32 @@ export class ClientsController {
     @Body(new ZodValidationPipe(duplicateCheckSchema)) body: DuplicateCheckInput
   ) {
     return this.clientsService.duplicateCheck(user, body);
+  }
+
+  /**
+   * D7/M3 — MÜVEKKİL SEGMENT KATALOĞU (kiracı bazlı yönetilen liste).
+   * Client.category bu listeden seçilir; kod sabiti değil büronun segmentasyonu.
+   */
+  @Get("segments")
+  segments(@CurrentUser() user: AuthUser) {
+    return this.clientsService.listSegments(user);
+  }
+
+  @Post("segments")
+  createSegment(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(createSegmentSchema)) body: CreateSegmentInput
+  ) {
+    return this.clientsService.createSegment(user, body);
+  }
+
+  @Patch("segments/:id")
+  updateSegment(
+    @CurrentUser() user: AuthUser,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(updateSegmentSchema)) body: UpdateSegmentInput
+  ) {
+    return this.clientsService.updateSegment(user, id, body);
   }
 
   @Post("import")

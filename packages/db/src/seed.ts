@@ -2667,6 +2667,21 @@ async function main() {
       notaryAdded++;
     }
   }
+  // ── Müvekkil segment kataloğu (D7/M3 — kiracı bazlı yönetilen liste) ──────
+  const segmentLabels = ["Kurumsal", "Bireysel", "Kamu", "STK"];
+  for (const [i, label] of segmentLabels.entries()) {
+    const exists = await prisma.clientSegment.findUnique({
+      where: { tenantId_label: { tenantId: TENANT_ID, label } },
+      select: { id: true },
+    });
+    if (!exists) {
+      await prisma.clientSegment.create({
+        data: { tenantId: TENANT_ID, label, sortOrder: i },
+      });
+      segmentAdded++;
+    }
+  }
+
   // ── Vergi daireleri (D7 — müvekkil kartında listeden seçim) ────────────────
   // TEMSİLÎ liste: her il için merkez dairesi + büyük şehirlerde gerçek adlı
   // büyük mükellefler daireleri. Tam resmî liste SYNC kaynağı ister; katalog
