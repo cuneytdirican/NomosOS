@@ -120,6 +120,13 @@ export const CLIENTS_ROUTES = {
   export: (id: string) => `/clients/${id}/export`,
   contacts: (id: string) => `/clients/${id}/contacts`,
   contact: (id: string, contactId: string) => `/clients/${id}/contacts/${contactId}`,
+  /** D6-B — mükerrer tespiti (kaydı engellemez; uyarı). */
+  duplicateCheck: "/clients/duplicate-check",
+  /** D6 — mükerrer birleştirme öngörüsü (taşınacak kayıt sayıları).
+   *  Çağıran `?source=<sourceId>` sorgu parametresini ekler. */
+  mergePreview: (id: string) => `/clients/${id}/merge-preview`,
+  /** D6 — mükerrer birleştirme (geri alınamaz; ADMIN/PARTNER). */
+  merge: (id: string) => `/clients/${id}/merge`,
 } as const;
 
 export const CASES_ROUTES = {

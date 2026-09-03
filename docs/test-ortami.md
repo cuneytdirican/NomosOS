@@ -257,6 +257,11 @@ Sistemin ayırt edici kararlarını görmek için:
 10. **UYAP eşleşme sonrası yeniden senkron** — Eşleşmeyen UYAP dosyasına sahnelenen
     olaylar, avukat eşleşmey çözdüğü anda dosyaya işlenir (safahat → zaman çizelgesi,
     duruşma → ajanda).
+11. **Mükerrer müvekkil tespiti + birleştirme (D6)** — Yeni müvekkil formunda
+    "ABC Holding A.S." yazın: canlı uyarı benzer kartı gösterir (kayda devam
+    edilebilir). Sonra bir kartı «Mükerrer kartı birleştir» ile başka karta
+    birleştirin: taşınacak kayıt sayıları önceden gösterilir, işlem geri alınamaz,
+    kaynak kart pasifleşir (silinmez) ve denetim izine yazılır.
 
 ---
 

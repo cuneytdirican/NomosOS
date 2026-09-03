@@ -181,13 +181,13 @@ degisiklik; plana alindi.
     — **C5 pgvector:** bilinçli ertelenmiş (belgeli karar; 100k+ parça üstünde).
 
 **DALGA 5 — P0/P1 "Platform yönetimi" (plans/yonetim-plani-2026Q4-D5.md)**
-16. Kiracı açma ucu + onay akışı; kiracı kapatma/arşiv yaşam döngüsü. — **PLANLI**
-17. Yönetim paneli `/yonetim` (14 platform alanının UI'sı: kiracılar, abonelik/
-    plan, ödemeler, platform kullanıcıları, onaylar, sistem+bakım kilidi, denetim,
-    metrik/sağlık, demo talepleri, destek erişimi, krediler, duyurular, bayraklar).
-    — **PLANLI**
-18. Eğitim iş yönetimi (fine-tune: iş aç → sağlayıcı durumu → model kaydet →
-    AiTaskRoute'a bağla). — **PLANLI (P1)**
+16. Kiracı açma ucu + onay akışı; kiracı kapatma/arşiv yaşam döngüsü. — **TAMAM**
+    (dört-göz TENANT_CREATE + askıda giriş engeli; canlı doğrulandı)
+17. Yönetim paneli değerlendirmesi. — **TAMAM** (envanter düzeltmesi: panel
+    `apps/admin`'da zaten vardı; gerçek eksikler 16 ve 18'di)
+18. Eğitim iş yönetimi (fine-tune: iş aç → manifest → durum izle → model
+    kaydet). — **TAMAM** (sağlayıcıya otomatik gönderim bilinçli yok; canlı
+    doğrulandı)
 19. Cila: UYAP eşleşme sonrası otomatik yeniden senkron; dilekçe sürüm farkı;
     portal e-postası; mobil ajanda/mesajlar. — **TAMAM (e-posta hariç — SMTP dış
     sözleşme)**; UYAP senkronu, dilekçe fark görünümü ve mobil ekranlar canlı

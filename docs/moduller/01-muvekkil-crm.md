@@ -148,8 +148,19 @@ Mevcut şemayla bağlar: `Case.client_id`, `PowerOfAttorney.client_id`, `Financi
 | GET/POST | /api/v1/clients/:id/representatives | Yetkililer |
 | GET/POST | /api/v1/clients/:id/interactions | İletişim geçmişi |
 | POST | /api/v1/clients/:id/ai/summary | CLIENT_SUMMARY görevi başlat |
-| POST | /api/v1/clients/:id/merge | `{merged_client_id}` — mükerrer birleştirme (kural 10) |
-| GET | /api/v1/clients/duplicates | Olası mükerrer kartlar (ad/VKN benzerliği) |
+| GET | /api/v1/clients/:id/merge-preview?source= | **D6** — taşınacak kayıt sayıları (kural 10: onay diyaloğunda gösterilir) |
+| POST | /api/v1/clients/:id/merge | `{sourceClientId}` — **D6** mükerrer birleştirme (kural 10; geri alınamaz) |
+| POST | /api/v1/clients/duplicate-check | **D6-B** — canlı mükerrer tespiti (ad benzerliği + kimlik/e-posta/telefon; UYARI, engel değil) |
+
+> **D6 uygulama notu (2026-09-03):** birleştirme KODLANIP canlı doğrulandı — 16
+> ilişki tek işlemde taşınır (cases, contacts, vekaletname, finans, ücret
+> sözleşmesi, randevu, zaman kaydı, fatura, ödeme, portal hesabı/daveti/yayını,
+> iletişim kaydı, giden/gelen mesaj, sözleşme), kaynak kart PASİFLEŞİR
+> (silinmez), `ClientMergeLog` + `CLIENT_MERGE` denetim izi yazılır. Tespit
+> (D6-B) deterministiktir (AI yoktur): Türkçe normalizasyon + hukuki ek
+> ayıklama + Jaro-Winkler; eşik 0.90 ampirik ölçüldü (yanlış pozitifler
+> 0.841–0.890 eşiğin altında, yazım hataları 0.94–1.00 üstünde). Tam TCKN/VKN
+> eşleşmesi create'te 409 ile kaydı ENGELLEMAYA devam eder.
 
 ## Diğer Modüllerle İlişkiler
 
