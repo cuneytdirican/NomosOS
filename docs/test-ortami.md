@@ -262,6 +262,14 @@ Sistemin ayırt edici kararlarını görmek için:
     edilebilir). Sonra bir kartı «Mükerrer kartı birleştir» ile başka karta
     birleştirin: taşınacak kayıt sayıları önceden gösterilir, işlem geri alınamaz,
     kaynak kart pasifleşir (silinmez) ve denetim izine yazılır.
+12. **Referans katalog seçimleri (D7)** — Müvekkil kartında vergi dairesi
+    İl → daire kademeli seçimle gelir; segment/kategori büronun YÖNETİLEN
+    listesindendir. Konkordato açarken mahkeme Asliye TİCARET kataloğundan
+    seçilir. Kataloglar yaklaşıktır: "Listede yok mu? Elle yazacağım" yedeği
+    her yerde çalışmayı durdurmaz.
+13. **Taraf ↔ müvekkil bağı (D8)** — Dosya detayı → Taraflar → «+ Taraf Ekle»:
+    "müvekkilimiz" işaretleyin — taraf adı müvekkil kartından SEÇİLİR, elle
+    yazılamaz (kartsız işaret 400); karşı taraf serbest metin girilir.
 
 ---
 

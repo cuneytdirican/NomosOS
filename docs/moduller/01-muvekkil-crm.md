@@ -61,7 +61,14 @@ Zaman akışı: tip ikonu (telefon/e-posta/toplantı/WhatsApp), tarih, kaydeden 
 | name | text | Tüzel: unvan; gerçek: ad soyad |
 | national_id | text nullable | TCKN (gerçek kişi), maskeli gösterim |
 | tax_number | text nullable | VKN (tüzel kişi) |
-| tax_office | text nullable | Vergi dairesi |
+| tax_office | text nullable | Vergi dairesi — D7: katalogdan SEÇİLİR (TaxOffice; `/judicial/tax-offices`), serbest metin yedeğiyle |
+
+> **D7 kataloglar (2026-09-03):** müvekkil kartındaki varlık alanları artık elle
+> girilmez: **vergi dairesi** `TaxOffice` kataloğundan seçilir (temsilî seed +
+> platform panelli büyüme; SEED→SYNC→MANUAL hiyerarşisi), **segment/kategori**
+> kiracıya özgü `ClientSegment` kataloğundan seçilir (`GET/POST/PATCH
+> /clients/segments`; liste ADMIN/PARTNER yönetir, okuma OPERASYON; pasifleştirme
+> vardır, silme yoktur; adı değişen segment mevcut kayıtları taşımaz).
 | mersis_no | text nullable | Tüzel kişi MERSİS |
 | parent_client_id | uuid FK→Client nullable | Bağlı şirket / holding ilişkisi |
 | responsible_user_id | uuid FK→User | Sorumlu avukat |

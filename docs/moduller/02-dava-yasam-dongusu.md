@@ -49,6 +49,15 @@ Bileşenler: arama (esas no/taraf/müvekkil), filtreler (tür: hukuk/ceza/icra/a
 ### 3. Yeni Dosya — `/app/cases/new`
 Adımlar: tür seçimi → mahkeme/esas no → müvekkil seçimi (Modül 01'den) → taraflar → sorumlu avukat. Kayıtla birlikte otomatik klasör (Modül 06) ve "tensip bekleniyor" safahat kaydı oluşur.
 
+> **D8 — taraf ↔ müvekkil bağı (2026-09-03):** dosya detayındaki Taraflar kartında
+> «+ Taraf Ekle» vardır. "Müvekkilimiz" işaretlenen taraf MÜVEKKİL KARTINDAN
+> SEÇİLİR (sunucu tarafı aramalı seçici); ad SUNUCUDA karttan doldurulur — elle
+> gönderilen ad yok sayılır. Kartsız "müvekkilimiz" işareti 400 ile reddedilir
+> (çatışma kontrolünü ve finans özetlerini kandıran kopuk kayıt engeli). Karşı
+> taraf serbest metindir — bilinçli: karşı taraf herkes olabilir, katalog varlığı
+> değildir. `CaseParty.client_id` FK ile kart bağlanır (SetNull); müvekkil tarafı
+> listede kart bağlantısıyla gösterilir.
+
 ## Veri Modeli
 
 ### Case (çekirdek, genişletilmiş)

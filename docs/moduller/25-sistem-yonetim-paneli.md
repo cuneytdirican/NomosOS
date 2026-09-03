@@ -288,6 +288,8 @@ Roller: **S**=SUPER_ADMIN, **O**=OPS_ADMIN, **B**=BILLING_ADMIN, **D**=SUPPORT_A
 | POST | /tenants/:id/suspend · /reactivate | Askıya al (gerekçe zorunlu, dört-göz) / çıkar | S O B* |
 | DELETE | /tenants/:id | Soft-delete + anonimleştirme kuyruğu (dört-göz) | S |
 | GET | /tenants/:id/usage | UsageSnapshot serisi | S O B D |
+| GET/POST/PATCH | /judicial/bodies · /notaries · /tax-offices (+ /:id) | REFERANS KATALOĞU yönetimi: mahkeme/icra dairesi, noterlik, vergi dairesi (D7) — SEED→SYNC→MANUAL; bureau formlarındaki seçim listeleri | S O (yazma: judicial.manage) |
+| GET/PUT | /judicial/sync/settings + /sync + /sync/logs | Katalog senkron kaynağı ve günlüğü | S O |
 | GET | /fine-tune-jobs | Fine-tune işleri + ONAYLANMIŞ havuz anlık görüntüsü (D5) | S O D A |
 | POST | /fine-tune-jobs | İş açma — anlık görüntü alır; sağlayıcıya otomatik gönderim YOK | S O |
 | GET | /fine-tune-jobs/:id/manifest | Manifest (JSONL, yalnız ONAYLANMIŞ örnekler; HAZIRLANDI/GONDERILDI) | S O |
