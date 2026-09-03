@@ -189,7 +189,14 @@ degisiklik; plana alindi.
 18. Eğitim iş yönetimi (fine-tune: iş aç → sağlayıcı durumu → model kaydet →
     AiTaskRoute'a bağla). — **PLANLI (P1)**
 19. Cila: UYAP eşleşme sonrası otomatik yeniden senkron; dilekçe sürüm farkı;
-    portal e-postası; mobil ajanda/mesajlar. — **PLANLI (P2)**
+    portal e-postası; mobil ajanda/mesajlar. — **TAMAM (e-posta hariç — SMTP dış
+    sözleşme)**; UYAP senkronu, dilekçe fark görünümü ve mobil ekranlar canlı
+    doğrulandı.
+
+> **Dalga 5 kapanış (03.09.2026):** kod tarafı TAMAM — ayrıntılar ve kanıtlar
+> plans/yonetim-plani-2026Q4-D5.md dosyasındadır (kiracı açma dört-göz TENANT_CREATE,
+> askıda giriş engeli, fine-tuning iş yönetimi, UYAP yeniden senkron, dilekçe sürüm
+> farkı, mobil ajanda/mesajlar; hepsi canlı doğrulandı).
 
 ## 6. Yapılmayacaklar (dürüstlük)
 

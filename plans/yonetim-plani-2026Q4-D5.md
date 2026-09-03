@@ -1,6 +1,8 @@
 # NomosOS — Dalga 5: Platform Yönetimi ve Ölçekleme Planı (2026Q4-D5)
 
-Tarih: 2026-09-02 · Durum: 5-A KISMEN TAMAM (M2+M3 bitti; panel envanteri düzeltildi)
+Tarih: 2026-09-02 · Durum: **KOD TARAFI TAMAM** (M2+M3+M4+M5+M6 + cila kalemleri;
+dokümantasyon güncel). Kalanlar: dış sözleşmeler (SMTP, UETS, POS/GİB, SMS) ve
+ölçek tetikleyicileri (Redis pub/sub, pgvector, TURN — 5-C maddeleri).
 
 ## 0. Mevcut durum (kanıtlı envanter — 02.09.2026)
 
