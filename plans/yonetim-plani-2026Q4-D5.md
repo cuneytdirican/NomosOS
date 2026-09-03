@@ -73,6 +73,15 @@ yöneticiler, demo talepleri, AI sağlayıcılar sayfaları ZATEN VARDI. M1'in
   seçimi + renkli fark çizimi (eklenen yeşil / çıkarılan kırmızı).
   Canlı doğrulandı: yeni sürüm 201 → v1 görünümü 200 (5 bölüm) → v1→v2 fark
   200 (1 bölüm değişti, +3 satır) → olmayan sürüm 404, geçersiz parametre 400.
+- **Cila (mobil ajanda/mesajlar) TAMAM:** /ajanda — gün gezinme (önceki/
+  bugün/sonraki), tür rozetleri, duruşma satırı duruşma detayına götürür;
+  salt-okur. /mesajlar — sohbet listesi (okunmamış sayacı) + konuşma
+  görünümü + mesaj gönderme; SSE YOK, açık sohbet 15 sn'de yenilenir
+  (mahkeme salonu gecikmesi kabul edilebilir). Yazma listesi bilinçli
+  genişletildi: POST /chat/messages + PATCH /chat/read (endpoints.ts
+  başlığında belgeli). Giriş: Bugün başlığındaki ajanda/mesajlar simgeleri.
+  Canlı doğrulandı: Bearer oturum → ajanda 4 olay (tür kırılımlı) → sohbet
+  listesi 3 → mesajlar → gönderim 201 → okundu 200 → mesaj sohbette göründü.
 
 ## 1. Eksikler (öncelik sırasıyla)
 

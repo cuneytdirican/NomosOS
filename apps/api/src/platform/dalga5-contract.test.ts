@@ -223,6 +223,43 @@ describe("Cila: dilekçe sürüm fark görünümü", () => {
   });
 });
 
+describe("Cila: mobil ajanda/mesajlar ekranları", () => {
+  it("ajanda ekranı: tek günlük pencere + tür rozetleri + duruşma yönlendirmesi", () => {
+    const page = read("..", "mobile", "app", "ajanda.tsx");
+    expect(page).toContain("fetchAgenda");
+    expect(page).toContain("`/durusma/${");
+    expect(page).toContain("DURUSMA: \"Duruşma\"");
+    // Yazma yoktur — salt-okur ekran.
+    expect(page).not.toContain("method: \"POST\"");
+    expect(page).not.toContain("method: \"PATCH\"");
+  });
+
+  it("mesajlar ekranı: sohbet listesi + konuşma + gönderim + okundu", () => {
+    const page = read("..", "mobile", "app", "mesajlar.tsx");
+    expect(page).toContain("fetchChatThreads");
+    expect(page).toContain("fetchChatMessages");
+    expect(page).toContain("sendChatMessage");
+    expect(page).toContain("markChatRead");
+    expect(page).toContain("15_000"); // SSE yerine zamanlayıcı yenileme
+  });
+
+  it("yazma listesi bilinçli genişletildi: mesaj gönderme + okundu", () => {
+    const ep = read("..", "mobile", "src", "api", "endpoints.ts");
+    expect(ep).toContain("POST /chat/messages");
+    expect(ep).toContain("PATCH /chat/read");
+    expect(ep).toContain("D5/cila");
+  });
+
+  it("rota kayıtları + Bugün başlığından kısayollar", () => {
+    const layout = read("..", "mobile", "app", "_layout.tsx");
+    expect(layout).toContain('name="ajanda"');
+    expect(layout).toContain('name="mesajlar"');
+    const tabs = read("..", "mobile", "app", "(tabs)", "_layout.tsx");
+    expect(tabs).toContain('"/ajanda"');
+    expect(tabs).toContain('"/mesajlar"');
+  });
+});
+
 describe("M3: askıda kiracı GİRİŞ engeli (abonelik → login)", () => {
   it("login: SUSPENDED ve CANCELED abonelik 403 ile reddedilir", () => {
     const s = read("src", "auth", "auth.service.ts");

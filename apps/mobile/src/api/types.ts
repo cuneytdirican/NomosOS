@@ -174,3 +174,66 @@ export interface Paged<T> {
   limit: number;
   totalPages: number;
 }
+
+// ---------------------------------------------------------------------------
+// Ajanda (D5 / cila) — GET /agenda yanıt biçimi (web ile aynı uç).
+// ---------------------------------------------------------------------------
+
+export type AgendaEventKind = "DURUSMA" | "RANDEVU" | "SURE" | "GOREV";
+
+export interface AgendaEvent {
+  /** "h-<id>" / "t-<id>" / "d-<id>" / "r-<id>" önekli — türden bağımsız kimlik. */
+  id: string;
+  kind: AgendaEventKind;
+  title: string;
+  date: string;
+  caseId?: string | null;
+  caseTitle?: string | null;
+  note?: string | null;
+}
+
+export interface AgendaPayload {
+  from: string;
+  to: string;
+  events: AgendaEvent[];
+  counts: Record<AgendaEventKind, number>;
+}
+
+// ---------------------------------------------------------------------------
+// Büroyiçi mesajlaşma (D5 / cila) — /chat uçları (web ile aynı).
+// ---------------------------------------------------------------------------
+
+export interface ChatPeer {
+  id: string;
+  fullName: string;
+  role: string;
+  hasAvatar: boolean;
+  online: boolean;
+  lastSeenAt: string | null;
+}
+
+export interface ChatThread {
+  peer: ChatPeer;
+  lastMessage: {
+    id: string;
+    content: string | null;
+    fromMe: boolean;
+    hasAttachment: boolean;
+    createdAt: string;
+  } | null;
+  unread: number;
+}
+
+export interface ChatMsg {
+  id: string;
+  fromMe: boolean;
+  content: string | null;
+  attachment: { documentId: string; name: string; mimeType: string; sizeBytes: number } | null;
+  createdAt: string;
+}
+
+export interface ChatMessagesPayload {
+  peer: ChatPeer & { typing: boolean };
+  messages: ChatMsg[];
+  hasMoreBefore: boolean;
+}

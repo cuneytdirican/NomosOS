@@ -8,13 +8,13 @@
  */
 
 import React from "react";
-import { Pressable } from "react-native";
+import { Pressable, View } from "react-native";
 import { Tabs, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, TOUCH } from "@/ui/theme";
 
 export default function TabsLayout(): React.JSX.Element {
-  const router = useRouter();
+  const router = useRouter(); // ajanda/mesajlar/ayarlar kısayolları
 
   return (
     <Tabs
@@ -36,15 +36,36 @@ export default function TabsLayout(): React.JSX.Element {
           tabBarIcon: ({ color, size }) => <Ionicons name="today-outline" color={color} size={size} />,
           // Ayarlar sekme çubuğunda yer kaplamasın diye başlıktaki dişlidedir.
           headerRight: () => (
-            <Pressable
-              onPress={() => router.push("/ayarlar")}
-              hitSlop={14}
-              accessibilityRole="button"
-              accessibilityLabel="Ayarlar"
-              style={{ paddingHorizontal: 12 }}
-            >
-              <Ionicons name="settings-outline" size={24} color={colors.onNavy} />
-            </Pressable>
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              {/* D5 / cila — ajanda + mesajlar yığın ekranlarına kısa yol. */}
+              <Pressable
+                onPress={() => router.push("/ajanda")}
+                hitSlop={14}
+                accessibilityRole="button"
+                accessibilityLabel="Ajanda"
+                style={{ paddingHorizontal: 8 }}
+              >
+                <Ionicons name="calendar-outline" size={24} color={colors.onNavy} />
+              </Pressable>
+              <Pressable
+                onPress={() => router.push("/mesajlar")}
+                hitSlop={14}
+                accessibilityRole="button"
+                accessibilityLabel="Mesajlar"
+                style={{ paddingHorizontal: 8 }}
+              >
+                <Ionicons name="chatbubbles-outline" size={24} color={colors.onNavy} />
+              </Pressable>
+              <Pressable
+                onPress={() => router.push("/ayarlar")}
+                hitSlop={14}
+                accessibilityRole="button"
+                accessibilityLabel="Ayarlar"
+                style={{ paddingHorizontal: 12 }}
+              >
+                <Ionicons name="settings-outline" size={24} color={colors.onNavy} />
+              </Pressable>
+            </View>
           ),
         }}
       />

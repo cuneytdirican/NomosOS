@@ -2,11 +2,13 @@
  * Ekran → uç eşlemesi. Mobilin sunucudan İSTEDİĞİ HER ŞEY burada listelidir.
  *
  * Yazma işlemleri bilinçli olarak SAYILIDIR (proje kararı 4 — "mobil salt-okur
- * ağırlıklıdır"). İzin verilen dört yazma:
+ * ağırlıklıdır"). İzin verilen yazmalar:
  *   1. duruşma notu ekleme        → PATCH /hearings/:id
  *   2. görev durumu değiştirme    → PATCH /tasks/:id/status
  *   3. süre onaylama / reddetme   → PATCH /deadlines/:id/status
  *   4. bildirim okundu            → PATCH /notifications/:id/read
+ *   5. mesaj gönderme             → POST /chat/messages        (D5/cila — mobil mesajlar)
+ *   6. sohbet okundu              → PATCH /chat/read           (D5/cila — mobil mesajlar)
  * Bunların dışında hiçbir POST/PATCH/DELETE çağrısı YOKTUR.
  */
 
@@ -20,6 +22,10 @@ import type {
   Hearing,
   LoginResponse,
   MeResponse,
+  AgendaPayload,
+  ChatMessagesPayload,
+  ChatMsg,
+  ChatThread,
   NotificationItem,
   Task,
 } from "./types";
@@ -225,6 +231,44 @@ export function registerDevice(token: string, platform: "IOS" | "ANDROID" | "WEB
  */
 export function revokeDevice(token: string): Promise<unknown> {
   return api(`/device-tokens/${encodeURIComponent(token)}`, { method: "DELETE" });
+}
+
+// ---------------------------------------------------------------------------
+// Ajanda (D5 / cila) — GET /agenda. Sekme değil, yığın ekranıdır: /ajanda.
+// ---------------------------------------------------------------------------
+
+export function fetchAgenda(from: string, to: string): Promise<AgendaPayload> {
+  return api<AgendaPayload>("/agenda", { query: { from, to } });
+}
+
+// ---------------------------------------------------------------------------
+// Büroyiçi mesajlaşma (D5 / cila) — web mesajlar sayfasıyla aynı uçlar.
+// SSE mobilde YOKTUR (EventSource tarayıcı API'sidir); açık sohbet 15 sn'de
+// bir yenilenir — mahkeme salonunda bu gecime kabul edilebilir.
+// ---------------------------------------------------------------------------
+
+export function fetchChatThreads(): Promise<ChatThread[]> {
+  return api<ChatThread[]>("/chat/threads").then((r) => asList<ChatThread>(r));
+}
+
+export function fetchChatMessages(peerId: string, limit = 60): Promise<ChatMessagesPayload> {
+  return api<ChatMessagesPayload>("/chat/messages", {
+    query: { peerId, limit },
+  });
+}
+
+export function sendChatMessage(peerId: string, content: string): Promise<ChatMsg> {
+  return api<ChatMsg>("/chat/messages", {
+    method: "POST",
+    body: { peerId, content },
+  });
+}
+
+export function markChatRead(peerId: string, lastReadMessageId: string): Promise<unknown> {
+  return api("/chat/read", {
+    method: "PATCH",
+    body: { peerId, lastReadMessageId },
+  });
 }
 
 // ---------------------------------------------------------------------------
