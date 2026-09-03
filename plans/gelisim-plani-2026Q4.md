@@ -198,6 +198,18 @@ degisiklik; plana alindi.
 > askıda giriş engeli, fine-tuning iş yönetimi, UYAP yeniden senkron, dilekçe sürüm
 > farkı, mobil ajanda/mesajlar; hepsi canlı doğrulandı).
 
+> **Sonraki dalgalar (plan dışı, kullanıcı talebiyle; hepsi canlı doğrulandı):**
+> - **Dalga 6** (plans/mudur-plani-2026Q4-D6.md): mükerrer müvekkil birleştirme
+>   (16 ilişki tek işlemde, geri alınamaz, ClientMergeLog + denetim izi) +
+>   otomatik mükerrer tespiti (deterministik Jaro-Winkler, ampirik eşik 0.90).
+> - **Dalga 7** (plans/referans-katalog-plani-2026Q4-D7.md): seçim ilkesi —
+>   konkordato/iflas mercii Asliye TİCARET kataloğundan; vergi dairesi kataloğu
+>   (TaxOffice, SEED→SYNC→MANUAL); müvekkil segmenti kiracıya özgü yönetilen liste
+>   (ClientSegment).
+> - **Dalga 8** (plans/taraf-baglantisi-plani-2026Q4-D8.md): dosya tarafı ↔ müvekkil
+>   kartı bağı — müvekkil taraf karttan SEÇİLİR (ad sunucuda doldurulur), kartsız
+>   "müvekkilimiz" işareti 400; karşı taraf bilinçli serbest metin.
+
 ## 6. Yapılmayacaklar (dürüstlük)
 
 - RG'den otomatik mevzuat senkronu vaadi — kaynak entegrasyonu olmadan.
