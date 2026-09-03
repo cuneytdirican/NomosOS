@@ -60,6 +60,8 @@ export default function MuvekkillerPage() {
    */
   const [conflict, setConflict] = useState<ConflictCheck | null>(null);
   const [conflictBusy, setConflictBusy] = useState(false);
+  /** D6-B — canlı mükerrer tespiti (uyarı; engel değil). */
+  const [dupes, setDupes] = useState<Array<{ id: string; name: string; reasons: string[] }> | null>(null);
 
   /**
    * ARAMA VE SAYFALAMA SUNUCUDA YAPILIR.
@@ -92,6 +94,36 @@ export default function MuvekkillerPage() {
     return () => clearTimeout(timer);
   }, [load, search, page]);
 
+  // D6-B — MÜKERRER TESPİTİ: yazarken canlı uyarı (çatışma taramasıyla aynı
+  // desen). Kaydı ENGELLEMEZ — kararı avukat verir; tam TCKN/VKN eşleşmesi
+  // yine de sunucuda 409 ile engeller.
+  useEffect(() => {
+    if (!modalOpen) return;
+    const name = form.name.trim();
+    if (name.length < 3) {
+      setDupes(null);
+      return;
+    }
+    let alive = true;
+    const timer = setTimeout(() => {
+      void api<{ suspects: Array<{ id: string; name: string; reasons: string[] }> }>(
+        "/clients/duplicate-check",
+        { method: "POST", body: { name } },
+      )
+        .then((res) => {
+          if (alive) setDupes(res.suspects ?? []);
+        })
+        .catch(() => {
+          // Sessiz: tespit uyarısı formu asla bloklamaz (çatışma taramasıyla aynı ilke).
+          if (alive) setDupes(null);
+        });
+    }, 600);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [modalOpen, form.name]);
+
   useEffect(() => {
     if (!modalOpen) return;
     const name = form.name.trim();
@@ -120,6 +152,7 @@ export default function MuvekkillerPage() {
     setModalOpen(false);
     setConflict(null);
     setSaveError(null);
+    setDupes(null);
   }
 
   /** A1: CSV içe aktarma — POST /clients/import. */
@@ -327,6 +360,33 @@ export default function MuvekkillerPage() {
             <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
               🟢 Çatışma taraması temiz — büro kayıtlarında eşleşme bulunamadı.
             </p>
+          )}
+          {/* D6-B — mükerrer kart uyarısı: kaydı engellemez; mevcut kartı
+              kullanmak ya da sonradan birleştirmek avukatın kararıdır. */}
+          {dupes && dupes.length > 0 && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <p className="font-semibold">
+                Benzer müvekkil kartı bulundu ({dupes.length}) — kayıt açmadan önce kontrol edin:
+              </p>
+              <ul className="mt-1 space-y-1">
+                {dupes.slice(0, 5).map((d) => (
+                  <li key={d.id} className="flex flex-wrap items-baseline gap-1">
+                    <a
+                      href={`/app/muvekkiller/${d.id}`}
+                      className="font-semibold underline"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {d.name}
+                    </a>
+                    <span className="text-amber-700">({d.reasons.join(", ")})</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1 text-amber-700">
+                Kayda devam edebilirsiniz; mükerrer kartı sonradan kart sayfasından birleştirebilirsiniz.
+              </p>
+            </div>
           )}
           <Field label="E-posta">
             <Input

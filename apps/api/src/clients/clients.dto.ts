@@ -50,6 +50,19 @@ export const mergeClientSchema = z.object({
 });
 export type MergeClientInput = z.infer<typeof mergeClientSchema>;
 
+/**
+ * D6-B — mükerrer tespiti: yeni kayıt öncesi canlı uyarı.
+ * Kaydı ENGELLEMEZ (tam TCKN/VKN eşleşmesi ayrı ve 409'dur); avukatın kararıdır.
+ */
+export const duplicateCheckSchema = z.object({
+  name: z.string().trim().min(2, "Tespit için ad zorunludur.").max(300),
+  tckn: z.string().trim().max(11).optional(),
+  taxNumber: z.string().trim().max(10).optional(),
+  email: z.string().trim().email().optional(),
+  phone: z.string().trim().max(30).optional(),
+});
+export type DuplicateCheckInput = z.infer<typeof duplicateCheckSchema>;
+
 /** POST /clients/:id/contacts */
 export const createContactSchema = z.object({
   fullName: z.string().min(2, "İlgili kişi adı en az 2 karakter olmalıdır.").max(200, "İlgili kişi adı en fazla 200 karakter olabilir."),

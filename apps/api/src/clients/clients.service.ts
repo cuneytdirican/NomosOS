@@ -8,6 +8,12 @@ import type { Prisma } from "@nomosos/db";
 import type { CreateClientInput } from "@nomosos/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
+import { isSimilarName, NAME_SIMILARITY_THRESHOLD } from "./client-similarity";
+
+/** Telefondaki biçimlendirmeyi (boşluk, parantez, tire) ayıklar. */
+function digitsOnly(v: string): string {
+  return v.replace(/\D+/g, "");
+}
 import type { AuthUser } from "../common/types";
 import { assertRole, ROLE_SETS } from "../common/roles";
 import { normalizeQuery, paged, resolvePage } from "../common/pagination";
@@ -145,6 +151,88 @@ export class ClientsService {
       detail: client.name,
     });
     return maskClient(client);
+  }
+
+  /* ================================================================== *
+   * D6-B — MÜKERRER TESPİTİ (benzerlik; DETERMİNİSTİK — AI yoktur).
+   *
+   * Kaydı ENGELLEMEZ: tam kimlik eşleşmesi (TCKN/VKN) zaten 409 ile
+   * engeller; buradaki tespit UYARIDIR — kararı AVUKAT verir (kartı açmaya
+   * devam eder ya da mevcut kaydı kullanır/birleştirir).
+   * ================================================================== */
+
+  /**
+   * POST /clients/duplicate-check — yeni kayıt ÖNCESİ tespit.
+   * Ad benzerliği + tam kimlik/e-posta/telefon eşleşmesi. OLUŞTURMA akışında
+   * ve web formunda canlı uyarı olarak kullanılır.
+   */
+  async duplicateCheck(
+    user: AuthUser,
+    input: { name: string; tckn?: string; taxNumber?: string; email?: string; phone?: string }
+  ) {
+    assertRole(user, ROLE_SETS.OPERASYON, "müvekkil mükerrer tespiti");
+    if (!input.name || input.name.trim().length < 2) {
+      throw new BadRequestException("Tespit için ad (en az 2 karakter) zorunludur.");
+    }
+
+    // Aday havuzu: büronun AKTİF kartları. Büro ölçeğinde (binlerce kart)
+    // tam tarama kabul edilebilir; tavan 5000 — üstü için tam metin
+    // arama altyapısı gerekir (bilinçli sınır, bu dalgada yok).
+    const candidates = await this.prisma.client.client.findMany({
+      where: { tenantId: user.tenantId, isActive: true },
+      select: { id: true, name: true, tckn: true, taxNumber: true, email: true, phone: true },
+      take: 5000,
+      orderBy: { createdAt: "desc" },
+    });
+
+    const suspects: Array<{
+      id: string;
+      name: string;
+      score: number;
+      reasons: string[];
+    }> = [];
+
+    for (const c of candidates) {
+      const reasons: string[] = [];
+      let score = 0;
+
+      if (input.taxNumber && c.taxNumber && input.taxNumber === c.taxNumber) {
+        reasons.push("Aynı vergi kimlik numarası");
+        score = 1;
+      }
+      if (input.tckn && c.tckn && input.tckn === c.tckn) {
+        reasons.push("Aynı TCKN");
+        score = 1;
+      }
+      if (input.email && c.email && input.email.toLocaleLowerCase("tr-TR") === c.email.toLocaleLowerCase("tr-TR")) {
+        reasons.push("Aynı e-posta");
+        score = Math.max(score, 0.95);
+      }
+      if (input.phone && c.phone && digitsOnly(input.phone) === digitsOnly(c.phone)) {
+        reasons.push("Aynı telefon");
+        score = Math.max(score, 0.9);
+      }
+      const nameResult = isSimilarName(input.name, c.name);
+      if (nameResult.similar) {
+        reasons.push("Benzer ad");
+        score = Math.max(score, nameResult.score);
+      }
+
+      if (reasons.length > 0) {
+        suspects.push({ id: c.id, name: c.name, score: Number(score.toFixed(3)), reasons });
+      }
+    }
+
+    suspects.sort((x, y) => y.score - x.score);
+    return {
+      suspects: suspects.slice(0, 10),
+      checked: candidates.length,
+      threshold: NAME_SIMILARITY_THRESHOLD,
+      hint:
+        suspects.length > 0
+          ? "Benzer kayıtlar bulundu. Kayıt açmaya devam edebilirsiniz; mevcut kartı kullanmak veya mükerrer kartı birleştirmek (kart sayfası → Mükerrer kartı birleştir) mümkündür. Tam TCKN/VKN eşleşmesi yine de kaydı engeller."
+          : "Benzer kayıt bulunamadı.",
+    };
   }
 
   /* ================================================================== *

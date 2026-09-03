@@ -86,6 +86,50 @@ describe("D6: birleştirme uçları ve kuralları", () => {
   });
 });
 
+describe("D6-B: mükerrer tespiti (deterministik — AI yok)", () => {
+  it("benzerlik motoru: Jaro-Winkler + Türkçe normalizasyon + hukuki ekler — testli", () => {
+    const engine = read("src", "clients", "client-similarity.ts");
+    expect(engine).toContain("jaroWinkler");
+    expect(engine).toContain("normalizeName");
+    expect(engine).toContain("AI YOKTUR");
+    expect(read("src", "clients", "client-similarity.test.ts")).toContain("MARTHA");
+  });
+
+  it("eşik AMPİRİK ölçülü ve kaynağında gerekçeli (0.90)", () => {
+    const engine = read("src", "clients", "client-similarity.ts");
+    expect(engine).toContain("export const NAME_SIMILARITY_THRESHOLD = 0.9;");
+    expect(engine).toContain("0.890");
+    expect(engine).toContain("yanl");
+  });
+
+  it("uç: POST /clients/duplicate-check — OPERASYON rolü, kaydı ENGELLEMEZ", () => {
+    const c = read("src", "clients", "clients.controller.ts");
+    expect(c).toContain('@Post("duplicate-check")');
+    const s = read("src", "clients", "clients.service.ts");
+    expect(s).toContain('assertRole(user, ROLE_SETS.OPERASYON, "müvekkil mükerrer tespiti")');
+    expect(s).toContain("Kaydı ENGELLEMEZ");
+  });
+
+  it("tam kimlik eşleşmesi tespit listesinde; engelleme create'te kalır (409)", () => {
+    const s = read("src", "clients", "clients.service.ts");
+    expect(s).toContain("Aynı vergi kimlik numarası");
+    expect(s).toContain("Aynı TCKN");
+    // create'in 409 engelleme mantığı duruyor
+    expect(s).toContain("ikinci kayıt AÇILAMAZ");
+  });
+
+  it("aday havuzu tavanı belgeli (5000)", () => {
+    expect(read("src", "clients", "clients.service.ts")).toContain("take: 5000");
+  });
+
+  it("web: formda canlı uyarı (debounce) — engel değil, bağlantı ile açılır", () => {
+    const page = read("..", "web", "src", "app", "app", "muvekkiller", "page.tsx");
+    expect(page).toContain("duplicate-check");
+    expect(page).toContain("Benzer müvekkil kartı bulundu");
+    expect(page).toContain("Kayda devam edebilirsiniz");
+  });
+});
+
 describe("D6: web — iki adımlı onay diyaloğu", () => {
   it("kaynak seçimi + sayı öngörüsü + açık onay kutusu", () => {
     const dialog = read("..", "web", "src", "components", "client-merge-dialog.tsx");

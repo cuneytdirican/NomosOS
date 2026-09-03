@@ -47,5 +47,28 @@ kaynak pasif → geri alınamaz).
 
 ## 2. Bilinçli yapılmayacaklar
 - Müvekkil SİLME yoktur (KVKK saklama süresi; pasifleştirme + dışa aktarım var).
-- Otomatik mükerrer TESPİTİ (fuzzy match) bu dalgada yok — birleştirme elle
-  hedefli yapılır; tespit önerisi ayrı çalışmadır.
+- ~~Otomatik mükerrer TESPİTİ (fuzzy match) bu dalgada yok~~ — **D6-B olarak
+  TAMAMLANDI** (aşağıda).
+
+## 3. D6-B — otomatik mükerrer tespiti (TAMAM)
+
+**Motor** (`client-similarity.ts`, deterministik — AI YOKTUR):
+- Türkçe normalizasyon + hukuki ek ayıklama (A.Ş., Ltd., Şti., Holding…)
+- Jaro-Winkler benzerliği; eşik **0.90 — AMPİRİK ölçüldü**: yanlış pozitifler
+  ("Deniz Tekstil"×"Deniz Lojistik" = 0.890, "Kaya İnşaat"×"Kaya Ticaret" =
+  0.841) eşiğin altında; yazım hataları ve ek farkları 0.94–1.00 üstünde.
+- 16 birim testi (normalizasyon, literatür değerleri MARTHA/MARHTA ≈0.961 ve
+  DIXON/DICKSONX ≈0.813, karar sınırları).
+
+**Uç:** `POST /clients/duplicate-check` (OPERASYON rolü) — tam kimlik
+(VKN/TCKN/e-posta/telefon) + ad benzerliği; aday havuzu aktif kartlar
+(tavan 5000, belgeli); en yakın 10 şüpheli + gerekçeler; **kaydı ENGELLEMEZ**
+— tam TCKN/VKN engellemesi create'te 409 olarak kalır; karar avukatındır.
+
+**Web:** yeni müvekkil formunda canlı uyarı (çatışma taramasıyla aynı desen:
+600 ms debounce, sessiz hata) — şüpheli kartlar bağlantıyla açılır, kayda
+devam edilebilir (sonradan birleştirme D6 ile).
+
+Canlı doğrulandı: "ABC Holding A.S." → 1 şüpheli (skor 1); farklı ad → 0;
+e-posta/telefon eşleşmeleri tespit; kısa ad 400; STAJYER 403; determinizm
+(iki sorgu birebir aynı).

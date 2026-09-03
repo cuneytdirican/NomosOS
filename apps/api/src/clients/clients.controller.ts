@@ -3,7 +3,7 @@ import { createClientSchema, type CreateClientInput } from "@nomosos/shared";
 import { ClientsService } from "./clients.service";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe";
-import { importCsvSchema, mergeClientSchema, type MergeClientInput } from "./clients.dto";
+import { importCsvSchema, duplicateCheckSchema, mergeClientSchema, type MergeClientInput, type DuplicateCheckInput } from "./clients.dto";
 import type { AuthUser } from "../common/types";
 import {
   createContactSchema,
@@ -40,6 +40,19 @@ export class ClientsController {
    * Gövde: { csv: "ad;e-posta;tckn..." } — metin, dosya DEĞİL.
    * Mükerrer kontrolü create() ile aynı hattan geçer.
    */
+  /**
+   * D6-B — MÜKERRER TESPİTİ (kaydı engellemez; avukata uyarı).
+   * Tam TCKN/VKN eşleşmesi create'te 409 ile engeller — bu uç AD BENZERLİĞİ
+   * ve e-posta/telefon eşleşmelerini ÖNCESİNDEN gösterir.
+   */
+  @Post("duplicate-check")
+  duplicateCheck(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(duplicateCheckSchema)) body: DuplicateCheckInput
+  ) {
+    return this.clientsService.duplicateCheck(user, body);
+  }
+
   @Post("import")
   importCsv(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(importCsvSchema)) body: { csv: string }) {
     return this.clientsService.importCsv(user, body.csv);
