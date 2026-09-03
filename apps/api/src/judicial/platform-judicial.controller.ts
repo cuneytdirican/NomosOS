@@ -57,6 +57,22 @@ const updateNotarySchema = z
   })
   .refine((v) => Object.keys(v).length > 0, "Güncellenecek en az bir alan gönderin.");
 
+// D7 — vergi dairesi kataloğu (noter kataloğuyla aynı desen).
+const createTaxOfficeSchema = z.object({
+  name: z.string().trim().min(4, "Ad en az 4 karakter olmalıdır.").max(200),
+  il: z.string().trim().min(2, "İl zorunludur.").max(40),
+  ilce: z.string().trim().max(60).nullable().optional(),
+});
+
+const updateTaxOfficeSchema = z
+  .object({
+    name: z.string().trim().min(4).max(200).optional(),
+    il: z.string().trim().min(2).max(40).optional(),
+    ilce: z.string().trim().max(60).nullable().optional(),
+    isActive: z.boolean().optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, "Güncellenecek en az bir alan gönderin.");
+
 const syncSettingsSchema = z.object({
   url: z.string().trim().max(500).nullable().optional(),
   intervalHours: z.number().int().min(1).max(720).optional(),
@@ -118,6 +134,40 @@ export class PlatformJudicialController {
     @Body(new ZodValidationPipe(updateNotarySchema)) body: z.infer<typeof updateNotarySchema>,
   ) {
     return this.judicial.updateNotary(actor, id, body);
+  }
+
+  /** D7 — vergi dairesi kataloğu YÖNETİMİ (müvekkil kartında seçilen liste). */
+  @Get("tax-offices")
+  @ReadPermission("judicial.view")
+  taxOffices(
+    @Query("il") il?: string,
+    @Query("q") q?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.judicial.listTaxOffices({
+      il,
+      q,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
+  }
+
+  @Post("tax-offices")
+  @WritePermission("judicial.manage")
+  createTaxOffice(
+    @CurrentPlatformUser() actor: PlatformAuthUser,
+    @Body(new ZodValidationPipe(createTaxOfficeSchema)) body: z.infer<typeof createTaxOfficeSchema>,
+  ) {
+    return this.judicial.createTaxOffice(actor, body);
+  }
+
+  @Patch("tax-offices/:id")
+  @WritePermission("judicial.manage")
+  updateTaxOffice(
+    @CurrentPlatformUser() actor: PlatformAuthUser,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(updateTaxOfficeSchema)) body: z.infer<typeof updateTaxOfficeSchema>,
+  ) {
+    return this.judicial.updateTaxOffice(actor, id, body);
   }
 
   @Get("sync/settings")

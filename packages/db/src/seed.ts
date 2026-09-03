@@ -20,7 +20,7 @@ import {
   parseDateOnly,
 } from "@nomosos/legal-core";
 import { agentCatalogForSeed } from "@nomosos/shared";
-import { buildJudicialCatalog } from "./judicial-catalog";
+import { buildJudicialCatalog, buildTaxOfficeCatalog } from "./judicial-catalog";
 
 const prisma = new PrismaClient();
 
@@ -2667,8 +2667,21 @@ async function main() {
       notaryAdded++;
     }
   }
+  // ── Vergi daireleri (D7 — müvekkil kartında listeden seçim) ────────────────
+  // TEMSİLÎ liste: her il için merkez dairesi + büyük şehirlerde gerçek adlı
+  // büyük mükellefler daireleri. Tam resmî liste SYNC kaynağı ister; katalog
+  // panelden büyür ( JudicialBody ile aynı SEED→SYNC→MANUAL hiyerarşisi).
+  const taxOffices = buildTaxOfficeCatalog();
+  let taxAdded = 0;
+  for (const t of taxOffices) {
+    const exists = await prisma.taxOffice.findUnique({ where: { name: t.name }, select: { id: true } });
+    if (!exists) {
+      await prisma.taxOffice.create({ data: t });
+      taxAdded++;
+    }
+  }
   console.log(
-    `Yargı organı: ${judicialBodies.length} (eklenen: ${bodyAdded}) | Noter: ${notaries.length} (eklenen: ${notaryAdded}) — katalog yaklaşık sayılardır; panelden düzenlenebilir.`,
+    `Yargı organı: ${judicialBodies.length} (eklenen: ${bodyAdded}) | Noter: ${notaries.length} (eklenen: ${notaryAdded}) | Vergi dairesi: ${taxOffices.length} (eklenen: ${taxAdded}, TEMSİLİ) — katalog yaklaşık sayılardır; panelden düzenlenebilir.`,
   );
 
   console.log("Seed tamamlandı.");  console.log(

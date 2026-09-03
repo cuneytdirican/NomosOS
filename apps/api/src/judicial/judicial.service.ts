@@ -30,6 +30,7 @@ export const JUDICIAL_BODY_TYPES = ["MAHKEME", "ICRA_DAIRESI"] as const;
 export const MAHKEME_CATEGORIES = [
   "ASLIYE_HUKUK",
   "ASLIYE_CEZA",
+  "ASLIYE_TICARET",
   "SULH_HUKUK",
   "SULH_CEZA",
   "IS",
@@ -141,6 +142,72 @@ export class JudicialService implements OnModuleInit {
       orderBy: { il: "asc" },
     });
     return rows.map((r) => r.il);
+  }
+
+  /** D7 — vergi dairesi kataloğu (müvekkil kartında listeden seçim). */
+  async listTaxOffices(filters: { il?: string; q?: string; limit?: number }) {
+    return this.prisma.client.taxOffice.findMany({
+      where: {
+        isActive: true,
+        ...(filters.il ? { il: filters.il } : {}),
+        ...(filters.q ? { name: { contains: filters.q, mode: "insensitive" as const } } : {}),
+      },
+      orderBy: [{ il: "asc" }, { name: "asc" }],
+      take: Math.min(filters.limit ?? 300, 500),
+      select: { id: true, name: true, il: true, ilce: true },
+    });
+  }
+
+  /** D7 — platform: vergi dairesi ekleme (source: MANUAL). */
+  async createTaxOffice(
+    actor: PlatformAuthUser,
+    input: { name: string; il: string; ilce?: string | null },
+  ) {
+    const created = await this.prisma.client.taxOffice.create({
+      data: {
+        name: input.name.trim(),
+        il: input.il.trim(),
+        ilce: input.ilce?.trim() || null,
+        source: "MANUAL",
+      },
+    });
+    await this.audit.log({
+      actor: { id: actor.id, role: actor.role, ip: actor.ip },
+      action: "TAX_OFFICE_CREATE",
+      entity: "TaxOffice",
+      entityId: created.id,
+      detail: `${created.name} (${created.il}) eklendi.`,
+    });
+    return created;
+  }
+
+  /** D7 — platform: vergi dairesi güncelleme (ad/il/pasifleştirme). */
+  async updateTaxOffice(
+    actor: PlatformAuthUser,
+    id: string,
+    input: { name?: string; il?: string; ilce?: string | null; isActive?: boolean },
+  ) {
+    const existing = await this.prisma.client.taxOffice.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Kayıt bulunamadı.");
+    const updated = await this.prisma.client.taxOffice.update({
+      where: { id },
+      data: {
+        ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+        ...(input.il !== undefined ? { il: input.il.trim() } : {}),
+        ...(input.ilce !== undefined ? { ilce: input.ilce?.trim() || null } : {}),
+        ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+      },
+    });
+    await this.audit.log({
+      actor: { id: actor.id, role: actor.role, ip: actor.ip },
+      action: "TAX_OFFICE_UPDATE",
+      entity: "TaxOffice",
+      entityId: id,
+      detail: `${existing.name}${input.name && input.name !== existing.name ? ` → ${input.name}` : ""}${
+        input.isActive !== undefined ? ` (${input.isActive ? "aktif" : "pasif"})` : ""
+      }`,
+    });
+    return updated;
   }
 
   /* ---------------------- Platform tarafı: yönetim ---------------------- */

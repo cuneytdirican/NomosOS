@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
+import { JudicialBodyPicker } from "@/components/judicial-picker";
 import { Badge, Button, Card, EmptyState, ErrorBox, Field, Input, Modal, Select, Spinner, Textarea } from "@/components/ui";
 
 interface ConcordatoRow {
@@ -244,8 +245,16 @@ export default function ConcordatoPage() {
             </Select>
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Mahkeme">
-              <Input value={form.court} onChange={(e) => setForm({ ...form, court: e.target.value })} />
+            <Field label="Mahkeme (Asliye Ticaret — listeden seçin)">
+              {/* D7 — konkordato (m.285+) ve iflas (m.154+) mercii katalogdan
+                  seçilir; serbest metin yedeği korunur (katalog yaklaşıktır). */}
+              <JudicialBodyPicker
+                type="MAHKEME"
+                category="ASLIYE_TICARET"
+                value={form.court}
+                onChange={(court) => setForm({ ...form, court })}
+                label="Mahkeme"
+              />
             </Field>
             <Field label="Esas no">
               <Input value={form.fileNo} onChange={(e) => setForm({ ...form, fileNo: e.target.value })} />

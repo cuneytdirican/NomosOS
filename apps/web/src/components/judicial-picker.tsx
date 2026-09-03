@@ -50,17 +50,20 @@ function useIller() {
  *
  * @param type   "MAHKEME" (dosya açarken) | "ICRA_DAIRESI" (icra dosyası açarken)
  * @param value  seçilen organın TAM ADI (var olan API sözleşmesi korunur — officeName/courtName dize kalır)
+ * @param category isteğe bağlı kategori süzgeci (örn. "ASLIYE_TICARET" — konkordato/iflas mercii)
  */
 export function JudicialBodyPicker({
   type,
   value,
   onChange,
   label,
+  category,
 }: {
   type: "MAHKEME" | "ICRA_DAIRESI";
   value: string;
   onChange: (name: string) => void;
   label?: string;
+  category?: string;
 }) {
   const iller = useIller();
   const [il, setIl] = useState<string>("");
@@ -75,7 +78,9 @@ export function JudicialBodyPicker({
     }
     let alive = true;
     setLoading(true);
-    void api<unknown>("/judicial/bodies", { query: { type, il, limit: "500" } })
+    void api<unknown>("/judicial/bodies", {
+      query: { type, il, limit: "500", ...(category ? { category } : {}) },
+    })
       .then((data) => {
         if (alive) setRows(Array.isArray(data) ? (data as BodyRow[]) : []);
       })
@@ -88,7 +93,7 @@ export function JudicialBodyPicker({
     return () => {
       alive = false;
     };
-  }, [il, type]);
+  }, [il, type, category]);
 
   const selectedInList = useMemo(
     () => rows.some((r) => r.name === value),
@@ -212,6 +217,96 @@ export function NotaryPicker({
           <span className="mb-1 block text-xs font-medium text-slate-600">Noterlik</span>
           {manual ? (
             <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder="Örn. İstanbul 5. Noterliği" />
+          ) : (
+            <Select
+              value={selectedInList ? value : ""}
+              onChange={(e) => onChange(e.target.value)}
+              disabled={!il || loading}
+            >
+              <option value="">{loading ? "Yükleniyor…" : il ? "Seçin…" : "Önce il seçin"}</option>
+              {rows.map((r) => (
+                <option key={r.id} value={r.name}>
+                  {r.name}
+                </option>
+              ))}
+            </Select>
+          )}
+        </label>
+      </div>
+      <button
+        type="button"
+        className="text-[11px] font-medium text-amber-700 underline"
+        onClick={() => {
+          setManual((m) => !m);
+          if (!manual) onChange("");
+        }}
+      >
+        {manual ? "Listeden seç" : "Listede yok mu? Elle yazacağım"}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * VERGİ DAİRESİ SEÇİCİ (D7) — müvekkil kartında seçim; katalog TEMSİLİdir
+ * (il bazlı merkez + büyük şehir daireleri), "Listede yok" yedeğiyle çalışma
+ * DURMAZ (NoterPicker ile aynı desen).
+ */
+export function TaxOfficePicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (name: string) => void;
+}) {
+  const iller = useIller();
+  const [il, setIl] = useState<string>("");
+  const [rows, setRows] = useState<NotaryRow[]>([]);
+  const [manual, setManual] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!il) {
+      setRows([]);
+      return;
+    }
+    let alive = true;
+    setLoading(true);
+    void api<unknown>("/judicial/tax-offices", { query: { il, limit: "500" } })
+      .then((data) => {
+        if (alive) setRows(Array.isArray(data) ? (data as NotaryRow[]) : []);
+      })
+      .catch(() => {
+        if (alive) setRows([]);
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [il]);
+
+  const selectedInList = useMemo(() => rows.some((r) => r.name === value), [rows, value]);
+
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-2">
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-slate-600">İl</span>
+          <Select value={il} onChange={(e) => setIl(e.target.value)}>
+            <option value="">İl seçin…</option>
+            {iller.map((i) => (
+              <option key={i} value={i}>
+                {i}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-slate-600">Vergi dairesi</span>
+          {manual ? (
+            <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder="Örn. İstanbul Beyoğlu V.D." />
           ) : (
             <Select
               value={selectedInList ? value : ""}

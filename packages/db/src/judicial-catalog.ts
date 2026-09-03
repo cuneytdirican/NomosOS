@@ -57,6 +57,8 @@ interface CourtCategorySpec {
 const COURT_CATEGORIES: readonly CourtCategorySpec[] = [
   { key: "ASLIYE_HUKUK", label: "Asliye Hukuk Mahkemesi", t1: 60 },
   { key: "ASLIYE_CEZA", label: "Ağır Ceza Mahkemesi", t1: 45 },
+  // D7 — konkordato (İİK m.285+) ve iflas (m.154+) mercii.
+  { key: "ASLIYE_TICARET", label: "Asliye Ticaret Mahkemesi", t1: 30 },
   { key: "SULH_HUKUK", label: "Sulh Hukuk Mahkemesi", t1: 60 },
   { key: "SULH_CEZA", label: "Sulh Ceza Mahkemesi", t1: 60 },
   { key: "IS", label: "İş Mahkemesi", t1: 25 },
@@ -113,6 +115,47 @@ export interface NotarySeedRow {
   name: string;
   il: string;
   ilce: string | null;
+}
+
+export interface TaxOfficeSeedRow {
+  name: string;
+  il: string;
+  ilce: string | null;
+}
+
+/** Temsilî büyük şehir daireleri — GERÇEK adlarla. */
+const MAJOR_TAX_OFFICES: readonly TaxOfficeSeedRow[] = [
+  { name: "İstanbul Büyük Mükellefler V.D.", il: "İstanbul", ilce: "Fatih" },
+  { name: "İstanbul Kurumlar V.D.", il: "İstanbul", ilce: "Fatih" },
+  { name: "İstanbul Beyoğlu V.D.", il: "İstanbul", ilce: "Beyoğlu" },
+  { name: "İstanbul Şişli V.D.", il: "İstanbul", ilce: "Şişli" },
+  { name: "İstanbul Ümraniye V.D.", il: "İstanbul", ilce: "Ümraniye" },
+  { name: "İstanbul Bakırköy V.D.", il: "İstanbul", ilce: "Bakırköy" },
+  { name: "İstanbul Kadıköy V.D.", il: "İstanbul", ilce: "Kadıköy" },
+  { name: "İstanbul Anadolu Kurumlar V.D.", il: "İstanbul", ilce: "Ümraniye" },
+  { name: "Ankara Büyük Mükellefler V.D.", il: "Ankara", ilce: "Çankaya" },
+  { name: "Ankara Çankaya V.D.", il: "Ankara", ilce: "Çankaya" },
+  { name: "Ankara Yenimahalle V.D.", il: "Ankara", ilce: "Yenimahalle" },
+  { name: "İzmir Büyük Mükellefler V.D.", il: "İzmir", ilce: "Konak" },
+  { name: "İzmir Konak V.D.", il: "İzmir", ilce: "Konak" },
+  { name: "İzmir Karşıyaka V.D.", il: "İzmir", ilce: "Karşıyaka" },
+  { name: "İzmir Bornova V.D.", il: "İzmir", ilce: "Bornova" },
+  { name: "Bursa Nilüfer V.D.", il: "Bursa", ilce: "Nilüfer" },
+  { name: "Antalya Muratpaşa V.D.", il: "Antalya", ilce: "Muratpaşa" },
+];
+
+/**
+ * VERGİ DAİRESİ kataloğu (D7) — TEMSİLÎ: her il için bir merkez dairesi +
+ * büyük şehirlerde GERÇEK adlı büyük mükellefler daireleri. TAM resmî liste
+ * (VDAND, ~500+ kayıt) bilinçli olarak SYNC kaynağına bırakılmıştır: eksik
+ * listeyle "tam katalog" iddiası üretme — katalog panelden büyür.
+ */
+export function buildTaxOfficeCatalog(): TaxOfficeSeedRow[] {
+  const rows: TaxOfficeSeedRow[] = MAJOR_TAX_OFFICES.map((r) => ({ ...r }));
+  for (const il of ILLER) {
+    rows.push({ name: `${il} V.D.`, il, ilce: null });
+  }
+  return rows;
 }
 
 /** Tüm kataloğu üretir — seed ve test aynı kaynağı kullanır. */

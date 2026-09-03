@@ -1,9 +1,10 @@
 /**
  * YARGI ORGANLARI — büro tarafı okuma uçları.
  *
- * GET /judicial/iller    — il listesi (kademeli seçim için)
- * GET /judicial/bodies   — mahkeme + icra dairesi kataloğu (type/category/il/q süzgeçli)
- * GET /judicial/notaries — noterlik kataloğu (il/q süzgeçli)
+ * GET /judicial/iller        — il listesi (kademeli seçim için)
+ * GET /judicial/bodies       — mahkeme + icra dairesi kataloğu (type/category/il/q süzgeçli)
+ * GET /judicial/notaries     — noterlik kataloğu (il/q süzgeçli)
+ * GET /judicial/tax-offices  — vergi dairesi kataloğu (D7; il/q süzgeçli)
  *
  * Bu bir REFERANS katalogdur: büronun kendi verisi değildir, her kimliği
  * doğrulanmış kullanıcı okuyabilir (dosya açarken mahkeme seçmek sekreterin de
@@ -46,6 +47,20 @@ export class JudicialController {
     @Query("limit") limit?: string,
   ) {
     return this.judicial.listNotaries({
+      il,
+      q,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
+  }
+
+  /** D7 — vergi dairesi kataloğu (müvekkil kartında listeden seçim). */
+  @Get("tax-offices")
+  taxOffices(
+    @Query("il") il?: string,
+    @Query("q") q?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.judicial.listTaxOffices({
       il,
       q,
       limit: limit ? parseInt(limit, 10) : undefined,

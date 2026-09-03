@@ -53,6 +53,7 @@ import {
 import { ClientFinanceTab } from "@/components/client-finance-tab";
 import { FeeAgreementsTab } from "@/components/fee-agreements-tab";
 import { ClientMergeDialog } from "@/components/client-merge-dialog";
+import { TaxOfficePicker } from "@/components/judicial-picker";
 import { ToastStack, useToasts } from "@/components/ai-ui";
 import { CLIENT_TYPES, type ClientType } from "@nomosos/shared";
 // ---- Faz 5: portal, vekaletname, sözleşme, iletişim ----
@@ -558,9 +559,11 @@ function GeneralTab({ client, onSaved }: { client: Client; onSaved: () => Promis
                 />
               </Field>
               <Field label="Vergi dairesi">
-                <Input
+                {/* D7 — katalogdan seçim; katalog TEMSİLİdir, "Listede yok"
+                    yedeğiyle çalışma durmaz (serbest metin korunur). */}
+                <TaxOfficePicker
                   value={form.taxOffice}
-                  onChange={(e) => setForm({ ...form, taxOffice: e.target.value })}
+                  onChange={(taxOffice) => setForm({ ...form, taxOffice })}
                 />
               </Field>
             </div>

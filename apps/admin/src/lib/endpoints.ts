@@ -131,6 +131,9 @@ export const EP = {
     body: (id: string) => `/judicial/bodies/${encodeURIComponent(id)}`,
     notaries: "/judicial/notaries",
     notary: (id: string) => `/judicial/notaries/${encodeURIComponent(id)}`,
+    /** D7 — vergi dairesi kataloğu (müvekkil kartında seçilen liste). */
+    taxOffices: "/judicial/tax-offices",
+    taxOffice: (id: string) => `/judicial/tax-offices/${encodeURIComponent(id)}`,
     syncSettings: "/judicial/sync/settings",
     syncNow: "/judicial/sync",
     syncLogs: "/judicial/sync/logs",

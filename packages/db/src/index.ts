@@ -1,7 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 
 export * from "@prisma/client";
-export { buildJudicialCatalog, ILLER } from "./judicial-catalog";
+export { buildJudicialCatalog, buildTaxOfficeCatalog, ILLER } from "./judicial-catalog";
 
 let prisma: PrismaClient | undefined;
 

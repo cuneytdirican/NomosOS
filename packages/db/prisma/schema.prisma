@@ -3452,6 +3452,27 @@ model NotaryOffice {
   @@index([il, ilce])
 }
 
+/// D7 — VERGİ DAİRESİ kataloğu (müvekkil kartında seçilir; elle giriş yedeğiyle).
+/// Kaynak hiyerarşisi yargı kataloğuyla AYNI: SEED (temsilî büyük şehir
+/// daireleri) → SYNC (resmî VD listesi yapılandırılmış kaynaktan) → MANUAL
+/// (panelden). Temsilî seed bilinçlidir: resmî listenin tamamı dış bağımlılık
+/// olan bir SYNC kaynağı ister — eksik listeyle "bütünlük" iddiası üretme.
+model TaxOffice {
+  id        String   @id @default(uuid())
+  /// Tam ad, örn. "İstanbul Beyoğlu V.D."
+  name      String
+  il        String
+  ilce      String?
+  isActive  Boolean  @default(true)
+  /// SEED | SYNC | MANUAL
+  source    String   @default("SEED")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name])
+  @@index([il])
+}
+
 /// Katalog senkron günlüğü — periyodik/elle senkron denemeleri kayıt altında.
 model JudicialSyncLog {
   id          String   @id @default(uuid())

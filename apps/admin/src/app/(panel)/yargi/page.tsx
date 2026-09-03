@@ -106,6 +106,12 @@ function YargiKatalog() {
   const [notaryIl, setNotaryIl] = useState("");
   const [notaryBusy, setNotaryBusy] = useState(false);
 
+  // D7 — vergi dairesi kataloğu
+  const [taxOffices, setTaxOffices] = useState<Array<{ id: string; name: string; il: string; isActive: boolean }>>([]);
+  const [taxOfficeName, setTaxOfficeName] = useState("");
+  const [taxOfficeIl, setTaxOfficeIl] = useState("");
+  const [taxBusy, setTaxBusy] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -144,6 +150,11 @@ function YargiKatalog() {
   useEffect(() => {
     void loadSync();
   }, [loadSync]);
+
+  // D7 — vergi dairesi kataloğu: sayfa açılışında bir kez.
+  useEffect(() => {
+    void loadTaxOffices();
+  }, []);
 
   async function saveSettings() {
     setSyncBusy(true);
@@ -218,6 +229,48 @@ function YargiKatalog() {
       setSyncMsg(errorMessage(err, "Noter eklenemedi."));
     } finally {
       setNotaryBusy(false);
+    }
+  }
+
+  // ---- D7: vergi dairesi kataloğu yönetimi --------------------------------
+  async function loadTaxOffices() {
+    try {
+      const rows = await adminApi<Array<{ id: string; name: string; il: string; isActive: boolean }>>(
+        EP.judicial.taxOffices,
+        { query: { limit: "300" } },
+      );
+      setTaxOffices(Array.isArray(rows) ? rows : []);
+    } catch {
+      setTaxOffices([]);
+    }
+  }
+
+  async function addTaxOffice() {
+    setTaxBusy(true);
+    try {
+      await adminApi(EP.judicial.taxOffices, {
+        method: "POST",
+        body: { name: taxOfficeName.trim(), il: taxOfficeIl.trim() },
+      });
+      setTaxOfficeName("");
+      setTaxOfficeIl("");
+      await loadTaxOffices();
+    } catch (err) {
+      setSyncMsg(errorMessage(err, "Vergi dairesi eklenemedi."));
+    } finally {
+      setTaxBusy(false);
+    }
+  }
+
+  async function toggleTaxOffice(row: { id: string; isActive: boolean }) {
+    try {
+      await adminApi(EP.judicial.taxOffice(row.id), {
+        method: "PATCH",
+        body: { isActive: !row.isActive },
+      });
+      await loadTaxOffices();
+    } catch (err) {
+      setSyncMsg(errorMessage(err, "Vergi dairesi güncellenemedi."));
     }
   }
 
@@ -357,6 +410,62 @@ function YargiKatalog() {
                 </Button>
               </div>
             </div>
+
+            {/* D7 — vergi dairesi kataloğu: müvekkil kartında SEÇİLEN liste.
+                TEMSİLÎ seed'den büyür: eksik daire buradan eklenir (MANUAL) ya
+                da resmî liste SYNC kaynağıyla gelir. */}
+            <div className="grid gap-3 border-t border-slate-100 p-4 sm:grid-cols-3">
+              <Field label="Vergi dairesi adı">
+                <Input
+                  value={taxOfficeName}
+                  onChange={(e) => setTaxOfficeName(e.target.value)}
+                  placeholder="İstanbul Beyoğlu V.D."
+                />
+              </Field>
+              <Field label="İl">
+                <Input value={taxOfficeIl} onChange={(e) => setTaxOfficeIl(e.target.value)} placeholder="İstanbul" />
+              </Field>
+              <div className="flex items-end">
+                <Button
+                  variant="secondary"
+                  disabled={taxBusy || !taxOfficeName.trim() || !taxOfficeIl.trim()}
+                  onClick={() => void addTaxOffice()}
+                >
+                  {taxBusy ? "Ekleniyor…" : "Vergi Dairesi Ekle"}
+                </Button>
+              </div>
+            </div>
+            {taxOffices.length > 0 && (
+              <div className="border-t border-slate-100 p-4">
+                <p className="mb-2 text-xs font-semibold text-slate-500">
+                  Vergi daireleri ({taxOffices.length}) — temsilî liste; eksikleri ekleyin
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {taxOffices.map((t) => (
+                    <span
+                      key={t.id}
+                      className={[
+                        "rounded-full border px-2.5 py-1 text-[11px]",
+                        t.isActive
+                          ? "border-slate-300 bg-slate-50 text-slate-700"
+                          : "border-slate-200 bg-slate-100 text-slate-400 line-through",
+                      ].join(" ")}
+                      title={t.il}
+                    >
+                      {t.name}
+                      <button
+                        type="button"
+                        className="ml-2 text-red-700 hover:underline"
+                        onClick={() => void toggleTaxOffice(t)}
+                        title={t.isActive ? "Pasifleştir" : "Aktifleştir"}
+                      >
+                        {t.isActive ? "×" : "↺"}
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </Card>
         )}
 
