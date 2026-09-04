@@ -125,3 +125,27 @@ export function hearingReminderKey(hearingId: string, hearingDay: Date, userId: 
 export function creditLowKey(tenantId: string, periodStart: Date, userId: string): string {
   return `KREDI_AZALDI:${tenantId}:${dayTag(periodStart)}:${userId}`;
 }
+
+/**
+ * HEPO (Modül 28) — müvekkil yükümlülüğü vade hatırlatmaları.
+ *
+ * Anahtar biçimi süreyle AYNI sözleşmeyi izler; kaynak kimliği `HEPO:<satırId>`
+ * ad alanıyla taşınır ki Deadline kimlikleriyle ÇAKIŞMASIN. Bildirim türü
+ * bilinçli olarak SURE_YAKLASIYOR/SURE_GECTI'dir: HEPO vadesi hukuken bir
+ * süredir, arayüzde de süre bildirimi olarak görünür (ayrı tür açmak tür
+ * etiketi, filtre ve arayüz eşlemesi gerektirirdi; kazanım yoktu).
+ */
+export type HepoWindow = 30 | 7 | 1;
+
+export function hepoReminderKey(
+  rowId: string,
+  window: HepoWindow,
+  userId: string,
+  dueDate: Date
+): string {
+  return build("SURE_YAKLASIYOR", `HEPO:${rowId}`, `${dayTag(dueDate)}:${window}g`, userId);
+}
+
+export function hepoOverdueKey(rowId: string, userId: string, dueDate: Date): string {
+  return build("SURE_GECTI", `HEPO:${rowId}`, `${dayTag(dueDate)}:ilk`, userId);
+}

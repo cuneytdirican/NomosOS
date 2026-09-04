@@ -12,6 +12,7 @@ import { avukatIsYukuReport } from "./builders/avukat-is-yuku.report";
 import { buroOzetReport } from "./builders/buro-ozet.report";
 import { dosyaDurumDagilimiReport } from "./builders/dosya-durum-dagilimi.report";
 import { durusmaTakvimiReport } from "./builders/durusma-takvimi.report";
+import { hepoUyumReport } from "./builders/hepo-uyum.report";
 import { icraTahsilatReport } from "./builders/icra-tahsilat.report";
 import { karlilikReport } from "./builders/karlilik.report";
 import { surePerformansiReport } from "./builders/sure-performansi.report";
@@ -28,4 +29,5 @@ export const REPORT_BUILDERS: Record<string, ReportBuilder> = {
   "icra-tahsilat": icraTahsilatReport,
   "ai-kullanim": aiKullanimReport,
   "durusma-takvimi": durusmaTakvimiReport,
+  "hepo-uyum": hepoUyumReport,
 };

@@ -158,6 +158,17 @@ export interface RiskCaseSnapshot {
   };
   /** Son 30 gündeki KAYBETTIREN_HUSUSLAR / HAKIM_GOZU koşularından bulgu sayısı. */
   recentLossFindingCount: number;
+  /**
+   * HEPO (Modül 28 Faz 5) — dosyanın MÜVEKKİLİNİN uyum yükümlülükleri.
+   * Dosya verisi değil, müvekkil şirketin uyum fotoğrafıdır; iş kazası ve
+   * idari ceza davalarında müvekkilin hukuki konumunu doğrudan etkiler.
+   */
+  hepo: {
+    /** Müvekkile hiç yükümlülük atanmış mı (hiç atanmamış ≠ uyumlu). */
+    clientHasAssignments: boolean;
+    /** Vadesi geçmiş ve UYGUN işaretlenmemiş yükümlülük sayısı. */
+    overdueOpenCount: number;
+  };
 }
 
 /* ------------------------------------------------------------------ *
@@ -694,6 +705,26 @@ export function computeHukuki(s: RiskCaseSnapshot): DimensionResult {
       "KAYBETTIREN_HUSUSLAR ve HAKIM_GOZU koşularındaki her bulgu 6 puan (azami 25). " +
       "Bulgular AI ÜRETİMİDİR ama SAYILARI deterministik bir sinyaldir: burada yorumlanmaz, " +
       "yalnızca sayılır.",
+  });
+
+  // HEPO (Modül 28 Faz 5): müvekkilin uyum fotoğrafı dosyanın hukuki konumudur —
+  // iş kazası, meslek hastalığı ve İSG/çevre ceza davalarında ihlal, işverenin
+  // özensizliğinin DOĞRUDAN ispat aracıdır. Yükümlülük hiç atanmamışsa puan
+  // ÜRETİLMEZ (hiç atanmamış ≠ uyumlu; sinyal yalnız VAROLAN veriden türer).
+  signals.push({
+    key: "HEPO_CLIENT_OVERDUE",
+    label: "Müvekkilin vadesi geçmiş İSG/uyum yükümlülüğü",
+    weight: 20,
+    value: !s.hepo.clientHasAssignments
+      ? "müvekkile atanmış yükümlülük yok"
+      : s.hepo.overdueOpenCount > 0
+        ? `${s.hepo.overdueOpenCount} vadesi geçmiş, uyumlu işaretlenmemiş yükümlülük`
+        : "vadesi geçmiş yükümlülük yok",
+    contribution: s.hepo.clientHasAssignments ? Math.min(20, s.hepo.overdueOpenCount * 10) : 0,
+    explanation:
+      "Müvekkil şirketin vadesi geçmiş ve UYGUN işaretlenmemiş İSG/çevre/sağlık " +
+      "yükümlülüğü, iş kazası ve idari ceza davalarında müvekkilin hukuki konumunu " +
+      "zayıflatır; her biri 10 puan (azami 20). Veri HEPO → Müvekkil Takibi modülünden gelir.",
   });
 
   const adverse = s.decisions.filter((d) => {

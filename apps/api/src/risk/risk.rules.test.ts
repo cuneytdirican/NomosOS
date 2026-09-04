@@ -15,7 +15,9 @@ import {
   bandOf,
   clamp,
   computeGenel,
+  computeHukuki,
   SCORED_DIMENSIONS,
+  type RiskCaseSnapshot,
 } from "./risk.rules";
 
 describe("clamp / bandOf", () => {
@@ -155,5 +157,58 @@ describe("computeGenel", () => {
     const genel = computeGenel([], new Map());
     expect(genel.baseScore).toBe(0);
     expect(genel.band).toBe("DUSUK");
+  });
+});
+
+describe("HEPO müvekkil uyum sinyali (HUKUKİ boyutu)", () => {
+  /** Boş anlık görüntü — yalnız hepo alanı teste göre değişir. */
+  function snapshotWith(hepo: RiskCaseSnapshot["hepo"]): RiskCaseSnapshot {
+    const now = new Date("2026-09-01T09:00:00.000Z");
+    return {
+      now,
+      kase: { id: "c1", type: "DAVA", status: "ACIK", openedAt: now, lastActivityAt: now, responsibleUserId: null },
+      deadlines: [],
+      hearings: [],
+      documents: [],
+      timelineEventDates: [],
+      decisions: [],
+      powerOfAttorneyCount: 0,
+      parties: [],
+      caseLawRefs: [],
+      unverifiedCitationCount: 0,
+      claims: [],
+      evidences: [],
+      enforcement: { exists: false, hasOpenObjection: false, objectionActionCount: 0, latestCollectionScore: null },
+      finance: { billed: "0", collected: "0", hasFeeAgreement: false },
+      strategy: { exists: false, status: null, weakPointCount: 0, riskNodeCount: 0 },
+      recentLossFindingCount: 0,
+      hepo,
+    };
+  }
+
+  function hepoSignal(hepo: RiskCaseSnapshot["hepo"]) {
+    const dim = computeHukuki(snapshotWith(hepo));
+    return dim.signals.find((s) => s.key === "HEPO_CLIENT_OVERDUE");
+  }
+
+  it("vadesi geçmiş her yükümlülük 10 puan; azami 20", () => {
+    expect(hepoSignal({ clientHasAssignments: true, overdueOpenCount: 1 })?.contribution).toBe(10);
+    expect(hepoSignal({ clientHasAssignments: true, overdueOpenCount: 2 })?.contribution).toBe(20);
+    expect(hepoSignal({ clientHasAssignments: true, overdueOpenCount: 5 })?.contribution).toBe(20);
+  });
+
+  it("uyumlu müvekkil ve hiç atanmamış müvekkil puan ÜRETMEZ", () => {
+    expect(hepoSignal({ clientHasAssignments: true, overdueOpenCount: 0 })?.contribution).toBe(0);
+    // Hiç atanmamış ≠ uyumlu: sinyal yalnız VAROLAN veriden türer.
+    expect(hepoSignal({ clientHasAssignments: false, overdueOpenCount: 0 })?.contribution).toBe(0);
+    expect(hepoSignal({ clientHasAssignments: false, overdueOpenCount: 0 })?.value).toContain(
+      "atanmış yükümlülük yok",
+    );
+  });
+
+  it("sinyal açıklaması verinin kaynağını (HEPO modülü) taşır", () => {
+    const s = hepoSignal({ clientHasAssignments: true, overdueOpenCount: 1 });
+    expect(s?.value).toContain("1 vadesi geçmiş");
+    expect(s?.explanation).toContain("HEPO");
   });
 });

@@ -11,6 +11,8 @@ import { getDemoRole } from "@/lib/api";
 import { CreditErrorAlert, CreditMeter, CreditWarningBanner, useWallet } from "@/components/credits";
 // Faz 6 — üst çubuktaki bildirim zili (tüm /app sayfalarında).
 import { NotificationBell } from "./_components/notification-bell";
+// Modül 27 — her sayfada bağlamsal yardım (özet + bölüme tek tık + Yardım Merkezi araması).
+import { ContextHelpButton } from "@/components/context-help";
 
 interface NavItem {
   href: string;
@@ -146,6 +148,20 @@ const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
         <path d="M7 4a3 3 0 1 1 6 0 3 3 0 0 1-6 0ZM5.5 9.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM14.5 9.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM2.5 17a3.5 3.5 0 0 1 6.9-.8.75.75 0 0 0 1.2 0A3.5 3.5 0 0 1 17.5 17a.75.75 0 0 1-.75.75H3.25A.75.75 0 0 1 2.5 17Z" />
+      </svg>
+    ),
+  },
+  {
+    // Modül 28 — İSG/çevre/sağlık uyum hukuku: yükümlülük, takvim, yaptırım, dava.
+    href: "/app/hepo",
+    label: "HEPO",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path
+          fillRule="evenodd"
+          d="M10 1.5a.75.75 0 0 1 .75.75v1.09c2.65.22 4.85 2.06 5.43 4.54l1.12-.28a.75.75 0 0 1 .36 1.46l-1.11.28v.06c0 3.98-2.91 7.35-6.8 8.19V19a.75.75 0 0 1-1.5 0v-1.41c-3.89-.84-6.8-4.21-6.8-8.19v-.06L.34 9.06a.75.75 0 0 1 .36-1.46l1.12.28C2.4 6.4 4.6 4.56 7.25 4.34V2.25A.75.75 0 0 1 10 1.5Z"
+          clipRule="evenodd"
+        />
       </svg>
     ),
   },
@@ -440,6 +456,21 @@ const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
       </svg>
     ),
   },
+  {
+    // Modül 27 — aranabilir yardım merkezi; üst çubuktaki ? düğmesi bulunduğu
+    // sayfanın konusuna bağlamsal açılır.
+    href: "/app/yardim",
+    label: "Yardım",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path
+          fillRule="evenodd"
+          d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm-.75-11.5a.75.75 0 0 0 1.5 0v-.75a.75.75 0 0 0-1.5 0v.75Zm.6 2.9a.75.75 0 0 0-.75.75v2.5a.75.75 0 0 0 1.5 0v-2.5a.75.75 0 0 0-.75-.75Z"
+          clipRule="evenodd"
+        />
+      </svg>
+    ),
+  },
     ],
   },
 ];
@@ -633,6 +664,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <header className="sticky top-0 z-20 flex items-center justify-end gap-4 border-b border-slate-200 bg-white px-6 py-3 print:hidden">
           <CreditMeter wallet={wallet} />
           <NotificationBell />
+          <ContextHelpButton />
           <div className="text-right">
             <p className="text-sm font-medium text-slate-900">{user?.fullName ?? user?.email ?? "Kullanıcı"}</p>
             {/* İ-20: ham enum basılmaz — Türkçe rol etiketi (biçim: "Avukat"). */}

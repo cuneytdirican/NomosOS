@@ -33,6 +33,22 @@ export class StorageService implements OnModuleInit {
   readonly bucket: string;
 
   constructor() {
+    // İ-15: KODDA GÖMÜLÜ KİMLİK VARSAYANI YALNIZ GELİŞTİRME ORTAMI İÇİNDİR
+    // (yerel MinIO). ÜRETİMDE (NODE_ENV=production) S3 kimlikleri zorunludur:
+    // gömülü varsayınla açılırsa "nomosos/nomosos-gizli-123" gibi bilinen
+    // kimliklerle çalışır, gerçek bir üretim kovasına kimlikbilgisiz yazma
+    // hatasını gizlerdi. Açılışta düşürmek, yanlış yapılandırmayı ilk saniyede
+    // belli eder — belge yükleme ucu "ayakta ama yazamıyor" durumunda kalmaz.
+    if (process.env.NODE_ENV === "production") {
+      const required = ["S3_ACCESS_KEY", "S3_SECRET_KEY", "S3_BUCKET"] as const;
+      const missing = required.filter((key) => !(process.env[key] ?? "").trim());
+      if (missing.length > 0) {
+        throw new Error(
+          `Üretim ortamında S3 yapılandırması eksik: ${missing.join(", ")}. ` +
+            "Gömülü geliştirme varsayılanları üretimde KULLANILMAZ.",
+        );
+      }
+    }
     const endpoint = process.env.S3_ENDPOINT ?? "http://localhost:9000";
     this.bucket = process.env.S3_BUCKET ?? "nomosos-belgeler";
     this.client = new S3Client({

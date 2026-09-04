@@ -66,6 +66,15 @@ model User {
   id           String   @id @default(uuid())
   tenantId     String
   tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  /// KÜRESEL unique — BİLİNÇLİ MİMARİ KARAR (denetim bulgusu F2-İ-26).
+  ///
+  /// PortalUser/PlatformUser deseninden FARKLI kalan bu alan, oturum açma
+  /// akışının E-POSTA TEK BAŞINA ile kullanıcıyı bulmasına dayanır: büro
+  /// seçme adımı yoktur, aynı e-posta iki büroda hesap açamaz. Kiracı-uzaylı
+  /// `@@unique([tenantId, email])` desenine geçiş, giriş akışına büro seçimi
+  /// (veya e-posta → büro listesi çözümlemesi) eklenmesini ve veri göçünü
+  /// gerektirir; mekanik bir şema düzeltmesi DEĞİLDİR. Gerekirse ürün kararı
+  /// alınarak planlanmalıdır.
   email        String   @unique
   passwordHash String
   fullName     String
@@ -182,6 +191,8 @@ model Client {
   outboundMessages   OutboundMessage[]
   inboundMessages    InboundMessage[]
   contracts          Contract[]
+  /// HEPO (Modül 28) — müvekkil şirkete atanan İSG/çevre/sağlık yükümlülükleri.
+  hepoObligations    HepoClientObligation[]
 
   @@index([tenantId])
   @@index([tenantId, name])
@@ -4166,4 +4177,65 @@ model DeviceToken {
 
   @@unique([token])
   @@index([tenantId, userId, isActive])
+}
+
+// ---------- HEPO) Sağlık, Güvenlik, Çevre uyum hukuku (docs/moduller/28) ----------
+//
+// İKİ KATMANLI TASARIM:
+//  1. HepoObligation — ORTAK katalog (tenantId YOK). Tohum verisi
+//     @nomosos/shared HEPO_OBLIGATIONS'dan gelir (slug kimliğiyle idempotent
+//     upsert); CaseLawDocument ile aynı "kamusal havuz" yaklaşımı.
+//  2. HepoClientObligation — kiracıya ait atama ve durum takibi. Tüm sorgular
+//     tenantId ile süzülür (kiracı izolasyonu).
+
+/// HEPO yükümlülük kataloğu — ortak havuz (İSG 6331, Çevre, Sağlık).
+model HepoObligation {
+  id          String  @id @default(uuid())
+  /// Tohum kataloğundaki değişmez kimlik (örn "risk-degerlendirme").
+  slug        String  @unique
+  /// ISG | CEVRE | SAGLIK
+  topic       String
+  title       String
+  legalBasis  String
+  /// TEK SEFER | YILLIK | 2/3/5/6 YILDA BİR
+  periodicity String
+  responsible String
+  summary     String
+  penaltyNote String
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clientObligations HepoClientObligation[]
+
+  @@index([topic])
+  @@index([isActive])
+}
+
+/// Müvekkile atanmış HEPO yükümlülüğü ve uyum durumu — BÜROYA AİT.
+model HepoClientObligation {
+  id           String @id @default(uuid())
+  tenantId     String
+  client       Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId     String
+  obligation   HepoObligation @relation(fields: [obligationId], references: [id])
+  obligationId String
+
+  /// ACIK | UYGUN | UYGUN_DEGIL | IHLAL
+  status      String   @default("ACIK")
+  /// Yükümlülüğün bir sonraki vadesi (periyodik yükümlülüklerde yenilenir).
+  dueDate     DateTime?
+  /// Son yerine getirme tarihi (rapor/tatbikat/muayene vb.).
+  lastDoneAt  DateTime?
+  note        String?
+
+  createdBy String   // User id
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([clientId, obligationId])
+  @@index([tenantId, status])
+  @@index([tenantId, dueDate])
+  @@index([clientId])
 }

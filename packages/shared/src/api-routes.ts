@@ -538,6 +538,15 @@ export const LEGISLATION_ROUTES = {
   remove: (id: string) => `/legislation/${id}`,
 } as const;
 
+/** HEPO (Modül 28) — İSG/Çevre/Sağlık uyum hukuku: katalog + müvekkil takibi. */
+export const HEPO_ROUTES = {
+  obligations: "/hepo/obligations",
+  clientObligations: (clientId: string) => `/hepo/clients/${clientId}/obligations`,
+  clientSummary: (clientId: string) => `/hepo/clients/${clientId}/summary`,
+  assign: (clientId: string) => `/hepo/clients/${clientId}/obligations`,
+  update: (id: string) => `/hepo/client-obligations/${id}`,
+} as const;
+
 /**
  * İzleme metrikleri (D3 / C6) — Prometheus metin biçimi.
  * NOT: genel önek DIŞINDADIR (standart /metrics yolu; global önek yok).

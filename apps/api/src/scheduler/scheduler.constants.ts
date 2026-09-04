@@ -38,6 +38,8 @@ export const JOB_KEYS = {
   USAGE_SNAPSHOT: "usage-snapshot-daily",
   DEADLINE_REMINDER: "deadline-reminder-daily",
   HEARING_REMINDER: "hearing-reminder-daily",
+  /** Modül 28 — HEPO müvekkil yükümlülüğü vade hatırlatmaları. */
+  HEPO_REMINDER: "hepo-reminder-daily",
   SUBSCRIPTION_RENEWAL: "subscription-renewal-daily",
   CREDIT_PERIOD_RENEWAL: "credit-period-renewal-daily",
   /** denetim bulgusu Ö-29 — %80 kredi uyarısı. Saatlik: 402 sürpriz olmamalı. */
@@ -83,6 +85,15 @@ export const OVERDUE_LOOKBACK_DAYS = 30;
 
 /** Yaklaşan süre hatırlatma pencereleri (kalan gün). */
 export const DEADLINE_REMINDER_WINDOWS = [7, 3, 1] as const;
+
+/**
+ * HEPO yükümlülüğü hatırlatma pencereleri (kalan gün).
+ *
+ * Süreden FARKLI olarak 30 gün penceresi DE VARDIR: İSG tatbikatı, çevre
+ * ölçümü gibi yükümlülükler büroko­matik hazırlık ister (ekip planlamak,
+ * ölçüm firması sözleşmesi); 7 gün geç bildirim üretim açısından geç kalınır.
+ */
+export const HEPO_REMINDER_WINDOWS = [30, 7, 1] as const;
 
 /**
  * PAST_DUE aboneliğin askıya alma ÖNERİSİNE dönüşmesi için geçmesi gereken

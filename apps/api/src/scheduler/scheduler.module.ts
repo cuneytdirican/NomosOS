@@ -21,6 +21,7 @@ import { SubscriptionRenewalJob } from "./jobs/subscription-renewal.job";
 import { CreditPeriodRenewalJob } from "./jobs/credit-period-renewal.job";
 import { CreditLowWarningJob } from "./jobs/credit-low-warning.job";
 import { RiskNightlyJob } from "./jobs/risk-nightly.job";
+import { HepoReminderJob } from "./jobs/hepo-reminder.job";
 
 import { PlatformJobsController } from "./platform-jobs.controller";
 import { PlatformJobsService } from "./platform-jobs.service";
@@ -99,6 +100,8 @@ import { DeviceTokensService } from "./device-tokens.service";
     CreditLowWarningJob,
     // F2 · E2: gece risk tazeleme + panel fotoğrafı.
     RiskNightlyJob,
+    // Modül 28 (Faz 3): HEPO müvekkil yükümlülüğü vade hatırlatmaları.
+    HepoReminderJob,
 
     // --- uç servisleri ---
     PlatformJobsService,

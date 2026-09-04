@@ -333,6 +333,33 @@ export const REPORT_DEFINITIONS: readonly ReportDefinition[] = [
     ],
     defaultTable: "durusmalar",
   },
+  {
+    key: "hepo-uyum",
+    name: "HEPO Uyum Durumu",
+    description:
+      "Müvekkil şirketlerin İSG/çevre/sağlık yükümlülük uyum fotoğrafı: müvekkil ve konu " +
+      "kırılımı, vadesi geçen yükümlülükler listesi.",
+    requiredRoles: REPORT_ACCESS.OPERASYON,
+    params: [
+      ...COMMON_PERIOD_PARAMS,
+      PARAM_LIMIT,
+      {
+        name: "muvekkilId",
+        label: "Müvekkil",
+        type: "uuid",
+        description: "Tek müvekkile daraltma.",
+      },
+    ],
+    supportsComparison: false,
+    containsMoney: false,
+    notes: [
+      "ANLIK FOTOĞRAF raporudur: referans an DÖNEMİN SON GÜNÜDÜR. Durum geçmişi " +
+        "tutulmadığı için dönem içi değişim ölçülemez.",
+      "Vadesi geçen: vadesi referans günü geçmiş ve UYGUN olarak işaretlenmemiş " +
+        "yükümlülük. Periyodik yükümlülüklerde vade, atamada girilen tarihtir.",
+    ],
+    defaultTable: "muvekkil",
+  },
 ] as const;
 
 const BY_KEY = new Map<string, ReportDefinition>();

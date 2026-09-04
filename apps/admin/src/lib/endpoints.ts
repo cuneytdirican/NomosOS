@@ -146,4 +146,10 @@ export const EP = {
     test: (id: string) => `/ai/providers/${encodeURIComponent(id)}/test`,
     models: (id: string) => `/ai/providers/${encodeURIComponent(id)}/models`,
   },
+  /** İçtihat havuz yönetimi (D1 — RAG havuzunu platform eliyle doldurma). */
+  caseLawPool: {
+    stats: "/caselaw-pool",
+    records: "/caselaw-pool/records",
+    import: "/caselaw-pool/import",
+  },
 } as const;

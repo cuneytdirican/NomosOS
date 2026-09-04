@@ -6,6 +6,8 @@ import { SupportGrantGuard } from "./guards/support-grant.guard";
 import { PlatformAuditService } from "./platform-audit.service";
 import { FineTuneController } from "./fine-tune/fine-tune.controller";
 import { FineTuneService } from "./fine-tune/fine-tune.service";
+import { CaselawPoolController } from "./caselaw-pool/caselaw-pool.controller";
+import { CaselawPoolService } from "./caselaw-pool/caselaw-pool.service";
 import { PlatformAuthController } from "./auth/platform-auth.controller";
 import { PlatformAuthService } from "./auth/platform-auth.service";
 import { PlatformApprovalExecutorService } from "./approvals/platform-approval-executor.service";
@@ -81,6 +83,7 @@ import { PlatformUsersService } from "./users/platform-users.service";
     PlatformDemoRequestsController,
     PlatformUsersController,
     FineTuneController,
+    CaselawPoolController,
   ],
   providers: [
     PlatformJwtGuard,
@@ -91,6 +94,7 @@ import { PlatformUsersService } from "./users/platform-users.service";
     PlatformAuditService,
     PlatformAuthService,
     FineTuneService,
+    CaselawPoolService,
     PlatformApprovalsService,
     PlatformApprovalExecutorService,
     PlatformTenantsService,

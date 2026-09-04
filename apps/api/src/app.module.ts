@@ -37,6 +37,8 @@ import { CaseExpensesModule } from "./case-expenses/case-expenses.module";
 import { MediationModule } from "./mediation/mediation.module";
 import { AiTrainingModule } from "./ai-training/ai-training.module";
 import { LegislationModule } from "./legislation/legislation.module";
+// --- Modül 28: HEPO (İSG/Çevre/Sağlık uyum hukuku) ---
+import { HepoModule } from "./hepo/hepo.module";
 import { MetricsModule } from "./metrics/metrics.module";
 import { ConcordatoModule } from "./concordato/concordato.module";
 import { PlatformModule } from "./platform/platform.module";
@@ -165,6 +167,7 @@ function requireJwtSecret(config: ConfigService): string {
     // Mevzuat kütüphanesi (D3 / A4) — büronun kendi yüklediği metinler,
     // tam metin arama; RG otomatik senkron YOKTUR (vaat kısıtı).
     LegislationModule,
+    HepoModule,
     // İzleme metrikleri (D3 / C6) — GET /metrics, Prometheus metin biçimi.
     MetricsModule,
     // Konkordato/iflas süreç takibi (D4 / A6) — şerit denetimli aşamalar.

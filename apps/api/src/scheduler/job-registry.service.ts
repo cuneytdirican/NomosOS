@@ -6,6 +6,7 @@ import { SubscriptionRenewalJob } from "./jobs/subscription-renewal.job";
 import { CreditPeriodRenewalJob } from "./jobs/credit-period-renewal.job";
 import { CreditLowWarningJob } from "./jobs/credit-low-warning.job";
 import { RiskNightlyJob } from "./jobs/risk-nightly.job";
+import { HepoReminderJob } from "./jobs/hepo-reminder.job";
 import type { ScheduledJobHandler } from "./scheduler.types";
 
 /**
@@ -33,7 +34,9 @@ export class JobRegistryService {
     // denetim bulgusu Ö-29
     creditLowWarning: CreditLowWarningJob,
     // F2 · E2
-    riskNightly: RiskNightlyJob
+    riskNightly: RiskNightlyJob,
+    // Modül 28 (Faz 3) — HEPO vade hatırlatmaları
+    hepoReminder: HepoReminderJob
   ) {
     const all: ScheduledJobHandler[] = [
       usageSnapshot,
@@ -43,6 +46,7 @@ export class JobRegistryService {
       creditPeriodRenewal,
       creditLowWarning,
       riskNightly,
+      hepoReminder,
     ];
     this.handlers = new Map(all.map((h) => [h.key, h]));
   }

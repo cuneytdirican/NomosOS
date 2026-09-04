@@ -879,6 +879,25 @@ export class RiskService {
       0,
     );
 
+    // HEPO (Modül 28 Faz 5): dosyanın müvekkilinin uyum yükümlülükleri.
+    // Sayım UYGUM işaretlenmemiş VE vadesi geçmiş kayıt üzerinden; "hiç atanmamış"
+    // ayrı taşınır (hiç atanmamış ≠ uyumlu — kural katmanı puan üretmez).
+    const [hepoAssigned, hepoOverdue] = kase.clientId
+      ? await Promise.all([
+          this.prisma.client.hepoClientObligation.count({
+            where: { tenantId, clientId: kase.clientId },
+          }),
+          this.prisma.client.hepoClientObligation.count({
+            where: {
+              tenantId,
+              clientId: kase.clientId,
+              status: { not: "UYGUN" },
+              dueDate: { lt: new Date() },
+            },
+          }),
+        ])
+      : ([0, 0] as const);
+
     // PARA: Decimal ile toplanır, float aritmetiği YASAK (ortak karar 5).
     const BILLED_TYPES = new Set(["TAHAKKUK", "VEKALET_UCRETI", "DANISMANLIK", "MASRAF", "HARC"]);
     const COLLECTED_TYPES = new Set(["TAHSILAT", "AVANS"]);
@@ -946,6 +965,10 @@ export class RiskService {
         riskNodeCount: nodeCount("RISK"),
       },
       recentLossFindingCount,
+      hepo: {
+        clientHasAssignments: hepoAssigned > 0,
+        overdueOpenCount: hepoOverdue,
+      },
     };
   }
 
