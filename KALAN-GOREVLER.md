@@ -23,7 +23,44 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 4 Eylül 2026, 10:40
+# 🔖 KALDIĞIM YER — 4 Eylül 2026, 11:20
+
+> **AI kalıcılık + detay + URL doğrulama turu tamamlandı.**
+
+1. **AI çıktı kalıcılığı (canlı bulgu):** Simülasyon koşuları KALICIYDI
+   (SimulationRun + "Geçmiş Koşular" listesi) ama ÇALIŞMIYORDU — LLM
+   `page: 0` döndürünce `SourceRefSchema` (positive) tüm koşuyu reddediyordu.
+   Düzeltme: `page`/`paragraph` artık `min(0)` (0-indeksli sayfa geçerli);
+   ChatCitationSchema da aynı. Canlı doğrulandı: "Karşı Taraf Avukatı"
+   simülasyonu 3 bulgu üretti, "Geçmiş Koşular (1)" listesinde model/süre
+   bilgisiyle duruyor ve okunabiliyor. Diğer AI katmanları zaten kalıcı:
+   strateji (StrategyVersion), bilirkişi diff (ExpertReportDiff), risk
+   (RiskAssessment), dilekçe sürümleri, sohbet (ChatSession/Message).
+2. **Detay:** İçtihat arama sonuçlarında iç detay YOKTU (yalnız dış kaynak
+   bağlantısı). Yeni sayfa `/app/ictihat/[id]`: tam künye, özet, tam metin,
+   kaynak bağlantısı, bu büronun bağlı dosyaları (emsal bağları + durumları).
+   Kartlara "Karar detayını aç" eklendi; arama sonucu `caseLawId`→`id`
+   eşlemesi tek noktada düzeltildi (`/ictihat/undefined` hatası gitti).
+   Canlı doğrulandı.
+3. **URL doğrulaması:** Tüm kaynak URL'leri tarandı. Doğru resmî adres
+   `https://karararama.yargitay.gov.tr/` (canlı webfetch ile doğrulandı —
+   kullanıcı bulgusu). Besleme fikstürü + havuzdaki FEED_TEST kayıtları
+   düzeltildi (eski `kararlar.yargitay.gov.tr`). Sağlayıcı varsayılanları
+   (api.openai.com/v1, open.bigmodel.cn/api/paas/v4) standart uçlar — doğru.
+   Kalan URL'ler örnek/SSRF-test dizgileri (kasıtlı).
+4. **Doğrulama:** build 12/12 · typecheck 20/20 · lint 0/0 · testler
+   1324/1324 (api 939, web 88, legal-ai 79, e-imza 37, udf 44, eklenti 35,
+   legal-core 102).
+
+## Sırada
+
+1. Plan Aşama 1-2: platform mevzuat havuzu + AAÜT platform tarifesi.
+2. Plan Aşama 4: içtihat havuzunu gerçek kararla doldurma (veri operasyonu).
+3. `FINAL-COMPLETION-REPORT.md` üretimi (Aşama 9 kapanışı).
+
+---
+
+## 🔖 ÖNCEKİ KALDIĞIM YER — 4 Eylül 2026, 10:40
 
 > **İÇTİHAT TOPLAMA HATTI (caselaw-ingest) KURULDU VE CANLI DOĞRULANDI.**
 > Plan dosyası: `plans/acilis-oncesi-hazir-veri-havuzu-plani.md`.

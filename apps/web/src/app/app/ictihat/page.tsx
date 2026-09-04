@@ -325,6 +325,12 @@ function CaseLawCard({ doc, onAttach }: { doc: CaseLawDoc; onAttach: () => void 
         <Button size="sm" variant="gold" onClick={onAttach}>
           Dosyaya emsal olarak ekle
         </Button>
+        <Link
+          href={`/app/ictihat/${doc.id}`}
+          className="text-xs font-medium text-slate-600 hover:text-amber-600"
+        >
+          Karar detayını aç →
+        </Link>
         {doc.sourceUrl && (
           <a
             href={doc.sourceUrl}
@@ -332,7 +338,7 @@ function CaseLawCard({ doc, onAttach }: { doc: CaseLawDoc; onAttach: () => void 
             rel="noopener noreferrer"
             className="text-xs font-medium text-slate-500 hover:text-amber-600"
           >
-            Kaynağı aç →
+            Kaynağı aç ↗
           </a>
         )}
       </div>

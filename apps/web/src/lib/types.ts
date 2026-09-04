@@ -626,6 +626,18 @@ export interface CaseLawDoc {
   isDemo?: boolean;
 }
 
+/** GET /caselaw/:id — karar detayı (tam metin + bu büronun emsal bağları). */
+export interface CaseLawDocDetail extends CaseLawDoc {
+  fullText?: string | null;
+  isDemo?: boolean;
+  linkedCases?: Array<{
+    referenceId: string;
+    status?: string;
+    relevanceNote?: string | null;
+    case: { id: string; title: string; fileNumber?: string | null; courtName?: string | null };
+  }>;
+}
+
 export interface CaseLawRef {
   id: string;
   caseId?: string;

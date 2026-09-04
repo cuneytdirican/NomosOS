@@ -26,6 +26,7 @@ import {
 import type {
   ActionProposal,
   AnalysisReport,
+  CaseLawDocDetail,
   DeadlineRuleOption,
   ReadyGate,
   TenantUser,
@@ -892,7 +893,12 @@ export async function searchCaseLaw(input: CaseLawSearchInput): Promise<CaseLawS
         await api<unknown>("/caselaw/search", {
           query: { q: input.query, court: input.court || undefined },
         });
-  const results = asList<CaseLawDoc>(res);
+  const results = asList<Record<string, unknown>>(res).map((hit) => ({
+    ...hit,
+    // Arama ucundan gelen kayıt kimliği `caseLawId` alanındadır (CaseLawHit);
+    // detay sayfası ve kart bağlantıları `id` okur — tek noktada eşitlenir.
+    id: (hit.id as string) ?? (hit.caseLawId as string),
+  })) as unknown as CaseLawDoc[];
   const note =
     res && typeof res === "object"
       ? ((res as Record<string, unknown>).note as string | undefined) ?? null
@@ -915,6 +921,11 @@ export function createCaseLaw(body: {
   sourceUrl?: string;
 }): Promise<CaseLawDoc> {
   return api<CaseLawDoc>("/caselaw", { method: "POST", body });
+}
+
+/** Tek karar kaydı — GET /caselaw/:id (tam metin + bağlı dosyalar). */
+export function detailCaseLaw(id: string): Promise<CaseLawDocDetail> {
+  return api<CaseLawDocDetail>(`/caselaw/${id}`);
 }
 
 export function listCaseLawRefs(caseId: string): Promise<CaseLawRef[]> {

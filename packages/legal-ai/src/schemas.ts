@@ -24,8 +24,10 @@ export const ConfidenceSchema = z.number().min(0).max(1);
 export const SourceRefSchema = z.object({
   documentId: z.string().optional(),
   documentTitle: z.string().optional(),
-  page: z.number().int().positive().optional(),
-  paragraph: z.number().int().positive().optional(),
+  // sayfa/paragraf 0 GEÇERLİDİR: model 0-indeksli sayfa verebilir (canlı
+  // bulgu: page=0 reddedilip tüm simülasyon koşusu çöpe gidiyordu).
+  page: z.number().int().min(0).optional(),
+  paragraph: z.number().int().min(0).optional(),
   quote: z.string().optional(),
 });
 export type SourceRefOutput = z.infer<typeof SourceRefSchema>;
@@ -195,7 +197,8 @@ export const ChatCitationSchema = z.object({
   kind: z.enum(["DOCUMENT", "TIMELINE", "DEADLINE", "CASELAW", "STATUTE"]),
   refId: z.string().optional(),
   chunkId: z.string().optional(),
-  page: z.number().int().positive().optional(),
+  // 0-indeksli sayfa geçerli (bkz. SourceRefSchema).
+  page: z.number().int().min(0).optional(),
   /** Cevabı destekleyen birebir alıntı. */
   quote: z.string().optional(),
   label: z.string().min(1),
