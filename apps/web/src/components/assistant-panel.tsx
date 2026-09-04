@@ -542,7 +542,14 @@ function CitationList({ citations, caseId }: { citations: Citation[]; caseId: st
             {verified.map((c, i) => {
               const label = citationLabel(c, i);
               const quote = c.quote ?? c.snippet ?? c.text ?? null;
-              const documentId = c.documentId ?? c.refId ?? null;
+              // KAYNAĞA GİT bağlantısı ATI TÜRÜNE GÖRE kurulur: yalnız
+              // DOCUMENT türündeki atıf belge sekmesine bağlanır. CASELAW
+              // atıfları içtihat detayına; diğer türler (TIMELINE, DEADLINE,
+              // STATUTE) bağlanmaz — yanlış yere giden bağlantı, bağlantı
+              // olmamaktan daha kötüydü.
+              const kind = (c.kind ?? "").toUpperCase();
+              const documentId = kind === "DOCUMENT" ? (c.documentId ?? c.refId ?? null) : null;
+              const caselawId = kind === "CASELAW" ? (c.refId ?? c.documentId ?? null) : null;
               const inner = (
                 <>
                   <span className="font-medium">
@@ -561,6 +568,13 @@ function CitationList({ citations, caseId }: { citations: Citation[]; caseId: st
                   {documentId ? (
                     <Link
                       href={`/app/dosyalar/${caseId}?sekme=belgeler&belge=${documentId}`}
+                      className="block rounded px-1 py-0.5 text-slate-600 hover:bg-amber-50 hover:text-amber-700"
+                    >
+                      {inner}
+                    </Link>
+                  ) : caselawId ? (
+                    <Link
+                      href={`/app/ictihat/${caselawId}`}
                       className="block rounded px-1 py-0.5 text-slate-600 hover:bg-amber-50 hover:text-amber-700"
                     >
                       {inner}
