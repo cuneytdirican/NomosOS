@@ -151,6 +151,10 @@ services:
       # devre dışı bırakılmamıştır; ortamı gerçekte ne ise o olarak
       # etiketliyoruz. Üretimde NODE_ENV=production + 2FA zorunludur.
       NODE_ENV: "development"
+      # Uzun sözleşme parçaları (~24 bin karakterlik iki taraflı analiz) tek
+      # AI çağrısında 60 sn'yi aşabilir; varsayılan 60 sn sözleşme analizinde
+      # "sağlayıcı yanıt vermedi" (502) üretiyordu. Üst sınır 600 sn (http.ts).
+      AI_TIMEOUT_MS: "180000"
       # Test panele TOTP uygulaması olmadan girilebilsin diye 2FA kapalı.
       PLATFORM_REQUIRE_2FA: "false"
       TRUSTED_PROXY_HOPS: "0"

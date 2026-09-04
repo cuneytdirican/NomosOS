@@ -58,6 +58,17 @@ export class CaselawController {
   }
 
   /**
+   * CANLI KARAR BELGESİ — resmî getDokuman yanıtı (XML zarfı + gömülü HTML)
+   * TEMİZ METNE çevrilerek döner; tarayıcıda ham XML gösterilir (kullanıcı
+   * bulgusu). Uç yalnız dış kimliği kabul eder; havuza YAZMAZ.
+   */
+  @Get("live/:externalId")
+  @AiThrottle(2)
+  async liveDocument(@Param("externalId") externalId: string) {
+    return this.caselaw.liveDocument(externalId);
+  }
+
+  /**
    * TEYİT AJANI — atıf doğrulama. TAMAMEN DETERMİNİSTİKTİR:
    * LLM'e "bu karar var mı?" diye SORULMAZ; yalnızca kayıtlı veriye bakılır.
    */

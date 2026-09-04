@@ -283,25 +283,49 @@ export class ContractAnalysisService {
       const chunkStartedAt = Date.now();
 
       try {
-        const run = await this.ai.run({
-          user,
-          taskType: CONTRACT_ANALYSIS_TASK,
-          outboundTexts: [chunkContext, instruction],
-          piiApproved: input.piiApproved,
-          schema: ContractAnalysisOutputSchema,
-          // Kaynak alanı boş olan bulgular (iki perspektif de) burada elenir.
-          findingPaths: ["ourSide", "otherSide"],
-          entity: "Contract",
-          entityId: contract.id,
-          maxTokens: 4096,
-          buildMessages: ([ctx, instr]) =>
-            buildContractChunkAnalysisMessages({
-              contextText: ctx,
-              instruction: instr,
-              pageLabel,
-              chunkLabel: `${chunkIndex + 1}/${chunks.length}`,
-            }),
-        });
+        // GEÇİCİ SAĞLAYICI HATALARINA TEK SEFERLİK YENİDEN DENEME: bazı
+        // sağlayıcılar arada BOŞ yanıt döndürür (aynı sözleşme önceki koşuda
+        // başarılıydı). Parça ilk denemede "boş yanıt" hatası verdiyse 2 sn
+        // sonra BİR kez daha denenir; ikinci de başarısızsa parça HATA notuyla
+        // işaretlenir (koşu düşmez). Diğer hatalarda yeniden deneme yok.
+        const runAi = async () => {
+          for (let attempt = 1; ; attempt += 1) {
+            try {
+              return await this.ai.run({
+                user,
+                taskType: CONTRACT_ANALYSIS_TASK,
+                outboundTexts: [chunkContext, instruction],
+                piiApproved: input.piiApproved,
+                schema: ContractAnalysisOutputSchema,
+                // Kaynak alanı boş olan bulgular (iki perspektif de) burada elenir.
+                findingPaths: ["ourSide", "otherSide"],
+                entity: "Contract",
+                entityId: contract.id,
+                maxTokens: 4096,
+                buildMessages: ([ctx, instr]) =>
+                  buildContractChunkAnalysisMessages({
+                    contextText: ctx,
+                    instruction: instr,
+                    pageLabel,
+                    chunkLabel: `${chunkIndex + 1}/${chunks.length}`,
+                  }),
+              });
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              const transientEmpty = msg.includes("boş yanıt") || msg.includes("beklenen biçimde değil");
+              if (transientEmpty && attempt < 2) {
+                this.logger.warn(
+                  `Sözleşme analizi parçası geçici yanıt hatası, yeniden deneniyor (sözleşme ` +
+                    `${contract.id}, parça ${chunkIndex + 1}/${chunks.length}, deneme ${attempt}): ${msg.slice(0, 160)}`,
+                );
+                await new Promise((r) => setTimeout(r, 2000));
+                continue;
+              }
+              throw err;
+            }
+          }
+        };
+        const run = await runAi();
 
         // ── KAPI (b): ALINTI PARÇA METNİNDE BİREBİR VAR MI ────────────────
         // Arama modelin GÖRDÜĞÜ metinde yapılır (maskeliyse maskeli hâlinde).

@@ -217,19 +217,42 @@ export class ContractsService {
 
     const wantsRange = range.pageFrom !== undefined || range.pageTo !== undefined;
     if (wantsRange) {
-      const pageFrom = Number(range.pageFrom ?? 1);
-      const pageTo = Number(range.pageTo ?? (Number.isFinite(pageFrom) ? pageFrom : 1));
+      let pageFrom = Number(range.pageFrom ?? 1);
+      let pageTo = Number(range.pageTo ?? (Number.isFinite(pageFrom) ? pageFrom : 1));
       if (
         !Number.isInteger(pageFrom) || !Number.isInteger(pageTo) ||
-        pageFrom < 1 || pageTo < pageFrom ||
-        pageFrom > Math.max(1, pages.length) || pageTo > Math.max(1, pages.length)
+        pageFrom < 1 || pageTo < pageFrom
       ) {
         throw new BadRequestException(
-          `Sayfa aralığı geçersiz. Sürüm ${pages.length} sayfadır; 1–${Math.max(1, pages.length)} ` +
-            "arasında, pageFrom ≤ pageTo olacak biçimde isteyin.",
+          "Sayfa aralığı geçersiz; pageFrom ≥ 1 ve pageFrom ≤ pageTo olacak biçimde isteyin.",
         );
       }
+      // KIRPMA (hata DEĞİL): istemcinin pencere aritmetiği sayfa sayısını aşabilir
+      // (ör. 6 sayfalık sözleşmede "s.6-10" penceresi). İstenen aralık
+      // geçerli SAYFA ARALIĞINA getirilir; taşan kısım sessizce boş döner.
+      // "Tüm sözleşmeyi göremiyoruz" şikâyetinin kökü buydu.
+      const pageCount = Math.max(1, pages.length);
+      if (pageFrom > pageCount) {
+        return {
+          id: version.id,
+          contractId: version.contractId,
+          versionNo: version.versionNo,
+          changeNote: version.changeNote,
+          documentId: version.documentId,
+          createdBy: version.createdBy,
+          createdAt: version.createdAt,
+          ...meta,
+          pageFrom: pageCount,
+          pageTo: pageCount,
+          text: "",
+          emptyReason: `İstenen aralık (${pageFrom}–${pageTo}) sürümün ${pageCount} sayfasının dışında.`,
+        };
+      }
+      if (pageTo > pageCount) pageTo = pageCount;
+      if (pageFrom > pageCount) pageFrom = pageCount;
       if (pageTo - pageFrom + 1 > ContractsService.VERSION_TEXT_MAX_PAGE_WINDOW) {
+        // Pencere tavanı yalnız GERÇEK genişlik için geçerli: kırpılmış aralık
+        // tavanın altındaysa (ör. 1–50 isteği 6 sayfaya kırpılır) hata YOK.
         throw new BadRequestException(
           `Tek istekte en fazla ${ContractsService.VERSION_TEXT_MAX_PAGE_WINDOW} sayfa metni döner; ` +
             "aralığı daraltın.",

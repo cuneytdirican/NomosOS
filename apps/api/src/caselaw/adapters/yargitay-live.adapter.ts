@@ -39,7 +39,100 @@ interface YargitayListRow {
   kararTarihi: string;
 }
 
+/**
+ * Resmî belge gövdesini (XML zarfı + gömülü HTML) TEMİZ METNE çevirir.
+ *
+ * Girdi biçimi (getDokuman): `<data><html>…<br>…</html></data>` — künye
+ * koyu `<b>` bloğunda, karar metni `<p>` içinde. Dönüşüm:
+ *  1. XML bildirimi/zarfları düşür, yalnız HTML gövdesini al
+ *  2. Blok etiketlerini satır sonuna çevir (`<br>`, `</p>`, `</li>`…)
+ *  3. Kalan etiketleri düşür, HTML varlıklarını çöz
+ *  4. Ardışık boş satırları tek satıra indir
+ */
+export function cleanOfficialDocument(raw: string): string {
+  let s = raw;
+  // XML bildirimi ve zarflar.
+  s = s.replace(/<\?xml[^>]*\?>/gi, "");
+  s = s.replace(/<\/?data[^>]*>/gi, "");
+  // Künye/karar blokları satır sonuna.
+  s = s.replace(/<br\s*\/?>/gi, "\n");
+  s = s.replace(/<\/(p|div|li|ul|ol|tr|h[1-6])>/gi, "\n");
+  // Kalan tüm etiketler düşer.
+  s = s.replace(/<[^>]+>/g, "");
+  // HTML varlıkları.
+  s = s
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'");
+  // Boşluk/satır düzeni.
+  s = s.replace(/\r/g, "");
+  s = s
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .join("\n");
+  s = s.replace(/\n{3,}/g, "\n\n").trim();
+  return s;
+}
+
+export interface LiveCaseLawDocument {
+  externalId: string;
+  /** Temizlenmiş karar metni (XML/HTML etiketlerinden arındırılmış). */
+  text: string;
+  sourceUrl: string;
+}
+
 export class YargitayLiveAdapter {
+  /**
+   * Canlı karar BELGESİ — GET /getDokuman?id=.
+   *
+   * Resmî uç, kararı XML zarfı içinde gömülü HTML olarak döndürür
+   * (`<data><html>…</html></data>`); tarayıcıda bu HAM görünür (kullanıcı
+   * "XML'i gösteriyor" bulgusu). Burada çekilip TEMİZ METNE çevrilir:
+   * etiketler düşer, HTML varlıkları çözülür, satır yapısı korunur.
+   */
+  async fetchDocument(externalId: string): Promise<LiveCaseLawDocument> {
+    if (!/^\d{1,20}$/.test(externalId)) {
+      throw new Error("Geçersiz karar kimliği.");
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ARAMA_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${BASE_URL}/getDokuman?id=${externalId}`, {
+        signal: controller.signal,
+        // İÇERİK UZLAŞMASI: resmî uç Accept başlığına bakar — application/json
+        // istenirse {"data":"<html>…"} döner; text/xml istenirse HAM XML.
+        // JSON zarfı istiyoruz (temizleme hattı buna göre çalışır).
+        headers: { accept: "application/json, text/html, */*" },
+      });
+      if (!res.ok) {
+        throw new Error(`karararama.yargitay.gov.tr ${res.status} döndü.`);
+      }
+      const raw = await res.text();
+      // Resmî uç JSON zarfı döndürür: {"data":"<html>…</html>", "metadata":{…}} —
+      // karar metni `data` alanında HTML olarak gelir. Zarf JSON değilse gövde
+      // doğrudan XML/HTML varsayılır (iki biçime de dayanıklı).
+      let html = raw;
+      try {
+        const parsed = JSON.parse(raw) as { data?: unknown };
+        if (typeof parsed.data === "string" && parsed.data.trim().length > 0) {
+          html = parsed.data;
+        }
+      } catch {
+        // JSON değil — gövdeyi olduğu gibi temizle.
+      }
+      const text = cleanOfficialDocument(html);
+      if (text.trim().length < 40) {
+        throw new Error("Karar belgesi boş ya da okunamadı.");
+      }
+      return { externalId, text, sourceUrl: `${BASE_URL}/getDokuman?id=${externalId}` };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   /** Canlı arama: resmî /arama + /aramalist zinciri. */
   async search(query: string, limit = 5): Promise<{ hits: LiveCaseLawHit[]; totalFound?: number }> {
     const q = query.trim();

@@ -55,6 +55,12 @@ export interface AiSearchHit extends CaseLawHit {
 
 @Injectable()
 export class CaselawService {
+  /** Canlı belge önbelleği — externalId → {doc, at}. */
+  private readonly liveDocCache = new Map<
+    string,
+    { at: number; doc: Awaited<ReturnType<YargitayLiveAdapter["fetchDocument"]>> }
+  >();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -114,6 +120,19 @@ export class CaselawService {
       liveError,
       warning: localResults.some((r) => r.isDemo) ? DEMO_WARNING : undefined,
     };
+  }
+
+  /** Canlı Yargıtay karar belgesi — temiz metin; havuza yazılmaz. */
+  async liveDocument(externalId: string) {
+    // Kısa süreli bellek önbelleği: aynı karar art arda açıldığında resmî
+    // kaynağı yormamak için (10 dk).
+    const cached = this.liveDocCache.get(externalId);
+    if (cached && Date.now() - cached.at < 10 * 60 * 1000) {
+      return cached.doc;
+    }
+    const doc = await this.liveAdapter.fetchDocument(externalId);
+    this.liveDocCache.set(externalId, { at: Date.now(), doc });
+    return doc;
   }
 
   async detail(tenantId: string, id: string) {

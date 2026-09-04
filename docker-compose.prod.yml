@@ -279,6 +279,11 @@ services:
       # istek yapamayacağı için ZORUNLU alan (bkz. docs/uretim-dagitimi.md §8.2).
       WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN zorunlu - ornek https://ornek-buro.com}
 
+      # --- Zaman aşımı ---
+      # Uzun sözleşme analiz parçaları tek AI çağrısında 60 sn'yi aşabilir;
+      # varsayılan 60 sn "sağlayıcı yanıt vermedi" (502) üretiyordu.
+      AI_TIMEOUT_MS: ${AI_TIMEOUT_MS:-180000}
+
       # --- Ters vekil ---
       # Vekil arkasındaysanız 1 yazın; 0 = X-Forwarded-For'a HİÇ bakma.
       TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:?TRUSTED_PROXY_HOPS zorunlu - vekil arkasinda 1, degilse 0}

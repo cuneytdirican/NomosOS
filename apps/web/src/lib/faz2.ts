@@ -944,6 +944,15 @@ export function detailCaseLaw(id: string): Promise<CaseLawDocDetail> {
   return api<CaseLawDocDetail>(`/caselaw/${id}`);
 }
 
+/** CANLI karar belgesi — GET /caselaw/live/:externalId (temiz metin; XML değil). */
+export function getLiveCaseLawDocument(externalId: string): Promise<{
+  externalId: string;
+  text: string;
+  sourceUrl: string;
+}> {
+  return api(`/caselaw/live/${encodeURIComponent(externalId)}`);
+}
+
 export function listCaseLawRefs(caseId: string): Promise<CaseLawRef[]> {
   return api<unknown>(`/cases/${caseId}/caselaw`).then((p) => asList<CaseLawRef>(p));
 }

@@ -22,6 +22,7 @@ import {
   extractPii,
   isFeatureMissing,
   searchCaseLaw,
+  getLiveCaseLawDocument,
   type LiveCaseLawDoc,
   type PiiPrompt,
 } from "@/lib/faz2";
@@ -66,6 +67,12 @@ export default function IctihatPage() {
   const [results, setResults] = useState<CaseLawDoc[]>([]);
   const [liveResults, setLiveResults] = useState<LiveCaseLawDoc[]>([]);
   const [liveError, setLiveError] = useState<string | null>(null);
+  const [liveDoc, setLiveDoc] = useState<{
+    loading: boolean;
+    hit: LiveCaseLawDoc | null;
+    text: string | null;
+    error: string | null;
+  }>({ loading: false, hit: null, text: null, error: null });
   const [note, setNote] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -116,6 +123,22 @@ export default function IctihatPage() {
     },
     [query, mode, court],
   );
+
+  /** Canlı karar belgesi — TEMİZ METİN olarak uygulama içinde okunur. */
+  const openLiveDoc = useCallback(async (hit: LiveCaseLawDoc) => {
+    setLiveDoc({ loading: true, hit, text: null, error: null });
+    try {
+      const doc = await getLiveCaseLawDocument(hit.externalId);
+      setLiveDoc({ loading: false, hit, text: doc.text, error: null });
+    } catch (err) {
+      setLiveDoc({
+        loading: false,
+        hit,
+        text: null,
+        error: err instanceof ApiError ? err.message : "Karar metni alınamadı.",
+      });
+    }
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -265,14 +288,23 @@ export default function IctihatPage() {
                           {hit.decisionDate ? ` · ${hit.decisionDate}` : ""}
                         </p>
                       </div>
-                      <a
-                        href={hit.sourceUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="shrink-0 text-xs font-medium text-emerald-700 hover:underline"
-                      >
-                        Kaynağa git ↗
-                      </a>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => void openLiveDoc(hit)}
+                          className="text-xs font-medium text-emerald-700 hover:underline"
+                        >
+                          Metni oku
+                        </button>
+                        <a
+                          href={hit.sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-medium text-emerald-700 hover:underline"
+                        >
+                          Kaynağa git ↗
+                        </a>
+                      </div>
                     </div>
                   </li>
                 ))}
@@ -319,6 +351,46 @@ export default function IctihatPage() {
           push("Karar ortak havuza eklendi.", "success");
         }}
       />
+
+      {/* CANLI KARAR METNİ — resmî getDokuman yanıtı sunucuda temizlenir;
+          tarayıcıda ham XML gösterilmez (kullanıcı bulgusu). */}
+      <Modal
+        open={liveDoc.hit !== null}
+        title={
+          liveDoc.hit
+            ? `${liveDoc.hit.court} — E. ${liveDoc.hit.caseNumber} · K. ${liveDoc.hit.decisionNumber}`
+            : "Karar metni"
+        }
+        onClose={() => setLiveDoc({ loading: false, hit: null, text: null, error: null })}
+      >
+        {liveDoc.loading ? (
+          <Spinner label="Karar metni resmî kaynaktan alınıyor…" />
+        ) : liveDoc.error ? (
+          <>
+            <ErrorBox message={liveDoc.error} />
+            {liveDoc.hit?.sourceUrl && (
+              <a
+                href={liveDoc.hit.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-block text-xs font-medium text-emerald-700 hover:underline"
+              >
+                Resmî kaynaktan aç ↗
+              </a>
+            )}
+          </>
+        ) : (
+          <>
+            <p className="mb-2 text-[11px] text-slate-500">
+              Metin resmî kaynaktan (karararama.yargitay.gov.tr) alınmış ve okunur biçime
+              çevrilmiştir; kayıt henüz büronuzun havuzunda DEĞİLDİR.
+            </p>
+            <p className="max-h-[60vh] overflow-y-auto whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">
+              {liveDoc.text}
+            </p>
+          </>
+        )}
+      </Modal>
 
       <ToastStack toasts={toasts} onDismiss={dismiss} />
     </div>

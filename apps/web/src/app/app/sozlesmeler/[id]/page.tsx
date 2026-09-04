@@ -750,7 +750,16 @@ function TextAnnotationsTab({
     let alive = true;
     setLoading(true);
     setError(null);
-    getContractVersionTextPage(version.id, windowFrom, windowFrom + TEXT_WINDOW_PAGES - 1)
+    // İstenen pencere BİLİNEN sayfa sayısına kırpılır (6 sayfalık sözleşmede
+    // "s.6-10" isteği 400 üretiyordu); sunucu da kırpma yapar — iki taraf da
+    // tahammüllü, ama istemci gereksiz istek göndermez.
+    const knownPages = textPage?.pageCount;
+    const pageTo = windowFrom + TEXT_WINDOW_PAGES - 1;
+    getContractVersionTextPage(
+      version.id,
+      windowFrom,
+      knownPages ? Math.min(pageTo, knownPages) : pageTo,
+    )
       .then((p) => {
         if (alive) setTextPage(p);
       })
@@ -763,7 +772,7 @@ function TextAnnotationsTab({
     return () => {
       alive = false;
     };
-  }, [contractId, version?.id, windowFrom]);
+  }, [contractId, version?.id, windowFrom, textPage?.pageCount]);
 
   const blocks = useMemo(() => (textPage ? splitClauses(textPage.contentText) : []), [textPage]);
   const open = annotations.filter((a) => a.status === "ACIK");
