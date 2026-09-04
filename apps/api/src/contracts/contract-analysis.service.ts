@@ -301,7 +301,13 @@ export class ContractAnalysisService {
                 findingPaths: ["ourSide", "otherSide"],
                 entity: "Contract",
                 entityId: contract.id,
-                maxTokens: 4096,
+                // ÇIKTI TAVANI: iki taraflı analiz + birebir alıntılar 4096
+                // tokenı AŞIYORDU — model sınırda kesiliyor, JSON ortadan
+                // bölünüyor ve koşu "boş yanıt" hatasıyla düşüyordu (AiUsageLog:
+                // outputTokens=4096=tavan). Alıntı güvenliği için GİRİŞİ
+                // küçültmek DOĞRU OLMAZDI (alıntı kaynağı eksilirdi); çıktı
+                // tavanı yükseltildi.
+                maxTokens: 16384,
                 buildMessages: ([ctx, instr]) =>
                   buildContractChunkAnalysisMessages({
                     contextText: ctx,
