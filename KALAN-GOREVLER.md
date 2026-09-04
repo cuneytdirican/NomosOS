@@ -23,7 +23,52 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 1 Eylül 2026, 22:30
+# 🔖 KALDIĞIM YER — 4 Eylül 2026, 07:15
+
+> **DENETİM İYİLEŞTİRME BORCU KAPANDI + Yardım Merkezi, HEPO ve havuz yönetimi teslim edildi.**
+> Son commit `f8cfcf9` GitHub'da (main).
+
+## Bu turda teslim edilenler
+
+1. **Yardım Merkezi (Modül 27):** paylaşılan yardım kataloğu (31 modül konusu) +
+   aranabilir `/app/yardim` (konu → bölüme çapa atlama, `?konu=`/`?sayfa=` girişleri) +
+   üst çubukta her sayfada bağlamsal `?` düğmesi.
+2. **HEPO (Modül 28, Faz 1–5) uçtan uca:** `@nomosos/shared` tek katalog kaynağı →
+   `HepoObligation`/`HepoClientObligation` (migration `20260903210000`, canlı DB'ye
+   uygulanmadı) → `/hepo` uçları (HUKUKI, kiracı izolasyonu) → web "Müvekkil Takibi"
+   sekmesi → `hepo-reminder-daily` işi (30/7/1 kala + tek seferlik SURE_GECTI;
+   `HEPO:<satır>` dedupeKey) → `hepo-uyum` deterministik raporu → risk motoru
+   `HEPO_CLIENT_OVERDUE` sinyali.
+3. **İçtihat havuz yönetimi (D1):** `/api/admin/v1/caselaw-pool` + admin paneli
+   `/yargi/havuz` — künye ön doğrulamalı toplu içe aktarma; büro MANUEL kaydı
+   ezilmez (ATLANIR); `CASELAW_POOL_IMPORT` denetim izi.
+4. **AI eğitim stratejisi kararı:** `docs/ai-egitim-stratejisi.md` — RAG öncelikli
+   mimari; fine-tuning Super Admin tekelinde, avukat/büro eğitim yüzeyini göremez.
+5. **İYİLEŞTİRME borcu (66/66) doğrulandı:** 63 madde önceki turlarda kapatılmış
+   (kaynak etiketleriyle kanıtlı); bu turda **İ-15** (üretimde gömülü S3 varsayılanı
+   yasak — açılışta düşer, 3 sözleşme testi) ve **İ-65** (MinIO imajları doğrulanmış
+   RELEASE etiketlerine sabitlendi — Docker Hub'dan teyitli) kapatıldı; **İ-26**
+   (User.email küresel unique) bilinçli mimari karar olarak şemada belgelendi
+   (giriş akışı e-posta tek başına kullanıcı bulur; kiracı-uzaylı unique geçişi
+   ürün kararı + göç gerektirir).
+
+## Doğrulama
+
+- `pnpm build` 12/12 · `pnpm typecheck` 20/20 · `pnpm lint` 0 hata / 0 uyarı
+- **Testler: api 925 (+37) · legal-core 90 · web 88 · legal-ai 79 · udf 44 ·
+  e-signature 37 · uyap 35** — hepsi geçiyor
+- Migration `20260903210000_hepo_yukumluluk_takibi` yazıldı; canlı veritabanına
+  UYGULANMADI — dağıtımda `prisma migrate deploy` çalıştırılmalı.
+
+## Sırada
+
+1. **Bağımsız final denetim** (yeni gözle sıfırdan okuma) — bu oturumun ve önceki
+   turların yeni kodları (HEPO hattı, havuz yönetimi, yardım merkezi) dâhil.
+2. `FINAL-COMPLETION-REPORT.md` üretimi (Aşama 9 kapanışı).
+
+---
+
+## 🔖 ÖNCEKİ KALDIĞIM YER — 1 Eylül 2026, 22:30
 
 > **RAKİP FARKLARI 7/7 TAMAMLANDI + kritik İYİLEŞTİRMELER kapatıldı.**
 > Son commit `88a8615` GitHub'da; Docker 7/7 sağlıklı; tüm yüzeyler 200.
