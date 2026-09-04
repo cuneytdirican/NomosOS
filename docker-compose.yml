@@ -69,7 +69,8 @@ services:
       S3_SECRET_KEY: nomosos-gizli-123
       S3_BUCKET: nomosos-belgeler
       API_PORT: 3001
-      JWT_SECRET: ${JWT_SECRET:-gelistirme-icin-jwt-secret}
+      # En az 32 karakter olmalı — API açılışta kısa JWT_SECRET'ı reddeder (app.module.ts).
+      JWT_SECRET: ${JWT_SECRET:-gelistirme-icin-jwt-secret-32-karakter-minimum-1234}
       MASTER_ENCRYPTION_KEY: ${MASTER_ENCRYPTION_KEY:-}
     ports:
       - "3001:3001"

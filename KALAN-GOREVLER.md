@@ -23,7 +23,32 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 4 Eylül 2026, 07:15
+# 🔖 KALDIĞIM YER — 4 Eylül 2026, 08:00
+
+> **Bağımsız final denetim TAM OKUMA tamamlandı + Docker üretim/topoloji güncellendi.**
+> 8 dikey kesit ajanı depoyu baştan sona okudu (~1.000 dosya); bulgular
+> `plans/bagimsiz-final-denetim-plani.md` dosyasında (P0-P3, dosya:satır kanıtlı).
+> Docker bulguları bu turda KAPATILDI (plan Aşama 3.1-3.4 + 3.18):
+
+1. **Docker düzeltmeleri:** dev `full` profili JWT_SECRET'i ≥32 karaktere çıkarıldı
+   (API açılışta reddediyordu) · `.dockerignore`'a UYAP zip istisnası (web imajı
+   `/downloads` 404 veriyordu) · prod compose'a `WEB_ORIGIN` (CORS) zorunlu alanı
+   eklendi · prod compose'a `portal` servisi (3003) eklendi · prod compose'daki çürük
+   yorumlar düzeltildi (web Dockerfile ARG'yi tanımlıyor + `USER node` var; `/root`
+   tmpfs → `/home/node`) · `docker-compose.prod.env.example`'a `WEB_ORIGIN` +
+   `PORTAL_BIND_PORT` eklendi. Üç compose dosyası `config` doğrulamasından geçti.
+
+## Sırada
+
+1. Plan Aşama 1 (P0 çalışma zamanı hataları: seed çökmesi, icra-tahsilat TDZ,
+   BANKA_CEVABI ölü yolu, UYAP pipeline tetiklenmesi, platform headersJson şifreleme,
+   /ai/chat prompt sözleşmesi, assistant maskeleme, kısmi iade, rol hiyerarşisi).
+2. Plan Aşama 2 (istemci-sunucu sözleşme kopuklukları) ve Aşama 4 (test borcu).
+3. `FINAL-COMPLETION-REPORT.md` üretimi (Aşama 9 kapanışı).
+
+---
+
+## 🔖 ÖNCEKİ KALDIĞIM YER — 4 Eylül 2026, 07:15
 
 > **DENETİM İYİLEŞTİRME BORCU KAPANDI + Yardım Merkezi, HEPO ve havuz yönetimi teslim edildi.**
 > Son commit `f8cfcf9` GitHub'da (main).

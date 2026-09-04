@@ -73,3 +73,6 @@ docker-compose*.yml
 apps/uyap-extension/dist
 *.zip
 *.crx
+# İSTİSNA: web imajı UYAP eklenti paketini `/app/uyap` sayfasından dağıtır —
+# pazarlama "NomosOS'tan indirilir" vaadi + vaat-kisitlari testi bu dosyayı ister.
+!apps/web/public/downloads/*.zip
