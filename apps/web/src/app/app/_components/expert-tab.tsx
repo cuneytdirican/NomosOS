@@ -61,6 +61,7 @@ import type {
   Expert,
   ExpertReport,
   ExpertReportDiff,
+  ExpertReportPatchResult,
   ObjectionDraft,
 } from "../_lib/faz4-types";
 import { useAiCall } from "../_lib/use-ai-call";
@@ -134,7 +135,7 @@ export function ExpertTab({
     try {
       const res = await setExpertReportServedAt(report.id, new Date(value).toISOString());
       onNotify("Tebliğ tarihi kaydedildi.", "success");
-      setSuggestion({ reportId: report.id, value: res.deadlineSuggestion ?? null });
+      setSuggestion({ reportId: report.id, value: res.deadline ?? null });
       await load();
     } catch (err) {
       onNotify(errText(err, "Tebliğ tarihi kaydedilemedi."), "error");
@@ -378,9 +379,14 @@ export function ExpertTab({
         caseId={caseId}
         experts={experts}
         onClose={() => setFormOpen(false)}
-        onSaved={async () => {
+        onSaved={async (created) => {
           setFormOpen(false);
           onNotify("Bilirkişi raporu kaydedildi.", "success");
+          // Oluşturma yanıtı da süre önerisi taşır (servedAt verildiyse) —
+          // kullanıcı ayrıca PATCH yapmak zorunda kalmaz.
+          if (created?.deadline && created?.id) {
+            setSuggestion({ reportId: created.id, value: created.deadline });
+          }
           await load();
         }}
       />
@@ -455,7 +461,8 @@ function ReportFormModal({
   caseId: string;
   experts: Expert[];
   onClose: () => void;
-  onSaved: () => Promise<void> | void;
+  /** Oluşturulan rapor (servedAt verildiyse `deadline` önerisiyle). */
+  onSaved: (created?: ExpertReportPatchResult) => Promise<void> | void;
 }) {
   const [form, setForm] = useState({
     reportType: "ASIL",
@@ -486,7 +493,7 @@ function ReportFormModal({
     setBusy(true);
     setError(null);
     try {
-      await createExpertReport(caseId, {
+      const created = await createExpertReport(caseId, {
         reportType: form.reportType,
         expertId: form.expertId || undefined,
         receivedAt: new Date(form.receivedAt).toISOString(),
@@ -494,7 +501,7 @@ function ReportFormModal({
         summary: form.summary.trim() || undefined,
         conclusionText: form.conclusionText.trim() || undefined,
       });
-      await onSaved();
+      await onSaved(created);
     } catch (err) {
       setError(errText(err, "Rapor kaydedilemedi."));
     } finally {

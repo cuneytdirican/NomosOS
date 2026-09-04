@@ -165,9 +165,17 @@ export class DeadlinesService {
     if (input.ownerId) {
       await this.requireTenantUser(user.tenantId, input.ownerId);
     }
+    // AÇIKÇA ONAYLANDI gönderen yalnız HUKUKI rol olabilir; aksi hâlde 403.
     if (input.status === "ONAYLANDI" && !hasRole(user, ROLE_SETS.HUKUKI)) {
       throw new ForbiddenException("Süreyi onaylı olarak yalnızca avukat, ortak veya yönetici kaydedebilir.");
     }
+    // Durum gönderilmediyse ROL BİLİNÇLİ varsayılan: avukatın kendi manuel
+    // kaydı kendi onayı sayılır (ONAYLANDI); operasyon personelinin kaydı
+    // BEKLIYOR açılır ve avukat onayıyla kesinleşir (ürün ilkesi: "süre
+    // avukat onayıyla kesinleşir" — şema varsayılanının sabit ONAYLANDI
+    // olması bu ilkeyi deliyordu).
+    const status =
+      input.status ?? (hasRole(user, ROLE_SETS.HUKUKI) ? "ONAYLANDI" : "BEKLIYOR");
 
     const deadline = await this.prisma.client.deadline.create({
       data: {
@@ -185,7 +193,7 @@ export class DeadlinesService {
         source: "MANUEL",
         computeNote: undefined,
         ruleKey: undefined,
-        status: input.status,
+        status,
       },
       include: DEADLINE_INCLUDE,
     });

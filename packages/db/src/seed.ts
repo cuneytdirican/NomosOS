@@ -2669,6 +2669,7 @@ async function main() {
   }
   // ── Müvekkil segment kataloğu (D7/M3 — kiracı bazlı yönetilen liste) ──────
   const segmentLabels = ["Kurumsal", "Bireysel", "Kamu", "STK"];
+  let segmentAdded = 0;
   for (const [i, label] of segmentLabels.entries()) {
     const exists = await prisma.clientSegment.findUnique({
       where: { tenantId_label: { tenantId: TENANT_ID, label } },
@@ -2696,7 +2697,7 @@ async function main() {
     }
   }
   console.log(
-    `Yargı organı: ${judicialBodies.length} (eklenen: ${bodyAdded}) | Noter: ${notaries.length} (eklenen: ${notaryAdded}) | Vergi dairesi: ${taxOffices.length} (eklenen: ${taxAdded}, TEMSİLİ) — katalog yaklaşık sayılardır; panelden düzenlenebilir.`,
+    `Yargı organı: ${judicialBodies.length} (eklenen: ${bodyAdded}) | Noter: ${notaries.length} (eklenen: ${notaryAdded}) | Vergi dairesi: ${taxOffices.length} (eklenen: ${taxAdded}, TEMSİLİ) | Segment: ${segmentLabels.length} (eklenen: ${segmentAdded}) — katalog yaklaşık sayılardır; panelden düzenlenebilir.`,
   );
 
   console.log("Seed tamamlandı.");  console.log(

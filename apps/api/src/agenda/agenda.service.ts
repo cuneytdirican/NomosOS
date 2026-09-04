@@ -120,7 +120,10 @@ export class AgendaService {
         where: {
           tenantId,
           dueDate: { gte: from, lte: to },
-          status: { in: ["ACIK", "DEVAM_EDIYOR"] },
+          // tasks.service.ts ile AYNI açık görev kümesi: kontrolde / onay
+          // bekliyor görevleri ajandadan düşmez (aksi hâlde incelemedeki
+          // işler takvimden sessizce kayboluyordu).
+          status: { in: ["ACIK", "DEVAM_EDIYOR", "KONTROLDE", "ONAY_BEKLIYOR"] },
           ...(params.assigneeId ? { assigneeId: params.assigneeId } : {}),
         },
         include: {

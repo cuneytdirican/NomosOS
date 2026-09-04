@@ -90,6 +90,19 @@ function OverviewView() {
   });
 
   const o = overview.data;
+  // /metrics/overview iç içe döner ({tenants, revenue, attention, ai}) —
+  // kartlar bu gerçek şekilden okur; API'de olmayan metrik dürüstçe "—" kalır.
+  const totalTenants = o?.tenants?.total ?? null;
+  const activeTenants = o?.tenants?.active ?? null;
+  const suspendedTenants = o?.tenants?.suspended ?? null;
+  const trialTenants = o?.tenants?.trial ?? null;
+  const newThisMonth = o?.tenants?.newThisMonth ?? null;
+  const mrr = o?.revenue?.mrr ?? null;
+  const arr = o?.revenue?.arr ?? null;
+  const failedPayments = o?.attention?.failedPayments ?? null;
+  const aiCallCount30d = o?.ai?.callCount ?? null;
+  const aiInputTokens30d = o?.ai?.inputTokens ?? null;
+  const aiOutputTokens30d = o?.ai?.outputTokens ?? null;
   const checks = useMemo(() => normalizeHealth(health.data), [health.data]);
 
   const aiSeries = useMemo(
@@ -133,59 +146,59 @@ function OverviewView() {
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <StatCard
                 label="Toplam tenant"
-                value={fmtNumber(o.totalTenants)}
+                value={fmtNumber(totalTenants)}
                 trend={
-                  o.newTenantsThisMonth !== null && o.newTenantsThisMonth !== undefined
-                    ? `+${o.newTenantsThisMonth} bu ay`
+                  newThisMonth !== null && newThisMonth !== undefined
+                    ? `+${newThisMonth} bu ay`
                     : undefined
                 }
                 href="/tenantlar"
               />
               <StatCard
                 label="Aktif tenant"
-                value={fmtNumber(o.activeTenants)}
-                hint={`${fmtNumber(o.suspendedTenants)} askıda · ${fmtNumber(o.trialTenants)} deneme`}
+                value={fmtNumber(activeTenants)}
+                hint={`${fmtNumber(suspendedTenants)} askıda · ${fmtNumber(trialTenants)} deneme`}
                 tone="green"
               />
               <StatCard
                 label="MRR"
-                value={fmtMoney(o.mrr)}
-                trend={o.arr ? `ARR ${fmtMoney(o.arr)}` : undefined}
+                value={fmtMoney(mrr)}
+                trend={arr ? `ARR ${fmtMoney(arr)}` : undefined}
                 hint="KDV hariç"
                 tone="accent"
               />
               <StatCard
                 label="Aylık churn"
-                value={fmtPercent(o.churnPct)}
+                value={fmtPercent(o?.churnPct)}
                 hint={
-                  o.trialConversionPct !== null && o.trialConversionPct !== undefined
+                  o?.trialConversionPct !== null && o?.trialConversionPct !== undefined
                     ? `deneme→ücretli ${fmtPercent(o.trialConversionPct, 0)}`
                     : undefined
                 }
-                tone={(o.churnPct ?? 0) > 2 ? "yellow" : "steel"}
+                tone={(o?.churnPct ?? 0) > 2 ? "yellow" : "steel"}
               />
               <StatCard
                 label="AI çağrısı (30g)"
-                value={fmtCompact(o.aiCallCount30d)}
+                value={fmtCompact(aiCallCount30d)}
                 hint="prompt/yanıt gövdesi hiçbir ekranda yoktur"
                 href="/kullanim"
               />
               <StatCard
                 label="Token (30g)"
-                value={fmtCompact((o.aiInputTokens30d ?? 0) + (o.aiOutputTokens30d ?? 0))}
-                hint={`girdi ${fmtCompact(o.aiInputTokens30d)} · çıktı ${fmtCompact(o.aiOutputTokens30d)}`}
+                value={fmtCompact((aiInputTokens30d ?? 0) + (aiOutputTokens30d ?? 0))}
+                hint={`girdi ${fmtCompact(aiInputTokens30d)} · çıktı ${fmtCompact(aiOutputTokens30d)}`}
               />
               <StatCard
                 label="Başarısız ödeme"
-                value={fmtNumber(o.failedPayments)}
-                tone={(o.failedPayments ?? 0) > 0 ? "red" : "steel"}
+                value={fmtNumber(failedPayments)}
+                tone={(failedPayments ?? 0) > 0 ? "red" : "steel"}
                 href="/odemeler"
               />
               <StatCard
                 label="Bekleyen onaylar"
-                value={fmtNumber(o.pendingApprovals ?? pending.length)}
+                value={fmtNumber(pending.length)}
                 hint="dört-göz kuyruğu"
-                tone={(o.pendingApprovals ?? pending.length) > 0 ? "yellow" : "steel"}
+                tone={pending.length > 0 ? "yellow" : "steel"}
                 href="/onaylar"
               />
             </div>

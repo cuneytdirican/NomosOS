@@ -240,7 +240,10 @@ export class PlatformAiService {
           ...(input.apiKey ? { encryptedApiKey: encryptSecret(input.apiKey) } : {}),
           baseUrl: input.baseUrl ?? null,
           defaultModel: input.defaultModel,
-          headersJson: input.headers ? JSON.stringify(input.headers) : null,
+          // K-08 (platform tarafı): başlıklar SIR TAŞIYABİLİR ("api-key: sk-…");
+          // kiracı tarafındaki gibi şifreli yazılır, okuma tek kapıdan
+          // (readProviderHeaders) çözülür.
+          headersJson: input.headers ? encryptSecret(JSON.stringify(input.headers)) : null,
           mappingJson: input.mapping ? JSON.stringify(input.mapping) : null,
           isDefault: input.isDefault ?? false,
           notes: input.notes ?? null,
@@ -302,7 +305,9 @@ export class PlatformAiService {
           : {}),
         ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
         ...(input.defaultModel !== undefined ? { defaultModel: input.defaultModel } : {}),
-        ...(input.headers !== undefined ? { headersJson: JSON.stringify(input.headers) } : {}),
+        ...(input.headers !== undefined
+          ? { headersJson: input.headers ? encryptSecret(JSON.stringify(input.headers)) : null }
+          : {}),
         ...(input.mapping !== undefined ? { mappingJson: JSON.stringify(input.mapping) } : {}),
         ...(input.isDefault !== undefined ? { isDefault: input.isDefault } : {}),
         ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),

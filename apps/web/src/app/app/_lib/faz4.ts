@@ -741,8 +741,12 @@ export function createExpertReport(
     summary?: string;
     conclusionText?: string;
   },
-): Promise<ExpertReport> {
-  return api<ExpertReport>(FAZ4_ROUTES.expertReports(caseId), { method: "POST", body });
+): Promise<ExpertReportPatchResult> {
+  // Sunucu servedAt verildiyse `deadline` önerisiyle döner (expert.service.ts:283).
+  return api<ExpertReportPatchResult>(FAZ4_ROUTES.expertReports(caseId), {
+    method: "POST",
+    body,
+  });
 }
 
 /**

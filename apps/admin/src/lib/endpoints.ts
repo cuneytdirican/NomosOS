@@ -50,6 +50,8 @@ export const EP = {
     list: "/tenants",
     create: "/tenants", // POST — dört-göz TENANT_CREATE talebi (D5 / M2)
     detail: (id: string) => `/tenants/${encodeURIComponent(id)}`,
+    /** Tenant AI sağlayıcı ÜSTVERİSİ (anahtar dönmez). */
+    aiConfig: (id: string) => `/tenants/${encodeURIComponent(id)}/ai-config`,
     suspend: (id: string) => `/tenants/${encodeURIComponent(id)}/suspend`,
     activate: (id: string) => `/tenants/${encodeURIComponent(id)}/activate`,
     supportAccess: (id: string) => `/tenants/${encodeURIComponent(id)}/support-access`,
@@ -101,6 +103,8 @@ export const EP = {
     list: "/jobs",
     runs: (key: string) => `/jobs/${encodeURIComponent(key)}/runs`,
     run: (key: string) => `/jobs/${encodeURIComponent(key)}/run`,
+    /** Aç/kapat + cron değiştir — değişiklik kuyruğa anında yansır. */
+    patch: (key: string) => `/jobs/${encodeURIComponent(key)}`,
   },
   audit: "/audit",
   /** Tanıtım sitesi demo talepleri — kayıt olarak izlenir (e-posta yok). */

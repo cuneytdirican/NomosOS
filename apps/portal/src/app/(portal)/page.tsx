@@ -37,8 +37,6 @@ import { TermText } from "@/components/Term";
 
 /** Kapanmış sayılan dosya durumları — "aktif dosyalarım" sayımından düşer. */
 const CLOSED_STATUSES = new Set(["KAPANDI", "ARSIV"]);
-/** Ödemesi tamamlanmamış sayılan fatura durumları. */
-const OPEN_INVOICE_STATUSES = new Set(["GONDERILDI", "KISMI_ODENDI"]);
 
 export default function PortalHomePage() {
   const { user } = usePortalSession();
@@ -56,32 +54,36 @@ export default function PortalHomePage() {
 
   // ---- Aktif dosya sayısı ----
   const activeCases =
-    s?.activeCaseCount ??
+    s?.cases?.active ??
     (cases.loaded
       ? cases.data.filter((c) => !CLOSED_STATUSES.has(c.status ?? "")).length
       : null);
 
   // ---- Yaklaşan duruşma ----
-  const nextHearing = s?.nextHearing ?? (hearings.loaded ? pickNextHearing(hearings.data) : null);
+  const nextHearing =
+    (s?.upcomingHearings?.length ? s.upcomingHearings[0] : null) ??
+    (hearings.loaded ? pickNextHearing(hearings.data) : null);
 
-  // ---- Ödeme durumu ----
-  const balanceRaw = s?.openBalance ?? payments.data?.openBalance ?? payments.data?.balance;
-  const currency = payments.data?.currency ?? "TRY";
-  const balanceLabel = fmtMoney(balanceRaw ?? null, currency);
-  const openInvoiceCount =
-    s?.openInvoiceCount ??
-    (payments.loaded
-      ? (payments.data?.invoices ?? []).filter((i) =>
-          OPEN_INVOICE_STATUSES.has(i.status ?? ""),
-        ).length
-      : null);
+  // ---- Ödeme durumu (dashboard finance ya da ödemeler listesinden) ----
+  // GET /portal/payments zarfı { items, total } biçimindedir; bakiye kaydı
+  // dashboard finance altından gelir.
+  const paymentItems = payments.data?.items ?? payments.data?.payments ?? [];
+  const balanceRaw =
+    s?.finance?.openBalance ?? payments.data?.openBalance ?? payments.data?.balance ?? null;
+  const currency = s?.finance?.currency ?? payments.data?.currency ?? "TRY";
+  const balanceLabel = fmtMoney(balanceRaw, currency);
+  const financeScope = s?.finance?.scope;
+  const openInvoiceCount = payments.loaded ? paymentItems.length || null : null;
 
   // ---- Avukattan mesaj ----
   const lastOfficeMessage = messages.loaded ? pickLastOfficeMessage(messages.data) : null;
-  const lastMessageAt = s?.lastMessageAt ?? lastOfficeMessage?.createdAt ?? lastOfficeMessage?.sentAt;
-  const unread = s?.unreadMessageCount ?? null;
+  const lastMessageAt =
+    s?.messages?.lastFromOfficeAt ??
+    s?.messages?.lastMessageAt ??
+    lastOfficeMessage?.createdAt ??
+    lastOfficeMessage?.sentAt;
 
-  const clientName = s?.clientName ?? user?.clientName;
+  const clientName = user?.clientName;
   const greetName = user?.fullName ?? clientName;
 
   return (
@@ -153,7 +155,7 @@ export default function PortalHomePage() {
           }
           hint={
             balanceLabel
-              ? "Ödenmemiş toplam tutarınız."
+              ? (financeScope ?? "Ödenmemiş toplam tutarınız.")
               : openInvoiceCount && openInvoiceCount > 0
                 ? "Tutar ve vade ayrıntıları Ödemelerim sayfasında."
                 : "Ödemeleriniz güncel görünüyor."
@@ -163,13 +165,7 @@ export default function PortalHomePage() {
         <StatCard
           label="Avukatımdan mesaj"
           href="/mesajlar"
-          value={
-            unread && unread > 0
-              ? `${unread} yeni mesaj`
-              : lastMessageAt
-                ? "Yazışmanız güncel"
-                : "Henüz mesaj yok"
-          }
+          value={lastMessageAt ? "Yazışmanız güncel" : "Henüz mesaj yok"}
           hint={
             lastMessageAt
               ? `Son mesaj: ${fmtDateTime(lastMessageAt) ?? "—"}`

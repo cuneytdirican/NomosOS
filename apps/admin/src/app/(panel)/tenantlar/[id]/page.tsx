@@ -58,6 +58,7 @@ import {
   toneOf,
 } from "@/lib/labels";
 import type {
+  AdminAiConfig,
   AdminAiMetricRow,
   AdminAuditEntry,
   AdminSupportGrant,
@@ -133,20 +134,22 @@ function TenantDetail() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={t?.name ?? "Tenant"}
+        title={t?.tenant?.name ?? "Tenant"}
         description={
           t
-            ? `Tenant ${t.id}${t.createdAt ? ` · Kayıt: ${fmtDate(t.createdAt)}` : ""}`
+            ? `Tenant ${t.tenant.id}${t.tenant.createdAt ? ` · Kayıt: ${fmtDate(t.tenant.createdAt)}` : ""}`
             : `Tenant ${id}`
         }
         action={
           <div className="flex flex-wrap items-center gap-2">
-            {t?.planKey && (
-              <Badge tone={toneOf(PLAN_TONES, t.planKey)}>{labelOf(PLAN_LABELS, t.planKey)}</Badge>
+            {t?.subscription?.planKey && (
+              <Badge tone={toneOf(PLAN_TONES, t.subscription.planKey)}>
+                {labelOf(PLAN_LABELS, t.subscription.planKey)}
+              </Badge>
             )}
-            {t?.status && (
-              <Badge tone={toneOf(SUBSCRIPTION_STATUS_TONES, t.status)}>
-                {labelOf(SUBSCRIPTION_STATUS_LABELS, t.status)}
+            {t?.subscription?.status && (
+              <Badge tone={toneOf(SUBSCRIPTION_STATUS_TONES, t.subscription.status)}>
+                {labelOf(SUBSCRIPTION_STATUS_LABELS, t.subscription.status)}
               </Badge>
             )}
             <Link href="/tenantlar" className="text-xs text-accent-300 hover:text-accent-200">
@@ -176,10 +179,10 @@ function TenantDetail() {
         {t && (
           <>
             <Tabs tabs={tabs} active={tab} onChange={setTab} ariaLabel="Tenant sekmeleri" />
-            {tab === "genel" && <GenelTab tenant={t} onChanged={res.reload} />}
-            {tab === "kullanim" && <KullanimTab tenantId={t.id} />}
-            {tab === "destek" && <DestekTab tenant={t} />}
-            {tab === "denetim" && <DenetimTab tenantId={t.id} />}
+            {tab === "genel" && <GenelTab detail={t} onChanged={res.reload} />}
+            {tab === "kullanim" && <KullanimTab tenantId={t.tenant.id} />}
+            {tab === "destek" && <DestekTab tenantId={t.tenant.id} />}
+            {tab === "denetim" && <DenetimTab tenantId={t.tenant.id} />}
           </>
         )}
       </ResourceView>
@@ -190,10 +193,10 @@ function TenantDetail() {
 // ---------------------------------------------------------------- Genel
 
 function GenelTab({
-  tenant,
+  detail,
   onChanged,
 }: {
-  tenant: AdminTenantDetail;
+  detail: AdminTenantDetail;
   onChanged: () => void;
 }) {
   const { role } = useAdminSession();
@@ -201,9 +204,21 @@ function GenelTab({
   const [reason, setReason] = useState("");
   const mutation = useMutation();
 
-  const suspended = tenant.status === "SUSPENDED";
+  const tenant = detail.tenant;
+  const sub = detail.subscription;
+  const plan = detail.plan;
+  const counters = detail.counters;
+  const suspended = sub?.status === "SUSPENDED";
   const actionKey = suspended ? "tenant.reactivate" : "tenant.suspend";
   const path = suspended ? EP.tenants.activate(tenant.id) : EP.tenants.suspend(tenant.id);
+
+  // AI sağlayıcı ÜSTVERİSİ ayrı uçtan gelir (anahtar asla dönmez).
+  const aiConfig = useResource<AdminAiConfig>(
+    can(role, "ai.provider_config") ? EP.tenants.aiConfig(tenant.id) : null,
+  );
+
+  // Depolama: en güncel UsageSnapshot değeri (sunucu önceden toplar).
+  const latestStorage = detail.usage?.[0]?.storageBytes ?? null;
 
   async function submit() {
     const ok = await mutation.run(
@@ -222,14 +237,22 @@ function GenelTab({
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Kullanıcı" value={fmtNumber(tenant.userCount)} hint={`${fmtNumber(tenant.seats)} koltuk`} />
+        <StatCard
+          label="Kullanıcı"
+          value={fmtNumber(counters?.userCount)}
+          hint={`${fmtNumber(sub?.seats)} koltuk`}
+        />
         <StatCard
           label="Dosya"
-          value={fmtNumber(tenant.caseCount)}
-          hint={`${fmtNumber(tenant.documentCount)} belge`}
+          value={fmtNumber(counters?.caseCount)}
+          hint={`${fmtNumber(counters?.documentCount)} belge`}
         />
-        <StatCard label="Depolama" value={fmtBytes(tenant.storageBytes)} />
-        <StatCard label="AI çağrısı" value={fmtCompact(tenant.aiCallCount)} />
+        <StatCard
+          label="Depolama"
+          value={fmtBytes(latestStorage)}
+          hint="son günlük anlık görüntü"
+        />
+        <StatCard label="AI çağrısı (30g)" value={fmtCompact(counters?.aiCallCount30d)} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -239,18 +262,20 @@ function GenelTab({
           </DataRow>
           <DataRow label="Büro adı">{tenant.name}</DataRow>
           <DataRow label="Plan">
-            {tenant.planKey ? labelOf(PLAN_LABELS, tenant.planKey) : "—"}
+            {sub?.planKey ? labelOf(PLAN_LABELS, sub.planKey) : "—"}
           </DataRow>
           <DataRow label="Durum">
-            {tenant.status ? labelOf(SUBSCRIPTION_STATUS_LABELS, tenant.status) : "—"}
+            {sub?.status ? labelOf(SUBSCRIPTION_STATUS_LABELS, sub.status) : "—"}
           </DataRow>
           <DataRow label="Dönem">
-            {tenant.currentPeriodStart || tenant.currentPeriodEnd
-              ? `${fmtDate(tenant.currentPeriodStart)} → ${fmtDate(tenant.currentPeriodEnd)}`
+            {sub?.currentPeriodStart || sub?.currentPeriodEnd
+              ? `${fmtDate(sub.currentPeriodStart)} → ${fmtDate(sub.currentPeriodEnd)}`
               : "—"}
           </DataRow>
-          <DataRow label="Deneme bitişi">{fmtDate(tenant.trialEndsAt)}</DataRow>
-          <DataRow label="MRR katkısı">{fmtMoney(tenant.mrr)}</DataRow>
+          <DataRow label="Deneme bitişi">{fmtDate(sub?.trialEndsAt)}</DataRow>
+          <DataRow label="Koltuk başı/ay">
+            {plan?.monthlyPricePerUser ? fmtMoney(plan.monthlyPricePerUser) : "—"}
+          </DataRow>
           <DataRow label="Kayıt tarihi">{fmtDate(tenant.createdAt)}</DataRow>
         </Card>
 
@@ -270,20 +295,20 @@ function GenelTab({
                     ? "Verildi"
                     : "Verilmedi"}
               </DataRow>
-              {(tenant.aiProviders ?? []).length === 0 ? (
+              {(aiConfig.data?.items ?? []).length === 0 ? (
                 <p className="mt-3 text-xs text-steel-500">
-                  Sağlayıcı yapılandırması dönmedi ya da tanımlı değil.
+                  Tanımlı AI sağlayıcısı yok ya da yapılandırma dönmedi.
                 </p>
               ) : (
                 <ul className="mt-3 space-y-2">
-                  {(tenant.aiProviders ?? []).map((p) => (
+                  {(aiConfig.data?.items ?? []).map((p) => (
                     <li
                       key={p.id}
                       className="rounded-lg border border-steel-800 bg-steel-950/60 px-3 py-2"
                     >
                       <div className="flex flex-wrap items-center gap-2">
-                        <Badge tone={toneOf(AI_PROVIDER_TYPE_TONES, p.providerType)}>
-                          {labelOf(AI_PROVIDER_TYPE_LABELS, p.providerType)}
+                        <Badge tone={toneOf(AI_PROVIDER_TYPE_TONES, p.type)}>
+                          {labelOf(AI_PROVIDER_TYPE_LABELS, p.type)}
                         </Badge>
                         {p.hasApiKey ? (
                           <Badge tone="green">hasApiKey: true</Badge>
@@ -292,7 +317,9 @@ function GenelTab({
                         )}
                         {p.isActive === false && <Badge tone="gray">pasif</Badge>}
                       </div>
-                      <p className="mt-1 font-mono text-xs text-steel-400">{p.model ?? "—"}</p>
+                      <p className="mt-1 font-mono text-xs text-steel-400">
+                        {p.defaultModel ?? p.name ?? "—"}
+                      </p>
                     </li>
                   ))}
                 </ul>
@@ -516,7 +543,7 @@ function KullanimTab({ tenantId }: { tenantId: string }) {
 
 // -------------------------------------------------------- Destek erişimi
 
-function DestekTab({ tenant }: { tenant: AdminTenantDetail }) {
+function DestekTab({ tenantId }: { tenantId: string }) {
   const { role } = useAdminSession();
   const [open, setOpen] = useState(false);
   const [scope, setScope] = useState<string>(GRANT_SCOPES[0]);
@@ -524,7 +551,7 @@ function DestekTab({ tenant }: { tenant: AdminTenantDetail }) {
   const [reason, setReason] = useState("");
 
   const res = useListResource<AdminSupportGrant>(EP.supportAccess.list, {
-    query: { tenantId: tenant.id },
+    query: { tenantId },
   });
   const create = useMutation();
   const revoke = useMutation();
@@ -539,7 +566,7 @@ function DestekTab({ tenant }: { tenant: AdminTenantDetail }) {
 
   async function submit() {
     const ok = await create.run(
-      EP.tenants.supportAccess(tenant.id),
+      EP.tenants.supportAccess(tenantId),
       { method: "POST", body: { reason: reason.trim(), scope, hours } },
       {
         successMessage: "Destek erişim penceresi açıldı.",
@@ -695,7 +722,7 @@ function DestekTab({ tenant }: { tenant: AdminTenantDetail }) {
         open={open}
         onClose={() => setOpen(false)}
         title="Destek erişim penceresi aç"
-        subtitle={`POST /api/admin/v1${EP.tenants.supportAccess(tenant.id)}`}
+        subtitle={`POST /api/admin/v1${EP.tenants.supportAccess(tenantId)}`}
         wide
       >
         <div className="space-y-4">
@@ -756,7 +783,7 @@ function DestekTab({ tenant }: { tenant: AdminTenantDetail }) {
 
           {create.missing && (
             <EndpointMissingNotice
-              endpoint={EP.tenants.supportAccess(tenant.id)}
+              endpoint={EP.tenants.supportAccess(tenantId)}
               method="POST"
               what="Destek erişim talebi"
             />

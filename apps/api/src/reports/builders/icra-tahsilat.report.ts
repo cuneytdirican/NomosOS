@@ -167,6 +167,15 @@ export const icraTahsilatReport: ReportBuilder = async (ctx): Promise<ReportBody
 
   const totalFiles = stageRows.reduce((sum, r) => sum + intOf(r.dosya), 0);
 
+  const avgDays = durationRows[0]?.gun;
+  const avgDaysFileCount = intOf(durationRows[0]?.dosya);
+
+  // F2-Ö-14: para birimi ÖNCE çözülür — aşağıdaki filtreler ve toplamlar bu
+  // değeri kullanır (TDZ: tanım kullanımdan SONRA geldiğinde rapor her çağrıda
+  // ReferenceError atıyordu).
+  const primaryCurrency =
+    currencyRows.find((r) => r.currency === "TRY")?.currency ?? currencyRows[0]?.currency ?? "TRY";
+
   // F2-Ö-14: dönem tahsilatı yalnız İLK para birimi üzerinden toplanır; diğer
   // para birimleri ayrı satırda rapor edilir (Ö-11 kuralının birebir uygulanması).
   const periodCollected = periodCollections
@@ -175,12 +184,6 @@ export const icraTahsilatReport: ReportBuilder = async (ctx): Promise<ReportBody
   const periodCollectionCount = periodCollections
     .filter((r) => r.currency === primaryCurrency)
     .reduce((sum, r) => sum + r.adet, 0);
-
-  const avgDays = durationRows[0]?.gun;
-  const avgDaysFileCount = intOf(durationRows[0]?.dosya);
-
-  const primaryCurrency =
-    currencyRows.find((r) => r.currency === "TRY")?.currency ?? currencyRows[0]?.currency ?? "TRY";
 
   // TOPLAM ÖLÇÜLERİ YALNIZ TEK PARA BİRİMİNİ KAPSAR (Ö-11 kuyruğu).
   //

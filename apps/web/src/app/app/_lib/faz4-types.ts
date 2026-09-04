@@ -362,7 +362,8 @@ export interface DeadlineSuggestion {
 }
 
 export interface ExpertReportPatchResult extends ExpertReport {
-  deadlineSuggestion?: DeadlineSuggestion | null;
+  /** Sunucu bu alanı `deadline` adıyla döner (expert.service.ts:344). */
+  deadline?: DeadlineSuggestion | null;
 }
 
 export interface ExpertDiffItem {

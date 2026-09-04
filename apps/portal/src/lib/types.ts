@@ -61,16 +61,30 @@ export interface InviteInfo {
   message?: string;
 }
 
-/** Panel özeti — dört kart. Uç yoksa kartlar tek tek kendi kaynağından beslenir. */
+/** Panel özeti — GET /portal/dashboard gerçek yanıt şekli (portal.service.ts:85). */
 export interface DashboardSummary {
-  activeCaseCount?: number;
-  nextHearing?: PortalHearing | null;
-  openBalance?: Money | null;
-  openInvoiceCount?: number;
-  unreadMessageCount?: number;
-  lastMessageAt?: string | null;
-  clientName?: string;
-  lawyerName?: string;
+  cases?: {
+    /** Yayınlanmış dosyaların toplamı — büronun dosya sayısı DEĞİLDİR. */
+    total?: number;
+    active?: number;
+  };
+  upcomingHearings?: PortalHearing[];
+  finance?: {
+    publishedInvoiceCount?: number;
+    publishedPaymentCount?: number;
+    invoiceTotal?: Money;
+    paymentTotal?: Money;
+    openBalance?: Money;
+    currency?: string;
+    /** Kapsam uyarısı — arayüz bunu kullanıcıya göstermelidir. */
+    scope?: string;
+  };
+  messages?: {
+    total?: number;
+    lastMessageAt?: string | null;
+    lastFromOfficeAt?: string | null;
+    unreadTrackingAvailable?: boolean;
+  };
 }
 
 export interface PortalCase {
@@ -91,6 +105,10 @@ export interface PortalCase {
   summary?: string;
   lastUpdateAt?: string;
   nextHearing?: PortalHearing | null;
+  /** Liste ucu: en yakın yayınlanmış duruşma tarihi (nesne değil). */
+  nextPublishedHearingAt?: string | null;
+  /** Avukatın yayınlarken yazdığı, müvekkile gösterilen sade açıklama. */
+  publicationNote?: string | null;
   parties?: PortalParty[];
   documents?: PortalDocument[];
   timeline?: PortalTimelineEntry[];
@@ -190,11 +208,15 @@ export interface PortalPayment {
 }
 
 export interface PaymentsResponse {
+  /** GET /portal/payments gerçek zarfı: { items, total } (portal.service.ts). */
+  items?: PortalPayment[];
+  total?: number;
+  /** Eski/uyumsuz şekiller için toleranslı alanlar. */
+  payments?: PortalPayment[];
   openBalance?: Money;
   balance?: Money;
   currency?: string;
   invoices?: PortalInvoice[];
-  payments?: PortalPayment[];
 }
 
 export interface PortalMessage {

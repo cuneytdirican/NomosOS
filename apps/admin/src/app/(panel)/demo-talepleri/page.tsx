@@ -92,50 +92,50 @@ function DemoTalepleri() {
 
   const columns: Column<DemoRequestRow>[] = [
     {
-      key: "col_1", header: "Talep sahibiTalep sahibi",
+      key: "col_1", header: "Talep sahibi",
       render: (r) => (
         <div>
-          <p className="font-medium text-slate-900">{r.fullName}</p>
-          <p className="text-xs text-slate-500">{r.email}{r.phone ? ` · ${r.phone}` : ""}</p>
+          <p className="font-medium text-steel-100">{r.fullName}</p>
+          <p className="text-xs text-steel-500">{r.email}{r.phone ? ` · ${r.phone}` : ""}</p>
         </div>
       ),
     },
     {
-      key: "col_2", header: "BuroBüro",
+      key: "col_2", header: "Büro",
       render: (r) => (
         <div>
           <p>{r.barAssociation ?? "—"}</p>
-          {r.lawyerCount && <p className="text-xs text-slate-500">{r.lawyerCount} avukat</p>}
+          {r.lawyerCount && <p className="text-xs text-steel-500">{r.lawyerCount} avukat</p>}
         </div>
       ),
     },
     {
-      key: "col_3", header: "MesajMesaj",
+      key: "col_3", header: "Mesaj",
       render: (r) => (
-        <p className="max-w-xs truncate text-sm text-slate-600" title={r.message ?? ""}>
+        <p className="max-w-xs truncate text-sm text-steel-300" title={r.message ?? ""}>
           {r.message ?? "—"}
         </p>
       ),
     },
     {
-      key: "col_4", header: "DurumDurum",
+      key: "col_4", header: "Durum",
       render: (r) => <Badge tone={STATUS_TONES[r.status]}>{STATUS_LABELS[r.status]}</Badge>,
     },
     {
-      key: "col_5", header: "TarihTarih",
+      key: "col_5", header: "Tarih",
       render: (r) => (
-        <span className="whitespace-nowrap text-sm text-slate-600">
+        <span className="whitespace-nowrap text-sm text-steel-300">
           {new Date(r.createdAt).toLocaleString("tr-TR")}
         </span>
       ),
     },
     {
-      key: "col_6", header: "Islemİşlem",
+      key: "col_6", header: "İşlem",
       render: (r) => {
         if (!canMutate(role, "demoRequests.update")) {
-          return <span className="text-xs text-slate-400">Yalnız okuma</span>;
+          return <span className="text-xs text-steel-500">Yalnız okuma</span>;
         }
-        if (busyId === r.id) return <span className="text-xs text-slate-500">Güncelleniyor…</span>;
+        if (busyId === r.id) return <span className="text-xs text-steel-500">Güncelleniyor…</span>;
         return (
           <div className="flex gap-1.5">
             {r.status === "YENI" && (

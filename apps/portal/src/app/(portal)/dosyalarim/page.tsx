@@ -63,8 +63,11 @@ export default function CasesPage() {
 
 function CaseCard({ item }: { item: PortalCase }) {
   const court = firstOf(item.courtName, item.court);
-  const next = item.nextHearing;
-  const nextWhen = next?.scheduledAt ?? next?.date;
+  // Liste ucu duruşma NESNESİ değil, en yakın yayınlanmış duruşma TARİHİNİ
+  // döndürür (nextPublishedHearingAt); ayrıca avukatın yayın notu gelir.
+  const nextWhen = item.nextHearing
+    ? (item.nextHearing.scheduledAt ?? item.nextHearing.date)
+    : (item.nextPublishedHearingAt ?? null);
 
   return (
     <Link
@@ -91,7 +94,7 @@ function CaseCard({ item }: { item: PortalCase }) {
 
       <LatestUpdateLine
         entries={item.timeline}
-        fallback={firstOf(item.statusSummary, item.summary)}
+        fallback={firstOf(item.publicationNote, item.statusSummary, item.summary)}
         interactive={false}
       />
 

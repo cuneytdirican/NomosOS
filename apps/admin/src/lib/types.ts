@@ -63,27 +63,23 @@ export interface AdminTenantRow {
   aiPolicy?: string | null;
   autoMaskConsent?: boolean | null;
 
-  // Subscription (tenantId @unique) üzerinden birleştirilir
-  planKey?: string | null;
-  status?: string | null;
-  seats?: number | null;
-  trialEndsAt?: Iso | null;
-  currentPeriodStart?: Iso | null;
-  currentPeriodEnd?: Iso | null;
+  /** GET /tenants yanıtında abonelik bu NESNE içinde gelir (tenantId @unique). */
+  subscription?: {
+    id: string;
+    planKey?: string | null;
+    status?: string | null;
+    seats?: number | null;
+    trialEndsAt?: Iso | null;
+    currentPeriodStart?: Iso | null;
+    currentPeriodEnd?: Iso | null;
+  } | null;
 
-  // Toplulaştırılmış sayaçlar (UsageSnapshot / count)
+  // Toplulaştırılmış sayaçlar (gerçek alan adları — API yanıtıyla hizalı)
   userCount?: number | null;
   clientCount?: number | null;
   caseCount?: number | null;
   documentCount?: number | null;
-  storageBytes?: BytesValue;
-  aiCallCount?: number | null;
-  activeUsers?: number | null;
-  lastActivityAt?: Iso | null;
-
-  // Finans
-  mrr?: Money;
-  openBalance?: Money;
+  aiCallCount30d?: number | null;
 }
 
 export interface AdminAiProviderMeta {
@@ -96,10 +92,67 @@ export interface AdminAiProviderMeta {
   baseUrl?: string | null;
 }
 
-export interface AdminTenantDetail extends AdminTenantRow {
-  subscription?: AdminSubscription | null;
-  aiProviders?: AdminAiProviderMeta[];
-  usersByRole?: Record<string, number> | null;
+/** GET /tenants/:id — PlatformTenantsService.detail() gerçek yanıt şekli. */
+export interface AdminTenantDetail {
+  tenant: {
+    id: string;
+    name: string;
+    aiPolicy?: string | null;
+    autoMaskConsent?: boolean | null;
+    createdAt?: Iso;
+  };
+  subscription?: {
+    id: string;
+    planKey?: string | null;
+    status?: string | null;
+    seats?: number | null;
+    trialEndsAt?: Iso | null;
+    currentPeriodStart?: Iso | null;
+    currentPeriodEnd?: Iso | null;
+    canceledAt?: Iso | null;
+    note?: string | null;
+  } | null;
+  plan?: {
+    key: string;
+    name: string;
+    monthlyPricePerUser?: Money;
+    maxUsers?: number | null;
+    isActive?: boolean;
+  } | null;
+  counters: {
+    userCount?: number | null;
+    clientCount?: number | null;
+    caseCount?: number | null;
+    documentCount?: number | null;
+    aiCallCount30d?: number | null;
+  };
+  /** Son 30 günün UsageSnapshot'ları (tarihe göre azalan). */
+  usage?: Array<{
+    date: Iso;
+    activeUsers?: number | null;
+    caseCount?: number | null;
+    documentCount?: number | null;
+    aiCallCount?: number | null;
+    aiInputTokens?: number | null;
+    aiOutputTokens?: number | null;
+    storageBytes?: number | null;
+  }>;
+  activeSupportGrants?: number | null;
+  contentAccessNote?: string | null;
+}
+
+/** GET /tenants/:id/ai-config — sağlayıcı ÜSTVERİSİ (anahtar asla dönmez). */
+export interface AdminAiConfig {
+  items: Array<{
+    id: string;
+    name?: string | null;
+    type: string;
+    baseUrl?: string | null;
+    defaultModel?: string | null;
+    isActive?: boolean;
+    hasApiKey?: boolean;
+  }>;
+  note?: string | null;
 }
 
 // ------------------------------------------------------------ Abonelik
@@ -240,8 +293,16 @@ export interface AdminHealthCheck {
 export interface AdminHealthResponse {
   status?: string;
   uptimePct?: number | null;
+  uptimeSeconds?: number | null;
   checkedAt?: Iso | null;
   checks?: AdminHealthCheck[];
+  /** PlatformHealthService biçimi: { components: [{ component, status, latencyMs, detail }] } */
+  components?: Array<{
+    component: string;
+    status: string;
+    latencyMs?: number | null;
+    detail?: string | null;
+  }>;
   /** Nest terminus biçimi: { info: { db: { status: "up" } }, ... } */
   info?: Record<string, { status?: string } & Record<string, unknown>>;
   details?: Record<string, { status?: string } & Record<string, unknown>>;
@@ -251,34 +312,37 @@ export interface AdminHealthResponse {
 // -------------------------------------------------------------- Metrikler
 
 export interface AdminOverview {
-  totalTenants?: number | null;
-  activeTenants?: number | null;
-  trialTenants?: number | null;
-  suspendedTenants?: number | null;
-  pastDueTenants?: number | null;
-  canceledTenants?: number | null;
-  newTenantsThisMonth?: number | null;
-
-  mrr?: Money;
-  arr?: Money;
+  /** GET /metrics/overview — PlatformMetricsService'in gerçek (iç içe) yanıt şekli */
+  tenants?: {
+    total?: number | null;
+    newThisMonth?: number | null;
+    active?: number | null;
+    trial?: number | null;
+    pastDue?: number | null;
+    suspended?: number | null;
+    canceled?: number | null;
+    withoutSubscription?: number | null;
+  } | null;
+  revenue?: {
+    mrr?: Money;
+    arr?: Money;
+    currency?: string | null;
+    mrrUnknownSubscriptions?: number | null;
+  } | null;
+  attention?: {
+    failedPayments?: number | null;
+    trialEndingIn48h?: number | null;
+  } | null;
+  ai?: {
+    windowDays?: number | null;
+    callCount?: number | null;
+    inputTokens?: number | null;
+    outputTokens?: number | null;
+    note?: string | null;
+  } | null;
+  /** Sunucu bu alanları overview'da dönmüyorsa kartlar dürüstçe "—" gösterir. */
   churnPct?: number | null;
   trialConversionPct?: number | null;
-  totalSeats?: number | null;
-
-  dau?: number | null;
-  wau?: number | null;
-  mau?: number | null;
-
-  aiCallCount30d?: number | null;
-  aiInputTokens30d?: number | null;
-  aiOutputTokens30d?: number | null;
-  storageBytes?: BytesValue;
-
-  failedPayments?: number | null;
-  pendingApprovals?: number | null;
-  activeSupportGrants?: number | null;
-  trialsEndingSoon?: number | null;
-  uptimePct?: number | null;
 }
 
 /** GET /metrics/usage?from=&to= — UsageSnapshot serisi. */

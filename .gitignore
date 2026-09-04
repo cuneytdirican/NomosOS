@@ -11,3 +11,5 @@ coverage/
 .DS_Store
 minio-data/
 postgres-data/
+
+# Tarayýcý test anlýk görüntüleri (canlý doðrulama çýktýlarý).playwright-mcp/

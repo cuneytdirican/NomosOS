@@ -37,11 +37,19 @@ import { providerUnreachable } from "../common/errors";
 import { assertRole, ROLE_SETS } from "../common/roles";
 import { readProviderHeaders } from "../common/provider-headers";
 import type { AuthUser } from "../common/types";
+import { composeSystemPrompt } from "@nomosos/legal-ai";
 
-const SYSTEM_PROMPT =
+/**
+ * /ai/chat SİSTEM PROMPTU — 11 kurallı ÇEKİRDEK SÖZLEŞMEYE bağlıdır
+ * (legal-ai system-core.ts). Eskiden burada 3 cümlelik yerel bir özet
+ * duruyordu; tarafsızlık, atıf disiplini, uydurma yasağı ve veri/talimat
+ * ayrımı kuralları bu uca hiç ulaşmıyordu ve prompts.test.ts sözleşmesi
+ * bu promptu kapsamıyordu.
+ */
+const SYSTEM_PROMPT = composeSystemPrompt(
   "Sen NomosOS hukuk asistanısın. Türk hukuku alanında çalışan avukatlara yardımcı olursun. " +
-  "Yanıtlarında mümkün olduğunca kaynak göster (kanun maddesi, içtihat); emin olmadığın konularda bunu açıkça belirt. " +
-  "Çıktın yalnızca öneri niteliğindedir; nihai değerlendirme için avukat onayı gerekir.";
+    "Yanıtların yalnızca öneri niteliğindedir; nihai değerlendirme için avukat onayı gerekir.",
+);
 
 /**
  * YANIT BEYAZ LİSTESİ (denetim bulgusu K-08).

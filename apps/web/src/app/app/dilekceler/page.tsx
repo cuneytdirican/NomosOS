@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
+import { exportPetitionUdf } from "@/lib/faz2";
 import {
   Badge,
   Button,
@@ -366,11 +367,10 @@ export default function DilekceStudyoPage() {
     setBusyAction("udf");
     setActionError(null);
     try {
-      const res = await api<{ url: string; filename: string; expiresIn: number }>(
-        `/petitions/${detail.id}/export/udf`,
-        { method: "POST", body: {} },
-      );
-      setUdfUrl(res.url);
+      // exportPetitionUdf: imzalı URL (downloadUrl) ya da üretilen belge —
+      // sunucu sözleşmesiyle hizalı tek yardımcı; ayrıca mevzuat atıf beyanı
+      // gerekiyorsa 422 hatasını anlaşılır biçimde iletir.
+      setUdfUrl(await exportPetitionUdf(detail.id));
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : "UDF üretilemedi.");
     } finally {

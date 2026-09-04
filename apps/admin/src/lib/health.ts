@@ -1,7 +1,9 @@
 /**
  * GET /api/admin/v1/health yanıtını tek bir kontrol listesine indirger.
  *
- * İki biçim desteklenir:
+ * Üç biçim desteklenir:
+ *  - PlatformHealthService (asıl): { status, checkedAt, uptimeSeconds,
+ *    components: [{ component, status, latencyMs, detail }] }
  *  - { checks: [{ key, label, status, value, detail, checkedAt }] }
  *  - Nest Terminus: { status, info: { db: { status: "up" } }, details: {...}, error: {...} }
  *
@@ -15,11 +17,13 @@ const CHECK_LABELS: Record<string, string> = {
   db: "PostgreSQL",
   database: "PostgreSQL",
   postgres: "PostgreSQL",
+  postgresql: "PostgreSQL",
   prisma: "PostgreSQL",
   redis: "Redis",
   cache: "Redis",
   storage: "MinIO / Depo",
   s3: "MinIO / Depo",
+  minio: "MinIO / Depo",
   queue: "Kuyruk (BullMQ)",
   bullmq: "Kuyruk (BullMQ)",
   api: "API",
@@ -38,6 +42,18 @@ function detailText(raw: Record<string, unknown> | undefined): string | null {
 
 export function normalizeHealth(payload: AdminHealthResponse | null): AdminHealthCheck[] {
   if (!payload) return [];
+
+  // PlatformHealthService biçimi: components: [{ component, status, latencyMs, detail }]
+  if (Array.isArray(payload.components) && payload.components.length > 0) {
+    return payload.components.map((c) => ({
+      key: c.component,
+      label: CHECK_LABELS[c.component] ?? c.component,
+      status: normalizeHealthStatus(c.status),
+      value: typeof c.latencyMs === "number" ? `${c.latencyMs} ms` : null,
+      detail: c.detail ?? null,
+      checkedAt: payload.checkedAt ?? null,
+    }));
+  }
 
   if (Array.isArray(payload.checks) && payload.checks.length > 0) {
     return payload.checks.map((c) => ({

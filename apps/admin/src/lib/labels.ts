@@ -203,6 +203,25 @@ export const APPROVAL_ACTION_LABELS: Record<string, string> = {
   "platform_user.assign_super_admin": "SUPER_ADMIN atama / düşürme",
   "platform_user.delete": "Platform kullanıcısı pasifleştirme",
   "audit.export": "Denetim izi dışa aktarımı",
+  // Dört-göz KATALOG anahtarları (approval-actions.ts) — API bu anahtarları
+  // PlatformApprovalRequest.action alanında döner.
+  TENANT_CREATE: "Yeni kiracı açma",
+  TENANT_DELETE: "Tenant kalıcı silme / veri imhası",
+  TENANT_SUSPEND: "Tenant askıya alma",
+  TENANT_ACTIVATE: "Tenant aktifleştirme",
+  SUBSCRIPTION_PLAN_CHANGE: "Plan değiştirme",
+  SUBSCRIPTION_CANCEL: "Abonelik iptali",
+  PAYMENT_REFUND: "Ödeme iadesi",
+  SUPPORT_ACCESS_GRANT: "Destek erişim penceresi",
+  SYSTEM_MAINTENANCE_LOCK: "Bakım modu tam kilidi",
+  FEATURE_FLAG_GLOBAL: "Platform geneli flag değişikliği",
+  PLATFORM_USER_SUPER_ADMIN: "SUPER_ADMIN atama / düşürme",
+  PLATFORM_USER_CREATE: "Panel personeli açma",
+  PLATFORM_USER_CREDENTIAL_RESET: "Parola / 2FA sıfırlama",
+  PLAN_PRICE_CHANGE: "Plan kataloğu fiyat değişikliği",
+  CREDIT_MANUAL_ADJUST: "Manuel kredi tahsisi / düzeltme",
+  PLAN_CREATE: "Yeni plan oluşturma",
+  AUDIT_EXPORT: "Denetim izi dışa aktarımı",
 };
 
 // ---------- Destek erişimi ----------

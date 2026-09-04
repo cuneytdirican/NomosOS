@@ -23,7 +23,50 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 4 Eylül 2026, 08:00
+# 🔖 KALDIĞIM YER — 4 Eylül 2026, 09:50
+
+> **ÜÇ YÜZEY CANLI MODÜL TESTİ TAMAMLANDI (admin paneli + büro/avukat + müvekkil
+> portalı) — bulunan hatalar düzeltildi ve canlı olarak doğrulandı.**
+
+1. **Canlı test kapsamı:** admin paneli 17 sayfa (giriş→genel bakış→tenantlar→detay
+   4 sekme→abonelikler→ödemeler→AI kullanımı→krediler→onaylar→işler→sistem 4 sekme→
+   yöneticiler→denetim→yargı→içtihat havuzu→eğitim→AI sağlayıcılar→demo talepleri);
+   büro tarafı tüm modüller + etkileşimli akışlar (finans, faturalar, zaman kayıtlarından
+   fatura, bilirkişi, süreler, öneri onayı, raporlar); portal 8 sayfa + randevu + mesaj
+   akışları.
+2. **Düzeltilen hatalar (canlı doğrulandı):**
+   - **Admin:** /metrics/overview kart şekli (iç içe tenants/revenue/ai'ye bağlandı),
+     sağlık kartı `components` şekli (PostgreSQL/Redis + gecikme artık görünüyor),
+     tenant listesi `subscription` nesnesi + `aiCallCount30d`, tenant detayı gerçek
+     şekle (counters/usage/plan) yeniden yazıldı + AI üstverisi ayrı uçtan, /isler
+     sayfası gerçek sözleşmeye yazıldı (koşu geçmişi modalı + PATCH ayarla), onay
+     kataloğu etiketleri, demo talepleri çift başlıklar.
+   - **Büro:** zaman kayıtlarından fatura artık ADANAN `from-time-entries` ucuna
+     gidiyor (12.375₺ taslak canlı oluşturuldu), bilirkişi süre önerisi `deadline`
+     alanından okunuyor (HMK m.281 önerisi canlı oluştu), finans özet kartları
+     periodTotals'tan eşleniyor (28.000₺ tahsilat görünüyor), tarih filtreleri
+     `from`/`to` gönderiyor, dilekçe stüdyosu UDF dışa aktarımı ortak yardımcıya
+     geçti, manuel süre modalı BEKLIYOR açılıyor + rol bilinçli sunucu varsayılanı,
+     ajanda kontrolde/onay bekleyen görevleri gösteriyor.
+   - **Portal:** ana sayfa gerçek dashboard şekline bağlandı (4 kart dolu), dosya
+     kartı `nextPublishedHearingAt`/`publicationNote` okuyor.
+   - **API (P0):** icra-tahsilat raporu TDZ hatası (canlı 200 + 14 ms), seed
+     `segmentAdded` çökmesi, platform sağlayıcı `headersJson` şifrelemesi (K-08
+     platform tarafı), `/ai/chat` promptu legal-ai çekirdek sözleşmesine bağlandı
+     (+ regresyon testi).
+3. **Doğrulama:** build 12/12 · typecheck 20/20 · lint 0/0 · testler 1313/1313
+   (yeni: ai-chat-prompt-contract). Test yığını 7/7 sağlıklı; tüm yüzeyler 200.
+
+## Sırada
+
+1. Plan Aşama 1'den kalanlar: BANKA_CEVABI ölü yolu (MALVARLIGI), UYAP pipeline
+   tetikleme, kısmi iade tutarı, rol hiyerarşisi sunucu tarafı.
+2. Plan Aşama 4 test borcu (petition-gate, balance engine).
+3. `FINAL-COMPLETION-REPORT.md` üretimi (Aşama 9 kapanışı).
+
+---
+
+## 🔖 ÖNCEKİ KALDIĞIM YER — 4 Eylül 2026, 08:00
 
 > **Bağımsız final denetim TAM OKUMA tamamlandı + Docker üretim/topoloji güncellendi.**
 > 8 dikey kesit ajanı depoyu baştan sona okudu (~1.000 dosya); bulgular

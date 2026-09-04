@@ -27,7 +27,6 @@ import {
   Select,
   Spinner,
   StatCard,
-  Textarea,
 } from "@/components/ui";
 import { RemoteSelect } from "@/components/remote-select";
 import { ComputeNote } from "@/components/compute-note";
@@ -490,7 +489,6 @@ function ManualDeadlineModal({
   const [title, setTitle] = useState("");
   const [dueDate, setDueDate] = useState(toIsoDate(new Date()));
   const [legalBasis, setLegalBasis] = useState("");
-  const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -504,23 +502,22 @@ function ManualDeadlineModal({
     setSaving(true);
     setError(null);
     try {
+      // `source`/`computeNote` şemada YOK (sahte hesap izini engeller — Zod
+      // sessizce atar); `status` gönderilmezse kayıt BEKLIYOR açılır ve avukat
+      // onayıyla kesinleşir — ONAYLANDI yalnız HUKUKI rollerin yetkisidir.
       await api("/deadlines", {
         method: "POST",
         body: {
           caseId,
           title: title.trim(),
           dueDate: new Date(dueDate).toISOString(),
-          source: "MANUEL",
-          status: "ONAYLANDI",
           legalBasis: legalBasis.trim() || undefined,
-          computeNote: note.trim() || undefined,
         },
       });
       onSaved();
       onClose();
       setTitle("");
       setLegalBasis("");
-      setNote("");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Süre kaydedilemedi.");
     } finally {
@@ -574,9 +571,10 @@ function ManualDeadlineModal({
             placeholder="Örn. Duruşma ara kararı"
           />
         </Field>
-        <Field label="Not">
-          <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
-        </Field>
+        <p className="text-xs text-slate-500">
+          Kayıt <strong>BEKLIYOR</strong> olarak açılır; Süreler ekranından avukat onayıyla
+          kesinleşir. Hesap izi (kural, adımlar) yalnız kural motorundan üretilir — elle girilemez.
+        </p>
 
         {error && <ErrorBox message={error} />}
 

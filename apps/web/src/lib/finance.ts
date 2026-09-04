@@ -50,8 +50,14 @@ export interface FinanceEntryQuery {
 export async function listFinanceEntriesPaged(
   query: FinanceEntryQuery & { page?: number } = {},
 ): Promise<PagedResult<FinanceEntry>> {
-  const { page, limit, ...filters } = query;
-  return fetchPaged<FinanceEntry>(FINANCE_ROUTES.entries, { query: { ...filters }, page, limit });
+  // Sunucu sözleşmesi ?from=&to= (finance.controller.ts); istemci arayüzü
+  // dateFrom/dateTo adını kullanır — burada tek noktada çevrilir.
+  const { page, limit, dateFrom, dateTo, ...filters } = query;
+  return fetchPaged<FinanceEntry>(FINANCE_ROUTES.entries, {
+    query: { ...filters, from: dateFrom, to: dateTo },
+    page,
+    limit,
+  });
 }
 
 export function listFinanceEntries(query: FinanceEntryQuery = {}): Promise<FinanceEntry[]> {
@@ -97,6 +103,7 @@ export function getCaseFinanceSummary(caseId: string): Promise<ClientFinanceSumm
  * (denetim bulgusu 12).
  */
 export interface OfficeReportQuery {
+  /** Sunucu sözleşmesi: ?from=&to= (finance.controller.ts @Query("from"/"to")). */
   dateFrom?: string;
   dateTo?: string;
   period?: string;
@@ -105,10 +112,28 @@ export interface OfficeReportQuery {
 export async function getOfficeReport(
   query: OfficeReportQuery = {},
 ): Promise<OfficeFinanceReport> {
-  const report = await api<OfficeFinanceReport & { receivables?: unknown }>(
-    FINANCE_ROUTES.summary,
-    { query: { ...query } },
-  );
+  const { dateFrom, dateTo, ...rest } = query;
+  const raw = await api<
+    OfficeFinanceReport & {
+      receivables?: unknown;
+      periodTotals?: Array<Record<string, unknown>>;
+      allTimeTotals?: Array<Record<string, unknown>>;
+    }
+  >(FINANCE_ROUTES.summary, { query: { ...rest, from: dateFrom, to: dateTo } });
+
+  // Sunucu özeti para birimi kovalarıyla döner ({periodTotals, allTimeTotals});
+  // kartların okuduğu düz alanlara İLK kova üzerinden haritalanır.
+  const period = raw.periodTotals?.[0];
+  const allTime = raw.allTimeTotals?.[0];
+  const report: OfficeFinanceReport = {
+    ...raw,
+    currency: (period?.currency as string) ?? raw.currency,
+    monthAccrued: (period?.accrued as string) ?? raw.monthAccrued,
+    monthCollected: (period?.netCollected as string) ?? raw.monthCollected,
+    totalOutstanding: (allTime?.outstanding as string) ?? raw.totalOutstanding,
+    totalExpenses: (allTime?.expenses as string) ?? raw.totalExpenses,
+    advanceBalance: (allTime?.advanceBalance as string) ?? raw.advanceBalance,
+  };
 
   const hasAging = Array.isArray(report.aging) && report.aging.length > 0;
   if (hasAging) return report;
@@ -117,7 +142,7 @@ export async function getOfficeReport(
   // okuyabilmek için tek yardımcıdan geçirilir.
   return {
     ...report,
-    aging: readAging(report.receivables ?? report),
+    aging: readAging(raw.receivables ?? report),
     topDebtors: report.topDebtors ?? readTopDebtors(report),
   };
 }

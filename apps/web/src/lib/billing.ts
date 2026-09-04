@@ -201,6 +201,16 @@ export function createInvoice(body: CreateInvoiceBody): Promise<Invoice> {
   return api<Invoice>(BILLING_ROUTES.invoices, { method: "POST", body: clean(body) });
 }
 
+/**
+ * Zaman kayıtlarından fatura — AYRI uç (POST /billing/invoices/from-time-entries).
+ * Satırları ve tutarları SUNUCU üretir; istemci yalnız aralık/seçim gönderir.
+ */
+export function createInvoiceFromTimeEntries(
+  body: CreateInvoiceBody & { from: string; to: string; caseId?: string | null; vatRate?: string },
+): Promise<Invoice> {
+  return api<Invoice>(BILLING_ROUTES.invoicesFromTimeEntries, { method: "POST", body: clean(body) });
+}
+
 /** Kesinleştirme — fatura numarası SUNUCUDA atanır (taslaklar numara tüketmez). */
 export function approveInvoice(id: string): Promise<Invoice> {
   return api<Invoice>(BILLING_ROUTES.invoiceFinalize(id), { method: "POST", body: {} });

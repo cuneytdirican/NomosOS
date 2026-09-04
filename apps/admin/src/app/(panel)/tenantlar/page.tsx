@@ -23,10 +23,7 @@ import {
   SUBSCRIPTION_STATUSES,
   SUBSCRIPTION_STATUS_LABELS,
   SUBSCRIPTION_STATUS_TONES,
-  fmtBytes,
   fmtCompact,
-  fmtDateTime,
-  fmtMoney,
   fmtNumber,
   labelOf,
   toneOf,
@@ -185,7 +182,7 @@ function TenantList() {
 
   const planOptions = useMemo(() => {
     const set = new Set<string>(KNOWN_PLANS);
-    for (const t of res.data) if (t.planKey) set.add(t.planKey);
+    for (const t of res.data) if (t.subscription?.planKey) set.add(t.subscription.planKey);
     return [...set];
   }, [res.data]);
 
@@ -210,35 +207,36 @@ function TenantList() {
       header: "Plan / Durum",
       render: (t) => (
         <div className="flex flex-wrap gap-1.5">
-          {t.planKey ? (
-            <Badge tone={toneOf(PLAN_TONES, t.planKey)}>{labelOf(PLAN_LABELS, t.planKey)}</Badge>
+          {t.subscription?.planKey ? (
+            <Badge tone={toneOf(PLAN_TONES, t.subscription.planKey)}>
+              {labelOf(PLAN_LABELS, t.subscription.planKey)}
+            </Badge>
           ) : (
             <span className="text-xs text-steel-600">abonelik yok</span>
           )}
-          {t.status && (
-            <Badge tone={toneOf(SUBSCRIPTION_STATUS_TONES, t.status)}>
-              {labelOf(SUBSCRIPTION_STATUS_LABELS, t.status)}
+          {t.subscription?.status && (
+            <Badge tone={toneOf(SUBSCRIPTION_STATUS_TONES, t.subscription.status)}>
+              {labelOf(SUBSCRIPTION_STATUS_LABELS, t.subscription.status)}
             </Badge>
           )}
         </div>
       ),
     },
-    { key: "seats", header: "Koltuk", align: "right", render: (t) => fmtNumber(t.seats) },
+    {
+      key: "seats",
+      header: "Koltuk",
+      align: "right",
+      render: (t) => fmtNumber(t.subscription?.seats),
+    },
     { key: "users", header: "Kullanıcı", align: "right", render: (t) => fmtNumber(t.userCount) },
     { key: "cases", header: "Dosya", align: "right", render: (t) => fmtNumber(t.caseCount) },
-    { key: "storage", header: "Depo", align: "right", render: (t) => fmtBytes(t.storageBytes) },
+    { key: "documents", header: "Belge", align: "right", render: (t) => fmtNumber(t.documentCount) },
     {
       key: "ai",
-      header: "AI çağrısı",
+      header: "AI çağrısı (30g)",
       align: "right",
-      render: (t) => <span className="font-mono text-steel-200">{fmtCompact(t.aiCallCount)}</span>,
-    },
-    { key: "mrr", header: "MRR", align: "right", render: (t) => fmtMoney(t.mrr) },
-    {
-      key: "last",
-      header: "Son aktivite",
       render: (t) => (
-        <span className="text-xs text-steel-400">{fmtDateTime(t.lastActivityAt)}</span>
+        <span className="font-mono text-steel-200">{fmtCompact(t.aiCallCount30d)}</span>
       ),
     },
   ];
@@ -260,14 +258,13 @@ function TenantList() {
               exportCsv("tenantlar", res.data, [
                 { key: "id", header: "Tenant ID", value: (t) => t.id },
                 { key: "name", header: "Büro", value: (t) => t.name },
-                { key: "plan", header: "Plan", value: (t) => t.planKey ?? "" },
-                { key: "status", header: "Durum", value: (t) => t.status ?? "" },
-                { key: "seats", header: "Koltuk", value: (t) => t.seats ?? "" },
+                { key: "plan", header: "Plan", value: (t) => t.subscription?.planKey ?? "" },
+                { key: "status", header: "Durum", value: (t) => t.subscription?.status ?? "" },
+                { key: "seats", header: "Koltuk", value: (t) => t.subscription?.seats ?? "" },
                 { key: "users", header: "Kullanıcı", value: (t) => t.userCount ?? "" },
                 { key: "cases", header: "Dosya", value: (t) => t.caseCount ?? "" },
-                { key: "storage", header: "Depolama (bayt)", value: (t) => String(t.storageBytes ?? "") },
-                { key: "ai", header: "AI çağrısı", value: (t) => t.aiCallCount ?? "" },
-                { key: "mrr", header: "MRR", value: (t) => String(t.mrr ?? "") },
+                { key: "documents", header: "Belge", value: (t) => t.documentCount ?? "" },
+                { key: "ai", header: "AI çağrısı (30g)", value: (t) => t.aiCallCount30d ?? "" },
               ])
             }
           >
@@ -350,15 +347,17 @@ function MaskedTenantView({
 }) {
   const byPlan = useMemo(() => {
     const map = new Map<string, number>();
-    for (const t of state.data) map.set(t.planKey ?? "—", (map.get(t.planKey ?? "—") ?? 0) + 1);
+    for (const t of state.data)
+      map.set(t.subscription?.planKey ?? "—", (map.get(t.subscription?.planKey ?? "—") ?? 0) + 1);
     return [...map.entries()].map(([plan, count]) => ({ plan, count }));
   }, [state.data]);
 
   const byStatus = useMemo(() => {
     const map = new Map<string, number>();
-    for (const t of state.data) map.set(t.status ?? "—", (map.get(t.status ?? "—") ?? 0) + 1);
+    for (const t of state.data)
+      map.set(t.subscription?.status ?? "—", (map.get(t.subscription?.status ?? "—") ?? 0) + 1);
     return [...map.entries()].map(([status, count]) => ({ status, count }));
-  }, [state.data]);
+  }, [state.data]);;
 
   return (
     <div className="space-y-6">

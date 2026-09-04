@@ -25,6 +25,7 @@ import { errText, isMissingEndpoint } from "@/lib/faz2";
 import {
   DEFAULT_VAT_RATE,
   createInvoice,
+  createInvoiceFromTimeEntries,
   listInvoicesPaged,
   listUnbilledTimeEntries,
   type InvoiceLineInput,
@@ -620,10 +621,12 @@ function TimeEntryInvoiceModal({
     setError(null);
     try {
       // Satırları ve tutarları SUNUCU üretir: seçilen kayıtların id'lerini
-      // gönderiyoruz, saat × tarife hesabını istemci YAPMIYOR.
-      const inv = await createInvoice({
+      // adanmış uca gönderiyoruz; saat × tarife hesabını istemci YAPMIYOR.
+      const inv = await createInvoiceFromTimeEntries({
         clientId,
         issueDate,
+        from: dateFrom,
+        to: dateTo,
         timeEntryIds: chosen.map((t) => t.id),
       });
       onCreated(inv);
