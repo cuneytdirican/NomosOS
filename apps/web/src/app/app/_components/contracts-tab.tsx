@@ -15,6 +15,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import type { CaseSummary } from "@/lib/types";
 import {
   Badge,
@@ -415,6 +416,17 @@ function ContractRow({
           )}
         </div>
       </details>
+
+      {/* Sözleşme Analizi ve Simülasyon modülüne köprü — iki taraflı analiz,
+          şerhler, versiyon diff'i ve süreç akışı orada yürür. */}
+      <div className="mt-3">
+        <Link
+          href={`/app/sozlesmeler/${contract.id}`}
+          className="text-xs font-medium text-slate-600 hover:text-amber-600"
+        >
+          Analiz, şerhler ve sürüm karşılaştırması →
+        </Link>
+      </div>
 
       {/* İmza talepleri */}
       {signatures.length > 0 && (
