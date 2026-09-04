@@ -17,6 +17,7 @@ const KIND_LABELS: Record<NotificationKind, string> = {
   KREDI_AZALDI: "Kredi azaldı",
   SOZLESME_YENILEME: "Sözleşme yenileme",
   VEKALET_SURESI: "Vekalet süresi",
+  SOZLESME_KRITIK_SHERH: "Kritik sözleşme şerhi",
 };
 
 /**

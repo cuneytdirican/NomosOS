@@ -15,6 +15,7 @@ import {
   availableCredits,
   contextMultiplier,
   estimateCredits,
+  estimateUnitsCredits,
   nextPeriod,
   planQuota,
   settledBalance,
@@ -177,5 +178,36 @@ describe("usagePercent", () => {
   it("0-100 aralığının dışına çıkmaz", () => {
     expect(usagePercent(wallet({ includedConsumed: 900 }))).toBe(100);
     expect(usagePercent(wallet({ includedCredits: 0, purchasedCredits: 0 }))).toBe(0);
+  });
+});
+
+describe("estimateUnitsCredits — parça bazlı fiyat (sözleşme analizi map-reduce)", () => {
+  it("toplam = parça sayısı × parça başına tahmin", () => {
+    // 24.000 karakter ≈ 6.858 token < 8.000 (çarpansız bant) → parça başına taban fiyat.
+    const { perUnit, total } = estimateUnitsCredits(25, { count: 14, charsPerUnit: 24_000 });
+    expect(perUnit).toBe(25);
+    expect(total).toBe(14 * 25);
+  });
+
+  it("tek parça önceki davranışla aynı banda iner (bağlam çarpanı parça başına)", () => {
+    // 40.000 karakter ≈ 11.429 token → 1,25 çarpan → 31,25 → 32 kredi.
+    expect(estimateUnitsCredits(25, { count: 1, charsPerUnit: 40_000 })).toEqual({
+      perUnit: 32,
+      total: 32,
+    });
+  });
+
+  it("çok uzun parça bağlam çarpanı taşır (parça başına), toplam ölçeklenir", () => {
+    // 100.000 karakter ≈ 28.572 token → 1 + 3×0.25 = 1.75 çarpan → 44 kredi/parça.
+    const { perUnit, total } = estimateUnitsCredits(25, { count: 3, charsPerUnit: 100_000 });
+    expect(perUnit).toBe(44);
+    expect(total).toBe(132);
+  });
+
+  it("ücretsiz görevde (taban 0) toplam her zaman 0'dır", () => {
+    expect(estimateUnitsCredits(0, { count: 50, charsPerUnit: 24_000 })).toEqual({
+      perUnit: 0,
+      total: 0,
+    });
   });
 });

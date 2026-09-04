@@ -54,6 +54,7 @@ import type {
   CancelSignatureRequestInput,
   CreateSignatureRequestInput,
 } from "./contracts.dto";
+import { appendContractEvent } from "./contract-events";
 
 @Injectable()
 export class ContractsSignatureService {
@@ -234,6 +235,17 @@ export class ContractsSignatureService {
         `sözleşme=${contract.id} sürüm=v${version.versionNo} sağlayıcı=${providerKey} ` +
         `yöntem=${input.method} imzacı=${normalized.length}`,
     });
+
+    // SÜREÇ AKIŞI (append-only): imza daveti gerçekten gittiyse GONDERILDI.
+    if (result.status === "GONDERILDI") {
+      await appendContractEvent(this.prisma.client, {
+        tenantId: user.tenantId,
+        contractId: contract.id,
+        type: "GONDERILDI",
+        detail: `v${version.versionNo} imzaya gönderildi — sağlayıcı ${providerKey}, ${normalized.length} imzacı.`,
+        user,
+      });
+    }
 
     return this.present(created, result.signers);
   }
@@ -422,6 +434,15 @@ export class ContractsSignatureService {
     // takıldığında sözleşme, imzalı nüsha hiç alınmadan yürürlüğe girecekti.
     if (remoteStatus === "IMZALANDI") {
       await this.captureSignedDocument(user, { ...record, ...updated }, provider);
+      // SÜREÇ AKIŞI (append-only): imza tamamlandı. Olay yazımı ana akışı
+      // bozmaz; sözleşme yürürlüğe kendiliğinden GİRMEZ.
+      await appendContractEvent(this.prisma.client, {
+        tenantId: user.tenantId,
+        contractId: record.contractId,
+        type: "IMZALANDI",
+        detail: `İmza süreci tamamlandı (süreç ${record.id}, sağlayıcı ${record.provider}).`,
+        user,
+      });
       return this.prisma.client.signatureRequest.findUniqueOrThrow({ where: { id: record.id } });
     }
 

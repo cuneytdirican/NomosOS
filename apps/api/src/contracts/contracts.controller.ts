@@ -211,9 +211,20 @@ export class ContractsController {
 export class ContractVersionsController {
   constructor(private readonly contracts: ContractsService) {}
 
+  /**
+   * Sürüm metni — İSTEĞE BAĞLI SAYFA ARALIĞI (`?pageFrom=&pageTo=`).
+   * Aralık verilmezse kısa sürümlerin tamamı döner; uzun sürümlerde (tavan
+   * ~150.000 karakter) aralık ZORUNLUDUR — tek istekte yüzlerce sayfa metin
+   * döndürülmez.
+   */
   @Get(":id")
-  detail(@CurrentUser() user: AuthUser, @Param("id") id: string) {
-    return this.contracts.versionDetail(user, id);
+  detail(
+    @CurrentUser() user: AuthUser,
+    @Param("id") id: string,
+    @Query("pageFrom") pageFrom?: string,
+    @Query("pageTo") pageTo?: string,
+  ) {
+    return this.contracts.versionDetail(user, id, { pageFrom, pageTo });
   }
 }
 

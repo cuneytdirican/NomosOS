@@ -1846,6 +1846,66 @@ export const SIGNATURE_STATUS_TONES: Record<string, BadgeTone> = {
   IPTAL: "gray",
 };
 
+// ---------- Sözleşme Analizi ve Simülasyon (Modül 20 eklentisi) ----------
+
+export const CONTRACT_ANALYSIS_MODES = ["ILK", "REVIZYON", "NIHAI"] as const;
+
+export const CONTRACT_ANALYSIS_MODE_LABELS: Record<string, string> = {
+  ILK: "İlk inceleme",
+  REVIZYON: "Revizyon incelemesi",
+  NIHAI: "Nihai kontrol (imza öncesi)",
+};
+
+export const CONTRACT_ANNOTATION_STATUSES = ["ACIK", "KAPALI", "SUPERSEDED"] as const;
+
+export const CONTRACT_ANNOTATION_STATUS_LABELS: Record<string, string> = {
+  ACIK: "Açık",
+  KAPALI: "Kapalı",
+  SUPERSEDED: "Geçersizleşti (revizyon)",
+};
+
+export const CONTRACT_ANNOTATION_STATUS_TONES: Record<string, BadgeTone> = {
+  ACIK: "yellow",
+  KAPALI: "green",
+  SUPERSEDED: "gray",
+};
+
+/** Şerh şiddeti — KRITIK kırmızı, ORTA turuncu, DUSUK sarı kenarlık. */
+export const CONTRACT_SEVERITY_TONES: Record<string, BadgeTone> = {
+  KRITIK: "danger",
+  ORTA: "red",
+  DUSUK: "yellow",
+};
+
+export const CONTRACT_EVENT_TYPE_LABELS: Record<string, string> = {
+  YUKLENDI: "Sürüm yüklendi",
+  GONDERILDI: "İmzaya gönderildi",
+  REVIZYON_ALINDI: "Revizyon alındı",
+  ANALIZ: "Analiz çalıştı",
+  SHERH_KAPANDI: "Şerh kapatıldı",
+  MUVEKKIL_BILGILENDIRILDI: "Müvekkil bilgilendirildi",
+  IMZALANDI: "İmzalandı",
+};
+
+export const CONTRACT_RISK_BAND_LABELS: Record<string, string> = {
+  DUSUK: "Düşük risk",
+  ORTA: "Orta risk",
+  YUKSEK: "Yüksek risk",
+};
+
+export const CONTRACT_RISK_BAND_TONES: Record<string, BadgeTone> = {
+  DUSUK: "green",
+  ORTA: "yellow",
+  YUKSEK: "red",
+};
+
+/** Skor → band (sunucudaki riskBandOf ile aynı eşikler). */
+export function contractRiskBand(score: number): "DUSUK" | "ORTA" | "YUKSEK" {
+  if (score >= 60) return "YUKSEK";
+  if (score >= 30) return "ORTA";
+  return "DUSUK";
+}
+
 /** Sözleşme yenileme/fesih ihbar uyarısının aciliyet tonu. */
 export function renewalTone(days: number | null | undefined): BadgeTone {
   if (days === null || days === undefined) return "gray";

@@ -3954,6 +3954,11 @@ model Contract {
 
   versions          ContractVersion[]
   signatureRequests SignatureRequest[]
+  analysisRuns      ContractAnalysisRun[]
+  clauseAnnotations ContractClauseAnnotation[]
+  versionDiffs      ContractVersionDiff[]
+  events            ContractEvent[]
+  notifySetting     ContractNotifySetting?
 
   @@index([tenantId, status])
   @@index([tenantId, effectiveTo])
@@ -3977,6 +3982,8 @@ model ContractVersion {
   createdAt   DateTime @default(now())
 
   signatureRequests SignatureRequest[]
+  /// Bu sürüm üzerinde koşan sözleşme analizleri (ContractAnalysisRun).
+  analysisRuns     ContractAnalysisRun[]
 
   @@unique([contractId, versionNo])
   @@index([contractId, createdAt])
@@ -4057,6 +4064,9 @@ enum NotificationKind {
   KREDI_AZALDI
   SOZLESME_YENILEME
   VEKALET_SURESI
+  /// Sözleşme Analizi — analizde KRİTİK şerh çıktığında avukata bildirim
+  /// (yalnızca ContractNotifySetting = OTOMATIK iken üretilir).
+  SOZLESME_KRITIK_SHERH
 }
 
 enum NotificationStatus {
@@ -4294,4 +4304,201 @@ model HepoClientObligation {
   @@index([tenantId, status])
   @@index([tenantId, dueDate])
   @@index([clientId])
+}
+
+// ===========================================================================
+// SÖZLEŞME ANALİZİ VE SİMÜLASYON (plans/sozlesme-analiz-ve-simulasyon-modulu-plani.md)
+// ===========================================================================
+// Mevcut `contracts` modülü (Contract + ContractVersion + CONTRACT_REVIEW)
+// ÜZERİNE genişletme. Para/skor disiplini: `overallRiskScore` SUNUCUDA
+// deterministik hesaplanır (KRITIK=10 / ORTA=5 / DUSUK=2 ağırlıklı toplam,
+// 100'e normalize); model skoru YAZMAZ.
+
+/// Analiz koşusunun turu: ilk inceleme, revizyon incelemesi, imza öncesi
+/// nihai kontrol. SimulationRun deseni — koşular DEĞİŞTİRİLEMEZ.
+enum ContractAnalysisMode {
+  ILK
+  REVIZYON
+  NIHAI
+}
+
+/// Şerh şiddeti. KRITIK = imzalanırsa ciddi ve geri dönülemez zarar;
+/// ORTA = müzakerede düzeltilmeli; DUSUK = bilgi notu.
+enum ContractAnnotationSeverity {
+  KRITIK
+  ORTA
+  DUSUK
+}
+
+/// Şerh durumu. ACIK = avukat incelemesinde; KAPALI = avukat gerekçeyle
+/// kapattı; SUPERSEDED = yeni revizyon analizinde geçersizleşti (revizyonda
+/// kapanan şerh — kapanma gerekçesi ANALİZ kaydındadır, silinmez).
+enum ContractAnnotationStatus {
+  ACIK
+  KAPALI
+  SUPERSEDED
+}
+
+/// Uçtan uca süreç akışı olayı — APPEND-ONLY; PATCH/DELETE ucu YOKTUR.
+enum ContractEventType {
+  YUKLENDI
+  GONDERILDI
+  REVIZYON_ALINDI
+  ANALIZ
+  SHERH_KAPANDI
+  MUVEKKIL_BILGILENDIRILDI
+  IMZALANDI
+}
+
+/// Müvekkil kritik şerh bildirimi kipi. MANUAL (varsayılan) = avukat elle
+/// gönderir; OTOMATIK = KRİTİK şerh çıkan analizden sonra portal özeti
+/// kendiliğinden hazırlanır. Açma PARTNER+ yetkisidir.
+enum ContractNotifyMode {
+  MANUAL
+  OTOMATIK
+}
+
+/// Bir sözleşme analiz koşusu — SimulationRun deseni. İKİ TARAF PERSPEKTİFİ
+/// TEK KOŞUDA, İKİ AYRI ÇIKTIDA saklanır (ourSide / otherSide); tek promptta
+/// karıştırılmaz. Koşular DEĞİŞTİRİLEMEZ: yeniden analiz = yeni koşu.
+model ContractAnalysisRun {
+  id         String  @id @default(uuid())
+  tenantId   String
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  versionId  String
+  version    ContractVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  mode       ContractAnalysisMode
+
+  /// Bizim taraf perspektifi bulguları (JSON):
+  /// [{ rank, title, body, severity, clauseRef?, pageFrom?, pageTo?, quote?, proposedFix?, refs? }]
+  /// HAM SÖZLEŞME METNİ BURADA TUTULMAZ — metin ContractVersion'dadır; bu
+  /// alan yalnız BULGU taşır (çok sayfalı koşularda tek JSON alanına yüzlerce
+  /// sayfa metin gömülmesin).
+  ourSideJson   String
+  /// Karşı taraf perspektifi bulguları (aynı şema).
+  otherSideJson String
+  /// Parça (map-reduce) künyesi (JSON): parça sayısı, sayfa aralıkları,
+  /// parça başına durum/hata notu. Yalnız ÖLÇÜ ve DURUM — parça metni YOK.
+  chunkStatsJson String?
+
+  /// SUNUCU hesabı: şerh ağırlıklarının 100'e normalize edilmiş bileşimi.
+  /// Model bu alanı YAZAMAZ — skor `computeRiskScore` içindedir.
+  overallRiskScore Int
+
+  model      String?
+  durationMs Int?
+  createdBy  String // User id
+  createdAt  DateTime @default(now())
+
+  annotations ContractClauseAnnotation[]
+
+  @@index([tenantId, createdAt])
+  @@index([contractId, createdAt])
+  @@index([versionId])
+}
+
+/// ŞERH — tek gerçek kaynak. AI önerir; kayıt AVUKAT KOMUTUYLA (analiz
+/// koşusunu başlatan komutla) yazılır ve her şerhin GEREKÇESİ ZORUNLUDUR.
+/// Alıntı (quote) sözleşme metninde SUNUCUDA birebir doğrulanır; doğrulanmayan
+/// bulgu şerhe DÖNÜŞMEZ (bkz. common/ai/quote-guard).
+model ContractClauseAnnotation {
+  id        String  @id @default(uuid())
+  tenantId  String
+  runId     String
+  run       ContractAnalysisRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  contractId String
+  contract  Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  /// Madde referansı ("m.7") — ContractVersion metninden; ayrıca bir Clause
+  /// TABLOSU YOKTUR, madde kimliği metin tabanlıdır (CONTRACT_REVIEW ile aynı).
+  clauseRef String?
+  /// Şerhin SANAL SAYFA konumu (map-reduce parçasının sayfa aralığı) —
+  /// yüzlerce sayfalık sözleşmede şerhin metnin neresinde olduğunu gösterir.
+  pageFrom Int?
+  pageTo   Int?
+  severity  ContractAnnotationSeverity
+  /// Gerekçe — ZORUNLU. "Riskli" diyen her şerh neden riskli olduğunu söylemek zorundadır.
+  explanation String
+  /// Madde alıntısı — quote-guard'dan geçmiş, metinde birebir doğrulanmış.
+  quote      String?
+  /// Önerilen düzeltme metni.
+  proposedFix String?
+
+  status     ContractAnnotationStatus @default(ACIK)
+  closedBy   String?
+  closedAt   DateTime?
+  closeNote  String?
+
+  createdBy String // User id — koşuyu başlatan avukat
+  createdAt DateTime @default(now())
+
+  @@index([contractId, status])
+  @@index([runId])
+  @@index([tenantId, status])
+}
+
+/// İki sürüm arasındaki otomatik fark — SUNUCUDA üretilir (satır bazlı basit
+/// LCS; bkz. contract-diff.ts). Aynı sürüm çifti için TEZ kayıt: diff
+/// deterministiktir, tekrar istendiğinde kayıt döner, yeniden hesap edilmez.
+model ContractVersionDiff {
+  id         String  @id @default(uuid())
+  tenantId   String
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  /// Eskiden yeniye: A = eski sürüm, B = yeni sürüm.
+  versionAId String
+  versionBId String
+
+  addedCount   Int
+  removedCount Int
+  changedCount Int
+  /// Satır bazlı fark (JSON): { added: string[], removed: string[], changed: [{ before, after }] }
+  addedJson   String
+  removedJson String
+  changedJson String
+  /// SAYFA PENCERELİ fark (JSON): PageDiffEntry[] — yalnızca DEĞİŞEN sayfalar.
+  /// Eski (sayfalama öncesi) kayıtlarda null'dur; okunduğunda yeniden hesaplanır.
+  pagesJson   String?
+
+  /// Farkı üreten kullanıcı — denetim izi (kim, hangi iki sürümü karşılaştırdı).
+  createdBy String // User id
+  createdAt DateTime @default(now())
+
+  @@unique([versionAId, versionBId])
+  @@index([contractId, createdAt])
+}
+
+/// Süreç akışı olayı — APPEND-ONLY. Kayıt yalnızca OLUŞTURULUR; değiştirme ve
+/// silme ucu YOKTUR (zaman çizelgesi müzakere geçmişinin kanıtıdır).
+model ContractEvent {
+  id         String  @id @default(uuid())
+  tenantId   String
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  type       ContractEventType
+  detail     String?
+  /// Aktör künyesi (JSON): { userId, role } — kullanıcı silinse bile iz okunur.
+  actorJson  String?
+  createdBy  String // User id
+  createdAt  DateTime @default(now())
+
+  @@index([contractId, createdAt])
+  @@index([tenantId, createdAt])
+}
+
+/// Sözleşme başına müvekkil bildirim kipi (varsayılan MANUAL — her sözleşme
+/// için ayrı satır açılmaz, ayar yalnızca değiştirilmek istendiğinde doğar).
+model ContractNotifySetting {
+  id         String  @id @default(uuid())
+  tenantId   String
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  mode       ContractNotifyMode @default(MANUAL)
+  updatedBy  String // User id
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+
+  @@unique([contractId])
+  @@index([tenantId, mode])
 }

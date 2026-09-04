@@ -57,6 +57,12 @@ export const AI_TASK_TYPES = [
   // Modül 20 — Sözleşme
   "CONTRACT_REVIEW",
   /**
+   * Sözleşme Analizi ve Simülasyon — iki taraflı (bizim/karşı taraf) kalıcı
+   * analiz koşusu + şerh üretimi. CONTRACT_REVIEW'den pahalıdır: iki perspektif
+   * tek koşuda ama çıktı ve şerh kalıcılığı daha geniştir.
+   */
+  "CONTRACT_ANALYSIS",
+  /**
    * Faz 6 — Kurumsal Raporlama. Hazır ve DETERMİNİSTİK rapor ölçülerini Türkçe
    * yorumlar; rakam ÜRETMEZ (yer tutuculu şablon + uydurma rakam kapısı).
    * `@AiCredits` tipli olduğu için katalogda bulunması derleme ön koşuludur.
@@ -99,5 +105,6 @@ export const AI_TASK_TYPE_LABELS: Record<AiTaskType, string> = {
   DAILY_PRIORITIZE: "Günlük öncelik listesi",
   CLIENT_FINANCIAL_SUMMARY: "Müvekkil finans özeti",
   CONTRACT_REVIEW: "Sözleşme incelemesi",
+  CONTRACT_ANALYSIS: "Sözleşme analizi (iki taraflı + şerh)",
   REPORT_INTERPRET: "Rapor yorumu (deterministik rakamların anlatımı)",
 };

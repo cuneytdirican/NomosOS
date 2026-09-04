@@ -106,9 +106,10 @@ export const AGENT_CATALOG: readonly AgentCatalogEntry[] = [
   },
   {
     agentKey: "SOZLESME_INCELEME",
-    taskTypes: ["CONTRACT_REVIEW"],
+    taskTypes: ["CONTRACT_REVIEW", "CONTRACT_ANALYSIS"],
     name: "Sözleşme İnceleme",
-    description: "Sözleşme risk işaretleme (Modül 20).",
+    description:
+      "Sözleşme risk işaretleme ve iki taraflı sözleşme analizi (Modül 20).",
   },
   {
     agentKey: "RAPOR_YORUM",

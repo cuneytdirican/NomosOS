@@ -78,10 +78,28 @@ export interface AiCreditsMeta {
    */
   parentCaseId?: {
     kind: ParentCaseKind;
-    /** Kimliğin okunacağı yol parametresi (ör. "id"). */
+    /** Kimliğin okunacağı yol parametresi (örn. "id"). */
     param?: string;
     /** Kimlik(ler) gövdede duruyorsa. Birden çoksa hepsinin bağlamı toplanır. */
     from?: (body: unknown) => string | string[] | undefined;
+  };
+  /**
+   * SÖZLEŞME ANALİZİ — PARÇA BAZLI FİYATLAMA (map-reduce).
+   *
+   * Analiz koşusu sözleşme metnini PARÇALARA bölüp her parça için AYRI AI
+   * çağrısı yapar; tahmini maliyet = PARÇA SAYISI × PARÇA FİYATI. Metin
+   * veritabanında durur (ContractVersion.contentText) ve kapı onu gövdede
+   * GÖREMEZ — `parentCaseId` deseninde olduğu gibi üst kayıttan ölçülür:
+   * kapı sürüm metnini okur, aynı chunker hesabıyla parça sayısını çıkarır
+   * ve rezervasyonu parça sayısıyla çarpar. Kayıt çözülemezse tahmin taban
+   * fiyata düşer; geçersiz kimliğin hatasını kredi kapısı değil, işin kendi
+   * servisi verir.
+   */
+  parentContract?: {
+    /** Sözleşme kimliğinin yol parametresi (örn. "id"). */
+    param?: string;
+    /** Sürüm kimliği gövdede duruyorsa (boşsa sözleşmenin güncel sürümü). */
+    versionIdFrom?: (body: unknown) => string | undefined;
   };
 }
 

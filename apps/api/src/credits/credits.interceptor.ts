@@ -78,6 +78,16 @@ export class CreditsInterceptor implements NestInterceptor {
     // dosyada durur. Çözüm başarısız olursa tahmin taban fiyata düşer.
     const parentIds = meta.parentCaseId ? collectParentIds(meta.parentCaseId, request, body) : [];
 
+    // Sözleşme analizinde fiyat PARÇA SAYISINA bağlıdır ve metin yine gövdede
+    // değil veritabanındadır (ContractVersion.contentText). Kapı üst kayıttan
+    // parça ölçüsünü çözer; çözülemezse tahmin taban fiyata düşer.
+    const contractVersionId = meta.parentContract?.versionIdFrom
+      ? readCaseIdFromBody(meta.parentContract.versionIdFrom, body)
+      : undefined;
+    const contractParam = meta.parentContract?.param
+      ? request.params?.[meta.parentContract.param]
+      : undefined;
+
     return from(
       (async () => {
         const contextCaseIds =
@@ -88,12 +98,20 @@ export class CreditsInterceptor implements NestInterceptor {
                 parentIds,
               )
             : [];
+        const contractUnits = meta.parentContract
+          ? await this.credits.resolveContractAnalysisUnits(
+              user.tenantId,
+              contractParam,
+              contractVersionId,
+            )
+          : undefined;
         return this.credits.checkAndReserve({
           user,
           taskType,
           contextChars,
           caseId,
           contextCaseIds,
+          ...(contractUnits ? { units: contractUnits } : {}),
         });
       })(),
     ).pipe(

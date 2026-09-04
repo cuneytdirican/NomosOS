@@ -39,6 +39,8 @@ import { normalizeQuery, paged, resolvePage } from "../common/pagination";
 import { assertRole, ROLE_SETS } from "../common/roles";
 import type { AuthUser } from "../common/types";
 import { ContractRenewalService } from "./contract-renewal.service";
+import { appendContractEvent } from "./contract-events";
+import { splitIntoPages } from "./contract-analysis-chunks";
 import {
   CONTRACT_STATUS_LABELS,
   CONTRACT_TRANSITIONS,
@@ -175,8 +177,29 @@ export class ContractsService {
     };
   }
 
-  /** GET /contract-versions/:id — metin dâhil tek sürüm. */
-  async versionDetail(user: AuthUser, versionId: string) {
+  /**
+   * Aralık istenmeden döndürülebilecek azami metin (karakter) — ≈50 sanal
+   * sayfa. Tek istekte yüzlerce sayfa metin DÖNMEZ: uzun sürümlerde istemci
+   * `pageFrom`/`pageTo` aralığı istemek ZORUNDADIR (400 ile yönlendirilir).
+   */
+  public static readonly VERSION_TEXT_MAX_CHARS = 150_000;
+
+  /** Tek istekte döndürülebilecek azami sayfa aralığı genişliği. */
+  public static readonly VERSION_TEXT_MAX_PAGE_WINDOW = 50;
+
+  /**
+   * GET /contract-versions/:id — sürüm metni, SAYFA ARALIĞI İLE.
+   *
+   * Ölçeklendirme kuralı: `?pageFrom=&pageTo=` verilmezse ve metin tavanı
+   * AŞIYORSA istek 400 döner — yüzlerce sayfalık metin tek yanıtta taşınmaz.
+   * Aralık verildiğinde yalnızca o sayfaların metni döner; `pageCount` ve
+   * `totalChars` arayüzün sayfa seçicisini kurmasına yeter.
+   */
+  async versionDetail(
+    user: AuthUser,
+    versionId: string,
+    range: { pageFrom?: string; pageTo?: string } = {},
+  ) {
     const version = await this.prisma.client.contractVersion.findFirst({
       // TENANT SÜZGECİ ÜST KAYITTAN — `ContractVersion.tenantId` YOKTUR.
       where: { id: versionId, contract: { tenantId: user.tenantId } },
@@ -185,12 +208,71 @@ export class ContractsService {
       },
     });
     if (!version) throw new NotFoundException("Sözleşme sürümü bulunamadı.");
+
+    const pages = splitIntoPages(version.contentText);
+    const meta = {
+      pageCount: pages.length,
+      totalChars: version.contentText.length,
+    };
+
+    const wantsRange = range.pageFrom !== undefined || range.pageTo !== undefined;
+    if (wantsRange) {
+      const pageFrom = Number(range.pageFrom ?? 1);
+      const pageTo = Number(range.pageTo ?? (Number.isFinite(pageFrom) ? pageFrom : 1));
+      if (
+        !Number.isInteger(pageFrom) || !Number.isInteger(pageTo) ||
+        pageFrom < 1 || pageTo < pageFrom ||
+        pageFrom > Math.max(1, pages.length) || pageTo > Math.max(1, pages.length)
+      ) {
+        throw new BadRequestException(
+          `Sayfa aralığı geçersiz. Sürüm ${pages.length} sayfadır; 1–${Math.max(1, pages.length)} ` +
+            "arasında, pageFrom ≤ pageTo olacak biçimde isteyin.",
+        );
+      }
+      if (pageTo - pageFrom + 1 > ContractsService.VERSION_TEXT_MAX_PAGE_WINDOW) {
+        throw new BadRequestException(
+          `Tek istekte en fazla ${ContractsService.VERSION_TEXT_MAX_PAGE_WINDOW} sayfa metni döner; ` +
+            "aralığı daraltın.",
+        );
+      }
+      const slice = pages.slice(pageFrom - 1, pageTo).map((p) => p.text).join("\n\n");
+      return {
+        id: version.id,
+        contractId: version.contractId,
+        versionNo: version.versionNo,
+        changeNote: version.changeNote,
+        documentId: version.documentId,
+        createdBy: version.createdBy,
+        createdAt: version.createdAt,
+        contract: version.contract,
+        contentText: slice,
+        pageFrom,
+        pageTo,
+        ...meta,
+        isCurrent: version.contract.currentVersionId === version.id,
+        immutable: true,
+        immutableNote:
+          "Sürümler DEĞİŞTİRİLEMEZ. Metni güncellemek için yeni sürüm ekleyin; " +
+          "müzakere geçmişi böylece bozulmadan kalır.",
+      };
+    }
+
+    if (version.contentText.length > ContractsService.VERSION_TEXT_MAX_CHARS) {
+      throw new BadRequestException(
+        `Sürüm metni çok uzun (${pages.length} sayfa); tek istekte tümü döndürülmez. ` +
+          "Sayfa aralığı isteyin: ?pageFrom=1&pageTo=20",
+      );
+    }
+
     return {
       ...version,
+      pageFrom: 1,
+      pageTo: Math.max(1, pages.length),
+      ...meta,
       isCurrent: version.contract.currentVersionId === version.id,
       immutable: true,
       immutableNote:
-        "Sürümler DEĞİŞTİRİLEMEZ. Metni güncellemek için yeni bir sürüm ekleyin; " +
+        "Sürümler DEĞİŞTİRİLEMEZ. Metni güncellemek için yeni sürüm ekleyin; " +
         "müzakere geçmişi böylece bozulmadan kalır.",
     };
   }
@@ -467,6 +549,19 @@ export class ContractsService {
       entity: "ContractVersion",
       entityId: created.id,
       detail: `sözleşme=${contractId} sürüm=v${created.versionNo} uzunluk=${input.contentText.length}`,
+    });
+
+    // SÜREÇ AKIŞI (append-only): v1 = yükleme, sonrası = karşı taraftan
+    // gelen revizyon. Olay yazımı ana akışı bozmaz (bkz. contract-events.ts).
+    await appendContractEvent(this.prisma.client, {
+      tenantId: user.tenantId,
+      contractId,
+      type: created.versionNo === 1 ? "YUKLENDI" : "REVIZYON_ALINDI",
+      detail:
+        `v${created.versionNo}` +
+        (input.changeNote?.trim() ? ` — ${input.changeNote.trim()}` : "") +
+        ` (metin ${input.contentText.length} karakter)`,
+      user,
     });
 
     return {

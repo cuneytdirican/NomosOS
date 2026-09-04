@@ -79,6 +79,20 @@ const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
     ),
   },
   {
+    // Sözleşme Analizi ve Simülasyon — liste + sekmeli detay (/app/sozlesmeler).
+    href: "/app/sozlesmeler",
+    label: "Sözleşmeler",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path
+          fillRule="evenodd"
+          d="M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V6.879a1.5 1.5 0 0 0-.44-1.06L13.18 2.439A1.5 1.5 0 0 0 12.12 2H4.5Zm.75 5.25A.75.75 0 0 1 6 6.5h8a.75.75 0 0 1 0 1.5H6a.75.75 0 0 1-.75-.75Zm0 3A.75.75 0 0 1 6 9.5h8a.75.75 0 0 1 0 1.5H6a.75.75 0 0 1-.75-.75Zm0 3a.75.75 0 0 1 .75-.75h4.5a.75.75 0 0 1 0 1.5H6a.75.75 0 0 1-.75-.75Z"
+          clipRule="evenodd"
+        />
+      </svg>
+    ),
+  },
+  {
     href: "/app/asistan",
     label: "Asistan",
     icon: (

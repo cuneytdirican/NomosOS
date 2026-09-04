@@ -54,6 +54,32 @@ export function estimateCredits(baseCredits: number, approxInputTokens: number):
   return Math.ceil(baseCredits * contextMultiplier(approxInputTokens));
 }
 
+export interface CreditUnits {
+  /** Birim (parça) sayısı — her birim AYRI bir sağlayıcı çağrısıdır. */
+  count: number;
+  /** Bir birimin yaklaşık karakter uzunluğu. */
+  charsPerUnit: number;
+}
+
+/**
+ * PARÇA BAZLI FİYATLAMA — toplam = parça sayısı × parça başına tahmin.
+ *
+ * NEDEN ÇARPIM VAR, TAVAN NEDEN YOK: `MAX_CREDITS_PER_REQUEST` TEK bir
+ * sağlayıcı çağrısını korur; parça bazlı bir koşu ise N AYRI çağrıdır
+ * (map-reduce). Tavan bu yüzden PARÇA BAŞINA uygulanır (bir parçanın
+ * kendisi tavanı aşarsa istek reddedilir); toplam, parça sayısıyla dürüstçe
+ * ölçeklenir — 20 parçalık bir koşu 20 çağrının bedelini öder, tek çağrı
+ * fiyatına indirilemez.
+ */
+export function estimateUnitsCredits(baseCredits: number, units: CreditUnits): {
+  perUnit: number;
+  total: number;
+} {
+  const count = Math.max(1, Math.floor(units.count));
+  const perUnit = estimateCredits(baseCredits, approximateTokens(units.charsPerUnit));
+  return { perUnit, total: perUnit * count };
+}
+
 /**
  * Kullanılabilir bakiye — cüzdanın TEK doğru formülü.
  * `kullanılabilir = (dahil − tüketilen) + satın alınan − rezerve`

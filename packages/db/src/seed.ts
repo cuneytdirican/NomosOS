@@ -1125,6 +1125,13 @@ const AI_TASK_COSTS: TaskCostSeed[] = [
   { taskType: "OPPONENT_SIMULATION", credits: 20, isFree: false, description: "Karşı taraf avukatı simülasyonu (Faz 4)." },
   { taskType: "EXPERT_REPORT_DIFF", credits: 20, isFree: false, description: "Bilirkişi raporu karşılaştırma (Faz 4)." },
   { taskType: "CONTRACT_REVIEW", credits: 20, isFree: false, description: "Sözleşme incelemesi (Faz 5)." },
+  {
+    taskType: "CONTRACT_ANALYSIS",
+    credits: 25,
+    isFree: false,
+    description:
+      "Sözleşme analizi — iki taraflı (bizim/karşı taraf) kalıcı koşu + şerh üretimi. Fiyat tahminidir — panelden doğrulanmalı.",
+  },
   { taskType: "PETITION_DRAFT", credits: 25, isFree: false, description: "Dilekçe taslağı (tam)." },
   { taskType: "STRATEGY_BUILD", credits: 30, isFree: false, description: "Dava stratejisi oluşturma (Faz 4) — 9 halkalı zincir." },
 
@@ -1899,66 +1906,144 @@ async function seedPowerOfAttorneys(
 }
 
 /**
- * Sözleşme tohumu: 1 vekalet ücret sözleşmesi + 1 (immutable) sürüm.
- * `currentVersionId` sürüm yazıldıktan SONRA işaretlenir.
+ * Sözleşme tohumu: 1 vekalet ücret sözleşmesi + 2 (immutable) sürüm.
+ * `currentVersionId` son sürüm yazıldıktan SONRA işaretlenir.
+ *
+ * İKİNCİ SÜRÜM (Sözleşme Analizi modülü): m.3 (ücret) ve m.6 (uyuşmazlık)
+ * değişen bir karşı taraf revizyonudur — sürüm farkı ve revizyon analizinin
+ * tohumda görülebilmesi içindir. Süreç akışına iki olay (YÜKLENDİ,
+ * REVIZYON_ALINDI) düşer; ANALİZ koşusu AI gerektirdiğinden tohumda ÜRETİLMEZ.
  */
 async function seedContracts(clientId: string, caseId: string, userId: string) {
   const title = "ABC Holding — Vekalet Ücret Sözleşmesi (2026)";
-  const existing = await prisma.contract.findFirst({ where: { tenantId: TENANT_ID, title } });
-  if (existing) return { contractCreated: false, versionCreated: false };
+  let contract = await prisma.contract.findFirst({ where: { tenantId: TENANT_ID, title } });
+  let contractCreated = false;
+  if (!contract) {
+    contract = await prisma.contract.create({
+      data: {
+        tenantId: TENANT_ID,
+        clientId,
+        caseId,
+        title,
+        type: "VEKALET_UCRET",
+        status: "YURURLUKTE",
+        effectiveFrom: utc(2026, 3, 1),
+        effectiveTo: utc(2027, 2, 28),
+        renewalNoticeDays: 30,
+        autoRenew: true,
+        createdBy: userId,
+      },
+    });
+    contractCreated = true;
+  }
 
-  const contract = await prisma.contract.create({
-    data: {
-      tenantId: TENANT_ID,
-      clientId,
-      caseId,
-      title,
-      type: "VEKALET_UCRET",
-      status: "YURURLUKTE",
-      effectiveFrom: utc(2026, 3, 1),
-      effectiveTo: utc(2027, 2, 28),
-      renewalNoticeDays: 30,
-      autoRenew: true,
-      createdBy: userId,
-    },
+  let versionCreated = false;
+  let v1 = await prisma.contractVersion.findFirst({
+    where: { contractId: contract.id, versionNo: 1 },
   });
+  if (!v1) {
+    v1 = await prisma.contractVersion.create({
+      data: {
+        contractId: contract.id,
+        versionNo: 1,
+        createdBy: userId,
+        changeNote: "İlk sürüm — taraflarca imzalanan metin.",
+        contentText: [
+          "VEKALET ÜCRET SÖZLEŞMESİ",
+          "",
+          "Madde 1 — Taraflar: Bir tarafta Demo Hukuk Bürosu (Vekil), diğer tarafta",
+          "ABC Holding A.Ş. (Müvekkil) arasında aşağıdaki şartlarla akdedilmiştir.",
+          "",
+          "Madde 2 — Konu: İstanbul 12. Asliye Ticaret Mahkemesi'nin 2026/145 esas",
+          "sayılı alacak davasının takibi ve sonuçlandırılması.",
+          "",
+          "Madde 3 — Ücret: Peşin ücret 150.000,00 TL olup, dava değerinin %10'u",
+          "oranında başarı primi tahsilat gerçekleştikçe hak edilir. Tutarlara KDV",
+          "dahil değildir.",
+          "",
+          "Madde 4 — Masraflar: Harç, tebligat, bilirkişi ve keşif masrafları",
+          "Müvekkil'e aittir; avans olarak talep edilebilir.",
+          "",
+          "Madde 5 — Süre ve Yenileme: Sözleşme 01.03.2026 tarihinde yürürlüğe girer,",
+          "28.02.2027 tarihine kadar geçerlidir. Taraflardan biri sona erme tarihinden",
+          "en az 30 gün önce yazılı fesih ihbarında bulunmazsa sözleşme aynı şartlarla",
+          "bir yıl uzar.",
+          "",
+          "Madde 6 — Uyuşmazlık: İstanbul Mahkemeleri ve İcra Daireleri yetkilidir.",
+          "",
+          "[DEMO VERİ] Bu metin örnek amaçlıdır; hukuki tavsiye niteliği taşımaz.",
+        ].join("\n"),
+      },
+    });
+    versionCreated = true;
+    await prisma.contractEvent.create({
+      data: {
+        tenantId: TENANT_ID,
+        contractId: contract.id,
+        type: "YUKLENDI",
+        detail: "v1 — ilk sürüm yüklendi.",
+        actorJson: JSON.stringify({ userId, role: "PARTNER" }),
+        createdBy: userId,
+      },
+    });
+  }
 
-  const version = await prisma.contractVersion.create({
-    data: {
-      contractId: contract.id,
-      versionNo: 1,
-      createdBy: userId,
-      changeNote: "İlk sürüm — taraflarca imzalanan metin.",
-      contentText: [
-        "VEKALET ÜCRET SÖZLEŞMESİ",
-        "",
-        "Madde 1 — Taraflar: Bir tarafta Demo Hukuk Bürosu (Vekil), diğer tarafta",
-        "ABC Holding A.Ş. (Müvekkil) arasında aşağıdaki şartlarla akdedilmiştir.",
-        "",
-        "Madde 2 — Konu: İstanbul 12. Asliye Ticaret Mahkemesi'nin 2026/145 esas",
-        "sayılı alacak davasının takibi ve sonuçlandırılması.",
-        "",
-        "Madde 3 — Ücret: Peşin ücret 150.000,00 TL olup, dava değerinin %10'u",
-        "oranında başarı primi tahsilat gerçekleştikçe hak edilir. Tutarlara KDV",
-        "dahil değildir.",
-        "",
-        "Madde 4 — Masraflar: Harç, tebligat, bilirkişi ve keşif masrafları",
-        "Müvekkil'e aittir; avans olarak talep edilebilir.",
-        "",
-        "Madde 5 — Süre ve Yenileme: Sözleşme 01.03.2026 tarihinde yürürlüğe girer,",
-        "31.03.2027 [sic: 28.02.2027] tarihine kadar geçerlidir. Taraflardan biri",
-        "sona erme tarihinden en az 30 gün önce yazılı fesih ihbarında bulunmazsa",
-        "sözleşme aynı şartlarla bir yıl uzar.",
-        "",
-        "Madde 6 — Uyuşmazlık: İstanbul Mahkemeleri ve İcra Daireleri yetkilidir.",
-        "",
-        "[DEMO VERİ] Bu metin örnek amaçlıdır; hukuki tavsiye niteliği taşımaz.",
-      ].join("\n"),
-    },
+  let v2 = await prisma.contractVersion.findFirst({
+    where: { contractId: contract.id, versionNo: 2 },
   });
+  if (!v2) {
+    v2 = await prisma.contractVersion.create({
+      data: {
+        contractId: contract.id,
+        versionNo: 2,
+        createdBy: userId,
+        changeNote: "Karşı taraf revizyonu — m.3 başarı primi ve m.6 yetki değişti.",
+        contentText: [
+          "VEKALET ÜCRET SÖZLEŞMESİ",
+          "",
+          "Madde 1 — Taraflar: Bir tarafta Demo Hukuk Bürosu (Vekil), diğer tarafta",
+          "ABC Holding A.Ş. (Müvekkil) arasında aşağıdaki şartlarla akdedilmiştir.",
+          "",
+          "Madde 2 — Konu: İstanbul 12. Asliye Ticaret Mahkemesi'nin 2026/145 esas",
+          "sayılı alacak davasının takibi ve sonuçlandırılması.",
+          "",
+          "Madde 3 — Ücret: Peşin ücret 150.000,00 TL olup, tahsilat gerçekleşse de",
+          "gerçekleşmese de dava değerinin %10'u oranında başarı primi vekile ödenir.",
+          "Tutarlara KDV dahil değildir.",
+          "",
+          "Madde 4 — Masraflar: Harç, tebligat, bilirkişi ve keşif masrafları",
+          "Müvekkil'e aittir; avans olarak talep edilebilir.",
+          "",
+          "Madde 5 — Süre ve Yenileme: Sözleşme 01.03.2026 tarihinde yürürlüğe girer,",
+          "28.02.2027 tarihine kadar geçerlidir. Taraflardan biri sona erme tarihinden",
+          "en az 30 gün önce yazılı fesih ihbarında bulunmazsa sözleşme aynı şartlarla",
+          "bir yıl uzar.",
+          "",
+          "Madde 6 — Uyuşmazlık: İşbu sözleşmeden doğan uyuşmazlıklarda Ankara",
+          "Mahkemeleri ve İcra Daireleri yetkilidir.",
+          "",
+          "[DEMO VERİ] Bu metin örnek amaçlıdır; hukuki tavsiye niteliği taşımaz.",
+        ].join("\n"),
+      },
+    });
+    versionCreated = true;
+    await prisma.contractEvent.create({
+      data: {
+        tenantId: TENANT_ID,
+        contractId: contract.id,
+        type: "REVIZYON_ALINDI",
+        detail: "v2 — karşı taraf revizyonu alındı (m.3, m.6).",
+        actorJson: JSON.stringify({ userId, role: "PARTNER" }),
+        createdBy: userId,
+      },
+    });
+  }
 
-  await prisma.contract.update({ where: { id: contract.id }, data: { currentVersionId: version.id } });
-  return { contractCreated: true, versionCreated: true };
+  await prisma.contract.update({
+    where: { id: contract.id },
+    data: { currentVersionId: v2.id },
+  });
+  return { contractCreated, versionCreated };
 }
 
 /**

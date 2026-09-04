@@ -48,11 +48,13 @@ import {
   availableCredits,
   contextMultiplier,
   estimateCredits,
+  estimateUnitsCredits,
   nextPeriod,
   planQuota,
   settledBalance,
   usagePercent,
 } from "./credit-plans";
+import { estimateAnalysisUnits } from "../contracts/contract-analysis-chunks";
 
 /** Kredi kapısının handler'a taşıdığı rezervasyon bileti. */
 export interface CreditTicket {
@@ -62,6 +64,12 @@ export interface CreditTicket {
   /** Rezerve edilen kredi. Mahsupta bundan FAZLASI tahsil edilmez. */
   reserved: number;
   baseCredits: number;
+  /**
+   * Biletin kapsadığı BİRİM (parça) sayısı — parça bazlı fiyatlamada mahsup
+   * ÇAĞRI BAŞINA toplanır (bkz. settle). Varsayılan 1: tek çağrılı uçlar
+   * önceki davranışını korur.
+   */
+  unitCount: number;
   /** Bilet kapandı mı? settle/release iki kez çalışmasın diye. */
   resolved: boolean;
   /** İzlenebilirlik — CreditTransaction.caseId. */
@@ -361,6 +369,70 @@ export class CreditService implements OnModuleInit {
   // =========================================================================
 
   /**
+   * Sözleşme analizinin PARÇA ÖLÇÜSÜ — kredi kapısının sözleşme uzantısı.
+   *
+   * Sözleşme metni gövdede DEĞİL veritabanındadır (ContractVersion.contentText);
+   * parça bazlı fiyat bunun uzunluğuna bağlıdır. Bu metot metni TENANT SÜZGEÇLİ
+   * okur, analiz servisinin kullandığı AYNI chunker hesabıyla (bkz.
+   * contract-analysis-chunks) parça sayısını çıkarır. Kayıt bulunamazsa
+   * sessizce `undefined` döner: geçersiz kimliğin hatasını kredi kapısı değil,
+   * işin kendi servisi vermelidir.
+   */
+  async resolveContractAnalysisUnits(
+    tenantId: string,
+    contractId: string | undefined,
+    versionId?: string | undefined,
+  ): Promise<{ count: number; charsPerUnit: number } | undefined> {
+    if (!contractId) return undefined;
+    try {
+      const contract = await this.prisma.client.contract.findFirst({
+        where: { id: contractId, tenantId },
+        select: { currentVersionId: true },
+      });
+      if (!contract) return undefined;
+      const targetVersionId = versionId ?? contract.currentVersionId;
+      if (!targetVersionId) return undefined;
+      const version = await this.prisma.client.contractVersion.findFirst({
+        where: { id: targetVersionId, contract: { id: contractId, tenantId } },
+        select: { contentText: true },
+      });
+      if (!version) return undefined;
+      const estimate = estimateAnalysisUnits(version.contentText);
+      if (estimate.chunkCount <= 0) return undefined;
+      return { count: estimate.chunkCount, charsPerUnit: Math.max(1, estimate.chunkChars) };
+    } catch (err) {
+      this.logger.warn(
+        `Sözleşme parça ölçüsü çözülemedi (${contractId}): ${(err as Error).message}. ` +
+          "Tahmin taban fiyata düşürüldü.",
+      );
+      return undefined;
+    }
+  }
+
+  /** Parça bazlı tahmin — analiz tahmin ucunun (`analyses/estimate`) kaynağı. */
+  async estimateForUnits(
+    taskType: string,
+    units: { count: number; charsPerUnit: number },
+  ) {
+    const cost = await this.costOfTask(taskType);
+    const perUnit = cost.isFree
+      ? 0
+      : estimateUnitsCredits(cost.credits, units).perUnit;
+    return {
+      taskType,
+      tabanKredi: cost.credits,
+      ucretsiz: cost.isFree,
+      fiyatTanimli: cost.known,
+      parcaSayisi: Math.max(1, Math.floor(units.count)),
+      parcaBasiKredi: perUnit,
+      tahminiKredi: perUnit * Math.max(1, Math.floor(units.count)),
+      parcaBasiTavan: MAX_CREDITS_PER_REQUEST,
+      parcaTavaniAsiyor: perUnit > MAX_CREDITS_PER_REQUEST,
+    };
+  }
+
+
+  /**
    * Kapının tamamı: muafiyet → fiyat → 50 tavanı → 402 → rezervasyon.
    * Hiçbir dalda LLM çağrısı YAPILMAZ; bu metot dönmeden sağlayıcıya gidilmez.
    */
@@ -376,6 +448,11 @@ export class CreditService implements OnModuleInit {
      * eklenir. Karşılaştırma uçlarında iki ayrı dosya olabilir.
      */
     contextCaseIds?: readonly string[];
+    /**
+     * PARÇA BAZLI FİYATLAMA (map-reduce): rezervasyon = parça sayısı × parça
+     * başına tahmin. Verilmezse tek birim varsayılır (önceki davranış).
+     */
+    units?: { count: number; charsPerUnit: number };
   }): Promise<CreditGate> {
     const billing = await this.billing.resolve(input.user.tenantId);
 
@@ -404,12 +481,24 @@ export class CreditService implements OnModuleInit {
         contextCaseIds.map((id) => this.caseContextChars(input.user.tenantId, id, false)),
       )
     ).reduce((sum, n) => sum + n, 0);
-    const tokens = approximateTokens(input.contextChars + caseChars);
-    const required = estimateCredits(cost.credits, tokens);
 
-    // 2. SINIR — LLM'e gidilmeden reddedilir (kabul kriteri 7).
-    if (required > MAX_CREDITS_PER_REQUEST) {
-      throw requestTooLarge({ taskType: input.taskType, required });
+    // Parça bazlı uçlarda fiyat = parça sayısı × parça başına tahmin; tavan
+    // PARÇA BAŞINA uygulanır (koşu N ayrı sağlayıcı çağrısıdır).
+    const units = input.units
+      ? estimateUnitsCredits(cost.credits, {
+          count: input.units.count,
+          charsPerUnit: Math.max(1, input.units.charsPerUnit),
+        })
+      : null;
+    const tokens = approximateTokens(input.contextChars + caseChars);
+    const required = units ? units.total : estimateCredits(cost.credits, tokens);
+    const unitCount = units ? Math.max(1, Math.floor(input.units?.count ?? 1)) : 1;
+
+    // 2. SINIR — LLM'e gidilmeden reddedilir (kabul kriteri 7). Parça bazlı
+    // uçlarda sınır parça başınadır; toplam parça sayısıyla ölçeklenir.
+    const perRequest = units ? units.perUnit : required;
+    if (perRequest > MAX_CREDITS_PER_REQUEST) {
+      throw requestTooLarge({ taskType: input.taskType, required: perRequest });
     }
 
     // Sahipsiz rezervasyonlar bakiyeyi kilitlemesin: kapı her çalıştığında
@@ -429,7 +518,7 @@ export class CreditService implements OnModuleInit {
           return {
             billed: true,
             billing,
-            ticket: this.newTicket(input, required, cost.credits),
+            ticket: this.newTicket(input, required, cost.credits, unitCount),
           };
         }
       }
@@ -444,7 +533,11 @@ export class CreditService implements OnModuleInit {
       });
     }
 
-    return { billed: true, billing, ticket: this.newTicket(input, required, cost.credits) };
+    return {
+      billed: true,
+      billing,
+      ticket: this.newTicket(input, required, cost.credits, unitCount),
+    };
   }
 
   /**
@@ -479,6 +572,7 @@ export class CreditService implements OnModuleInit {
     input: { user: AuthUser; taskType: string; caseId?: string },
     reserved: number,
     baseCredits: number,
+    unitCount = 1,
   ): CreditTicket {
     return {
       tenantId: input.user.tenantId,
@@ -486,6 +580,7 @@ export class CreditService implements OnModuleInit {
       taskType: input.taskType,
       reserved,
       baseCredits,
+      unitCount,
       resolved: false,
       caseId: input.caseId,
     };
@@ -530,7 +625,13 @@ export class CreditService implements OnModuleInit {
     const priced = billable.length > 0 ? billable : calls;
 
     const totalInput = priced.reduce((sum, c) => sum + (c.inputTokens ?? 0), 0);
-    const computed = estimateCredits(ticket.baseCredits, totalInput);
+    // PARÇA BAZLI BİLET: her parça AYRI bir sağlayıcı çağrısıdır; fiyat ÇAĞRI
+    // BAŞINA toplanır (parça sayısı × parça fiyatı). Tek birimli biletlerde
+    // önceki davranış korunur: tüm girdi toplanır, çarpan bir kez uygulanır.
+    const computed =
+      ticket.unitCount > 1
+        ? priced.reduce((sum, c) => sum + estimateCredits(ticket.baseCredits, c.inputTokens ?? 0), 0)
+        : estimateCredits(ticket.baseCredits, totalInput);
     const charged = Math.max(0, Math.min(ticket.reserved, computed));
 
     // Gerçek maliyet — çağrı başına, ModelPrice üzerinden (iç muhasebe).
