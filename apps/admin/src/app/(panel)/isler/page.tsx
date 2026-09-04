@@ -14,6 +14,7 @@
  */
 
 import { useState } from "react";
+import Link from "next/link";
 import { useListResource, useResource } from "@/lib/useResource";
 import { useMutation } from "@/lib/useMutation";
 
@@ -121,6 +122,7 @@ function Isler() {
           {j.description && (
             <p className="mt-0.5 max-w-md text-[11px] text-steel-500">{j.description}</p>
           )}
+          {j.key === "caselaw-ingest-daily" && <IngestQueueNote />}
         </div>
       ),
     },
@@ -283,6 +285,32 @@ function Isler() {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * İçtihat besleme işi için kuyruk köprüsü (plans/ictihat-havuzu-yol-haritasi.md
+ * madde 8): iş satırında "Kuyrukta bekleyen: N kayıt" + Onay Masası bağlantısı.
+ *
+ * Sayı, İŞ KAYIT SERVİSİNDEN değil caselaw-ingest kuyruk ucundan gelir (ikinci
+ * fetch): GET /caselaw-ingest/items → counts.BEKLIYOR. Uç görünmezse (yetki/
+ * hazır değil) yalnız bağlantı gösterilir; sayı uydurulmaz.
+ */
+function IngestQueueNote() {
+  const res = useResource<{ counts?: { BEKLIYOR?: number } }>(EP.caseLawIngest.items, {
+    query: { limit: 1 },
+  });
+  const pending = res.data?.counts?.BEKLIYOR;
+
+  return (
+    <p className="mt-1 text-[11px]">
+      {typeof pending === "number" ? (
+        <span className="text-amber-300">Kuyrukta bekleyen: {pending.toLocaleString("tr-TR")} kayıt · </span>
+      ) : null}
+      <Link href="/ictihat/onay" className="text-sky-300 hover:underline">
+        Onay Masası&apos;na git →
+      </Link>
+    </p>
   );
 }
 

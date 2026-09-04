@@ -4,14 +4,36 @@ import { poolRecordSchema } from "../caselaw-pool/caselaw-pool.schemas";
 /**
  * İÇTİHAT TOPLAMA HATTI ŞEMALARI (caselaw-ingest).
  *
- * Besleme kayıt biçimi havuz içe aktarma kaydıyla BİREBİR AYNIdır
+ * Besleme KÜNYE biçimi havuz içe aktarma kaydıyla BİREBİR AYNIdır
  * (poolRecordSchema) — iki doğrulama katmanı asla ayrışamaz; ayrışırsa
- * kuyrukta kabul edilen kayıt havuza girerken reddedilirdi.
+ * kuyrukta kabul edilen kayıt havuza girerken reddedilirdi. Buna EK olarak
+ * besleme kaydı opsiyonel dış kaynak kimliği (externalId/id → externalRef)
+ * taşıyabilir; kimlik yalnız önizleme içindir, havuz doğrulamasına girmez.
  */
+
+/**
+ * Besleme kaydı: havuz kaydı + opsiyonel DIŞ KAYNAK kimliği.
+ *
+ * Kimlik alanı beslemede `externalId` ya da `id` adıyla gelebilir; ikisi de
+ * kuyrukta `externalRef` olarak normalize edilir (onay öncesi karar metnini
+ * kaynaktan okumak için — Onay Masası önizlemesi). Zorunlu DEĞİLDİR: besleme
+ * yalnız künye + özet veriyorsa kimlik null kalır ve önizleme kuyruk metninden
+ * okunur; ikisi de yoksa önizleme dürüst hata verir.
+ */
+export const feedRecordSchema = poolRecordSchema
+  .extend({
+    externalId: z.string().trim().min(1).max(100).optional(),
+    id: z.string().trim().min(1).max(100).optional(),
+  })
+  .transform((r) => {
+    const { externalId, id, ...record } = r;
+    return { ...record, externalRef: externalId ?? id };
+  });
+export type FeedRecord = z.infer<typeof feedRecordSchema>;
 
 /** Besleme yanıtı: { records: PoolRecord[] } (+ opsiyonel üst veri yok sayılır). */
 export const feedResponseSchema = z.object({
-  records: z.array(poolRecordSchema).max(500),
+  records: z.array(feedRecordSchema).max(500),
 });
 export type FeedResponse = z.infer<typeof feedResponseSchema>;
 

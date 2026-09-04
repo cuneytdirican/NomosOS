@@ -19,6 +19,8 @@ import { feedResponseSchema, sourceUpsertSchema } from "./caselaw-ingest.schemas
 import type { PrismaService } from "../../prisma/prisma.service";
 import type { PlatformAuditService } from "../platform-audit.service";
 import type { CaselawPoolService } from "../caselaw-pool/caselaw-pool.service";
+import type { YargitayLiveAdapter } from "../../caselaw/adapters/yargitay-live.adapter";
+import type { LiveCaseLawDocument } from "../../caselaw/adapters/yargitay-live.adapter";
 import type { PlatformAuthUser } from "../platform.types";
 
 const ACTOR: PlatformAuthUser = { id: "pu-1", role: "SUPER_ADMIN", ip: "127.0.0.1" } as PlatformAuthUser;
@@ -30,11 +32,15 @@ interface Harness {
   /** poolCalls kapanış değişkeni — sayıyı değer olarak döndürmek anlık görüntü alırdı. */
   poolCallCount: () => number;
   auditLines: string[];
+  /** Canlı adaptör çağrı sayısı (önizleme testleri). */
+  liveFetchCount: () => number;
 }
 
 function serviceWith(overrides: {
   existingPoolRecord?: Record<string, unknown> | null;
   poolOutcome?: "EKLENDI" | "GUNCELLENDI" | "ATLANDI" | "REDDEDILDI";
+  liveDocument?: LiveCaseLawDocument | null;
+  liveError?: Error;
 }): Harness {
   const inserted: Array<Record<string, unknown>> = [];
   const auditLines: string[] = [];
@@ -86,7 +92,27 @@ function serviceWith(overrides: {
       };
     },
   } as unknown as CaselawPoolService;
-  return { svc: new CaselawIngestService(prisma, audit, pool), inserted, poolCallCount: () => poolCalls, auditLines };
+  let liveCalls = 0;
+  const liveAdapter = {
+    fetchDocument: async (externalId: string) => {
+      liveCalls += 1;
+      if (overrides.liveError) throw overrides.liveError;
+      return (
+        overrides.liveDocument ?? {
+          externalId,
+          text: "TEMYİZ İSTEMİ ÜZERİNDE ... gerekçeli karar metni.",
+          sourceUrl: `https://karararama.yargitay.gov.tr/getDokuman?id=${externalId}`,
+        }
+      );
+    },
+  } as unknown as YargitayLiveAdapter;
+  return {
+    svc: new CaselawIngestService(prisma, audit, pool, liveAdapter),
+    inserted,
+    poolCallCount: () => poolCalls,
+    auditLines,
+    liveFetchCount: () => liveCalls,
+  };
 }
 
 const FEED = {
@@ -184,6 +210,29 @@ describe("Çekim → onay kuyruğu", () => {
     expect(summaries[0].ok).toBe(false);
     expect(summaries[0].note).toContain("503");
   });
+
+  it("besleme kaydının dış kaynak kimliği (externalId) kuyruğa externalRef olarak yazılır", async () => {
+    const fetchMock = mockFeed({ records: [{ ...FEED.records[0], externalId: "98765" }] });
+    const { svc, inserted } = serviceWith({});
+    await svc.runSource({ id: "src-1", key: "FEED_TEST", baseUrl: "http://x" }, NOW);
+    fetchMock.mockRestore();
+
+    expect(inserted).toHaveLength(1);
+    expect(inserted[0].externalRef).toBe("98765");
+  });
+
+  it("kimlik `id` alanıyla geldiyse de externalRef yazılır; kimlik yoksa null kalır", async () => {
+    const fetchMock = mockFeed({
+      records: [{ ...FEED.records[0], id: "11111" }, { ...FEED.records[0], caseNumber: "2016/5678" }],
+    });
+    const { svc, inserted } = serviceWith({});
+    const summary = await svc.runSource({ id: "src-1", key: "FEED_TEST", baseUrl: "http://x" }, NOW);
+    fetchMock.mockRestore();
+
+    expect(summary.queued).toBe(2);
+    expect(inserted[0].externalRef).toBe("11111");
+    expect(inserted[1].externalRef).toBeNull();
+  });
 });
 
 describe("Onay / red", () => {
@@ -233,5 +282,60 @@ describe("Onay / red", () => {
     expect(res.status).toBe("REDDEDILDI");
     expect(res.rejectReason).toBe("Künye kaynakla doğrulanamadı");
     expect(auditLines.some((l) => l.includes("Künye kaynakla doğrulanamadı"))).toBe(true);
+  });
+});
+
+describe("Önizleme (onay öncesi okuma — Onay Masası)", () => {
+  const PENDING_PREVIEW = {
+    id: "qi-1",
+    status: "BEKLIYOR",
+    sourceKey: "FEED_TEST",
+    court: "Yargıtay 9. Hukuk Dairesi",
+    chamber: null,
+    caseNumber: "2016/1234",
+    decisionNumber: "2017/5678",
+    decisionDate: new Date("2017-06-15T00:00:00Z"),
+    summary: "Özet",
+    fullText: null as string | null,
+    sourceUrl: null,
+    externalRef: null as string | null,
+  };
+
+  it("fullText VARSA kuyruk metni döner — canlı kaynağa gidilmez", async () => {
+    const { svc, liveFetchCount } = serviceWith({
+      existingPoolRecord: { ...PENDING_PREVIEW, fullText: "Kuyrukta saklı karar metni." },
+    });
+    const res = await svc.preview("qi-1");
+
+    expect(res.source).toBe("KUYRUK");
+    expect(res.text).toBe("Kuyrukta saklı karar metni.");
+    expect(liveFetchCount()).toBe(0);
+  });
+
+  it("fullText YOKSA externalRef ile resmî kaynaktan temiz metin çeker", async () => {
+    const { svc, liveFetchCount } = serviceWith({
+      existingPoolRecord: { ...PENDING_PREVIEW, externalRef: "123456" },
+    });
+    const res = await svc.preview("qi-1");
+
+    expect(res.source).toBe("CANLI");
+    expect(res.text).toContain("karar metni");
+    expect(res.item.externalRef).toBe("123456");
+    expect(res.sourceUrl).toContain("getDokuman?id=123456");
+    expect(liveFetchCount()).toBe(1);
+  });
+
+  it("fullText de externalRef de yoksa DÜRÜST hata verir — uydurma metin gösterilmez", async () => {
+    const { svc, liveFetchCount } = serviceWith({ existingPoolRecord: PENDING_PREVIEW });
+    await expect(svc.preview("qi-1")).rejects.toThrow(/karar metni yok.*dış kaynak kimliği/i);
+    expect(liveFetchCount()).toBe(0);
+  });
+
+  it("canlı kaynak hatası dürüst mesajla yansır — önizleme onay/red akışını düşürmez", async () => {
+    const { svc } = serviceWith({
+      existingPoolRecord: { ...PENDING_PREVIEW, externalRef: "123456" },
+      liveError: new Error("karararama.yargitay.gov.tr 503 döndü."),
+    });
+    await expect(svc.preview("qi-1")).rejects.toThrow(/alınamadı.*503/);
   });
 });

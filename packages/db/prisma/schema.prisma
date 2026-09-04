@@ -1551,6 +1551,10 @@ model CaseLawIngestItem {
   summary        String?
   fullText       String?
   sourceUrl      String?
+  /// Dış kaynak karar kimliği (resmî getDokuman?id= için) — null ise önizleme
+  /// yalnız kuyruktaki fullText'ten okunabilir. Besleme kaydı externalId/id
+  /// alanı taşıyorsa çekimde buraya yazılır.
+  externalRef    String?
   /// BEKLIYOR | ONAYLANDI | REDDEDILDI — onay/red yalnız platform görevlisi.
   status         String    @default("BEKLIYOR")
   /// Koşu parti kimliği (JobRun ile ilişkilendirme, denetim izi).

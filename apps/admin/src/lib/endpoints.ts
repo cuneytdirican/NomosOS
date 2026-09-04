@@ -165,5 +165,7 @@ export const EP = {
     run: "/caselaw-ingest/run",
     approve: (id: string) => `/caselaw-ingest/items/${encodeURIComponent(id)}/approve`,
     reject: (id: string) => `/caselaw-ingest/items/${encodeURIComponent(id)}/reject`,
+    /** Onay ÖNCESİ karar metni (Onay Masası okuma bölmesi) — fullText ya da canlı kaynak. */
+    preview: (id: string) => `/caselaw-ingest/items/${encodeURIComponent(id)}/preview`,
   },
 } as const;

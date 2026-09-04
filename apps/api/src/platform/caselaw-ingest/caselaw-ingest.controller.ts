@@ -67,6 +67,17 @@ export class CaselawIngestController {
     };
   }
 
+  /**
+   * ONAY ÖNCESİ KARAR METNİ (önizleme) — Onay Masası'nın okuma bölmesi.
+   * Kuyruğa ve havuza YAZMAZ; fullText varsa onu, yoksa externalRef ile resmî
+   * kaynaktan temiz metin döndürür. İkisi de yoksa dürüst hata verir.
+   */
+  @Get("items/:id/preview")
+  @ReadPermission("aiProvider.view")
+  preview(@Param("id") id: string) {
+    return this.ingest.preview(id);
+  }
+
   /** Kuyruk kaydını ONAYLA → havuza yazar (tek kapı: CaselawPoolService). */
   @Post("items/:id/approve")
   @WritePermission("aiProvider.manage")

@@ -67,6 +67,8 @@ export default function IctihatPage() {
   const [results, setResults] = useState<CaseLawDoc[]>([]);
   const [liveResults, setLiveResults] = useState<LiveCaseLawDoc[]>([]);
   const [liveError, setLiveError] = useState<string | null>(null);
+  /** Canlı katman sayfası — "Daha fazla canlı sonuç" ile artar. */
+  const [livePage, setLivePage] = useState(1);
   const [liveDoc, setLiveDoc] = useState<{
     loading: boolean;
     hit: LiveCaseLawDoc | null;
@@ -101,6 +103,9 @@ export default function IctihatPage() {
           mode: searchMode,
           court: court || undefined,
           piiApproved,
+          // Canlı katman sayfası — yeni aramada ilk sayfaya dönülür.
+          livePage,
+          liveLimit: 10,
         });
         setResults(res.results);
         setLiveResults(res.live ?? []);
@@ -121,14 +126,43 @@ export default function IctihatPage() {
         setBusy(false);
       }
     },
-    [query, mode, court],
+    [query, mode, court, livePage],
   );
+
+  /** Canlı sayfalama: sonraki sayfayı ÇEKER ve listeye EKLER (daha fazla). */
+  const loadMoreLive = useCallback(async () => {
+    if (!query.trim() || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const nextPage = livePage + 1;
+      const res = await searchCaseLaw({
+        query: query.trim(),
+        mode: "CLASSIC",
+        court: court || undefined,
+        piiApproved: true,
+        livePage: nextPage,
+        liveLimit: 10,
+      });
+      // Aynı aramanın 2. sayfası: veritabanı sonuçları aynı; canlı EKLENİR.
+      setLiveResults((prev) => {
+        const seen = new Set(prev.map((h) => h.externalId));
+        return [...prev, ...(res.live ?? []).filter((h) => !seen.has(h.externalId))];
+      });
+      setLivePage(nextPage);
+      if (res.liveError) setLiveError(res.liveError);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Daha fazla sonuç alınamadı.");
+    } finally {
+      setBusy(false);
+    }
+  }, [query, busy, livePage, court]);
 
   /** Canlı karar belgesi — TEMİZ METİN olarak uygulama içinde okunur. */
   const openLiveDoc = useCallback(async (hit: LiveCaseLawDoc) => {
     setLiveDoc({ loading: true, hit, text: null, error: null });
     try {
-      const doc = await getLiveCaseLawDocument(hit.externalId);
+      const doc = await getLiveCaseLawDocument(hit.externalId, hit.sourceAdapter);
       setLiveDoc({ loading: false, hit, text: doc.text, error: null });
     } catch (err) {
       setLiveDoc({
@@ -266,10 +300,10 @@ export default function IctihatPage() {
           {(liveResults.length > 0 || liveError) && (
             <section className="space-y-3 rounded-xl border-l-4 border-emerald-600 bg-emerald-50/40 px-4 py-3">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge tone="green">CANLI · karararama.yargitay.gov.tr</Badge>
+                <Badge tone="green">CANLI · resmî kaynaklar</Badge>
                 <p className="text-xs text-emerald-800">
                   {liveResults.length > 0
-                    ? `${liveResults.length} sonuç — resmî Yargıtay karar aramadan, gerçek zamanlı`
+                    ? `${liveResults.length} sonuç — Yargıtay Karar Arama + Emsal (UYAP, tüm mahkemeler), gerçek zamanlı`
                     : ""}
                 </p>
               </div>
@@ -278,37 +312,66 @@ export default function IctihatPage() {
                 {liveResults.map((hit) => (
                   <li
                     key={hit.externalId}
-                    className="rounded-lg border border-emerald-300 bg-white px-4 py-3"
+                    // SATIR TAMAMI TIKLANABİLİR: tek tıkla karar metni okuma
+                    // bölmesinde açılır (önceki "Metni oku" düğmesi ikincileşti).
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => void openLiveDoc(hit)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        void openLiveDoc(hit);
+                      }
+                    }}
+                    className="cursor-pointer rounded-lg border border-emerald-300 bg-white px-4 py-3 text-left transition-colors hover:border-emerald-500 hover:bg-emerald-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-slate-900">{hit.court}</p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {hit.sourceAdapter === "EMSAL_UYAP" ? (
+                            <span className="inline-flex items-center rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-teal-800">
+                              EMSAL · UYAP
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-emerald-800">
+                              YARGITAY CANLI
+                            </span>
+                          )}
+                          {hit.status && (
+                            <span
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                                hit.status === "KESİNLEŞTİ"
+                                  ? "bg-slate-100 text-slate-700"
+                                  : "bg-amber-100 text-amber-800"
+                              }`}
+                            >
+                              {hit.status === "KESİNLEŞTİ" ? "Kesinleşti" : "Kesinleşmedi"}
+                            </span>
+                          )}
+                          <p className="text-sm font-semibold text-slate-900">{hit.court}</p>
+                        </div>
                         <p className="mt-0.5 text-sm text-slate-700">
                           E. {hit.caseNumber} · K. {hit.decisionNumber}
                           {hit.decisionDate ? ` · ${hit.decisionDate}` : ""}
                         </p>
                       </div>
-                      <div className="flex shrink-0 items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => void openLiveDoc(hit)}
-                          className="text-xs font-medium text-emerald-700 hover:underline"
-                        >
-                          Metni oku
-                        </button>
-                        <a
-                          href={hit.sourceUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs font-medium text-emerald-700 hover:underline"
-                        >
-                          Kaynağa git ↗
-                        </a>
-                      </div>
+                      <span className="shrink-0 text-[11px] font-medium text-emerald-700">
+                        Metni oku →
+                      </span>
                     </div>
                   </li>
                 ))}
               </ul>
+              {liveResults.length > 0 && liveResults.length >= livePage * 10 && (
+                <button
+                  type="button"
+                  onClick={() => void loadMoreLive()}
+                  disabled={busy}
+                  className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                >
+                  {busy ? "Yükleniyor…" : "Daha fazla canlı sonuç"}
+                </button>
+              )}
               {liveResults.length > 0 && (
                 <p className="text-[11px] text-emerald-800">
                   Canlı sonuçlar havuza otomatik yazılmaz. Dosyaya emsal bağlamak ya da tam metni
@@ -400,15 +463,29 @@ export default function IctihatPage() {
 function CaseLawCard({ doc, onAttach }: { doc: CaseLawDoc; onAttach: () => void }) {
   const [open, setOpen] = useState(false);
   const demo = isDemoCaseLaw(doc);
+  // Kaynak rozeti: MANUEL = büronun kendi girdiği kayıt; diğerleri ortak havuz.
+  const bureauRecord = doc.sourceAdapter === "MANUEL";
 
   return (
     <li className="rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
+            {demo ? (
+              <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-amber-800">
+                DEMO VERİ
+              </span>
+            ) : bureauRecord ? (
+              <span className="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-purple-800">
+                BÜRO KAYDI
+              </span>
+            ) : (
+              <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-blue-800">
+                HAVUZ
+              </span>
+            )}
             <Badge tone="navy">{doc.court}</Badge>
             {doc.chamber && <Badge tone="gray">{doc.chamber}</Badge>}
-            {demo && <Badge tone="yellow">DEMO VERİ</Badge>}
           </div>
           <p className="mt-1.5 text-sm font-semibold text-slate-900">
             E. {doc.caseNumber} · K. {doc.decisionNumber}

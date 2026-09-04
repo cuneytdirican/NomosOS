@@ -15,6 +15,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { adminApi, errorMessage } from "@/lib/api";
 import { EP } from "@/lib/endpoints";
 import { PageGate } from "@/components/RoleGate";
@@ -370,6 +371,12 @@ function Havuz() {
               {r.summary.length > 120 ? "…" : ""}
             </p>
           )}
+          <Link
+            href="/ictihat/onay"
+            className="mt-0.5 inline-block text-[11px] text-sky-300 hover:underline"
+          >
+            Onay Masası&apos;nda aç →
+          </Link>
         </div>
       ),
     },

@@ -1,65 +1,98 @@
 /**
- * CANLI YARGITAY KARAR ARAMA (karararama.yargitay.gov.tr).
+ * CANLI KARAR ARAMA - COK KAYNAKLI (ayni resmi API sozlesmesi).
  *
- * GERÇEK, resmî uç noktaları kullanır (uydurma entegrasyon yasağı — buradaki
- * her uç tarayıcı üzerinden birebir doğrulanmıştır):
- *   POST /arama     {data:{aranan, arananKelime}}                    → aramayı başlatır
- *   POST /aramalist {data:{aranan, arananKelime, pageSize, pageNumber}} → JSON sonuç listesi
- *   GET  /getDokuman?id=<kararId>                                    → karar belgesi
+ * GERCEK, resmi uc noktalari kullanir (uydurma entegrasyon yasagi - her uc
+ * tarayici uzerinden birebir dogrulanmistir). Iki kaynak AYNI sozlesmeyi
+ * paylasir (POST /arama, POST /aramalist -> JSON, GET /getDokuman ->
+ * {"data":"<html>...","metadata":{...}}):
+ *   - karararama.yargitay.gov.tr - yalniz YARGITAY kararlar?
+ *   - emsal.uyap.gov.tr          - TUM mahkeme dereceleri (istinaf + asliye;
+ *                                  847 binden fazla karar; `durum` alani ekstra)
  *
- * Canlı sonuçlar:
- *  - HAVUZA YAZILMAZ (yazım için kasıtlı toplama hattı: caselaw-ingest onayı).
- *  - sourceKind = "CANLI" işaretlenir; künye alanları birebir resmî yanıttan gelir.
- *  - Kaynak bağlantısı karararama.yargitay.gov.tr belge sayfasına gider.
- *  - Hata olursa arama DÜŞMEZ: liveError döner, veritabanı sonuçları aynen listelenir.
+ * Canli sonuclar:
+ *  - HAVUZA YAZILMAZ (yazim icin kasitli toplama hatti: caselaw-ingest onayi).
+ *  - sourceKind = "CANLI"; sourceAdapter kaynagi ayirt eder (rozet/rota).
+ *  - Kunye alanlari birebir resmi yanittan gelir; kayit baglantisi kaynagin
+ *    belge sayfasina gider.
+ *  - Hata olursa arama DUSMEZ: liveError doner, veritabani sonuclari aynen
+ *    listelenir.
  */
 
-const BASE_URL = "https://karararama.yargitay.gov.tr";
 const ARAMA_TIMEOUT_MS = 12_000;
 
 export interface LiveCaseLawHit {
-  /** Resmî kayıt kimliği (getDokuman?id= için) — havuz kimliği DEĞİLDİR. */
+  /** Resmi kayit kimligi (getDokuman?id= icin) - havuz kimligi DEGILDIR. */
   externalId: string;
   court: string;
   chamber?: string;
   caseNumber: string;
   decisionNumber: string;
   decisionDate?: string;
+  /** Emsal (UYAP) kayitlarinda karar?n durumu: KESINLASTI / KESINLESMEDI. */
+  status?: string;
   sourceUrl: string;
   sourceKind: "CANLI";
-  sourceAdapter: "YARGITAY_CANLI";
+  sourceAdapter: "YARGITAY_CANLI" | "EMSAL_UYAP";
   totalFound?: number;
 }
 
-interface YargitayListRow {
+interface LiveListRow {
   id: string;
   daire: string;
   esasNo: string;
   kararNo: string;
   kararTarihi: string;
+  /** Emsal ucunda eklenen alan. */
+  durum?: string;
 }
 
+/** Cok kaynakli yapilandirma - her ornek kendi taban adresini tasir. */
+export interface LiveAdapterConfig {
+  baseUrl: string;
+  /** Hit'lerde tasinan kaynak anahtari (rozet/rota icin). */
+  adapterKey: "YARGITAY_CANLI" | "EMSAL_UYAP";
+  /** `daire` alaninin basina eklenen ek (Yargitay'da "Yargitay "; Emsal'da tam ad gelir). */
+  courtPrefix: string;
+}
+
+/** Kaynak 1: Yargitay Karar Arama. */
+export const YARGITAY_LIVE_CONFIG: LiveAdapterConfig = {
+  baseUrl: "https://karararama.yargitay.gov.tr",
+  adapterKey: "YARGITAY_CANLI",
+  courtPrefix: "Yarg\u0131tay ",
+};
+
+/** Kaynak 2: Emsal (UYAP) - tum mahkeme dereceleri. */
+export const EMSAL_LIVE_CONFIG: LiveAdapterConfig = {
+  baseUrl: "https://emsal.uyap.gov.tr",
+  adapterKey: "EMSAL_UYAP",
+  courtPrefix: "",
+};
+
+/** DI anahtari: Emsal orneklemesi (ayni sinif, farkli yapilandirma). */
+export const EMSAL_LIVE = "EMSAL_LIVE_ADAPTER";
+
 /**
- * Resmî belge gövdesini (XML zarfı + gömülü HTML) TEMİZ METNE çevirir.
+ * Resmi belge govdesini (XML zarfi + gomulu HTML) TEMIZ METNE cevirir.
  *
- * Girdi biçimi (getDokuman): `<data><html>…<br>…</html></data>` — künye
- * koyu `<b>` bloğunda, karar metni `<p>` içinde. Dönüşüm:
- *  1. XML bildirimi/zarfları düşür, yalnız HTML gövdesini al
- *  2. Blok etiketlerini satır sonuna çevir (`<br>`, `</p>`, `</li>`…)
- *  3. Kalan etiketleri düşür, HTML varlıklarını çöz
- *  4. Ardışık boş satırları tek satıra indir
+ * Girdi bicimi (getDokuman): `<html>...</html>` - kunye koyu `<b>` blogunda,
+ * karar metni `<p>` icinde. Donusum:
+ *  1. XML bildirimi/zarflari dusur, yalniz HTML govdesini al
+ *  2. Blok etiketlerini satir sonuna cevir (`<br>`, `</p>`, `</li>` ...)
+ *  3. Kalan etiketleri dusur, HTML varliklarini coz
+ *  4. Ardisik bos satirlari tek satira indir
  */
 export function cleanOfficialDocument(raw: string): string {
   let s = raw;
   // XML bildirimi ve zarflar.
   s = s.replace(/<\?xml[^>]*\?>/gi, "");
   s = s.replace(/<\/?data[^>]*>/gi, "");
-  // Künye/karar blokları satır sonuna.
+  // Kunye/karar bloklari satir sonuna.
   s = s.replace(/<br\s*\/?>/gi, "\n");
   s = s.replace(/<\/(p|div|li|ul|ol|tr|h[1-6])>/gi, "\n");
-  // Kalan tüm etiketler düşer.
+  // Kalan tum etiketler dusar.
   s = s.replace(/<[^>]+>/g, "");
-  // HTML varlıkları.
+  // HTML varliklari.
   s = s
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/gi, "&")
@@ -67,7 +100,7 @@ export function cleanOfficialDocument(raw: string): string {
     .replace(/&gt;/gi, ">")
     .replace(/&quot;/gi, '"')
     .replace(/&#39;|&apos;/gi, "'");
-  // Boşluk/satır düzeni.
+  // Bosluk/satir duzeni.
   s = s.replace(/\r/g, "");
   s = s
     .split("\n")
@@ -79,109 +112,140 @@ export function cleanOfficialDocument(raw: string): string {
 
 export interface LiveCaseLawDocument {
   externalId: string;
-  /** Temizlenmiş karar metni (XML/HTML etiketlerinden arındırılmış). */
+  /** Temizlenmis karar metni (XML/HTML etiketlerinden arindirilmis). */
   text: string;
   sourceUrl: string;
 }
 
+/**
+ * Canli adaptor - hem Yargitay Karar Arama hem Emsal (UYAP) icin TEK sinif:
+ * iki uc da ayni sozlesmeyi kullanir. Yapilandirmayi kurucudan alir
+ * (varsayilan: Yargitay).
+ */
 export class YargitayLiveAdapter {
+  private readonly cfg: LiveAdapterConfig;
+
+  constructor(config: LiveAdapterConfig = YARGITAY_LIVE_CONFIG) {
+    this.cfg = config;
+  }
+
   /**
-   * Canlı karar BELGESİ — GET /getDokuman?id=.
+   * Canli karar BELGESI - GET /getDokuman?id=.
    *
-   * Resmî uç, kararı XML zarfı içinde gömülü HTML olarak döndürür
-   * (`<data><html>…</html></data>`); tarayıcıda bu HAM görünür (kullanıcı
-   * "XML'i gösteriyor" bulgusu). Burada çekilip TEMİZ METNE çevrilir:
-   * etiketler düşer, HTML varlıkları çözülür, satır yapısı korunur.
+   * Resmi uc, karari JSON zarfi icinde gomulu HTML olarak dondurur
+   * (`{"data":"<html>...</html>","metadata":...}`); tarayicida bu HAM gorunur
+   * (kullanici "XML'i gosteriyor" bulgusu). Burada cekilip TEMIZ METNE
+   * cevrilir: etiketler dus(er), HTML varliklari cozulur, satir yapisi korunur.
    */
   async fetchDocument(externalId: string): Promise<LiveCaseLawDocument> {
     if (!/^\d{1,20}$/.test(externalId)) {
-      throw new Error("Geçersiz karar kimliği.");
+      throw new Error("Ge\u00e7ersiz karar kimli\u011fi.");
     }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ARAMA_TIMEOUT_MS);
     try {
-      const res = await fetch(`${BASE_URL}/getDokuman?id=${externalId}`, {
+      const res = await fetch(`${this.cfg.baseUrl}/getDokuman?id=${externalId}`, {
         signal: controller.signal,
-        // İÇERİK UZLAŞMASI: resmî uç Accept başlığına bakar — application/json
-        // istenirse {"data":"<html>…"} döner; text/xml istenirse HAM XML.
-        // JSON zarfı istiyoruz (temizleme hattı buna göre çalışır).
+        // Icerik uzlasmasi: resmi uc Accept basligina bakar - application/json
+        // istenirse JSON zarfi, text/xml istenirse HAM XML doner. Zarf istiyoruz.
         headers: { accept: "application/json, text/html, */*" },
       });
       if (!res.ok) {
-        throw new Error(`karararama.yargitay.gov.tr ${res.status} döndü.`);
+        throw new Error(`${this.cfg.baseUrl} ${res.status} d\u00f6nd\u00fc.`);
       }
       const raw = await res.text();
-      // Resmî uç JSON zarfı döndürür: {"data":"<html>…</html>", "metadata":{…}} —
-      // karar metni `data` alanında HTML olarak gelir. Zarf JSON değilse gövde
-      // doğrudan XML/HTML varsayılır (iki biçime de dayanıklı).
       let html = raw;
       try {
-        const parsed = JSON.parse(raw) as { data?: unknown };
+        const parsed = JSON.parse(raw) as {
+          data?: unknown;
+          metadata?: { FMTY?: string; FMTE?: string; FMU?: string };
+        };
         if (typeof parsed.data === "string" && parsed.data.trim().length > 0) {
           html = parsed.data;
+        } else if (parsed && typeof parsed === "object" && "data" in parsed) {
+          // Zarf VAR ama data yok -> resmi kaynak KAYIT BULAMADI (FMTY:ERROR).
+          // Ham JSON'u "metin" olarak GOSTERMEK yerine durust hata firlat.
+          const reason =
+            parsed.metadata?.FMU ??
+            parsed.metadata?.FMTE ??
+            "Resmi kaynak bu kimlik i\u00e7in karar belgesi d\u00f6nd\u00fcrmedi.";
+          throw new Error(`Karar belgesi al\u0131namad\u0131: ${reason}`);
         }
-      } catch {
-        // JSON değil — gövdeyi olduğu gibi temizle.
+      } catch (err) {
+        if (err instanceof Error && err.message.startsWith("Karar belgesi al\u0131namad\u0131")) throw err;
+        // JSON degil - govdeyi oldugu gibi temizle.
       }
       const text = cleanOfficialDocument(html);
       if (text.trim().length < 40) {
-        throw new Error("Karar belgesi boş ya da okunamadı.");
+        throw new Error("Karar belgesi bo\u015f ya da okunamad\u0131.");
       }
-      return { externalId, text, sourceUrl: `${BASE_URL}/getDokuman?id=${externalId}` };
+      return { externalId, text, sourceUrl: `${this.cfg.baseUrl}/getDokuman?id=${externalId}` };
     } finally {
       clearTimeout(timer);
     }
   }
 
-  /** Canlı arama: resmî /arama + /aramalist zinciri. */
-  async search(query: string, limit = 5): Promise<{ hits: LiveCaseLawHit[]; totalFound?: number }> {
+  /** Canli arama: resmi /arama + /aramalist zinciri. Sayfali: page 1'den baslar. */
+  async search(
+    query: string,
+    limit = 10,
+    page = 1,
+  ): Promise<{ hits: LiveCaseLawHit[]; totalFound?: number; page?: number }> {
     const q = query.trim();
     if (q.length < 3) return { hits: [] };
+    const pageSize = Math.min(Math.max(1, limit), 50);
+    const pageNumber = Math.max(1, Math.min(100, page));
 
-    // 0) Oturum açma: resmî site çerezsiz POST'a HTML hata sayfası döndürür —
-    // önce ana sayfa GET'lenir ve Set-CCookie zinciri yakalanır.
+    // 0) Oturum acma: karararama cerezsiz POST'a HTML hata sayfasi dondurur -
+    //    ana sayfa GET'lenir ve Set-Cookie zinciri yakalanir (Emsal'da cerez
+    //    sart degil ama bu adim zararsizdir).
     const cookie = await this.openSession();
 
-    // 1) /arama — oturumu başlatır. Bu uç HER ZAMAN HTML döndürür (sonuç sayfası
-    //    kabuğu); gövdesi kullanılmaz, yalnız 200 beklenir — JSON çözümlenmez.
-    await this.postText(`${BASE_URL}/arama`, { data: { aranan: q, arananKelime: q } }, cookie);
+    // 1) /arama - oturumu baslatir. Bu uc HER ZAMAN HTML dondurur (sonuc
+    //    sayfasi kabugu); govdesi kullanilmaz, yalniz 200 beklenir.
+    await this.postText(`${this.cfg.baseUrl}/arama`, { data: { aranan: q, arananKelime: q } }, cookie);
 
-    // 2) /aramalist — sonuç listesi (JSON).
+    // 2) /aramalist - sonuc listesi (JSON), ISTENEN SAYFA.
     const res = await this.post(
-      `${BASE_URL}/aramalist`,
-      { data: { aranan: q, arananKelime: q, pageSize: limit, pageNumber: 1 } },
+      `${this.cfg.baseUrl}/aramalist`,
+      { data: { aranan: q, arananKelime: q, pageSize: pageNumber * pageSize, pageNumber } },
       cookie,
     );
     const payload = (res.data ?? {}) as {
-      data?: YargitayListRow[];
+      data?: LiveListRow[];
       recordsFiltered?: number;
     };
     const body = payload.data;
     const totalFound = typeof payload.recordsFiltered === "number" ? payload.recordsFiltered : undefined;
-    const rows = Array.isArray(body) ? body.slice(0, limit) : [];
+    // Istenen sayfa penceresini dondur (pageSize*n'in son `pageSize` tanesi).
+    const rows = Array.isArray(body)
+      ? body.slice((pageNumber - 1) * pageSize, pageNumber * pageSize)
+      : [];
 
     return {
       totalFound,
+      page: pageNumber,
       hits: rows.map((r) => ({
         externalId: String(r.id),
-        court: `Yargıtay ${r.daire}`,
+        court: this.cfg.courtPrefix ? `${this.cfg.courtPrefix}${r.daire}` : r.daire,
         chamber: r.daire,
         caseNumber: r.esasNo,
         decisionNumber: r.kararNo,
         decisionDate: r.kararTarihi,
-        sourceUrl: `${BASE_URL}/getDokuman?id=${r.id}`,
+        status: r.durum,
+        sourceUrl: `${this.cfg.baseUrl}/getDokuman?id=${r.id}`,
         sourceKind: "CANLI",
-        sourceAdapter: "YARGITAY_CANLI",
+        sourceAdapter: this.cfg.adapterKey,
       })),
     };
   }
 
-  /** Ana sayfayı GET'ler ve Set-Cookie zincirini "k=v; k2=v2" biçiminde döner. */
+  /** Ana sayfayi GET'ler ve Set-Cookie zincirini "k=v; k2=v2" biciminde doner. */
   private async openSession(): Promise<string> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ARAMA_TIMEOUT_MS);
     try {
-      const res = await fetch(`${BASE_URL}/`, {
+      const res = await fetch(`${this.cfg.baseUrl}/`, {
         signal: controller.signal,
         headers: { accept: "text/html" },
       });
@@ -195,7 +259,7 @@ export class YargitayLiveAdapter {
     }
   }
 
-  /** POST → gövdeyi METİN olarak tüketir (HTML dönen uçlar için — /arama). */
+  /** POST -> govdeyi METIN olarak tuketir (HTML donen uclar icin - /arama). */
   private async postText(url: string, body: unknown, cookie?: string): Promise<void> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ARAMA_TIMEOUT_MS);
@@ -211,7 +275,7 @@ export class YargitayLiveAdapter {
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        throw new Error(`karararama.yargitay.gov.tr ${res.status} döndü.`);
+        throw new Error(`${this.cfg.baseUrl} ${res.status} d\u00f6nd\u00fc.`);
       }
       await res.text();
     } finally {
@@ -238,7 +302,7 @@ export class YargitayLiveAdapter {
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        throw new Error(`karararama.yargitay.gov.tr ${res.status} döndü.`);
+        throw new Error(`${this.cfg.baseUrl} ${res.status} d\u00f6nd\u00fc.`);
       }
       return (await res.json()) as Record<string, unknown>;
     } finally {

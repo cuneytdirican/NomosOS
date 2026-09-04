@@ -3,6 +3,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { PlatformAuditService } from "../platform-audit.service";
 import { CaselawPoolService } from "../caselaw-pool/caselaw-pool.service";
 import { isPlausibleDecisionDate } from "../caselaw-pool/caselaw-pool.schemas";
+import { YargitayLiveAdapter } from "../../caselaw/adapters/yargitay-live.adapter";
 import type { PlatformAuthUser } from "../platform.types";
 import {
   feedResponseSchema,
@@ -49,12 +50,33 @@ export interface SourceRunSummary {
 
 const COMPOUND_WHERE = "court_caseNumber_decisionNumber" as const;
 
+/** Önizleme sonucu — metin ya kuyruk kaydından (KUYRUK) ya da resmî kaynaktan (CANLI) gelir. */
+export interface IngestPreviewResult {
+  item: {
+    id: string;
+    court: string;
+    chamber: string | null;
+    caseNumber: string;
+    decisionNumber: string;
+    decisionDate: Date | null;
+    sourceKey: string;
+    sourceUrl: string | null;
+    externalRef: string | null;
+  };
+  source: "KUYRUK" | "CANLI";
+  text: string;
+  sourceUrl: string | null;
+}
+
 @Injectable()
 export class CaselawIngestService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: PlatformAuditService,
     private readonly pool: CaselawPoolService,
+    /** Onay öncesi karar metnini KAYNAKTAN okuma (önizleme) — onay akışını
+     *  körlemeye çevirmemek için. Yazma/değiştirme YAPMAZ, yalnız çeker. */
+    private readonly liveAdapter: YargitayLiveAdapter,
   ) {}
 
   // ------------------------------------------------------------------ //
@@ -159,6 +181,7 @@ export class CaselawIngestService {
     const batchId = `ingest-${now.toISOString()}`;
 
     // Biçimsiz künye KUYRUĞA DA GİREMEZ: havuz kapısıyla AYNI şema.
+    // (externalRef şemada transform ile normalize edilir; havuz doğrulamasına girmez.)
     const valid: Array<Record<string, string | undefined>> = [];
     let rejected = 0;
     const seen = new Set<string>();
@@ -182,6 +205,7 @@ export class CaselawIngestService {
         summary: record.summary,
         fullText: record.fullText,
         sourceUrl: record.sourceUrl,
+        externalRef: record.externalRef,
       });
     }
 
@@ -197,6 +221,7 @@ export class CaselawIngestService {
         summary: v.summary ?? null,
         fullText: v.fullText ?? null,
         sourceUrl: v.sourceUrl ?? null,
+        externalRef: v.externalRef ?? null,
         sourceKey: source.key,
         batchId,
       })),
@@ -247,6 +272,55 @@ export class CaselawIngestService {
         REDDEDILDI: countBy["REDDEDILDI"] ?? 0,
       },
     };
+  }
+
+  /**
+   * ÖNİZLEME — onay ÖNCESİ karar metnini okuma (Onay Masası'nın okuma bölmesi).
+   *
+   * Öncelik sırası:
+   *  1. Kuyruk kaydının fullText'i varsa OLDUĞU GİBİ döner (kaynağa gidilmez).
+   *  2. fullText yok ama externalRef VARSA → YargitayLiveAdapter.fetchDocument
+   *     ile resmî kaynaktan TEMİZ METİN çekilir (onay körlemeye çevrilmez).
+   *  3. İkisi de yoksa DÜRÜST HATA: uydurma/boş metin gösterilmez.
+   *
+   * Bu metot HAVUZA ve KUYRUĞA YAZMAZ — yalnızca okur.
+   */
+  async preview(id: string): Promise<IngestPreviewResult> {
+    const item = await this.prisma.client.caseLawIngestItem.findUnique({ where: { id } });
+    if (!item) throw new NotFoundException("Kuyruk kaydı bulunamadı.");
+
+    const citation = {
+      id: item.id,
+      court: item.court,
+      chamber: item.chamber,
+      caseNumber: item.caseNumber,
+      decisionNumber: item.decisionNumber,
+      decisionDate: item.decisionDate,
+      sourceKey: item.sourceKey,
+      sourceUrl: item.sourceUrl,
+      externalRef: item.externalRef,
+    };
+
+    if (item.fullText && item.fullText.trim().length > 0) {
+      return { item: citation, source: "KUYRUK", text: item.fullText, sourceUrl: item.sourceUrl };
+    }
+
+    if (!item.externalRef) {
+      throw new BadRequestException(
+        "Bu kayıtta karar metni yok (fullText boş) ve dış kaynak kimliği (externalRef) de taşınmıyor; " +
+          "metin okunamıyor. Kararı yalnız künye/özet üzerinden değerlendirebilir ya da kaynağı belirten bir besleme tanımlayabilirsiniz.",
+      );
+    }
+
+    try {
+      const doc = await this.liveAdapter.fetchDocument(item.externalRef);
+      return { item: citation, source: "CANLI", text: doc.text, sourceUrl: doc.sourceUrl };
+    } catch (err) {
+      // Canlı kaynak hatası onayı düşürmez — dürüst mesajla yeniden denenebilir.
+      throw new BadRequestException(
+        `Karar metni kaynaktan alınamadı (kimlik ${item.externalRef}): ${messageOf(err)}`,
+      );
+    }
   }
 
   /**

@@ -10,7 +10,7 @@ import { AiRunnerService } from "./ai-runner.service";
 import { CaseLawAdapterRegistry } from "./adapters/registry.service";
 import { LocalDbCaseLawAdapter } from "./adapters/local-db.adapter";
 import { ManualEntryCaseLawAdapter } from "./adapters/manual-entry.adapter";
-import { YargitayLiveAdapter } from "./adapters/yargitay-live.adapter";
+import { YargitayLiveAdapter, EMSAL_LIVE, EMSAL_LIVE_CONFIG } from "./adapters/yargitay-live.adapter";
 // D1.3: BYO yetkisi + platform sağlayıcı yedeği için.
 import { AiModule } from "../ai/ai.module";
 
@@ -30,6 +30,9 @@ import { AiModule } from "../ai/ai.module";
   providers: [
     // CANLI katman: resmî karararama.yargitay.gov.tr arama istemcisi.
     YargitayLiveAdapter,
+    // CANLI katman 2: Emsal/UYAP — tüm mahkeme dereceleri (aynı sözleşme,
+    // ayrı yapılandırma; DI anahtarıyla ayrılır).
+    { provide: EMSAL_LIVE, useValue: new YargitayLiveAdapter(EMSAL_LIVE_CONFIG) },
     CaselawService,
     CitationVerifyService,
     AiRunnerService,

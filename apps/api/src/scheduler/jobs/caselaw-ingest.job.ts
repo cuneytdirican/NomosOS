@@ -23,11 +23,12 @@ import type { JobExecutionContext, JobResult, ScheduledJobHandler } from "../sch
 @Injectable()
 export class CaselawIngestJob implements ScheduledJobHandler {
   readonly key = JOB_KEYS.CASELAW_INGEST;
-  readonly name = "İçtihat toplama (besleme → onay kuyruğu)";
+  readonly name = "İçtihat besleme çekimi";
   readonly defaultCron = "0 6 * * *";
   readonly description =
-    "Yapılandırılmış içtihat beslemelerinden yeni kararları çeker ve onay kuyruğuna yazar. " +
-    "Havuza yazım YOKTUR — kayıtlar platform görevlisi onayladığında havuz kapısından geçer.";
+    "Her sabah 06:00'da tanımlı veri kaynaklarından (ör. lisanslı içtihat servisi) yeni Yargıtay " +
+    "kararlarını çeker. Çekilen kararlar doğrudan havuza GİRMEZ; İçtihat Onay Masası'nda " +
+    "bekleyen kayıt olarak listelenir ve yönetici karar metnini okuyup onayladığında havuza yazılır.";
 
   constructor(private readonly ingest: CaselawIngestService) {}
 

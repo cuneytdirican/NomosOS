@@ -10,6 +10,10 @@ import { CaselawPoolController } from "./caselaw-pool/caselaw-pool.controller";
 import { CaselawPoolService } from "./caselaw-pool/caselaw-pool.service";
 import { CaselawIngestController } from "./caselaw-ingest/caselaw-ingest.controller";
 import { CaselawIngestService } from "./caselaw-ingest/caselaw-ingest.service";
+// Onay Masası önizlemesi: karar metnini resmî kaynaktan okuyan canlı adaptör.
+// Durumsuz istemcidir; CaselawModule'deki örnekten AYRI, platforma özel örnektir
+// (bu modül bilinçli olarak başka modül İÇERMEZ — üstteki not).
+import { YargitayLiveAdapter } from "../caselaw/adapters/yargitay-live.adapter";
 import { PlatformAuthController } from "./auth/platform-auth.controller";
 import { PlatformAuthService } from "./auth/platform-auth.service";
 import { PlatformApprovalExecutorService } from "./approvals/platform-approval-executor.service";
@@ -99,6 +103,7 @@ import { PlatformUsersService } from "./users/platform-users.service";
     FineTuneService,
     CaselawPoolService,
     CaselawIngestService,
+    YargitayLiveAdapter,
     PlatformApprovalsService,
     PlatformApprovalExecutorService,
     PlatformTenantsService,

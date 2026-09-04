@@ -47,8 +47,11 @@ export class CaselawController {
     @Query("from") from?: string,
     @Query("to") to?: string,
     @Query("limit") limit?: string,
+    /** Canlı katman: sayfa (1+) ve sayfa boyutu (tavan 25). */
+    @Query("livePage") livePage?: string,
+    @Query("liveLimit") liveLimit?: string,
   ) {
-    return this.caselaw.search(user.tenantId, { q, court, from, to, limit });
+    return this.caselaw.search(user.tenantId, { q, court, from, to, limit, livePage, liveLimit });
   }
 
   /** Adaptörlerin sağlık durumu (bir kaynak düştüğünde aramanın neden eksik döndüğü). */
@@ -58,14 +61,17 @@ export class CaselawController {
   }
 
   /**
-   * CANLI KARAR BELGESİ — resmî getDokuman yanıtı (XML zarfı + gömülü HTML)
-   * TEMİZ METNE çevrilerek döner; tarayıcıda ham XML gösterilir (kullanıcı
-   * bulgusu). Uç yalnız dış kimliği kabul eder; havuza YAZMAZ.
+   * CANLI KARAR BELGESİ — resmî getDokuman yanıtı (JSON zarfı + gömülü HTML)
+   * TEMİZ METNE çevrilerek döner. `?source=YARGITAY_CANLI|EMSAL_UYAP` kaynağı
+   * seçer (varsayılan Yargıtay). Havuza YAZMAZ.
    */
   @Get("live/:externalId")
   @AiThrottle(2)
-  async liveDocument(@Param("externalId") externalId: string) {
-    return this.caselaw.liveDocument(externalId);
+  async liveDocument(
+    @Param("externalId") externalId: string,
+    @Query("source") source?: string,
+  ) {
+    return this.caselaw.liveDocument(externalId, source);
   }
 
   /**

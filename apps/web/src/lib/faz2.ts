@@ -860,9 +860,13 @@ export interface CaseLawSearchInput {
   court?: string;
   caseId?: string;
   piiApproved?: boolean;
+  /** Canlı katman sayfası (1+; yalnız klasik aramada geçerli). */
+  livePage?: number;
+  /** Canlı katman sayfa boyutu (sunucu tavanı 25). */
+  liveLimit?: number;
 }
 
-/** CANLI kaynak sonucu — resmî karararama.yargitay.gov.tr (havuza yazılmaz). */
+/** CANLI kaynak sonucu — resmî kaynaklardan (havuza yazılmaz). */
 export interface LiveCaseLawDoc {
   externalId: string;
   court: string;
@@ -870,6 +874,8 @@ export interface LiveCaseLawDoc {
   caseNumber: string;
   decisionNumber: string;
   decisionDate?: string;
+  /** Emsal (UYAP) kayıtlarında kararın durumu. */
+  status?: string;
   sourceUrl: string;
   sourceKind: "CANLI";
   sourceAdapter: string;
@@ -907,7 +913,13 @@ export async function searchCaseLaw(input: CaseLawSearchInput): Promise<CaseLawS
         })
       : // Klasik arama DETERMİNİSTİKTİR ve GET'tir.
         await api<unknown>("/caselaw/search", {
-          query: { q: input.query, court: input.court || undefined },
+          query: {
+            q: input.query,
+            court: input.court || undefined,
+            // Canlı katman sayfalama parametreleri (tavan sunucuda uygulanır).
+            livePage: input.livePage ?? 1,
+            liveLimit: input.liveLimit ?? 10,
+          },
         });
   const results = asList<Record<string, unknown>>(res).map((hit) => ({
     ...hit,
@@ -945,12 +957,17 @@ export function detailCaseLaw(id: string): Promise<CaseLawDocDetail> {
 }
 
 /** CANLI karar belgesi — GET /caselaw/live/:externalId (temiz metin; XML değil). */
-export function getLiveCaseLawDocument(externalId: string): Promise<{
+export function getLiveCaseLawDocument(
+  externalId: string,
+  source?: string,
+): Promise<{
   externalId: string;
   text: string;
   sourceUrl: string;
 }> {
-  return api(`/caselaw/live/${encodeURIComponent(externalId)}`);
+  return api(
+    `/caselaw/live/${encodeURIComponent(externalId)}${source ? `?source=${encodeURIComponent(source)}` : ""}`,
+  );
 }
 
 export function listCaseLawRefs(caseId: string): Promise<CaseLawRef[]> {

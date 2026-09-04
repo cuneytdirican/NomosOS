@@ -15,7 +15,7 @@
  * kiracıya ait olan tek şey CaseLawReference'tır ve her sorgusunda tenantId süzgeci vardır.
  */
 
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import type { CaseLawDocument } from "@nomosos/db";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
@@ -30,7 +30,11 @@ import {
   CaseLawSearchPlanSchema,
   type CaseLawSearchPlan,
 } from "./prompts/caselaw-search";
-import { LiveCaseLawHit, YargitayLiveAdapter } from "./adapters/yargitay-live.adapter";
+import {
+  EMSAL_LIVE,
+  LiveCaseLawHit,
+  YargitayLiveAdapter,
+} from "./adapters/yargitay-live.adapter";
 import {
   buildCaseLawSummarizeMessages,
   CaseLawSummarySchema,
@@ -67,7 +71,10 @@ export class CaselawService {
     private readonly adapters: CaseLawAdapterRegistry,
     private readonly manualAdapter: ManualEntryCaseLawAdapter,
     private readonly aiRunner: AiRunnerService,
+    /** CANLI kaynak 1: Yargıtay Karar Arama (karararama.yargitay.gov.tr). */
     private readonly liveAdapter: YargitayLiveAdapter,
+    /** CANLI kaynak 2: Emsal/UYAP — tüm mahkeme dereceleri (emsal.uyap.gov.tr). */
+    @Inject(EMSAL_LIVE) private readonly emsalAdapter: YargitayLiveAdapter,
   ) {}
 
   // ------------------------------------------------------------------ //
@@ -82,6 +89,9 @@ export class CaselawService {
       from?: string;
       to?: string;
       limit?: string;
+      /** Canlı katman sayfası (1'den başlar) ve sayfa boyutu (tavan 25). */
+      livePage?: string;
+      liveLimit?: string;
     },
   ): Promise<{
     results: CaseLawHit[];
@@ -99,19 +109,30 @@ export class CaselawService {
       limit: params.limit ? Number.parseInt(params.limit, 10) || undefined : undefined,
     });
 
-    // CANLI KATMAN — resmî kaynaktan, veritabanı aramasıyla PARALEL. Kaynak
-    // erişilemezse arama düşmez: canlı bölüm hata notuyla listelenir.
+    // CANLI KATMAN — İKİ resmî kaynak PARALEL (Yargıtay + Emsal/UYAP). Bir
+    // kaynağın hatası diğerini düşürmez; İKİSİ de düşerse liveError döner.
     let live: LiveCaseLawHit[] = [];
     let liveError: string | undefined;
     const localResults = await localPromise;
-    try {
-      const res = await this.liveAdapter.search(params.q ?? "", 5);
-      live = res.hits;
-    } catch (err) {
-      liveError =
-        err instanceof Error
-          ? `Canlı Yargıtay araması yapılamadı: ${err.message}`
-          : "Canlı Yargıtay araması yapılamadı.";
+    {
+      const livePage = Math.max(1, Math.min(5, Number.parseInt(params.livePage ?? "1", 10) || 1));
+      const liveLimit = Math.max(1, Math.min(25, Number.parseInt(params.liveLimit ?? "10", 10) || 10));
+      const q = params.q ?? "";
+      const run = (adapter: YargitayLiveAdapter) =>
+        q.trim().length >= 3 ? adapter.search(q, liveLimit, livePage) : Promise.resolve({ hits: [] as LiveCaseLawHit[] });
+      const settled = await Promise.allSettled([run(this.liveAdapter), run(this.emsalAdapter)]);
+      const hits: LiveCaseLawHit[] = [];
+      const errors: string[] = [];
+      for (const s of settled) {
+        if (s.status === "fulfilled") hits.push(...s.value.hits);
+        else errors.push(s.reason instanceof Error ? s.reason.message : String(s.reason));
+      }
+      live = hits;
+      if (errors.length === 2) {
+        liveError = `Canlı aramalar yapılamadı: ${errors.join(" · ")}`;
+      } else if (errors.length === 1) {
+        liveError = `Bir canlı kaynak erişilemedi: ${errors[0]}`;
+      }
     }
 
     return {
@@ -122,16 +143,21 @@ export class CaselawService {
     };
   }
 
-  /** Canlı Yargıtay karar belgesi — temiz metin; havuza yazılmaz. */
-  async liveDocument(externalId: string) {
+  /**
+   * Canlı karar belgesi — temiz metin; havuza yazılmaz.
+   * `source` parametresi kaynağı seçer: YARGITAY_CANLI (varsayılan) | EMSAL_UYAP.
+   */
+  async liveDocument(externalId: string, source?: string) {
+    const adapter = source === "EMSAL_UYAP" ? this.emsalAdapter : this.liveAdapter;
     // Kısa süreli bellek önbelleği: aynı karar art arda açıldığında resmî
-    // kaynağı yormamak için (10 dk).
-    const cached = this.liveDocCache.get(externalId);
+    // kaynağı yormamak için (10 dk). Anahtar kaynak+kimlik.
+    const cacheKey = `${source ?? "YARGITAY_CANLI"}:${externalId}`;
+    const cached = this.liveDocCache.get(cacheKey);
     if (cached && Date.now() - cached.at < 10 * 60 * 1000) {
       return cached.doc;
     }
-    const doc = await this.liveAdapter.fetchDocument(externalId);
-    this.liveDocCache.set(externalId, { at: Date.now(), doc });
+    const doc = await adapter.fetchDocument(externalId);
+    this.liveDocCache.set(cacheKey, { at: Date.now(), doc });
     return doc;
   }
 
