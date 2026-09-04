@@ -48,6 +48,7 @@ import {
   ToastStack,
   useToasts,
 } from "@/components/ai-ui";
+import { ReadingModal } from "@/components/reading-modal";
 import { fmtDate, isDemoCaseLaw } from "@/lib/labels";
 
 const COURTS = [
@@ -415,45 +416,54 @@ export default function IctihatPage() {
         }}
       />
 
-      {/* CANLI KARAR METNİ — resmî getDokuman yanıtı sunucuda temizlenir;
-          tarayıcıda ham XML gösterilmez (kullanıcı bulgusu). */}
-      <Modal
-        open={liveDoc.hit !== null}
-        title={
-          liveDoc.hit
-            ? `${liveDoc.hit.court} — E. ${liveDoc.hit.caseNumber} · K. ${liveDoc.hit.decisionNumber}`
-            : "Karar metni"
-        }
-        onClose={() => setLiveDoc({ loading: false, hit: null, text: null, error: null })}
-      >
-        {liveDoc.loading ? (
+      {/* CANLI KARAR METNİ — TAM EKRAN OKUMA MODU: resmî getDokuman yanıtı
+          sunucuda temizlenir; metin ekranın tamamında, yakınlaştırma (A−/A+)
+          ve tam ekran geçişiyle okunur (önceki 60vh'lik kutu kırpıktı). */}
+      {liveDoc.loading && liveDoc.hit ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30">
           <Spinner label="Karar metni resmî kaynaktan alınıyor…" />
-        ) : liveDoc.error ? (
-          <>
-            <ErrorBox message={liveDoc.error} />
-            {liveDoc.hit?.sourceUrl && (
-              <a
-                href={liveDoc.hit.sourceUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 inline-block text-xs font-medium text-emerald-700 hover:underline"
-              >
-                Resmî kaynaktan aç ↗
-              </a>
-            )}
-          </>
-        ) : (
-          <>
-            <p className="mb-2 text-[11px] text-slate-500">
-              Metin resmî kaynaktan (karararama.yargitay.gov.tr) alınmış ve okunur biçime
-              çevrilmiştir; kayıt henüz büronuzun havuzunda DEĞİLDİR.
-            </p>
-            <p className="max-h-[60vh] overflow-y-auto whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">
-              {liveDoc.text}
-            </p>
-          </>
-        )}
-      </Modal>
+        </div>
+      ) : liveDoc.error && liveDoc.hit ? (
+        <Modal open onClose={() => setLiveDoc({ loading: false, hit: null, text: null, error: null })} title="Karar metni">
+          <ErrorBox message={liveDoc.error} />
+          {liveDoc.hit.sourceUrl && (
+            <a
+              href={liveDoc.hit.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-block text-xs font-medium text-emerald-700 hover:underline"
+            >
+              Resmî kaynaktan aç ↗
+            </a>
+          )}
+        </Modal>
+      ) : (
+        <ReadingModal
+          open={liveDoc.hit !== null && liveDoc.text !== null}
+          onClose={() => setLiveDoc({ loading: false, hit: null, text: null, error: null })}
+          title={liveDoc.hit ? liveDoc.hit.court : "Karar metni"}
+          subtitle={
+            liveDoc.hit
+              ? `E. ${liveDoc.hit.caseNumber} · K. ${liveDoc.hit.decisionNumber}${
+                  liveDoc.hit.decisionDate ? ` · ${liveDoc.hit.decisionDate}` : ""
+                }`
+              : undefined
+          }
+          headerExtra={
+            liveDoc.hit?.sourceAdapter === "EMSAL_UYAP" ? (
+              <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-semibold text-teal-800">
+                EMSAL · UYAP
+              </span>
+            ) : (
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                YARGITAY CANLI
+              </span>
+            )
+          }
+          text={liveDoc.text ?? ""}
+          note="Metin resmî kaynaktan alınmış ve okunur biçime çevrilmiştir; kayıt henüz büronuzun havuzunda değildir."
+        />
+      )}
 
       <ToastStack toasts={toasts} onDismiss={dismiss} />
     </div>
@@ -462,6 +472,7 @@ export default function IctihatPage() {
 
 function CaseLawCard({ doc, onAttach }: { doc: CaseLawDoc; onAttach: () => void }) {
   const [open, setOpen] = useState(false);
+  const [reading, setReading] = useState(false);
   const demo = isDemoCaseLaw(doc);
   // Kaynak rozeti: MANUEL = büronun kendi girdiği kayıt; diğerleri ortak havuz.
   const bureauRecord = doc.sourceAdapter === "MANUEL";
@@ -519,21 +530,42 @@ function CaseLawCard({ doc, onAttach }: { doc: CaseLawDoc; onAttach: () => void 
         )}
         {doc.fullText && (
           <>
-            <button
-              type="button"
-              onClick={() => setOpen((v) => !v)}
-              className="text-xs font-medium text-slate-500 hover:text-amber-600"
-            >
-              {open ? "Karar metnini gizle" : "Karar metnini göster"}
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setOpen((v) => !v)}
+                className="text-xs font-medium text-slate-500 hover:text-amber-600"
+              >
+                {open ? "Karar metnini gizle" : "Karar metnini göster"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setReading(true)}
+                className="text-xs font-medium text-slate-500 hover:text-amber-600"
+                title="Kararın tamamını tam ekranda, yakınlaştırarak oku"
+              >
+                Tam ekran oku ⤢
+              </button>
+            </div>
             {open && (
-              <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-3 font-sans text-xs leading-6 text-slate-700">
+              <pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-3 font-sans text-sm leading-6 text-slate-700">
                 {doc.fullText}
               </pre>
             )}
           </>
         )}
       </div>
+
+      {/* Tam ekran okuma — kartın metninin tümü, yakınlaştırmalı görünümde. */}
+      {reading && doc.fullText ? (
+        <ReadingModal
+          open
+          onClose={() => setReading(false)}
+          title={doc.court}
+          subtitle={`E. ${doc.caseNumber} · K. ${doc.decisionNumber}`}
+          text={doc.fullText}
+        />
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 px-5 py-3">
         <Button size="sm" variant="gold" onClick={onAttach}>

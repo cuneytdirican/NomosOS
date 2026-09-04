@@ -502,6 +502,72 @@ function DecisionText({ item }: { item: IngestItem }) {
   const text = item.fullText ?? state.preview?.text ?? null;
   const sourceUrl = item.fullText ? item.sourceUrl : state.preview?.sourceUrl ?? null;
 
+  // OKUMA KONFORU: yazı boyutu A−/A+ (kalıcı) + TAM EKRAN geçişi. Bölme
+  // dar kalır; "Tam ekran" metni ekranın tamamına yayar (mobilde de tam kaplar).
+  const [fontSize, setFontSize] = useState(() => {
+    if (typeof window === "undefined") return 15;
+    const saved = Number.parseInt(window.localStorage.getItem("nomosos.admin.reading.fontSize") ?? "", 10);
+    return Number.isFinite(saved) && saved >= 12 && saved <= 24 ? saved : 15;
+  });
+  const [expanded, setExpanded] = useState(false);
+  const changeFont = (next: number) => {
+    const v = Math.max(12, Math.min(24, next));
+    setFontSize(v);
+    window.localStorage.setItem("nomosos.admin.reading.fontSize", String(v));
+  };
+
+  const textBlock = (
+    <pre
+      className="whitespace-pre-wrap break-words font-sans leading-relaxed text-steel-100"
+      style={{ fontSize: `${fontSize}px` }}
+    >
+      {text}
+    </pre>
+  );
+
+  // TAM EKRAN okuma katmanı — panelin üstünde, ekranın tamamında.
+  if (expanded && text) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-steel-950">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-steel-800 px-4 py-3">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-steel-100">{item.court}</p>
+            <p className="text-xs text-steel-500">
+              E. {item.caseNumber} · K. {item.decisionNumber}
+            </p>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="flex items-center rounded-lg border border-steel-800">
+              <button
+                type="button"
+                onClick={() => changeFont(fontSize - 2)}
+                className="px-2.5 py-1.5 text-xs font-semibold text-steel-300 hover:bg-steel-900"
+                title="Yazıyı küçült"
+              >
+                A−
+              </button>
+              <span className="px-1 text-[11px] tabular-nums text-steel-500">{fontSize}px</span>
+              <button
+                type="button"
+                onClick={() => changeFont(fontSize + 2)}
+                className="px-2.5 py-1.5 text-xs font-semibold text-steel-300 hover:bg-steel-900"
+                title="Yazıyı büyüt"
+              >
+                A+
+              </button>
+            </div>
+            <Button size="sm" variant="secondary" onClick={() => setExpanded(false)}>
+              Bölmesine dön ⤡
+            </Button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto px-4 py-4">
+          <div className="mx-auto max-w-3xl">{textBlock}</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <Card
       title="Karar metni"
@@ -514,6 +580,35 @@ function DecisionText({ item }: { item: IngestItem }) {
               : "Kuyruk metni"
             : undefined
       }
+      action={
+        text ? (
+          <div className="flex items-center gap-1">
+            <div className="flex items-center rounded-lg border border-steel-800" aria-label="Yazı boyutu">
+              <button
+                type="button"
+                onClick={() => changeFont(fontSize - 2)}
+                disabled={fontSize <= 12}
+                className="px-2 py-1 text-xs font-semibold text-steel-300 hover:bg-steel-900 disabled:opacity-40"
+                title="Yazıyı küçült"
+              >
+                A−
+              </button>
+              <button
+                type="button"
+                onClick={() => changeFont(fontSize + 2)}
+                disabled={fontSize >= 24}
+                className="px-2 py-1 text-xs font-semibold text-steel-300 hover:bg-steel-900 disabled:opacity-40"
+                title="Yazıyı büyüt"
+              >
+                A+
+              </button>
+            </div>
+            <Button size="sm" variant="secondary" onClick={() => setExpanded(true)} title="Metni ekranın tamamında oku">
+              Tam ekran ⤢
+            </Button>
+          </div>
+        ) : undefined
+      }
       bodyClassName="p-0"
     >
       {state.loading ? (
@@ -521,11 +616,7 @@ function DecisionText({ item }: { item: IngestItem }) {
           <Spinner label="Karar metni kaynaktan çekiliyor…" />
         </div>
       ) : text ? (
-        <div className="max-h-[60vh] overflow-y-auto px-5 py-4">
-          <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-steel-200">
-            {text}
-          </pre>
-        </div>
+        <div className="max-h-[62vh] overflow-y-auto px-5 py-4">{textBlock}</div>
       ) : state.error ? (
         <div className="p-4">
           <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">

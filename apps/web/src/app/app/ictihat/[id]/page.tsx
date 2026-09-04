@@ -15,6 +15,7 @@ import { ApiError } from "@/lib/api";
 import { detailCaseLaw } from "@/lib/faz2";
 import type { CaseLawDocDetail } from "@/lib/types";
 import { Badge, Button, Card, ErrorBox, Spinner } from "@/components/ui";
+import { ReadingModal } from "@/components/reading-modal";
 import { fmtDate, isDemoCaseLaw } from "@/lib/labels";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -26,6 +27,7 @@ const STATUS_LABELS: Record<string, string> = {
 export default function IctihatDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const [id, setId] = useState<string | null>(null);
   const [doc, setDoc] = useState<CaseLawDocDetail | null>(null);
+  const [reading, setReading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,6 +69,17 @@ export default function IctihatDetailPage({ params }: { params: Promise<{ id: st
   if (!doc) return null;
 
   const demo = isDemoCaseLaw(doc);
+
+  // TAM EKRAN OKUMA — kararın tümü, yakınlaştırmalı tam ekran görünümde.
+  const readingNode = reading && doc.fullText ? (
+    <ReadingModal
+      open
+      onClose={() => setReading(false)}
+      title={doc.court}
+      subtitle={`E. ${doc.caseNumber} · K. ${doc.decisionNumber}${doc.decisionDate ? ` · ${fmtDate(doc.decisionDate)}` : ""}`}
+      text={doc.fullText ?? ""}
+    />
+  ) : null;
 
   return (
     <div className="space-y-6">
@@ -110,9 +123,18 @@ export default function IctihatDetailPage({ params }: { params: Promise<{ id: st
         </Card>
       )}
 
-      <Card title="Karar metni">
+      <Card
+        title="Karar metni"
+        action={
+          doc.fullText ? (
+            <Button variant="secondary" size="sm" onClick={() => setReading(true)}>
+              Tam ekran oku
+            </Button>
+          ) : undefined
+        }
+      >
         {doc.fullText ? (
-          <p className="max-h-[60vh] overflow-y-auto whitespace-pre-wrap text-sm leading-6 text-slate-700">
+          <p className="max-h-[70vh] overflow-y-auto whitespace-pre-wrap text-sm leading-6 text-slate-700">
             {doc.fullText}
           </p>
         ) : (
@@ -160,6 +182,9 @@ export default function IctihatDetailPage({ params }: { params: Promise<{ id: st
           </ul>
         )}
       </Card>
+
+      {/* TAM EKRAN OKUMA — kararın tümü, yakınlaştırmalı (A−/A+) görünümde. */}
+      {readingNode}
     </div>
   );
 }

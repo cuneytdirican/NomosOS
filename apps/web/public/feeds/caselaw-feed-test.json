@@ -31,6 +31,14 @@
       "decisionDate": "2024-03-15",
       "id": "999900011",
       "summary": "BESLEME TESTİ — genel kurul birleştirici kararı; bağlantı doğrulama kaydıdır, gerçek karar metni değildir."
+    },
+    {
+      "court": "Yargıtay 13. Hukuk Dairesi",
+      "caseNumber": "2023/456",
+      "decisionNumber": "2024/789",
+      "decisionDate": "2024-05-10",
+      "fullText": "MAHKEMESİ: Asliye Hukuk Mahkemesi\nTARAFLAR: Davacı alacaklı, davalı borçlu.\nK A R A R\nDava, kiralananın teslimi ile ilgili olup mahkemece kabul edilmiştir.\nSONUÇ: Temyiz edilen hükmün ONANMASINA, kararlı olarak oybirliğiyle karar verildi.",
+      "summary": "BESLEME TESTİ — tam metinli okuma doğrulama kaydıdır."
     }
   ]
 }
