@@ -35,9 +35,12 @@ services:
   # Bu yığının portları eskiden 0.0.0.0'a yayınlanıyordu; internetten taranan
   # parolasız Redis bulunup REPLICAOF ile dış bir adrese replica yapıldı
   # (BullMQ "READONLY replica" hatalarıyla ortaya çıktı). Artık TÜM test
-  # portları YALNIZ 127.0.0.1'e bağlanır: yerel geliştirme etkilenmez
-  # (localhost aynı), dış erişim kapalı. Üretim yığını (prod) zaten
-  # 127.0.0.1'e bağlıydı. Parolasız servis (redis) ASLA dışa açılmaz.
+  # portları YALNIZ loopback'e bağlanır (127.0.0.1 + ::1): yerel geliştirme
+  # etkilenmez, dış erişim kapalı. İKİ aile de bağlanır çünkü Windows'ta
+  # tarayıcı `localhost`'u bazen ::1 (IPv6) olarak çözer; yalnız IPv4 bağı
+  # o durumda "API sunucusuna ulaşılamadı" görünümü yaratıyordu (2026-09-04).
+  # Üretim yığını (prod) zaten 127.0.0.1'e bağlıydı. Parolasız servis (redis)
+  # ASLA dışa açılmaz.
   # ────────────────────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
@@ -48,6 +51,7 @@ services:
       POSTGRES_DB: nomosos
     ports:
       - "127.0.0.1:5432:5432"
+      - "[::1]:5432:5432"
     volumes:
       - test-postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -61,6 +65,7 @@ services:
     container_name: nomosos-test-redis
     ports:
       - "127.0.0.1:6379:6379"
+      - "[::1]:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -79,9 +84,11 @@ services:
       MINIO_ROOT_PASSWORD: nomosos-gizli-123
     ports:
       - "127.0.0.1:9000:9000"
+      - "[::1]:9000:9000"
       # Konsol test ortamında AÇIK (üretimde kapalıdır) — belgeleri gözle
       # doğrulayabilmek için: http://localhost:9001
       - "127.0.0.1:9001:9001"
+      - "[::1]:9001:9001"
     volumes:
       - test-minio-data:/data
     healthcheck:
@@ -153,6 +160,7 @@ services:
       ODEME_SAGLAYICI: "SIMULASYON"
     ports:
       - "127.0.0.1:3001:3001"
+      - "[::1]:3001:3001"
     depends_on:
       postgres:
         condition: service_healthy
@@ -182,6 +190,7 @@ services:
       NEXT_PUBLIC_API_URL: "http://localhost:3001"
     ports:
       - "127.0.0.1:3000:3000"
+      - "[::1]:3000:3000"
     depends_on:
       api:
         condition: service_healthy
@@ -199,6 +208,7 @@ services:
       NEXT_PUBLIC_ADMIN_API_URL: "http://localhost:3001"
     ports:
       - "127.0.0.1:3002:3002"
+      - "[::1]:3002:3002"
     depends_on:
       api:
         condition: service_healthy
@@ -216,6 +226,7 @@ services:
       NEXT_PUBLIC_API_URL: "http://localhost:3001"
     ports:
       - "127.0.0.1:3003:3003"
+      - "[::1]:3003:3003"
     depends_on:
       api:
         condition: service_healthy
