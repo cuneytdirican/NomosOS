@@ -23,7 +23,46 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 4 Eylül 2026, 09:50
+# 🔖 KALDIĞIM YER — 4 Eylül 2026, 10:40
+
+> **İÇTİHAT TOPLAMA HATTI (caselaw-ingest) KURULDU VE CANLI DOĞRULANDI.**
+> Plan dosyası: `plans/acilis-oncesi-hazir-veri-havuzu-plani.md`.
+
+1. **Ne eklendi:** `CaselawSourceConfig` (besleme kaynağı yapılandırması — adres
+   KODDA DEĞİL, tabloda) + `CaseLawIngestItem` (onay kuyruğu) + migration
+   `20260904095000_caselaw_ingest` + `caselaw-ingest-daily` zamanlanmış iş
+   (her gün 06:00, panelden ayarlanabilir) + admin uçları (`/api/admin/v1/caselaw-ingest`:
+   sources PUT/GET, items, run, approve, reject) + admin panelinde
+   `/yargi/havuz` sayfasına "Toplama Hattı" bölümü (kaynak kartları, "Şimdi
+   Topla", kuyruk tablosu, onayla/reddet, +Kaynak modalı) + 11 birim testi.
+2. **Tasarım taahhütleri:** çekim havuza OTOMATİK YAZMAZ — kayıt kuyrukta
+   bekler, onay `CaselawPoolService`'in künye doğrulamasından geçer (tek kapı);
+   red için gerekçe ZORUNLU; kuyrukta @@unique ile aynı künye ikinci kez
+   girmez (idempotent); biçimsiz künye kuyruğa da girmez (poolRecordSchema
+   birebir); FEED_TEST kaynağı [DEMO VERİ] işaretli — dilekçe teyit kapısından
+   geçmez; web `isDemoCaseLaw` artık sunucunun `isDemo` bayrağına bakıyor.
+3. **Canlı doğrulanan akış:** kaynak tanımladı (FEED_TEST → web konteynerındaki
+   besleme örneği) → "Şimdi Topla" → 3 kayıt kuyruğa → 2 onay (EKLENDI) +
+   1 red (gerekçeli) → ikinci çekimde 0 kuyruk / 3 mükerrer → büro içtihat
+   aramasında "tazminat" FEED_TEST kaydını [DEMO VERİ] işaretiyle buldu →
+   /isler sayfasında iş + koşu geçmişi görünüyor.
+4. **Doğrulama:** build 12/12 · typecheck 20/20 · lint 0/0 · testler
+   1324/1324 (api 939 — 11 yeni, e-signature 37, udf 44, extension 35,
+   legal-core 102, web 88, legal-ai 79). Test yığını 7/7 sağlıklı.
+5. **Üretim kullanımı:** lisanslı/resmî dönüşüm beslemesini panelden "+ Kaynak"
+   ile tanımlayın (GET → `{records:[...]}` sözleşmesi; örnek:
+   `apps/web/public/feeds/caselaw-feed-test.json`). Onay kuyruğu sürekli izlenir.
+
+## Sırada
+
+1. Plan Aşama 1-2: platform mevzuat havuzu (Legislation tenant-scoped → ortak)
+   + AAÜT tarifesinin platform varsayılanı.
+2. Plan Aşama 4: içtihat havuzunu gerçek kararla doldurma (veri operasyonu).
+3. `FINAL-COMPLETION-REPORT.md` üretimi (Aşama 9 kapanışı).
+
+---
+
+## 🔖 ÖNCEKİ KALDIĞIM YER — 4 Eylül 2026, 09:50
 
 > **ÜÇ YÜZEY CANLI MODÜL TESTİ TAMAMLANDI (admin paneli + büro/avukat + müvekkil
 > portalı) — bulunan hatalar düzeltildi ve canlı olarak doğrulandı.**

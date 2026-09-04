@@ -8,6 +8,8 @@ import { FineTuneController } from "./fine-tune/fine-tune.controller";
 import { FineTuneService } from "./fine-tune/fine-tune.service";
 import { CaselawPoolController } from "./caselaw-pool/caselaw-pool.controller";
 import { CaselawPoolService } from "./caselaw-pool/caselaw-pool.service";
+import { CaselawIngestController } from "./caselaw-ingest/caselaw-ingest.controller";
+import { CaselawIngestService } from "./caselaw-ingest/caselaw-ingest.service";
 import { PlatformAuthController } from "./auth/platform-auth.controller";
 import { PlatformAuthService } from "./auth/platform-auth.service";
 import { PlatformApprovalExecutorService } from "./approvals/platform-approval-executor.service";
@@ -84,6 +86,7 @@ import { PlatformUsersService } from "./users/platform-users.service";
     PlatformUsersController,
     FineTuneController,
     CaselawPoolController,
+    CaselawIngestController,
   ],
   providers: [
     PlatformJwtGuard,
@@ -95,6 +98,7 @@ import { PlatformUsersService } from "./users/platform-users.service";
     PlatformAuthService,
     FineTuneService,
     CaselawPoolService,
+    CaselawIngestService,
     PlatformApprovalsService,
     PlatformApprovalExecutorService,
     PlatformTenantsService,
@@ -116,6 +120,10 @@ import { PlatformUsersService } from "./users/platform-users.service";
   // tahsisi için DÖRT-GÖZ talebi açar. Yalnız TALEP açma yönü dışarı verilir;
   // onaylanan talebi uygulayan executor kimseyi geri çağırmadığı için modüller
   // arasında döngü doğmaz.
-  exports: [UsageSnapshotService, PlatformApprovalsService, PlatformAuditService],
+  //
+  // CaselawIngestService dışa açılır: caselaw-ingest-daily zamanlanmış işi
+  // (SchedulerModule) çekimi bu servisten yürütür — kaynak adresi
+  // yapılandırmada, kodda sabit istemci yoktur.
+  exports: [UsageSnapshotService, PlatformApprovalsService, PlatformAuditService, CaselawIngestService],
 })
 export class PlatformModule {}

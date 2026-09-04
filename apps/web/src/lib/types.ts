@@ -622,6 +622,8 @@ export interface CaseLawDoc {
   fetchedAt?: string;
   score?: number | null;
   relevanceNote?: string | null;
+  /** Sunucunun demo işareti (DEMO_SOURCE_ADAPTERS) — istemci kendisi karar vermez. */
+  isDemo?: boolean;
 }
 
 export interface CaseLawRef {

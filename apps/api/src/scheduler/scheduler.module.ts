@@ -22,6 +22,7 @@ import { CreditPeriodRenewalJob } from "./jobs/credit-period-renewal.job";
 import { CreditLowWarningJob } from "./jobs/credit-low-warning.job";
 import { RiskNightlyJob } from "./jobs/risk-nightly.job";
 import { HepoReminderJob } from "./jobs/hepo-reminder.job";
+import { CaselawIngestJob } from "./jobs/caselaw-ingest.job";
 
 import { PlatformJobsController } from "./platform-jobs.controller";
 import { PlatformJobsService } from "./platform-jobs.service";
@@ -102,6 +103,8 @@ import { DeviceTokensService } from "./device-tokens.service";
     RiskNightlyJob,
     // Modül 28 (Faz 3): HEPO müvekkil yükümlülüğü vade hatırlatmaları.
     HepoReminderJob,
+    // İçtihat toplama hattı: beslemeler → onay kuyruğu (havuza yazım onayla).
+    CaselawIngestJob,
 
     // --- uç servisleri ---
     PlatformJobsService,

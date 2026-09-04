@@ -156,4 +156,14 @@ export const EP = {
     records: "/caselaw-pool/records",
     import: "/caselaw-pool/import",
   },
+
+  /** İçtihat toplama hattı — besleme kaynakları, onay kuyruğu, elle çekim. */
+  caseLawIngest: {
+    sources: "/caselaw-ingest/sources",
+    upsertSource: "/caselaw-ingest/sources",
+    items: "/caselaw-ingest/items",
+    run: "/caselaw-ingest/run",
+    approve: (id: string) => `/caselaw-ingest/items/${encodeURIComponent(id)}/approve`,
+    reject: (id: string) => `/caselaw-ingest/items/${encodeURIComponent(id)}/reject`,
+  },
 } as const;

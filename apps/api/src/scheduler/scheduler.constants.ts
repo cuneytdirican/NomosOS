@@ -46,6 +46,8 @@ export const JOB_KEYS = {
   CREDIT_LOW_WARNING: "credit-low-warning-hourly",
   /** F2 · E2 — gece risk tazeleme + panel fotoğrafı. */
   RISK_NIGHTLY: "risk-nightly",
+  /** İçtihat toplama hattı — beslemelerden çekip ONAY KUYRUĞUNA yazar. */
+  CASELAW_INGEST: "caselaw-ingest-daily",
 } as const;
 
 export type JobKey = (typeof JOB_KEYS)[keyof typeof JOB_KEYS];

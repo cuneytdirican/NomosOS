@@ -424,9 +424,21 @@ export function fmtBytes(value: number | null | undefined): string {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** Demo tohum verisi işareti — kullanıcıya "gerçek karar değil" uyarısı için. */
-export function isDemoCaseLaw(value: { summary?: string | null; fullText?: string | null; sourceAdapter?: string }): boolean {
-  if (value.sourceAdapter === "SEED_DEMO") return true;
+/**
+ * Demo tohum verisi işareti — kullanıcıya "gerçek karar değil" uyarısı için.
+ *
+ * ÖNCE sunucunun `isDemo` bayrağına bakılır (tek kaynak: API'deki
+ * DEMO_SOURCE_ADAPTERS kümesi — SEED_DEMO, FEED_TEST, …). Bayrak yoksa
+ * geri dönüş olarak kaynak etiketi ve metin işaretine bakılır.
+ */
+export function isDemoCaseLaw(value: {
+  isDemo?: boolean;
+  summary?: string | null;
+  fullText?: string | null;
+  sourceAdapter?: string | null;
+}): boolean {
+  if (typeof value.isDemo === "boolean") return value.isDemo;
+  if (value.sourceAdapter === "SEED_DEMO" || value.sourceAdapter === "FEED_TEST") return true;
   return Boolean(
     value.summary?.includes("[DEMO VERİ]") || value.fullText?.includes("[DEMO VERİ]"),
   );

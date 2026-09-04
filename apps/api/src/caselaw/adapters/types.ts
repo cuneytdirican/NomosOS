@@ -141,7 +141,10 @@ export function tenantVisibility(tenantId: string): {
 }
 
 /** Seed/demo kayıtlarını işaretleyen adaptör anahtarları. */
-export const DEMO_SOURCE_ADAPTERS = new Set(["SEED_DEMO"]);
+// FEED_TEST: caselaw-ingest hattının bağlantı doğrulama fikstürü — besleme
+// sözleşmesi örneğidir, gerçek karar içeriği DEĞİLDİR; havuza girse bile
+// [DEMO VERİ] işaretlenir ve dilekçe teyit kapısından geçemez.
+export const DEMO_SOURCE_ADAPTERS = new Set(["SEED_DEMO", "FEED_TEST"]);
 
 export function isDemoRecord(record: { sourceAdapter: string }): boolean {
   return DEMO_SOURCE_ADAPTERS.has(record.sourceAdapter);

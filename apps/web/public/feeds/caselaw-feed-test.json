@@ -1,0 +1,28 @@
+{
+  "_sozlesme": "caselaw-ingest besleme sözleşmesi örneği. GET → { records: [...] }. Alanlar: court, chamber?, caseNumber, decisionNumber, decisionDate? (YYYY-MM-DD), summary?, fullText?, sourceUrl?. Biçimsiz künye/makul olmayan tarih kuyruğa da girmez (poolRecordSchema). Bu dosya AYNI ZAMANDA bağlantı doğrulama fikstürüdür; FEED_TEST anahtarlı kaynak demodur ve havuzda [DEMO VERİ] işaretlenir.",
+  "records": [
+    {
+      "court": "Yargıtay 9. Hukuk Dairesi",
+      "chamber": "9. Hukuk Dairesi",
+      "caseNumber": "2016/1234",
+      "decisionNumber": "2017/5678",
+      "decisionDate": "2017-06-15",
+      "summary": "BESLEME TESTİ — iş kazası sonrası maddi-manevi tazminatta işverenin kusuru; bağlantı doğrulama kaydıdır, gerçek karar metni değildir.",
+      "sourceUrl": "https://kararlar.yargitay.gov.tr/"
+    },
+    {
+      "court": "Yargıtay 15. Hukuk Dairesi",
+      "caseNumber": "2019/4455",
+      "decisionNumber": "2020/1122",
+      "decisionDate": "2020-02-10",
+      "summary": "BESLEME TESTİ — kira bedelinin rayiç bedele uyarlanması; bağlantı doğrulama kaydıdır, gerçek karar metni değildir."
+    },
+    {
+      "court": "Danıştay 10. Daire",
+      "caseNumber": "2018/77",
+      "decisionNumber": "2019/301",
+      "decisionDate": "2019-11-05",
+      "summary": "BESLEME TESTİ — ihale işlemlerinde kamu düzeni; bağlantı doğrulama kaydıdır, gerçek karar metni değildir."
+    }
+  ]
+}

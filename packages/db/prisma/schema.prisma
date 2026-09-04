@@ -1511,6 +1511,62 @@ model CaseLawDocument {
   @@index([createdByTenantId])
 }
 
+/// İÇTİHAT TOPLAMA KAYNAĞI YAPILANDIRMASI — platform işletmesine ait.
+///
+/// `caselaw-ingest-daily` zamanlanmış işi bu kaynakların her birinden yeni
+/// kararları ÇEKER ve onay kuyruğuna (CaseLawIngestItem) yazar. Kaynak, sözleşmesi
+/// belgelenmiş bir JSON beslemesidir (lisanslı veri sağlayıcı, resmî yayın
+/// dönüşümü); UYDURMA İSTEMCİ YOKTUR — adres burada TUTULUR, kod sabit değildir.
+model CaselawSourceConfig {
+  id            String    @id @default(uuid())
+  /// Kaynak anahtarı — CaseLawDocument.sourceAdapter olarak da yazılır (BÜYÜK harf/rakam/_).
+  key           String    @unique
+  name          String
+  /// Besleme adresi: GET → { records: PoolRecord[] } JSON sözleşmesi.
+  baseUrl       String
+  isEnabled     Boolean   @default(true)
+  lastFetchedAt DateTime?
+  note          String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([isEnabled])
+}
+
+/// İÇTİHAT TOPLAMA HAZIRLIK KUYRUĞU — onaylanmadan ortak havuza GİRMEZ.
+///
+/// Halüsinasyon zinciri havuz girişinde kesilir; bu tablo zincirin son halkasıdır:
+/// beslemeden çekilen kayıt önce BURADA bekler, platform görevlisi künyeyi
+/// gördükten sonra ONAYLAR; onay CaseLawPoolService'in birebir aynı künye
+/// doğrulamasından geçer ve yalnız ondan sonra CaseLawDocument'a yazılır.
+model CaseLawIngestItem {
+  id             String    @id @default(uuid())
+  /// Çekildiği CaselawSourceConfig.key.
+  sourceKey      String
+  court          String
+  chamber        String?
+  caseNumber     String
+  decisionNumber String
+  decisionDate   DateTime? @db.Date
+  summary        String?
+  fullText       String?
+  sourceUrl      String?
+  /// BEKLIYOR | ONAYLANDI | REDDEDILDI — onay/red yalnız platform görevlisi.
+  status         String    @default("BEKLIYOR")
+  /// Koşu parti kimliği (JobRun ile ilişkilendirme, denetim izi).
+  batchId        String
+  fetchedAt      DateTime  @default(now())
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  rejectReason   String?
+  /// Onay sonrası havuzdaki kayıt (CaseLawDocument.id).
+  poolRecordId   String?
+  createdAt      DateTime  @default(now())
+
+  @@unique([sourceKey, court, caseNumber, decisionNumber])
+  @@index([status, fetchedAt])
+}
+
 enum RefStatus {
   ADAY // AI önerisi — avukat henüz karar vermedi
   KABUL
