@@ -22,6 +22,7 @@ import {
   extractPii,
   isFeatureMissing,
   searchCaseLaw,
+  type LiveCaseLawDoc,
   type PiiPrompt,
 } from "@/lib/faz2";
 import type { CaseLawDoc, CaseSummary } from "@/lib/types";
@@ -63,6 +64,8 @@ export default function IctihatPage() {
   const [mode, setMode] = useState<"CLASSIC" | "AI">("CLASSIC");
   const [court, setCourt] = useState("");
   const [results, setResults] = useState<CaseLawDoc[]>([]);
+  const [liveResults, setLiveResults] = useState<LiveCaseLawDoc[]>([]);
+  const [liveError, setLiveError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -93,6 +96,8 @@ export default function IctihatPage() {
           piiApproved,
         });
         setResults(res.results);
+        setLiveResults(res.live ?? []);
+        setLiveError(res.liveError ?? null);
         setNote(res.note ?? null);
         setSearched(true);
         setPii(null);
@@ -215,23 +220,83 @@ export default function IctihatPage() {
         />
       ) : busy ? (
         <Spinner label="Kararlar aranıyor…" />
-      ) : searched && results.length === 0 ? (
-        <Card>
-          <EmptyState message="Bu aramaya uyan karar bulunamadı. Ortak havuz yalnızca kaydedilmiş kararları içerir — elinizdeki kararı 'Elle Karar Ekle' ile havuza kazandırabilirsiniz." />
-        </Card>
-      ) : results.length > 0 ? (
-        <div className="space-y-4">
-          <p className="text-xs text-slate-500">{results.length} sonuç</p>
-          <ul className="space-y-4">
-            {results.map((doc) => (
-              <CaseLawCard key={doc.id} doc={doc} onAttach={() => setAttachTarget(doc)} />
-            ))}
-          </ul>
-        </div>
       ) : (
-        <Card>
-          <EmptyState message="Arama yapmak için yukarıdaki kutuyu kullanın." />
-        </Card>
+        <div className="space-y-5">
+          {/* ---- KATMAN 1: VERİTABANI (havitasyon: yeşil çerçeve yok, koyu mavi etiket) ---- */}
+          {results.length > 0 && (
+            <section className="space-y-3 rounded-xl border-l-4 border-slate-700 pl-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tone="navy">VERİTABANI</Badge>
+                <p className="text-xs text-slate-500">
+                  {results.length} sonuç — NomosOS ortak havuzundan (demo kayıtlar sarı işaretlidir)
+                </p>
+              </div>
+              <ul className="space-y-4">
+                {results.map((doc) => (
+                  <CaseLawCard key={doc.id} doc={doc} onAttach={() => setAttachTarget(doc)} />
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {/* ---- KATMAN 2: CANLI YARGITAY (yeşil çerçeve) ---- */}
+          {(liveResults.length > 0 || liveError) && (
+            <section className="space-y-3 rounded-xl border-l-4 border-emerald-600 bg-emerald-50/40 px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tone="green">CANLI · karararama.yargitay.gov.tr</Badge>
+                <p className="text-xs text-emerald-800">
+                  {liveResults.length > 0
+                    ? `${liveResults.length} sonuç — resmî Yargıtay karar aramadan, gerçek zamanlı`
+                    : ""}
+                </p>
+              </div>
+              {liveError && <p className="text-xs text-red-600">{liveError}</p>}
+              <ul className="space-y-2">
+                {liveResults.map((hit) => (
+                  <li
+                    key={hit.externalId}
+                    className="rounded-lg border border-emerald-300 bg-white px-4 py-3"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-900">{hit.court}</p>
+                        <p className="mt-0.5 text-sm text-slate-700">
+                          E. {hit.caseNumber} · K. {hit.decisionNumber}
+                          {hit.decisionDate ? ` · ${hit.decisionDate}` : ""}
+                        </p>
+                      </div>
+                      <a
+                        href={hit.sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 text-xs font-medium text-emerald-700 hover:underline"
+                      >
+                        Kaynağa git ↗
+                      </a>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              {liveResults.length > 0 && (
+                <p className="text-[11px] text-emerald-800">
+                  Canlı sonuçlar havuza otomatik yazılmaz. Dosyaya emsal bağlamak ya da tam metni
+                  saklamak için kaydı &quot;Elle Karar Ekle&quot; ile havuza kazandırabilirsiniz.
+                </p>
+              )}
+            </section>
+          )}
+
+          {searched && results.length === 0 && liveResults.length === 0 && !liveError && (
+            <Card>
+              <EmptyState message="Bu aramaya uyan karar bulunamadı. Ortak havuz yalnızca kaydedilmiş kararları içerir — elinizdeki kararı 'Elle Karar Ekle' ile havuza kazandırabilirsiniz." />
+            </Card>
+          )}
+          {!searched && (
+            <Card>
+              <EmptyState message="Arama yapmak için yukarıdaki kutuyu kullanın." />
+            </Card>
+          )}
+        </div>
       )}
 
       <AttachModal

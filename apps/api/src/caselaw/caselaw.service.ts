@@ -30,6 +30,7 @@ import {
   CaseLawSearchPlanSchema,
   type CaseLawSearchPlan,
 } from "./prompts/caselaw-search";
+import { LiveCaseLawHit, YargitayLiveAdapter } from "./adapters/yargitay-live.adapter";
 import {
   buildCaseLawSummarizeMessages,
   CaseLawSummarySchema,
@@ -60,6 +61,7 @@ export class CaselawService {
     private readonly adapters: CaseLawAdapterRegistry,
     private readonly manualAdapter: ManualEntryCaseLawAdapter,
     private readonly aiRunner: AiRunnerService,
+    private readonly liveAdapter: YargitayLiveAdapter,
   ) {}
 
   // ------------------------------------------------------------------ //
@@ -75,8 +77,14 @@ export class CaselawService {
       to?: string;
       limit?: string;
     },
-  ): Promise<{ results: CaseLawHit[]; warning?: string }> {
-    const results = await this.adapters.searchAll(params.q ?? "", {
+  ): Promise<{
+    results: CaseLawHit[];
+    /** CANLI kaynak: resmî karararama.yargitay.gov.tr sonuçları (havuza yazılmaz). */
+    live: LiveCaseLawHit[];
+    liveError?: string;
+    warning?: string;
+  }> {
+    const localPromise = this.adapters.searchAll(params.q ?? "", {
       // KİRACI GÖRÜNÜRLÜĞÜ: başka büronun elle girdiği kayıt aramada çıkmaz.
       tenantId,
       court: params.court,
@@ -84,9 +92,27 @@ export class CaselawService {
       to: parseDate(params.to, "to"),
       limit: params.limit ? Number.parseInt(params.limit, 10) || undefined : undefined,
     });
+
+    // CANLI KATMAN — resmî kaynaktan, veritabanı aramasıyla PARALEL. Kaynak
+    // erişilemezse arama düşmez: canlı bölüm hata notuyla listelenir.
+    let live: LiveCaseLawHit[] = [];
+    let liveError: string | undefined;
+    const localResults = await localPromise;
+    try {
+      const res = await this.liveAdapter.search(params.q ?? "", 5);
+      live = res.hits;
+    } catch (err) {
+      liveError =
+        err instanceof Error
+          ? `Canlı Yargıtay araması yapılamadı: ${err.message}`
+          : "Canlı Yargıtay araması yapılamadı.";
+    }
+
     return {
-      results,
-      warning: results.some((r) => r.isDemo) ? DEMO_WARNING : undefined,
+      results: localResults,
+      live,
+      liveError,
+      warning: localResults.some((r) => r.isDemo) ? DEMO_WARNING : undefined,
     };
   }
 

@@ -862,8 +862,24 @@ export interface CaseLawSearchInput {
   piiApproved?: boolean;
 }
 
+/** CANLI kaynak sonucu — resmî karararama.yargitay.gov.tr (havuza yazılmaz). */
+export interface LiveCaseLawDoc {
+  externalId: string;
+  court: string;
+  chamber?: string;
+  caseNumber: string;
+  decisionNumber: string;
+  decisionDate?: string;
+  sourceUrl: string;
+  sourceKind: "CANLI";
+  sourceAdapter: string;
+}
+
 export interface CaseLawSearchResult {
   results: CaseLawDoc[];
+  /** CANLI katman: resmî Yargıtay arama sonuçları. */
+  live?: LiveCaseLawDoc[];
+  liveError?: string | null;
   note?: string | null;
   mode?: string;
 }
@@ -899,15 +915,15 @@ export async function searchCaseLaw(input: CaseLawSearchInput): Promise<CaseLawS
     // detay sayfası ve kart bağlantıları `id` okur — tek noktada eşitlenir.
     id: (hit.id as string) ?? (hit.caseLawId as string),
   })) as unknown as CaseLawDoc[];
-  const note =
-    res && typeof res === "object"
-      ? ((res as Record<string, unknown>).note as string | undefined) ?? null
-      : null;
-  const mode =
-    res && typeof res === "object"
-      ? ((res as Record<string, unknown>).mode as string | undefined)
-      : undefined;
-  return { results, note, mode };
+  const envelope = res && typeof res === "object" ? (res as Record<string, unknown>) : {};
+  return {
+    results,
+    note: (envelope.note as string | undefined) ?? null,
+    mode: envelope.mode as string | undefined,
+    // CANLI katman (yalnız klasik arama döndürür; AI araması yerel havuzdadır).
+    live: asList<LiveCaseLawDoc>(envelope.live),
+    liveError: (envelope.liveError as string | undefined) ?? null,
+  };
 }
 
 export function createCaseLaw(body: {

@@ -10,6 +10,7 @@ import { AiRunnerService } from "./ai-runner.service";
 import { CaseLawAdapterRegistry } from "./adapters/registry.service";
 import { LocalDbCaseLawAdapter } from "./adapters/local-db.adapter";
 import { ManualEntryCaseLawAdapter } from "./adapters/manual-entry.adapter";
+import { YargitayLiveAdapter } from "./adapters/yargitay-live.adapter";
 // D1.3: BYO yetkisi + platform sağlayıcı yedeği için.
 import { AiModule } from "../ai/ai.module";
 
@@ -27,6 +28,8 @@ import { AiModule } from "../ai/ai.module";
   imports: [AiModule],
   controllers: [CaselawController, CaseCaselawController, CaseLawReferencesController],
   providers: [
+    // CANLI katman: resmî karararama.yargitay.gov.tr arama istemcisi.
+    YargitayLiveAdapter,
     CaselawService,
     CitationVerifyService,
     AiRunnerService,
