@@ -43,7 +43,7 @@ services:
   # ASLA dışa açılmaz.
   # ────────────────────────────────────────────────────────────────────────────
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: nomosos-test-postgres
     environment:
       POSTGRES_USER: nomosos

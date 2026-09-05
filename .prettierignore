@@ -8,3 +8,5 @@ packages/db/prisma/migrations
 **/*.md
 .playwright-mcp
 plans
+# compose dosyaları: yoğun açıklamalı YAML; doğrulama `docker compose config` ile (CI)
+docker-compose*.yml

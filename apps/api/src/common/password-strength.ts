@@ -14,6 +14,8 @@ import { BadRequestException } from "@nestjs/common";
 import zxcvbn from "zxcvbn";
 
 export const MIN_PASSWORD_SCORE = 3;
+/** Skor 3 tek başına yetmez: "Parola123456!" 3 puan alıyordu (10^8). En az 10^9 tahmin istenir. */
+export const MIN_GUESSES_LOG10 = 9;
 
 /**
  * zxcvbn sözlükleri İngilizcedir; Türkçe hukuk/büro bağlamında en sık görülen kelimeler
@@ -71,11 +73,19 @@ export interface PasswordStrengthResult {
   reason: string | null;
 }
 
+/** Harfler dışındaki her şey atılınca geriye tek bir sözlük kelimesi kalıyor mu? ("Parola123456!" → "parola") */
+function dictionaryCore(password: string): string | null {
+  const letters = password.toLocaleLowerCase("tr-TR").replace(/[^a-zçğıöşü]/g, "");
+  return letters.length >= 3 && TR_COMMON_WORDS.includes(letters) ? letters : null;
+}
+
 export function evaluatePassword(password: string, context: string[] = []): PasswordStrengthResult {
   const hit = containsContext(password, context);
   if (hit) return { ok: false, score: 0, reason: `Parola, hesap bilgilerinizden bir parça içeriyor ("${hit}"); e-posta ve ad soyadınızı parolada kullanmayın.` };
+  const core = dictionaryCore(password);
+  if (core) return { ok: false, score: 1, reason: `Parola, yaygın bir kelimeye ("${core}") rakam/sembol eklenmiş biçimde; bu kalıp ilk denenenler arasındadır. Birkaç ilişkisiz kelime ya da uzun bir cümle seçin.` };
   const result = zxcvbn(password, [...TR_COMMON_WORDS, ...context]);
-  if (result.score >= MIN_PASSWORD_SCORE) return { ok: true, score: result.score, reason: null };
+  if (result.score >= MIN_PASSWORD_SCORE && result.guesses_log10 >= MIN_GUESSES_LOG10) return { ok: true, score: result.score, reason: null };
   const hints = [result.feedback.warning, ...result.feedback.suggestions].filter(Boolean).map(tr);
   return {
     ok: false,

@@ -16,7 +16,11 @@ import { IS_PUBLIC_KEY } from "../decorators/public.decorator";
 import { REQUIRES_MODULE_KEY, type PlanModule } from "../decorators/requires-module.decorator";
 import type { AuthUser } from "../types";
 
-const CACHE_TTL_MS = 60_000;
+/** Önbellek ömrü (ms); testler `MODULE_ACCESS_CACHE_TTL_MS=0` ile kapatır. */
+function cacheTtlMs(): number {
+  const v = Number.parseInt(process.env.MODULE_ACCESS_CACHE_TTL_MS ?? "", 10);
+  return Number.isFinite(v) && v >= 0 ? v : 60_000;
+}
 
 interface CachedModules {
   /** null = abonelik ya da plan yok → kısıt yok. */
@@ -80,8 +84,9 @@ export class ModuleAccessGuard implements CanActivate {
     const now = Date.now();
     const cached = this.cache.get(tenantId);
     if (cached && cached.expiresAt > now) return cached;
+    const ttl = cacheTtlMs();
     const sub = await this.prisma.client.subscription.findUnique({ where: { tenantId }, select: { planKey: true } });
-    let entry: CachedModules = { modules: null, planName: null, expiresAt: now + CACHE_TTL_MS };
+    let entry: CachedModules = { modules: null, planName: null, expiresAt: now + ttl };
     if (sub) {
       const plan = await this.prisma.client.planTier.findUnique({ where: { key: sub.planKey }, select: { name: true, featuresJson: true } });
       if (plan) {
@@ -92,7 +97,7 @@ export class ModuleAccessGuard implements CanActivate {
         } catch {
           modules = null;
         }
-        entry = { modules, planName: plan.name, expiresAt: now + CACHE_TTL_MS };
+        entry = { modules, planName: plan.name, expiresAt: now + ttl };
       }
     }
     if (this.cache.size > 1_000) {

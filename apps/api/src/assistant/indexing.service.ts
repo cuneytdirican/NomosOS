@@ -193,6 +193,8 @@ export class IndexingService {
             data: { chunkStatus: "TAMAM" },
           }),
         ]);
+        // Faz 5: pgvector sütunu Float[] kaynağından doldurulur (tek UPDATE; boyut kaydı HNSW kısmi indeksi seçer).
+        await this.syncVectorColumn(doc.id);
 
         totalChunks += chunks.length;
         results.push({
@@ -286,6 +288,18 @@ export class IndexingService {
         chunkCount: d._count.chunks,
       })),
     };
+  }
+
+  /**
+   * Faz 5 — `embeddingVec` (pgvector) sütununu `embedding` Float[]'ten türetir. Uzantı yoksa
+   * (eski PG) sessizce atlanır: JS kosinüs yolu (RAG_VECTOR_BACKEND=js) çalışmaya devam eder.
+   */
+  async syncVectorColumn(documentId: string): Promise<void> {
+    try {
+      await this.prisma.client.$executeRaw`UPDATE "DocumentChunk" SET "embeddingVec" = embedding::real[]::vector, "embeddingDim" = array_length(embedding, 1) WHERE "documentId" = ${documentId} AND array_length(embedding, 1) > 0`;
+    } catch (err) {
+      this.logger.warn(`pgvector sütunu güncellenemedi (uzantı yok?): ${(err as Error).message.slice(0, 120)}`);
+    }
   }
 
   /**

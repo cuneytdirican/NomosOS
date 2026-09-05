@@ -23,7 +23,41 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 6 Eylül 2026, 08:00
+# 🔖 KALDIĞIM YER — 6 Eylül 2026, 11:00
+
+> Üç persona planı (`~/.claude/plans/wiggly-giggling-lighthouse.md`):
+> **Faz 0 ✅ · 1 ✅ · 2 ✅ · 3 ✅ · 4 ✅ · 5 ✅ (bu commit)** · sırada Faz 6 (UYAP/icra/finans).
+
+**FAZ 4 canlı doğrulama (5aefeef + 05a432e):** readiness `ready` (pg/redis/s3 up), `x-request-id`
+korunuyor/üretiliyor, `/metrics` 207+ nomosos_ satırı (abonelik/kuyruk/yedek/DB), 320 istek → 315×429
++ `Retry-After`, OpenAPI 514 yol, rotasyon dry-run 3 satır. Bulgu: `Parola123456!` zxcvbn'de 3 puan
+alıp geçti → eşik 10^9 tahmin + "sözlük kelimesi + rakam/sembol" kalıbı reddi eklendi. Ayrıca
+`@nestjs/swagger@12` ESM-only (Nest 11) → 7.x'e indirildi (açılış SyntaxError).
+
+**FAZ 5 — RAG ÖLÇEK + TEST ALTYAPISI TAMAMLANDI** (belge: `docs/faz5-rag-olcek-test.md`):
+1. **pgvector**: `pgvector/pgvector:pg16` imajı (dev/test/prod/CI), göç `20260927100000_faz5_pgvector`
+   (`embeddingVec vector` + `embeddingDim`, Float[] → vector taşıma, HNSW 768/1024/1536 kısmi indeksler,
+   `pg_trgm` GIN content/ocrText, `[tenantId,caseId]`). `IndexingService.syncVectorColumn`,
+   `RetrievalService.retrieveByPgvector` (`<=>` LIMIT k); `RAG_VECTOR_BACKEND=js` eski yol.
+2. **Entegrasyon testleri** (supertest): `apps/api/test/kritik-uclar.int.test.ts` (10 uç),
+   `vitest.integration.config.ts`, `test:int`; CI `entegrasyon.yml` (pgvector servisi + göç + seed).
+3. **e2e**: `e2e/` Playwright paketi (readiness/metrik, giriş → Abonelik, parola sıfırlama Mailpit,
+   admin Kuponlar); CI gecelik/elle Docker yığınıyla.
+4. **Admin/portal Vitest** (rbac matrisi, uçlar, menü; portal api yardımcıları/etiketler) — `pnpm -r test`.
+Testler: api 1380+, admin 3, portal 4; lint 0.
+Bulgu (husky sayesinde): Faz 4'te prod compose'a eklenen `volumes:` bloğu `environment:` içine girmiş,
+`docker-compose.prod.yml` 5aefeef'ten beri YAML olarak BOZUKTU → düzeltildi; CI'ya `docker compose config`
+doğrulaması (test + prod + edge profili, örnek env sahte değerle doldurularak) eklendi. Entegrasyon paketi
+yerelde 10/10 (pgvector'lu test yığını DB'si).
+
+**SIRADA: FAZ 6 — UYAP / icra / finans:** UYAP'tan dosya oluşturma (eşleşmeyen → onaylı `Case`) + icra
+ekranı parser'ı; `InterestRatePeriod` + TCMB avans/yasal faiz seed + dönemli faiz; İİK 106/110 sürelerinin
+icra aşamasından otomatik üretimi + portföy özeti; `Tebligat` varlığı + KEP/UETS adaptör arayüzü; finans:
+kronometre + timesheet onayı, storno, AAÜT yıllık iş, maktu harç tablosu, Luca/Logo CSV.
+
+---
+
+## 🔖 ÖNCEKİ KALDIĞIM YER — 6 Eylül 2026, 08:00
 
 > Üç persona planı (`~/.claude/plans/wiggly-giggling-lighthouse.md`) yürüyor:
 > **Faz 0 ✅ · Faz 1 ✅ · Faz 2 ✅ · Faz 3 ✅ · Faz 4 ✅ (bu commit)** · sırada Faz 5 (RAG ölçek + test altyapısı).

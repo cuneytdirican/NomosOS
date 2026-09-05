@@ -782,7 +782,7 @@ model Document {
 
 /// Belgenin RAG için bölünmüş parçası. İÇERİK MASKELİ SAKLANIR (KVKK):
 /// content alanına yazmadan önce packages/ai scanPii/maskText uygulanır.
-/// pgvector Faz 3'e bırakıldı — embedding Float[] olarak tutulur, benzerlik JS'te kosinüs ile.
+/// Faz 5: pgvector (HNSW) + Float[] yedeği; RAG_VECTOR_BACKEND=js ile eski JS kosinüs yolu.
 model DocumentChunk {
   id             String   @id @default(uuid())
   tenantId       String
@@ -795,11 +795,16 @@ model DocumentChunk {
   tokenCount     Int?
   embedding      Float[] // Boş dizi = gömme üretilmedi (anahtar kelime yedeği kullanılır)
   embeddingModel String?
+  /// Faz 5: pgvector sütunu (Float[] ile birlikte yazılır; benzerlik veritabanında `<=>` ile).
+  /// Prisma istemcisi Unsupported alanı okumaz/yazmaz — ham SQL (indexing/retrieval) kullanır.
+  embeddingVec   Unsupported("vector")?
+  embeddingDim   Int?
   sourceLabel    String // Atıf etiketi, örn. "Bilirkişi Raporu · s.3"
   createdAt      DateTime @default(now())
 
   @@index([tenantId, documentId])
   @@index([caseId])
+  @@index([tenantId, caseId])
 }
 
 enum PipelineStatus {

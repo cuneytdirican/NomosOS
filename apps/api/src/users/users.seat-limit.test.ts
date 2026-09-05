@@ -30,7 +30,7 @@ function build(opts: { active: number; seats?: number | null; maxUsers?: number 
   const svc = new UsersService(prisma as any, { log: vi.fn() } as any, {} as any);
   return { svc, prisma };
 }
-const input = { email: "yeni@buro.com", fullName: "Yeni Kişi", role: "AVUKAT" as const, password: "Parola12345!" };
+const input = { email: "yeni@buro.com", fullName: "Yeni Kişi", role: "AVUKAT" as const, password: "Mvk7!pd3Qz-Tramvay-2026" };
 
 describe("UsersService — koltuk sınırı", () => {
   it("aktif kullanıcı sayısı koltuk sayısına ulaştıysa 409", async () => {

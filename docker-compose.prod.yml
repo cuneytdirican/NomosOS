@@ -96,7 +96,8 @@ services:
   # ==========================================================================
   postgres:
     <<: *hardening
-    image: postgres:16-alpine
+    # Faz 5: pgvector (HNSW) — RAG vektör araması veritabanında.
+    image: pgvector/pgvector:pg16
     container_name: nomosos-prod-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER zorunlu}
@@ -317,9 +318,6 @@ services:
       RATE_LIMIT_GLOBAL_PER_IP: ${RATE_LIMIT_GLOBAL_PER_IP:-300}
       RATE_LIMIT_GLOBAL_PER_USER: ${RATE_LIMIT_GLOBAL_PER_USER:-600}
       BACKUP_STATUS_FILE: /backups/last-success.json
-    volumes:
-      # Yedek durumu (salt okunur): backup servisi last-success.json yazar, API metrik üretir.
-      - backups:/backups:ro
 
       # --- Zaman aşımı ---
       # Uzun sözleşme analiz parçaları tek AI çağrısında 60 sn'yi aşabilir;
@@ -381,6 +379,9 @@ services:
       # Belge ayrıştırma sırasında geçici dosya yazılabilir; 50 MB'lık yükleme
       # tavanı düşünülerek ölçülendirildi.
       - /tmp:size=512m,mode=1777
+    volumes:
+      # Faz 4 — yedek durumu (salt okunur): backup servisi last-success.json yazar, API metrik üretir.
+      - backups:/backups:ro
     healthcheck:
       # LIVENESS UCU — hiçbir iş kuralına tabi değildir (denetim bulgusu K-02).
       #

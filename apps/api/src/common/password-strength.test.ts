@@ -9,6 +9,9 @@ describe("password-strength (zxcvbn)", () => {
     expect(evaluatePassword("qwertyuiop12").ok).toBe(false);
     expect(evaluatePassword("Demo1234!").ok).toBe(false);
     expect(evaluatePassword("Avukat2026!").ok).toBe(false);
+    expect(evaluatePassword("Parola123456!").ok).toBe(false); // canlıda 3 puan alıp geçmişti
+    expect(evaluatePassword("Parola123456!").reason).toContain("yaygın bir kelimeye");
+    expect(evaluatePassword("Mvk7!pd3Qz").ok).toBe(true); // 10^10
     const good = evaluatePassword("mavi-kedi-tramvay-1907-Uskudar");
     expect(good.ok).toBe(true);
     expect(good.score).toBeGreaterThanOrEqual(3);

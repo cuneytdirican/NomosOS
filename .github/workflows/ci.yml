@@ -10,7 +10,7 @@ name: CI
 
 on:
   push:
-    branches: ['**']
+    branches: ["**"]
   pull_request:
   workflow_dispatch:
 
@@ -22,29 +22,29 @@ permissions:
   contents: read
 
 env:
-  CI: 'true'
-  FORCE_COLOR: '0'
-  NEXT_TELEMETRY_DISABLED: '1'
-  TURBO_TELEMETRY_DISABLED: '1'
-  DO_NOT_TRACK: '1'
+  CI: "true"
+  FORCE_COLOR: "0"
+  NEXT_TELEMETRY_DISABLED: "1"
+  TURBO_TELEMETRY_DISABLED: "1"
+  DO_NOT_TRACK: "1"
 
   # --- Servis konteynerindeki PostgreSQL ---
-  DATABASE_URL: 'postgresql://nomosos:nomosos@localhost:5432/nomosos_ci'
+  DATABASE_URL: "postgresql://nomosos:nomosos@localhost:5432/nomosos_ci"
   # prisma migrate diff --from-migrations için gereken boş gölge veritabanı.
-  SHADOW_DATABASE_URL: 'postgresql://nomosos:nomosos@localhost:5432/nomosos_ci_shadow'
+  SHADOW_DATABASE_URL: "postgresql://nomosos:nomosos@localhost:5432/nomosos_ci_shadow"
   # Gölge veritabanını oluşturmak için bağlanılan yönetim veritabanı.
-  ADMIN_DATABASE_URL: 'postgresql://nomosos:nomosos@localhost:5432/postgres'
+  ADMIN_DATABASE_URL: "postgresql://nomosos:nomosos@localhost:5432/postgres"
 
   # --- Uygulama derlemesinin beklediği değişkenler (hepsi sahte/CI'ya özel) ---
-  API_PORT: '3001'
+  API_PORT: "3001"
   # JWT_SECRET en az 32 karakter olmalı, yoksa uygulama açılmaz.
-  JWT_SECRET: 'ci-ortami-icin-atilabilir-sahte-jwt-anahtari-0123456789'
+  JWT_SECRET: "ci-ortami-icin-atilabilir-sahte-jwt-anahtari-0123456789"
   # 32 baytlık hex; gerçek anahtar DEĞİLDİR, yalnızca biçim doğrulaması içindir.
-  MASTER_ENCRYPTION_KEY: '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff'
-  NEXT_PUBLIC_API_URL: 'http://localhost:3001'
-  NEXT_PUBLIC_ADMIN_API_URL: 'http://localhost:3001'
-  S3_BUCKET: 'nomosos-belgeler'
-  S3_REGION: 'us-east-1'
+  MASTER_ENCRYPTION_KEY: "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+  NEXT_PUBLIC_API_URL: "http://localhost:3001"
+  NEXT_PUBLIC_ADMIN_API_URL: "http://localhost:3001"
+  S3_BUCKET: "nomosos-belgeler"
+  S3_REGION: "us-east-1"
 
 jobs:
   dogrula:
@@ -54,7 +54,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: nomosos
           POSTGRES_PASSWORD: nomosos
@@ -82,8 +82,8 @@ jobs:
       - name: Node 22 kurulumu ve pnpm store önbelleği
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'pnpm'
+          node-version: "22"
+          cache: "pnpm"
 
       - name: pnpm store yolunu ve sürümleri raporla
         run: |
@@ -130,6 +130,15 @@ jobs:
       # dakikalarını harcamadan önce yakalar.
       # İ-66: UYARI TAVANI ARTIK SIFIR — 10 birikmiş uyarı temizlendi;
       # yeni uyarı CI'ı kırar. Bilinçli bir baskı: uyarı birikmesine geri dönülmez.
+      # Faz 4/5: compose dosyaları YAML + değişken doğrulaması (bozuk girinti üretimi kırmasın).
+      - name: Compose dosyalarını doğrula (docker compose config)
+        run: |
+          docker compose -f docker-compose.test.yml config -q
+          # Örnek env'de zorunlu değerler boştur; doğrulama için sahte değerle doldurulur.
+          sed -E 's/^([A-Z0-9_]+)=$/=ci-dummy-degeri/' docker-compose.prod.env.example > "$RUNNER_TEMP/prod.env"
+          docker compose -f docker-compose.prod.yml --env-file "$RUNNER_TEMP/prod.env" config -q
+          docker compose -f docker-compose.prod.yml --env-file "$RUNNER_TEMP/prod.env" --profile edge config -q
+
       - name: Lint (pnpm lint --max-warnings 0)
         id: lint
         run: |

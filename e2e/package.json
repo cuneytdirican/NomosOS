@@ -1,0 +1,13 @@
+{
+  "name": "@nomosos/e2e",
+  "private": true,
+  "version": "0.1.0",
+  "description": "NomosOS uçtan uca duman testi (Playwright) — docker-compose.test.yml yığınına karşı koşar.",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1"
+  }
+}

@@ -132,6 +132,10 @@ sözleşmede böyle yazılmalıdır. Destek erişimi gerekirse süreli ve kayıt
 
 ### 2.1 Zorunlu bileşen sürümleri
 
+> **Faz 5:** PostgreSQL'de **pgvector** ve **pg_trgm** uzantıları zorunludur (RAG vektör araması + trigram
+> indeksleri). Compose imajı `pgvector/pgvector:pg16`; yönetilen PostgreSQL'de (RDS/Cloud SQL/Azure)
+> pgvector'ü etkinleştirin. Göç `CREATE EXTENSION IF NOT EXISTS vector` ile başlar; uzantı yoksa durur.
+
 | Bileşen | Asgari | Not |
 |---|---|---|
 | PostgreSQL | **16+** | `docker-compose.yml` `postgres:16-alpine` kullanır; Prisma 6 şeması buna göre migrate edilmiştir |

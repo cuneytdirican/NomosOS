@@ -16,6 +16,11 @@ const TR_STOPWORDS = new Set([
 /** Anahtar kelime yedeğinde taranacak en fazla parça (JS tarafı skorlama sınırı). */
 const KEYWORD_SCAN_CAP = 400;
 
+/** RAG_VECTOR_BACKEND: pgvector (varsayılan) | js (eski süreç-içi kosinüs; geçiş dönemi bayrağı). */
+export function vectorBackend(env: NodeJS.ProcessEnv = process.env): "pgvector" | "js" {
+  return env.RAG_VECTOR_BACKEND?.trim().toLowerCase() === "js" ? "js" : "pgvector";
+}
+
 export interface RetrievedChunk {
   chunkId: string;
   documentId: string;
@@ -133,6 +138,12 @@ export class RetrievalService {
       return null;
     }
 
+    // Faz 5: pgvector (HNSW) — benzerlik veritabanında; JS yolu yalnız bayrakla ya da uzantı yokken.
+    if (vectorBackend() === "pgvector") {
+      const viaDb = await this.retrieveByPgvector(tenantId, caseId, queryVector, embedding.model, topK);
+      if (viaDb) return viaDb.length > 0 ? viaDb : null;
+    }
+
     const rows = await this.prisma.client.documentChunk.findMany({
       where: { tenantId, caseId, NOT: { embedding: { isEmpty: true } } },
       select: {
@@ -160,6 +171,46 @@ export class RetrievalService {
       .slice(0, topK);
 
     return scored.length > 0 ? scored : null;
+  }
+
+  /**
+   * Faz 5 — pgvector: `ORDER BY embeddingVec <=> $q LIMIT k` (kosinüs uzaklığı; skor = 1 − uzaklık).
+   * Sorgu vektörü modelin boyutuna cast edilir ki kısmi HNSW indeksi (768/1024/1536) seçilsin.
+   * Uzantı/sütun yoksa `null` döner → çağıran JS kosinüs yoluna düşer (eski PG ile de çalışır).
+   */
+  private async retrieveByPgvector(
+    tenantId: string,
+    caseId: string,
+    queryVector: number[],
+    model: string,
+    topK: number,
+  ): Promise<RetrievedChunk[] | null> {
+    const dim = queryVector.length;
+    if (dim === 0) return null;
+    const literal = `[${queryVector.map((v) => (Number.isFinite(v) ? v : 0)).join(",")}]`;
+    try {
+      const rows = await this.prisma.client.$queryRawUnsafe<
+        Array<{ id: string; documentId: string; sourceLabel: string; content: string; score: number }>
+      >(
+        `SELECT id, "documentId", "sourceLabel", content,
+                1 - (("embeddingVec")::vector(${dim}) <=> $1::vector(${dim})) AS score
+         FROM "DocumentChunk"
+         WHERE "tenantId" = $2 AND "caseId" = $3 AND "embeddingDim" = ${dim}
+           AND ("embeddingModel" IS NULL OR "embeddingModel" = $4)
+         ORDER BY ("embeddingVec")::vector(${dim}) <=> $1::vector(${dim})
+         LIMIT ${Math.max(1, Math.min(50, Math.floor(topK)))}`,
+        literal,
+        tenantId,
+        caseId,
+        model,
+      );
+      return rows
+        .map((r) => ({ chunkId: r.id, documentId: r.documentId, sourceLabel: r.sourceLabel, content: r.content, score: Number(r.score) }))
+        .filter((r) => r.score > 0);
+    } catch (err) {
+      this.logger.warn(`pgvector sorgusu başarısız, JS kosinüs yoluna düşülüyor: ${(err as Error).message.slice(0, 140)}`);
+      return null;
+    }
   }
 
   /* ---------------- (b) Anahtar kelime yedeği ---------------- */

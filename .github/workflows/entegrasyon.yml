@@ -1,0 +1,102 @@
+name: Entegrasyon ve e2e
+
+# Faz 5 — iki iş:
+#   entegrasyon: gerçek PostgreSQL (pgvector) + göçler + seed → supertest ile 10 kritik uç
+#                (apps/api/test/*.int.test.ts). Her push/PR'da.
+#   e2e:         docker-compose.test.yml yığını + Playwright dumanı (giriş → abonelik → duyuru).
+#                Gecelik + elle (workflow_dispatch); ~10 dk sürer, PR'ı bekletmez.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CI: "true"
+  FORCE_COLOR: "0"
+  NEXT_TELEMETRY_DISABLED: "1"
+  TURBO_TELEMETRY_DISABLED: "1"
+
+jobs:
+  entegrasyon:
+    name: Kritik uçlar (supertest + PostgreSQL/pgvector)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: nomosos
+          POSTGRES_PASSWORD: nomosos
+          POSTGRES_DB: nomosos_int
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U nomosos -d nomosos_int"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://nomosos:nomosos@localhost:5432/nomosos_int
+      INTEGRATION_DATABASE_URL: postgresql://nomosos:nomosos@localhost:5432/nomosos_int
+      JWT_SECRET: ci-ortami-icin-atilabilir-sahte-jwt-anahtari-0123456789
+      MASTER_ENCRYPTION_KEY: 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
+      S3_BUCKET: nomosos-belgeler
+      S3_REGION: us-east-1
+      S3_ENDPOINT: http://127.0.0.1:9000
+      S3_ACCESS_KEY: ci
+      S3_SECRET_KEY: ci-secret-key
+      SCHEDULER_DISABLED: "true"
+      SEED_ALLOW_PROD: "true"
+      ODEME_SAGLAYICI: SIMULASYON
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Paketleri derle (api bağımlılıkları)
+        run: |
+          pnpm --filter @nomosos/db exec prisma generate
+          pnpm --filter @nomosos/shared build && pnpm --filter @nomosos/ai build \
+            && pnpm --filter @nomosos/legal-core build && pnpm --filter @nomosos/legal-ai build \
+            && pnpm --filter @nomosos/udf build && pnpm --filter @nomosos/e-signature build \
+            && pnpm --filter @nomosos/db build
+      - name: Göçler + seed (pgvector uzantısı göçte kurulur)
+        run: |
+          pnpm --filter @nomosos/db exec prisma migrate deploy
+          pnpm db:seed
+      - name: Entegrasyon testleri
+        run: pnpm --filter @nomosos/api test:int
+
+  e2e:
+    name: Docker yığını + Playwright dumanı
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test yığınını kaldır (Postgres/pgvector, Redis, MinIO, Mailpit, api, web, admin)
+        run: |
+          docker compose -f docker-compose.test.yml up -d --build
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3001/api/v1/health/ready | grep -q '"ready"'; then echo "API hazır"; break; fi
+            [ "$i" -eq 60 ] && { echo "API hazır olmadı"; docker compose -f docker-compose.test.yml logs --tail 80 api; exit 1; }
+            sleep 5
+          done
+          for i in $(seq 1 30); do curl -fsS http://localhost:3000/giris >/dev/null && break; sleep 5; done
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Playwright dumanı
+        run: |
+          cd e2e && npm ci && npx playwright install --with-deps chromium && npx playwright test
+      - name: Yığını kapat
+        if: always()
+        run: docker compose -f docker-compose.test.yml down -v
