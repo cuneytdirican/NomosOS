@@ -21,7 +21,7 @@
     "@nestjs/jwt": "^10.2.0",
     "@nestjs/platform-express": "^10.4.15",
     "@nestjs/schedule": "^4.1.1",
-    "@nestjs/swagger": "^12.0.1",
+    "@nestjs/swagger": "^7.4.2",
     "@nomosos/ai": "workspace:*",
     "@nomosos/db": "workspace:*",
     "@nomosos/e-signature": "workspace:*",
