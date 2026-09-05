@@ -11,8 +11,8 @@
  * bu dosyadan KALDIRILMIŞTIR. Eski `saveUdfToDisk` hiçbir yerden çağrılmıyordu ve `chrome.downloads`
  * content script bağlamında zaten tanımlı olmadığı için çağrılsa hata verirdi; buna rağmen
  * manifest'te `downloads` izni isteniyordu. En az yetki ilkesi gereği hem fonksiyon hem izin
- * kaldırıldı. Faz 2.5'te indirme akışı bağlanırken kod SERVICE WORKER'a yazılmalı, izin o zaman
- * (tercihen `optional_permissions` üzerinden, kullanıcı hareketiyle) istenmelidir.
+ * kaldırıldı. FAZ 7D: indirme akışı SERVICE WORKER'a (`downloadPetitionUdf`) yazıldı; izin
+ * `optional_permissions: ["downloads"]` üzerinden popup'taki KULLANICI HAREKETİYLE istenir.
  */
 
 import { sha256Bytes } from "./hash";

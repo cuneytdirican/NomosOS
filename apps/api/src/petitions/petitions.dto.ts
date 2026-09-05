@@ -104,3 +104,27 @@ export const exportUdfSchema = z.object({
   confirmedStatuteCitations: z.array(z.string().trim().min(1)).max(100).optional(),
 });
 export type ExportUdfInput = z.infer<typeof exportUdfSchema>;
+
+/** Faz 7D — büro dilekçe şablonu (POST/PATCH /petition-templates). */
+export const templateSectionSpecSchema = z.object({
+  title: z.string().trim().min(2).max(120),
+  hint: z.string().trim().max(2000).nullable().optional(),
+  required: z.boolean().optional(),
+});
+export const petitionTemplateSchema = z.object({
+  name: z.string().trim().min(3).max(200),
+  petitionType: z.enum(PETITION_TYPES),
+  /** Verilmezse addan türetilir (BURO_…). */
+  key: z.string().trim().regex(/^[A-Z0-9_]{3,60}$/).optional(),
+  sections: z.array(templateSectionSpecSchema).min(1).max(40),
+});
+export type PetitionTemplateInput = z.infer<typeof petitionTemplateSchema>;
+export const updatePetitionTemplateSchema = petitionTemplateSchema.partial();
+export type UpdatePetitionTemplateInput = z.infer<typeof updatePetitionTemplateSchema>;
+
+/** Faz 7D — UDF/düz metin yükleyerek şablon içe aktarma (multipart `file` + alanlar). */
+export const importPetitionTemplateSchema = z.object({
+  name: z.string().trim().min(3).max(200),
+  petitionType: z.enum(PETITION_TYPES),
+});
+export type ImportPetitionTemplateInput = z.infer<typeof importPetitionTemplateSchema>;

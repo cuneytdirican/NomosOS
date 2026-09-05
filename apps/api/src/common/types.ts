@@ -32,4 +32,6 @@ export interface AuthUser {
   apiKeyId?: string;
   /** Enterprise++: bu isteğin cihaz oturumu (UserSession.id); jti'siz eski token'da yok. */
   sessionId?: string;
+  /** Faz 7C: role EK yetenekler (rol matrisi) — ROLE_SETS anahtarları. */
+  permissions?: string[];
 }

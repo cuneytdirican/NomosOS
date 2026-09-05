@@ -6,6 +6,7 @@ import { AuditService } from "../audit/audit.service";
 import { relatedCaseVisibilityWhere } from "../common/case-visibility";
 import type { AuthUser } from "../common/types";
 import { assertRole, hasRole, ROLE_SETS } from "../common/roles";
+import type { BulkTaskInput } from "./tasks-bulk";
 import { parseDateParam, parseRangeEnd } from "../common/dates";
 import { paged, resolvePage } from "../common/pagination";
 import { touchCase } from "../common/case-denormals";
@@ -282,6 +283,67 @@ export class TasksService {
       detail: `${existing.title}: ${from} → ${status}${note ? ` (${note})` : ""}`,
     });
     return updated;
+  }
+
+  /** Faz 7C — kontrol/onay kuyruğu. */
+  async reviewQueue(user: AuthUser) {
+    const canApprove = hasRole(user, ROLE_SETS.ONAY);
+    const rows = await this.prisma.client.task.findMany({
+      where: {
+        tenantId: user.tenantId,
+        ...relatedCaseVisibilityWhere(user, { optionalCase: true }),
+        OR: [
+          { status: "KONTROLDE", reviewerId: user.userId },
+          ...(canApprove ? [{ status: "ONAY_BEKLIYOR" as const }] : [{ status: "ONAY_BEKLIYOR" as const, reviewerId: user.userId }]),
+        ],
+      },
+      orderBy: [{ dueDate: "asc" }, { updatedAt: "asc" }],
+      take: 100,
+      include: { assignee: { select: { id: true, fullName: true } }, reviewer: { select: { id: true, fullName: true } }, case: { select: { id: true, title: true, fileNumber: true } } },
+    });
+    return { items: rows, total: rows.length, canApprove };
+  }
+
+  /** Faz 7C — iş yükü (kullanıcı bazlı açık görev / geciken / en yakın son tarih). */
+  async workload(user: AuthUser) {
+    assertRole(user, ROLE_SETS.HUKUKI, "iş yükü görünümü");
+    const now = new Date();
+    const rows = await this.prisma.client.task.findMany({
+      where: { tenantId: user.tenantId, status: { notIn: ["TAMAMLANDI", "IPTAL"] }, ...relatedCaseVisibilityWhere(user, { optionalCase: true }) },
+      select: { assigneeId: true, dueDate: true, priority: true, status: true, workflowKey: true, assignee: { select: { fullName: true } } },
+    });
+    const map = new Map<string, { userId: string; fullName: string; open: number; overdue: number; critical: number; inReview: number; nextDue: Date | null; workflows: number }>();
+    for (const t of rows) {
+      const cur = map.get(t.assigneeId) ?? { userId: t.assigneeId, fullName: t.assignee.fullName, open: 0, overdue: 0, critical: 0, inReview: 0, nextDue: null, workflows: 0 };
+      cur.open += 1;
+      if (t.dueDate && t.dueDate.getTime() < now.getTime()) cur.overdue += 1;
+      if (t.priority === "KRITIK") cur.critical += 1;
+      if (t.status === "KONTROLDE" || t.status === "ONAY_BEKLIYOR") cur.inReview += 1;
+      if (t.workflowKey) cur.workflows += 1;
+      if (t.dueDate && (!cur.nextDue || t.dueDate < cur.nextDue)) cur.nextDue = t.dueDate;
+      map.set(t.assigneeId, cur);
+    }
+    const items = [...map.values()].sort((a, b) => b.overdue - a.overdue || b.open - a.open);
+    return { items, totalOpen: rows.length, totalOverdue: items.reduce((a, i) => a + i.overdue, 0) };
+  }
+
+  /** Faz 7C — toplu işlem (döngü; her görev tek tek kapılardan geçer). */
+  async bulk(user: AuthUser, input: BulkTaskInput) {
+    const ok: string[] = [];
+    const failed: Array<{ id: string; message: string }> = [];
+    for (const id of input.ids) {
+      try {
+        if (input.action === "STATUS") await this.updateStatus(user, id, input.status as TaskStatus, input.note);
+        else if (input.action === "ASSIGN") await this.update(user, id, { assigneeId: input.assigneeId } as UpdateTaskInput);
+        else if (input.action === "PRIORITY") await this.update(user, id, { priority: input.priority } as UpdateTaskInput);
+        else await this.update(user, id, { dueDate: input.dueDate ?? null } as UpdateTaskInput);
+        ok.push(id);
+      } catch (err) {
+        failed.push({ id, message: (err as Error).message.slice(0, 200) });
+      }
+    }
+    await this.audit.log({ tenantId: user.tenantId, userId: user.userId, action: "TASK_BULK", entity: "Task", entityId: ok[0] ?? input.ids[0], detail: `${input.action}: ${ok.length} başarılı, ${failed.length} başarısız` });
+    return { ok: ok.length, okIds: ok, failed };
   }
 
   private async requireTask(tenantId: string, id: string) {

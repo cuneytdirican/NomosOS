@@ -62,6 +62,8 @@ import {
   type UpdateCommunicationInput,
   type UpdateOutboundInput,
   type UpdateTemplateInput,
+  clientStatusSummarySchema,
+  type ClientStatusSummaryInput,
 } from "./communication.dto";
 
 /* ========================================================================== *
@@ -277,6 +279,22 @@ export class OutboundMessagesController {
     @Body(new ZodValidationPipe(createOutboundSchema)) body: CreateOutboundInput,
   ) {
     return this.outbound.create(user, body);
+  }
+
+  /**
+   * Faz 7F — CLIENT_STATUS_SUMMARY ucu: dosya için müvekkile yönelik SADE DİL durum özeti
+   * TASLAĞI. Mesaj kaydı AÇMAZ; avukat okur, düzenler, mesaj/portal notu olarak kendisi kullanır.
+   * Bağlam `buildClientFacingCaseContext` ile kurulur (strateji/risk/iç not model'e gitmez).
+   */
+  @Post("client-status-summary")
+  @HttpCode(200)
+  @AiThrottle(1)
+  @AiCredits("CLIENT_STATUS_SUMMARY", { caseIdFrom: (body) => (body as { caseId?: string } | undefined)?.caseId })
+  clientStatusSummary(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(clientStatusSummarySchema)) body: ClientStatusSummaryInput,
+  ) {
+    return this.outbound.clientStatusSummary(user, body);
   }
 
   /** Metni düzenle. ONAYLANMIŞ mesajda onayı DÜŞÜRÜR. */

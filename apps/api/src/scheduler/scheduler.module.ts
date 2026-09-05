@@ -17,6 +17,8 @@ import { PlatformBillingModule } from "../platform-billing/platform-billing.modu
 import { ExpoPushProvider } from "./push/expo-push.provider";
 import { BildirimDagitimiJob } from "./jobs/bildirim-dagitimi.job";
 import { BildirimTemizligiJob } from "./jobs/bildirim-temizligi.job";
+import { EpostaBelgeGirisiJob } from "./jobs/eposta-belge-girisi.job";
+import { MailIngestModule } from "../mail-ingest/mail-ingest.module";
 
 import { UsageSnapshotJob } from "./jobs/usage-snapshot.job";
 import { DeadlineReminderJob } from "./jobs/deadline-reminder.job";
@@ -78,7 +80,7 @@ import { DeviceTokensService } from "./device-tokens.service";
  * ajanının işidir.
  */
 @Module({
-  imports: [PlatformModule, CreditsModule, RiskModule, VekaletUcretiModule, SecurityModule, IntegrationsModule, AuthModule, PlatformBillingModule],
+  imports: [PlatformModule, CreditsModule, RiskModule, VekaletUcretiModule, SecurityModule, IntegrationsModule, AuthModule, PlatformBillingModule, MailIngestModule],
   controllers: [
     // Platform (/api/admin/v1/jobs) — PlatformJwtGuard + yetki matrisi.
     PlatformJobsController,
@@ -135,6 +137,7 @@ import { DeviceTokensService } from "./device-tokens.service";
     OturumTemizligiJob,
     BildirimDagitimiJob,
     BildirimTemizligiJob,
+    EpostaBelgeGirisiJob,
 
     // --- uç servisleri ---
     PlatformJobsService,

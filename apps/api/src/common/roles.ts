@@ -31,8 +31,33 @@ export const ROLE_SETS = {
   HERKES: ["ADMIN", "PARTNER", "AVUKAT", "STAJYER", "SEKRETER"] as UserRole[],
 };
 
+/** Faz 7C — rol matrisi: role ek verilebilen yetenek anahtarları (User.extraPermissions). */
+export const PERMISSION_KEYS = ["HUKUKI", "ONAY", "OPERASYON", "FINANS"] as const;
+export type PermissionKey = (typeof PERMISSION_KEYS)[number];
+export const PERMISSION_LABELS: Record<PermissionKey, string> = {
+  HUKUKI: "Hukuki tasarruf (dosya/müvekkil üzerinde tam yetki)",
+  ONAY: "Onay yetkisi (süre/görev/fatura onayı)",
+  OPERASYON: "Büro operasyonu (kayıt, belge, iletişim)",
+  FINANS: "Finansal veri (tahsilat, masraf, vekâlet ücreti)",
+};
+
+/** ROLE_SETS dizisi (referans kimliğiyle) → yetenek anahtarı. */
+const ROLE_SET_KEY = new Map<readonly UserRole[], PermissionKey>([
+  [ROLE_SETS.HUKUKI, "HUKUKI"],
+  [ROLE_SETS.ONAY, "ONAY"],
+  [ROLE_SETS.OPERASYON, "OPERASYON"],
+  [ROLE_SETS.FINANS, "FINANS"],
+]);
+
+/**
+ * Rol kümesi kontrolü + rol matrisi: kullanıcının rolü kümede yoksa bile o kümeye karşılık
+ * gelen yetenek (`permissions`) EK olarak verilmişse geçer. Yalnız ROLE_SETS'in dört
+ * yeteneği matrise açıktır; geçici/özel rol dizileri (`["ADMIN"]` gibi) matristen ETKİLENMEZ.
+ */
 export function hasRole(user: AuthUser, roles: readonly UserRole[]): boolean {
-  return roles.includes(user.role);
+  if (roles.includes(user.role)) return true;
+  const key = ROLE_SET_KEY.get(roles);
+  return key !== undefined && Array.isArray(user.permissions) && user.permissions.includes(key);
 }
 
 /**
@@ -41,7 +66,7 @@ export function hasRole(user: AuthUser, roles: readonly UserRole[]): boolean {
  * "Sekreter rolü dosya durumu değiştirme yetkisine sahip değil."
  */
 export function assertRole(user: AuthUser, roles: readonly UserRole[], action: string): void {
-  if (!roles.includes(user.role)) {
+  if (!hasRole(user, roles)) {
     throw new ForbiddenException(`${ROLE_LABELS[user.role]} rolü ${action} yetkisine sahip değil.`);
   }
 }

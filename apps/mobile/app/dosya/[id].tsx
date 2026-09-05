@@ -12,6 +12,7 @@
 
 import React, { useCallback, useState } from "react";
 import { Linking, RefreshControl, StyleSheet, View } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { errorMessage } from "@/api/client";
 import { fetchCase, requestDocumentUrl } from "@/api/endpoints";
@@ -38,6 +39,7 @@ import {
   Muted,
   ScrollScreen,
   Section,
+  Button,
 } from "@/ui/components";
 import { DeadlineRow } from "@/ui/list-items";
 import { colors, font, radius, space } from "@/ui/theme";
@@ -66,12 +68,18 @@ export default function CaseDetailScreen(): React.JSX.Element {
       setDocError(null);
       try {
         const result = await requestDocumentUrl(documentId);
-        const canOpen = await Linking.canOpenURL(result.url);
-        if (!canOpen) {
-          setDocError("Belge bu cihazda açılamıyor. Büro panelinden görüntüleyin.");
-          return;
+        // Faz 7E: uygulama içi görüntüleyici (SFSafariViewController / Custom Tab); süreli bağlantı
+        // uygulamadan çıkmadan açılır. Açılamazsa sistem tarayıcısına düşülür.
+        try {
+          await WebBrowser.openBrowserAsync(result.url, { presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET });
+        } catch {
+          const canOpen = await Linking.canOpenURL(result.url);
+          if (!canOpen) {
+            setDocError("Belge bu cihazda açılamıyor. Büro panelinden görüntüleyin.");
+            return;
+          }
+          await Linking.openURL(result.url);
         }
-        await Linking.openURL(result.url);
       } catch (caught) {
         setDocError(errorMessage(caught));
       } finally {
@@ -195,7 +203,16 @@ export default function CaseDetailScreen(): React.JSX.Element {
           )}
         </Section>
 
-        <Section title="Belgeler">
+        <Section
+          title="Belgeler"
+          right={
+            <Button
+              title="Kamera / yükle"
+              variant="secondary"
+              onPress={() => router.push({ pathname: "/belge/yukle", params: { caseId: data.id, caseTitle: data.title } })}
+            />
+          }
+        >
           {docError ? (
             <View style={styles.docError}>
               <Body style={styles.docErrorText}>{docError}</Body>
@@ -223,7 +240,7 @@ export default function CaseDetailScreen(): React.JSX.Element {
           </Muted>
         </Section>
 
-        <DesktopOnlyNote what="Dilekçe üretimi, belge yükleme, finans ve fatura işlemleri" />
+        <DesktopOnlyNote what="Dilekçe üretimi, finans ve fatura işlemleri" />
       </ScrollScreen>
     </>
   );

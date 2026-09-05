@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { Badge, Button, Card, CopyOnceField, EmptyState, ErrorBox, Field, Input, Modal, Spinner, SuccessBox, Switch } from "@/components/ui";
+import { MailIngestCard } from "@/components/mail-ingest-card";
 
 interface ApiKeyRow {
   id: string;
@@ -218,6 +219,8 @@ export default function EntegrasyonlarPage() {
 
       {notice && <SuccessBox message={notice} />}
       {error && <ErrorBox message={error} />}
+
+      <MailIngestCard />
 
       <Card
         title="API anahtarları"

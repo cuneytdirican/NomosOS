@@ -60,6 +60,15 @@ export type UpdateClaimInput = z.infer<typeof updateClaimSchema>;
 
 /* ------------------------------- Delil ------------------------------- */
 
+/** Faz 7G — tanık ayrıntıları (TANIK tipinde). */
+export const witnessInfoSchema = z.object({
+  contact: z.string().trim().max(200).nullable().optional(),
+  relation: z.string().trim().max(200).nullable().optional(),
+  summonsStatus: z.enum(["BEKLIYOR", "CELP_EDILDI", "DINLENDI", "VAZGECILDI"]).nullable().optional(),
+  statementSummary: z.string().trim().max(4000).nullable().optional(),
+});
+export type WitnessInfo = z.infer<typeof witnessInfoSchema>;
+
 export const createEvidenceSchema = z
   .object({
     type: z.enum(EVIDENCE_TYPES, {
@@ -76,6 +85,7 @@ export const createEvidenceSchema = z
     /** DMS bağı — Document.id. Varlığı servis katmanında doğrulanır. */
     documentId: nullableUuid("Belge kimliği"),
     witnessName: nullableText(200, "Tanık adı"),
+    witnessInfo: witnessInfoSchema.nullable().optional(),
     obtainedAt: nullableDate("Elde edilme tarihi"),
     status: z.enum(EVIDENCE_STATUSES).optional(),
     /** Delili KİM sundu (F2 · E6/KK6): verilmezse null kalır (taraf belirsiz). */
@@ -108,6 +118,7 @@ export const updateEvidenceSchema = z
     description: nullableText(4000, "Açıklama"),
     documentId: nullableUuid("Belge kimliği"),
     witnessName: nullableText(200, "Tanık adı"),
+    witnessInfo: witnessInfoSchema.nullable().optional(),
     obtainedAt: nullableDate("Elde edilme tarihi"),
     status: z.enum(EVIDENCE_STATUSES).optional(),
     /** Taraf güncellenebilir (F2 · E6): null = taraf işaretini kaldır. */

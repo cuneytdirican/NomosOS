@@ -24,6 +24,8 @@ import type {
   SyncEventsResponse,
   SyncFilesRequest,
   SyncFilesResponse,
+  ReadyPetitionsResponse,
+  PetitionUdfResponse,
 } from "../types/dto";
 
 async function authedRequest<T>(
@@ -119,4 +121,14 @@ export async function transferDocument(input: {
     gonderen: input.gonderen,
   };
   return commitDocument(commit);
+}
+
+/** Faz 7D — UYAP'a gönderilmeye hazır dilekçeler. */
+export async function fetchReadyPetitions(): Promise<ReadyPetitionsResponse> {
+  return authedRequest<ReadyPetitionsResponse>("GET", "/api/v1/uyap/petitions/ready");
+}
+
+/** Faz 7D — dilekçe UDF'si için süreli indirme bağlantısı. */
+export async function exportPetitionUdf(petitionId: string): Promise<PetitionUdfResponse> {
+  return authedRequest<PetitionUdfResponse>("POST", `/api/v1/uyap/petitions/${encodeURIComponent(petitionId)}/udf`);
 }

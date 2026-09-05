@@ -41,6 +41,8 @@ interface ManagedUser {
   barNumber: string | null;
   isActive: boolean;
   isLocked: boolean;
+  /** Faz 7C — rol matrisi: role ek yetenekler. */
+  extraPermissions?: string[];
   /** Enterprise++: TOTP kurulu mu (gizli anahtar dönmez). */
   twoFactorEnabled?: boolean;
   createdAt: string;
@@ -48,6 +50,14 @@ interface ManagedUser {
 }
 
 const ROLE_VALUES = ["ADMIN", "PARTNER", "AVUKAT", "STAJYER", "SEKRETER"] as const;
+
+/** Faz 7C — rol matrisi: role EK verilebilen yetenekler (sunucu: common/roles.ts PERMISSION_KEYS). */
+const PERMISSION_OPTIONS = [
+  { key: "HUKUKI", label: "Hukuki", title: "Dosya/müvekkil üzerinde tam hukuki tasarruf" },
+  { key: "ONAY", label: "Onay", title: "Süre/görev/fatura onayı" },
+  { key: "OPERASYON", label: "Operasyon", title: "Kayıt, belge, iletişim" },
+  { key: "FINANS", label: "Finans", title: "Tahsilat, masraf, vekâlet ücreti" },
+] as const;
 
 /** Rol yetki sıralaması — yönetici, kendinden yetkili birine rol veremez/alamaz. */
 const ROLE_RANK: Record<string, number> = {
@@ -244,6 +254,32 @@ export default function KullanicilarPage() {
       key: "barNumber",
       header: "Baro No",
       render: (u: ManagedUser) => u.barNumber ?? "—",
+    },
+    {
+      key: "permissions",
+      header: "Ek yetkiler",
+      render: (u: ManagedUser) => (
+        <span className="flex flex-wrap gap-1" data-testid="ek-yetkiler">
+          {PERMISSION_OPTIONS.map((p) => {
+            const on = (u.extraPermissions ?? []).includes(p.key);
+            return (
+              <button
+                key={p.key}
+                type="button"
+                disabled={!canManage(u)}
+                title={p.title}
+                onClick={() => {
+                  const next = on ? (u.extraPermissions ?? []).filter((x) => x !== p.key) : [...(u.extraPermissions ?? []), p.key];
+                  void patchUser(u.id, { permissions: next }, `${u.fullName}: ${p.label} ${on ? "kaldırıldı" : "verildi"} (oturumları yenilenir).`);
+                }}
+                className={`rounded-full border px-2 py-0.5 text-[11px] ${on ? "border-amber-500 bg-amber-100 text-slate-900" : "border-slate-300 text-slate-600"} disabled:opacity-50`}
+              >
+                {p.label}
+              </button>
+            );
+          })}
+        </span>
+      ),
     },
     {
       key: "status",

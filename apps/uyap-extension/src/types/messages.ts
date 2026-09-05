@@ -3,7 +3,7 @@
  * Tüm mesajlar tipli; service worker `switch` ile tam kapsamlı ele alır.
  */
 
-import type { PendingDocument, SyncTrigger } from "./dto";
+import type { PendingDocument, ReadyPetitionsResponse, SyncTrigger } from "./dto";
 import type { ParseFailure } from "./parser";
 import type { ExtensionSettings, PopupState } from "./state";
 import type { QueueSnapshot } from "./queue";
@@ -25,6 +25,9 @@ export type ExtensionMessage =
   | { readonly type: "GET_QUEUE" }
   | { readonly type: "RETRY_FAILED" }
   | { readonly type: "CLEAR_QUEUE" }
+  /** Faz 7D — popup: hazır dilekçeler / UDF indir. */
+  | { readonly type: "GET_READY_PETITIONS" }
+  | { readonly type: "DOWNLOAD_PETITION_UDF"; readonly petitionId: string }
   /** İçerik betiği: dosya listesi/detay aktarımı. */
   | {
       readonly type: "TRANSFER_FILES";
@@ -80,6 +83,8 @@ export interface MessageResultMap {
   GET_QUEUE: QueueSnapshot;
   RETRY_FAILED: { readonly requeued: number };
   CLEAR_QUEUE: { readonly cleared: number };
+  GET_READY_PETITIONS: ReadyPetitionsResponse;
+  DOWNLOAD_PETITION_UDF: { readonly downloadId: number; readonly fileName: string; readonly warning: string | null };
   TRANSFER_FILES: { readonly queued: number; readonly duplicates: number };
   TRANSFER_EVENTS: { readonly queued: number; readonly duplicates: number };
   TRANSFER_DOCUMENTS: { readonly queued: number; readonly duplicates: number };

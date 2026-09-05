@@ -60,6 +60,7 @@ import { CommScopeTab } from "../../_components/comm-scope-tab";
 import { ContractsTab } from "../../_components/contracts-tab";
 import { PoaTab } from "../../_components/poa-tab";
 import { PortalTab } from "../../_components/portal-tab";
+import { PortalTodoCard } from "../../_components/portal-todo-card";
 
 const TABS = [
   { key: "genel", label: "Genel" },
@@ -454,7 +455,10 @@ export default function MuvekkilDetayPage({ params }: { params: Promise<{ id: st
       )}
 
       {tab === "portal" && (
-        <PortalTab clientId={id} clientName={client.name} onNotify={push} />
+        <div className="space-y-6">
+          <PortalTab clientId={id} clientName={client.name} onNotify={push} />
+          <PortalTodoCard clientId={id} cases={(cases ?? []).map((c) => ({ id: c.id, title: c.title, fileNumber: c.fileNumber ?? null }))} onNotify={push} />
+        </div>
       )}
 
       {tab === "vekaletname" && <PoaTab clientId={id} cases={cases} onNotify={push} />}

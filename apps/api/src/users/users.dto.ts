@@ -33,6 +33,8 @@ export const updateUserSchema = z
     role: z.enum(USER_ROLES, { errorMap: () => ({ message: "Geçersiz rol." }) }).optional(),
     barNumber: z.string().trim().max(50).nullish(),
     isActive: z.boolean().optional(),
+    /** Faz 7C: rol matrisi — role ek yetenekler. */
+    permissions: z.array(z.enum(["HUKUKI", "ONAY", "OPERASYON", "FINANS"])).max(4).optional(),
   })
   .refine((v) => Object.keys(v).length > 0, "Güncellenecek en az bir alan gönderilmelidir.");
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;

@@ -36,6 +36,17 @@ import {
 } from "./evidence.dto";
 
 /** Delil kaydı girebilen roller — stajyer dâhil (veri girişi hukuki tasarruf değildir). */
+/** Faz 7G — tanık ayrıntıları JSON → nesne (bozuksa null). */
+function parseWitnessInfo(json: string | null | undefined): Record<string, unknown> | null {
+  if (!json) return null;
+  try {
+    const v = JSON.parse(json) as Record<string, unknown>;
+    return v && typeof v === "object" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 const EVIDENCE_WRITE_ROLES = [...ROLE_SETS.HUKUKI, "STAJYER"] as const;
 
 @Injectable()
@@ -171,7 +182,7 @@ export class EvidenceService {
         },
       },
     });
-    return { items, total: items.length };
+    return { items: items.map((e) => ({ ...e, witnessInfo: parseWitnessInfo(e.witnessInfoJson) })), total: items.length };
   }
 
   /** POST /cases/:caseId/evidence */
@@ -190,6 +201,7 @@ export class EvidenceService {
         description: input.description ?? null,
         documentId,
         witnessName: input.witnessName ?? null,
+        witnessInfoJson: input.witnessInfo ? JSON.stringify(input.witnessInfo) : null,
         obtainedAt: input.obtainedAt ?? null,
         status: input.status ?? "PLANLANAN",
         offeredBy: input.offeredBy ?? null,
@@ -254,6 +266,7 @@ export class EvidenceService {
     const evidence = await this.prisma.client.evidence.update({
       where: { id: existing.id },
       data: {
+        ...(input.witnessInfo !== undefined ? { witnessInfoJson: input.witnessInfo ? JSON.stringify(input.witnessInfo) : null } : {}),
         ...(input.type !== undefined ? { type: input.type } : {}),
         ...(input.title !== undefined ? { title: input.title } : {}),
         ...(input.description !== undefined ? { description: input.description ?? null } : {}),

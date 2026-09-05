@@ -7,6 +7,8 @@ import { DocumentsController } from "./documents.controller";
 import { DocumentsService } from "./documents.service";
 import { ProposalsController } from "./proposals.controller";
 import { ProposalsService } from "./proposals.service";
+import { DocumentExtrasService } from "./document-extras.service";
+import { PublicShareController } from "./public-share.controller";
 
 /**
  * Belge yönetimi (DMS) + onay kuyruğu.
@@ -17,8 +19,8 @@ import { ProposalsService } from "./proposals.service";
  */
 @Module({
   imports: [StorageModule, PipelineModule, DiskQuotaModule, AiTrainingModule],
-  controllers: [DocumentsController, ProposalsController],
-  providers: [DocumentsService, ProposalsService],
-  exports: [DocumentsService],
+  controllers: [DocumentsController, ProposalsController, PublicShareController],
+  providers: [DocumentsService, ProposalsService, DocumentExtrasService],
+  exports: [DocumentsService, DocumentExtrasService],
 })
 export class DocumentsModule {}

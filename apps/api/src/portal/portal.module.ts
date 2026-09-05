@@ -1,3 +1,6 @@
+import { DocumentsModule } from "../documents/documents.module";
+import { PortalTodoService } from "./portal-todo.service";
+import { PortalConsentService } from "./portal-consent.service";
 import { Module, forwardRef } from "@nestjs/common";
 import { CommunicationModule } from "../communication/communication.module";
 import { PortalAdminController } from "./portal-admin.controller";
@@ -55,7 +58,7 @@ import { RandevuModule } from "../randevu/randevu.module";
    * `InboundService` portalı bilmez); yalnız modül grafiği döngüseldir ve
    * `forwardRef` tam olarak bunun içindir.
    */
-  imports: [forwardRef(() => CommunicationModule), RandevuModule],
+  imports: [forwardRef(() => CommunicationModule), RandevuModule, DocumentsModule],
   controllers: [PortalAuthController, PortalDataController, PortalAdminController],
   providers: [
     PortalAuthService,
@@ -63,6 +66,8 @@ import { RandevuModule } from "../randevu/randevu.module";
     PortalAdminService,
     PortalPublicationService,
     PortalAuditService,
+    PortalTodoService,
+    PortalConsentService,
     // Guard ve interceptor'lar PROVIDER olarak kaydedilir: `@UseGuards(Class)`
     // ile kullanıldıklarında Nest bunları modül enjektöründen çözer ve
     // TEK ÖRNEK olarak paylaşır. Hız sınırlayıcının sayaç tablosu bu yüzden

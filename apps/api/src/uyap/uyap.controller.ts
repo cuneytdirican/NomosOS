@@ -105,6 +105,23 @@ export class UyapExtensionController {
   status(@Req() req: UyapTokenRequest) {
     return this.uyap.status(req.uyapToken!);
   }
+
+  /** Faz 7D — UYAP'a gönderilmeye hazır dilekçeler (HAZIR / DISA_AKTARILDI). */
+  @Get("petitions/ready")
+  @UseGuards(UyapTokenGuard)
+  readyPetitions(@Req() req: UyapTokenRequest) {
+    return this.uyap.listReadyPetitions(req.uyapToken!);
+  }
+
+  /**
+   * Faz 7D — dilekçenin UDF'sini üret ve süreli indirme bağlantısı ver. Eklenti dosyayı
+   * kullanıcının diskine indirir; UYAP'a yükleme, e-imza ve gönderim KULLANICININ eylemidir.
+   */
+  @Post("petitions/:id/udf")
+  @UseGuards(UyapTokenGuard)
+  petitionUdf(@Req() req: UyapTokenRequest, @Param("id") id: string) {
+    return this.uyap.exportPetitionUdf(req.uyapToken!, id);
+  }
 }
 
 /* ------------------------- 2) WEB (BÜRO) UÇLARI ------------------------- */

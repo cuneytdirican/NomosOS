@@ -149,6 +149,55 @@ function durumCiz(state: PopupState): void {
   hataListesiCiz(state);
 }
 
+/* ------------------------- Faz 7D: dilekçe → UDF ------------------------- */
+
+async function dilekceIndir(petitionId: string, baslik: string): Promise<void> {
+  const durum = el("dilekceDurum");
+  // İzin KULLANICI HAREKETİYLE (bu tıklama) istenir; verilmezse hiçbir şey indirilmez.
+  const izin = (await chrome.permissions.contains({ permissions: ["downloads"] })) || (await chrome.permissions.request({ permissions: ["downloads"] }));
+  if (!izin) {
+    durum.textContent = "İndirme izni verilmedi; UDF indirilemez. İzin yalnız dosyayı diskinize yazmak için kullanılır.";
+    return;
+  }
+  durum.textContent = `"${baslik}" UDF'si hazırlanıyor…`;
+  const response = await sendMessage({ type: "DOWNLOAD_PETITION_UDF", petitionId });
+  if (!response.ok) {
+    durum.textContent = response.error.message;
+    return;
+  }
+  durum.textContent = `${response.data.fileName} indirildi. UYAP → Evrak Gönder ekranında dosyayı seçip e-imzanızla siz gönderirsiniz.${response.data.warning ? " " + response.data.warning : ""}`;
+}
+
+async function dilekceListesiCiz(): Promise<void> {
+  const liste = el<HTMLUListElement>("dilekceListesi");
+  const durum = el("dilekceDurum");
+  liste.replaceChildren();
+  const response = await sendMessage({ type: "GET_READY_PETITIONS" });
+  if (!response.ok) {
+    durum.textContent = response.error.message;
+    return;
+  }
+  if (response.data.items.length === 0) {
+    durum.textContent = "NomosOS'ta HAZIR durumunda dilekçe yok. Dilekçe Stüdyosu'nda teyit kapısından geçirin.";
+    return;
+  }
+  durum.textContent = "";
+  for (const p of response.data.items) {
+    const li = document.createElement("li");
+    const metin = document.createElement("span");
+    metin.textContent = `${p.dosyaNo ? p.dosyaNo + " — " : ""}${p.title} (${p.status})`;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "kucuk";
+    btn.textContent = "UDF indir";
+    btn.addEventListener("click", () => {
+      void withBusy(btn, () => dilekceIndir(p.id, p.title));
+    });
+    li.append(metin, btn);
+    liste.append(li);
+  }
+}
+
 async function yenile(): Promise<void> {
   const response = await sendMessage({ type: "GET_POPUP_STATE" });
   if (!response.ok) {
@@ -223,6 +272,13 @@ function baglaOlaylar(): void {
       await sendMessage({ type: "RETRY_FAILED" });
       await yenile();
     });
+  });
+
+  el("dilekceYenileBtn").addEventListener("click", () => {
+    void dilekceListesiCiz();
+  });
+  el<HTMLDetailsElement>("dilekceBolumu").addEventListener("toggle", () => {
+    if (el<HTMLDetailsElement>("dilekceBolumu").open) void dilekceListesiCiz();
   });
 
   el("kuyrukTemizleBtn").addEventListener("click", () => {

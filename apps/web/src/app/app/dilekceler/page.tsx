@@ -21,6 +21,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { exportPetitionUdf } from "@/lib/faz2";
+import { PetitionTemplatesCard } from "@/components/petition-templates-card";
 import {
   Badge,
   Button,
@@ -391,6 +392,8 @@ export default function DilekceStudyoPage() {
           + Yeni Dilekçe
         </Button>
       </div>
+
+      <PetitionTemplatesCard />
 
       <Card>
         <div className="mb-4">

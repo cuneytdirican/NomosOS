@@ -284,3 +284,32 @@ export function toSyncHearingDto(
     aciklama: kayit.aciklama,
   };
 }
+
+/* ------------------------- Faz 7D: dilekçe → UDF köprüsü ------------------------- */
+
+/** GET /uyap/petitions/ready satırı. */
+export interface ReadyPetitionDto {
+  readonly id: string;
+  readonly title: string;
+  readonly type: string;
+  readonly status: string;
+  readonly updatedAt: string;
+  readonly dosyaNo: string | null;
+  readonly dosyaBaslik: string | null;
+  readonly birim: string | null;
+}
+
+export interface ReadyPetitionsResponse {
+  readonly items: readonly ReadyPetitionDto[];
+}
+
+/** POST /uyap/petitions/:id/udf — süreli indirme bağlantısı (sunucu üretir, eklenti indirir). */
+export interface PetitionUdfResponse {
+  readonly petitionId: string;
+  readonly versionNo: number;
+  readonly fileName?: string;
+  readonly url?: string;
+  readonly downloadUrl?: string;
+  readonly expiresInSeconds?: number;
+  readonly warning?: string;
+}

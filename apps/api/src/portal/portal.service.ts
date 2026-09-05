@@ -1,6 +1,9 @@
-import { Inject, Injectable, NotFoundException, forwardRef } from "@nestjs/common";
+import { Inject, Injectable, NotFoundException, forwardRef, BadRequestException } from "@nestjs/common";
 import { Prisma } from "@nomosos/db";
 import { PrismaService } from "../prisma/prisma.service";
+import { DocumentsService } from "../documents/documents.service";
+import { AuditService } from "../audit/audit.service";
+import type { AuthUser } from "../common/types";
 import { StorageService } from "../storage/storage.service";
 import { InboundService } from "../communication/inbound.service";
 import { PortalAuditService } from "./portal-audit.service";
@@ -57,6 +60,8 @@ export class PortalService {
     private readonly publications: PortalPublicationService,
     private readonly storage: StorageService,
     private readonly audit: PortalAuditService,
+    private readonly documents: DocumentsService,
+    private readonly officeAudit: AuditService,
     // İki modül birbirini görür (portal → iletişim: gelen mesaj yazımı;
     // iletişim → portal: gönderilen mesajın yayın kaydı). Sağlayıcılar
     // arasında döngü YOKTUR; yalnız modül grafiği döngüseldir, bu yüzden
@@ -461,6 +466,51 @@ export class PortalService {
    * `matchStatus` deterministik bir eşleşme yoksa BEKLIYOR kalır; eşleştirme
    * kararı büro tarafındadır (İletişim Merkezi ortak kararı 5).
    */
+  /* ================================================================== *
+   * POST /portal/documents — Faz 7F: müvekkil belge yükleme
+   *
+   * Dosya portalda YAYINDA olmalı (aksi hâlde yayınlanmamış dosya varlığı sızar). Belge normal
+   * büro hattından geçer (hash/kota/doğrulama/OCR); kaynak PORTAL, klasör "/Müvekkil".
+   * Yükleyen büro kullanıcısı DEĞİLDİR: `uploadedBy` dosya sorumlusu (ya da büro yöneticisi)
+   * adına yazılır, denetim satırı müvekkil kimliğini taşır. Belge bu müvekkile OTOMATİK yayınlanır
+   * (sahiplik doğrulanmış: kendi yüklediği belgeyi görür); büro isterse yayından kaldırır.
+   * ================================================================== */
+  async uploadDocument(user: PortalAuthUser, file: Express.Multer.File | undefined, input: { caseId: string; note?: string | null }) {
+    await this.publications.assertPublished(user, "DOSYA", input.caseId);
+    if (!file || !file.buffer || file.size === 0) throw new BadRequestException("Yüklenecek dosya bulunamadı (alan adı: file).");
+    if (file.size > 25 * 1024 * 1024) throw new BadRequestException("Portaldan yüklenen belge en fazla 25 MB olabilir.");
+    const c = await this.prisma.client.case.findFirst({
+      where: { id: input.caseId, tenantId: user.tenantId, clientId: user.clientId },
+      select: { id: true, responsibleUserId: true, title: true },
+    });
+    if (!c) throw new NotFoundException("Dosya bulunamadı.");
+    const actorId = c.responsibleUserId ?? (await this.prisma.client.user.findFirst({ where: { tenantId: user.tenantId, isActive: true, role: { in: ["ADMIN", "PARTNER"] } }, select: { id: true }, orderBy: { createdAt: "asc" } }))?.id;
+    if (!actorId) throw new BadRequestException("Büroda belgeyi teslim alacak aktif bir sorumlu bulunamadı.");
+    const actor: AuthUser = { userId: actorId, tenantId: user.tenantId, role: "ADMIN" } as AuthUser;
+    const res = await this.documents.upload(actor, file, {
+      caseId: c.id,
+      source: "PORTAL",
+      folderPath: "/Müvekkil",
+      name: file.originalname,
+    });
+    if (!res.duplicate) {
+      await this.prisma.client.portalPublication.upsert({
+        where: { tenantId_resourceType_resourceId_clientId: { tenantId: user.tenantId, resourceType: "BELGE", resourceId: res.document.id, clientId: user.clientId } },
+        create: { tenantId: user.tenantId, clientId: user.clientId, resourceType: "BELGE", resourceId: res.document.id, publishedBy: actorId, note: input.note ?? "Müvekkil portaldan yükledi.", ownershipVerified: true },
+        update: { unpublishedAt: null, publishedBy: actorId, publishedAt: new Date(), ownershipVerified: true },
+      });
+    }
+    await this.officeAudit.log({
+      tenantId: user.tenantId,
+      userId: actorId,
+      action: "PORTAL_DOCUMENT_UPLOAD",
+      entity: "Document",
+      entityId: res.document.id,
+      detail: `müvekkil ${user.fullName} (${user.email}) portaldan yükledi: ${file.originalname} → ${c.title.slice(0, 80)}${res.duplicate ? " (KOPYA — yeni kayıt açılmadı)" : ""}${input.note ? ` — ${input.note.slice(0, 200)}` : ""}`,
+    });
+    return { id: res.document.id, name: res.document.name, duplicate: res.duplicate, caseId: c.id, message: res.duplicate ? "Bu belge dosyada zaten vardı." : "Belge dosyaya eklendi; büronuz bilgilendirildi." };
+  }
+
   async createMessage(user: PortalAuthUser, input: PortalMessageInput) {
     if (input.caseId) {
       // Yayınlanmamış bir dosyanın id'si mesaja iliştirilemez: aksi hâlde

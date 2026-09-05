@@ -251,6 +251,73 @@ export const DOCUMENTS_ROUTES = {
   text: (id: string) => `/documents/${id}/text`,
   download: (id: string) => `/documents/${id}/download`,
   reprocess: (id: string) => `/documents/${id}/reprocess`,
+  /** Faz 7A */
+  folders: "/documents/folders",
+  versions: (id: string) => `/documents/${id}/versions`,
+  move: (id: string) => `/documents/${id}/move`,
+  share: (id: string) => `/documents/${id}/share`,
+  shares: (id: string) => `/documents/${id}/shares`,
+  revokeShare: (shareId: string) => `/documents/shares/${shareId}`,
+  publicShare: (token: string) => `/public/paylasim/${token}`,
+} as const;
+
+/** Faz 7G — dosya detayı sekmeleri: kapanış kontrol listesi (tanık/harç/vekâlet/finans mevcut uçları kullanır). */
+export const CASE_TABS_ROUTES = {
+  closingChecklist: (caseId: string) => `/cases/${caseId}/closing-checklist`,
+  poaStatus: (caseId: string) => `/cases/${caseId}/poa-status`,
+  financeSummary: (caseId: string) => `/finance/cases/${caseId}/summary`,
+  evidence: (caseId: string) => `/cases/${caseId}/evidence`,
+  expenses: (caseId: string) => `/cases/${caseId}/case-expenses`,
+  harcTarifesi: (yil: number) => `/finance/harc-tarifesi/${yil}`,
+} as const;
+
+/** Faz 7F — portal yapılacaklar + belge yükleme + rıza; büro tarafı portal-admin. */
+export const PORTAL_TODO_ROUTES = {
+  portalTodos: "/portal/todos",
+  portalTodoComplete: (id: string) => `/portal/todos/${id}/complete`,
+  portalUpload: "/portal/documents",
+  portalConsents: "/portal/consents",
+  adminTodos: "/portal-admin/todos",
+  adminTodoCancel: (id: string) => `/portal-admin/todos/${id}`,
+  adminConsents: "/portal-admin/consents",
+  clientStatusSummary: "/outbound-messages/client-status-summary",
+} as const;
+
+/** Faz 7D — büro dilekçe şablonları + eklenti UDF köprüsü. */
+export const PETITION_TEMPLATE_ROUTES = {
+  list: "/petition-templates",
+  create: "/petition-templates",
+  importUdf: "/petition-templates/import",
+  update: (id: string) => `/petition-templates/${id}`,
+  remove: (id: string) => `/petition-templates/${id}`,
+  uyapReady: "/uyap/petitions/ready",
+  uyapUdf: (id: string) => `/uyap/petitions/${id}/udf`,
+} as const;
+
+/** Faz 7C — iş akışı şablonları + toplu görev + kuyruk/iş yükü. */
+export const WORKFLOW_ROUTES = {
+  list: "/workflow-templates",
+  create: "/workflow-templates",
+  update: (id: string) => `/workflow-templates/${id}`,
+  remove: (id: string) => `/workflow-templates/${id}`,
+  apply: (key: string) => `/workflow-templates/${key}/apply`,
+  tasksBulk: "/tasks/bulk",
+  reviewQueue: "/tasks/review-queue",
+  workload: "/tasks/workload",
+} as const;
+
+/** Faz 7B — global arama (Ctrl+K). */
+export const SEARCH_ROUTES = {
+  search: "/search",
+} as const;
+
+/** Faz 7A — e-posta ile belge girişi (IMAP) ayarları. */
+export const MAIL_INGEST_ROUTES = {
+  get: "/settings/mail-ingest",
+  upsert: "/settings/mail-ingest",
+  remove: "/settings/mail-ingest",
+  test: "/settings/mail-ingest/test",
+  run: "/settings/mail-ingest/run",
 } as const;
 
 /** Belge → otomatik aksiyon hattının öneri kuyruğu (Modül 06). */

@@ -38,6 +38,7 @@ import { scanPii } from "@nomosos/ai";
 import type { OutboundMessage, Prisma } from "@nomosos/db";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { caseVisibilityWhere } from "../common/case-visibility";
 import { paged, resolvePage } from "../common/pagination";
 import { ROLE_SETS, assertRole } from "../common/roles";
 import type { AuthUser } from "../common/types";
@@ -74,6 +75,18 @@ export class OutboundService {
     @Inject(forwardRef(() => PortalPublicationService))
     private readonly portalPublications: PortalPublicationService,
   ) {}
+
+  /** Faz 7F — CLIENT_STATUS_SUMMARY: dosya için müvekkile yönelik sade özet taslağı (mesaj kaydı açmaz). */
+  async clientStatusSummary(user: AuthUser, input: { caseId: string; channel: string; instruction?: string | null; piiApproved?: boolean }) {
+    const c = await this.prisma.client.case.findFirst({
+      where: { id: input.caseId, tenantId: user.tenantId, ...caseVisibilityWhere(user) },
+      select: { id: true, clientId: true, title: true, client: { select: { name: true } } },
+    });
+    if (!c) throw new NotFoundException("Dosya bulunamadı.");
+    const draft = await this.ai.draft(user, { clientName: c.client.name, clientId: c.clientId, caseId: c.id, channel: input.channel, instruction: input.instruction ?? null, piiApproved: input.piiApproved });
+    await this.audit.log({ tenantId: user.tenantId, userId: user.userId, action: "CLIENT_STATUS_SUMMARY", entity: "Case", entityId: c.id, detail: `kanal=${input.channel} · ${String(draft.meta.model ?? "")}`.slice(0, 200) });
+    return { caseId: c.id, channel: input.channel, message: draft.body, glossary: draft.glossary, nextStepForClient: draft.nextStepForClient ?? null, meta: draft.meta, taslak: true };
+  }
 
   /* ---------------------------------------------------------------- *
    * Okuma

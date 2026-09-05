@@ -9,10 +9,11 @@
  *   4. bildirim okundu            → PATCH /notifications/:id/read
  *   5. mesaj gönderme             → POST /chat/messages        (D5/cila — mobil mesajlar)
  *   6. sohbet okundu              → PATCH /chat/read           (D5/cila — mobil mesajlar)
+ *   7. belge yükleme (Faz 7E)     → POST  /documents (multipart) — kamera/galeri/dosya; OCR sunucuda
  * Bunların dışında hiçbir POST/PATCH/DELETE çağrısı YOKTUR.
  */
 
-import { api, asList } from "./client";
+import { api, apiUpload, asList } from "./client";
 import { localDateParam } from "@/lib/format";
 import type {
   CaseBrief,
@@ -132,6 +133,35 @@ export function fetchCase(id: string): Promise<CaseDetail> {
 /** Belge indirme — süreli imzalı URL üretir ve sunucuda denetim kaydı yazar. */
 export function requestDocumentUrl(id: string): Promise<{ url: string; expiresIn?: number }> {
   return api<{ url: string; expiresIn?: number }>(`/documents/${id}/download`);
+}
+
+/** Faz 7E — belge yükleme sonucu (sunucu zarfı sadeleştirilmiş). */
+export interface UploadResult {
+  id: string;
+  name: string;
+  duplicate: boolean;
+  pipelineStatus: string | null;
+}
+
+/**
+ * Faz 7E — kamera/galeri/dosya seçiciden belge yükleme (multipart `file`).
+ * RN FormData dosya nesnesi `{ uri, name, type }` biçimindedir; yükleme sunucudaki normal
+ * belge hattından geçer (hash/kota/OCR/sınıflandırma). Cihazda kopya tutulmaz.
+ */
+export async function uploadDocument(input: { caseId: string; uri: string; name: string; mimeType: string; source?: "MANUEL" | "UYAP" | "SISTEM"; folderPath?: string }): Promise<UploadResult> {
+  const form = new FormData();
+  form.append("file", { uri: input.uri, name: input.name, type: input.mimeType } as unknown as Blob);
+  form.append("caseId", input.caseId);
+  form.append("name", input.name);
+  if (input.source) form.append("source", input.source);
+  if (input.folderPath) form.append("folderPath", input.folderPath);
+  const res = await apiUpload<{ duplicate?: boolean; document?: { id: string; name: string }; pipeline?: { status?: string } | null }>("/documents", form);
+  return {
+    id: res.document?.id ?? "",
+    name: res.document?.name ?? input.name,
+    duplicate: res.duplicate === true,
+    pipelineStatus: res.pipeline?.status ?? null,
+  };
 }
 
 // ---------------------------------------------------------------------------

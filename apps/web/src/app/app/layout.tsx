@@ -14,6 +14,7 @@ import { AnnouncementBanner } from "@/components/announcement-banner";
 import { NotificationBell } from "./_components/notification-bell";
 // Modül 27 — her sayfada bağlamsal yardım (özet + bölüme tek tık + Yardım Merkezi araması).
 import { ContextHelpButton } from "@/components/context-help";
+import { CommandPalette, type PaletteShortcut } from "@/components/command-palette";
 
 interface NavItem {
   href: string;
@@ -640,6 +641,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     ),
   })).filter((group) => group.items.length > 0);
 
+  /** Ctrl+K paleti için menü kısayolları (rol süzgeci uygulanmış gruplar). */
+  const paletteShortcuts: PaletteShortcut[] = visibleGroups.flatMap((g) => g.items.map((i) => ({ label: i.label, href: i.href, group: g.title })));
+
   /** Demo gezinti şeridi: /demo-giris'ten gelindiyse rolü her ekranda göster. */
   const demoRole = getDemoRole();
 
@@ -763,6 +767,20 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           </div>
         )}
         <header className="sticky top-0 z-20 flex items-center justify-end gap-4 border-b border-slate-200 bg-white px-6 py-3 print:hidden">
+          <button
+            type="button"
+            data-testid="komut-paleti-ac"
+            onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }))}
+            className="mr-auto flex items-center gap-2 rounded-md border border-slate-300 px-3 py-1.5 text-xs text-slate-600 transition-colors hover:bg-slate-100"
+            title="Global arama (Ctrl+K)"
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4" aria-hidden="true">
+              <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clipRule="evenodd" />
+            </svg>
+            Ara
+            <kbd className="rounded border border-slate-300 px-1 text-[10px]">Ctrl K</kbd>
+          </button>
+          <CommandPalette shortcuts={paletteShortcuts} />
           <CreditMeter wallet={wallet} />
           <NotificationBell />
           <ContextHelpButton />

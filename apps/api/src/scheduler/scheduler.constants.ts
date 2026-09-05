@@ -79,6 +79,8 @@ export const JOB_KEYS = {
   BILDIRIM_DAGITIMI: "bildirim-dagitimi-5dk",
   /** Faz 2: eski bildirim kutusu kayıtlarını budar (günlük). */
   BILDIRIM_TEMIZLIGI: "bildirim-temizligi-gunluk",
+  /** Faz 7: bağlı IMAP posta kutularından ek → belge hattı (5 dk). */
+  EPOSTA_BELGE_GIRISI: "eposta-belge-girisi-5dk",
 } as const;
 
 export type JobKey = (typeof JOB_KEYS)[keyof typeof JOB_KEYS];

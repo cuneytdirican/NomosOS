@@ -209,6 +209,8 @@ export interface UploadOptions {
   documentClass?: string;
   onProgress?: (percent: number) => void;
   signal?: AbortSignal;
+  /** Faz 7A: sanal klasör yolu. */
+  folderPath?: string;
 }
 
 /**
@@ -224,6 +226,7 @@ export function uploadDocument(opts: UploadOptions): Promise<DocumentItem> {
       form.append("case_id", opts.caseId);
     }
     if (opts.documentClass) form.append("class", opts.documentClass);
+    if (opts.folderPath) form.append("folderPath", opts.folderPath);
     form.append("name", opts.file.name);
 
     const xhr = new XMLHttpRequest();

@@ -56,6 +56,7 @@ function RootNavigator(): React.JSX.Element {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="durusma/[id]" options={{ title: "Duruşma" }} />
         <Stack.Screen name="dosya/[id]" options={{ title: "Dosya" }} />
+        <Stack.Screen name="belge/yukle" options={{ title: "Belge yükle" }} />
         <Stack.Screen name="ayarlar" options={{ title: "Ayarlar" }} />
         <Stack.Screen name="ajanda" options={{ title: "Ajanda" }} />
         <Stack.Screen name="mesajlar" options={{ title: "Mesajlar" }} />

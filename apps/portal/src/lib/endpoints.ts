@@ -54,6 +54,11 @@ export const EP = {
    */
   timeline: "/timeline",
 
+  /** Faz 7F — yapılacaklar, belge yükleme, rızalar. */
+  todos: "/todos",
+  todoComplete: (id: string) => `/todos/${id}/complete`,
+  documentUpload: "/documents",
+  consents: "/consents",
   /** GET → yayınlanmış belgeler (`?caseId=` ile daraltılabilir). */
   documents: "/documents",
   /** GET → kısa ömürlü imzalı indirme adresi ({ url, expiresIn, name }). */

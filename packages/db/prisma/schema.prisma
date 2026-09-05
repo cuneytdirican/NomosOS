@@ -112,6 +112,8 @@ model User {
   role         UserRole
   barNumber    String? // Baro sicil no
   isActive     Boolean  @default(true)
+  /// Faz 7C: role EK yetenekler (HUKUKI | ONAY | OPERASYON | FINANS) — rol matrisi.
+  extraPermissions String[] @default([])
 
   /// ── HESAP KİLİDİ (KALICI) — denetim bulgusu K-03 ─────────────────────────
   /// Üç kimlik alanının EN GENİŞ YETKİLİSİ, en korumasızıydı: `PlatformUser`
@@ -246,6 +248,7 @@ model Client {
   @@index([tenantId, name])
   @@index([tenantId, category])
   @@index([tenantId, referenceCode])
+  portalTodos PortalTodo[]
 }
 
 /// Tüzel kişi yetkilileri / ilgili kişiler
@@ -324,6 +327,9 @@ model Case {
   amount            Decimal?   @db.Decimal(18, 2) // Dava değeri / takip tutarı (TRY)
   openedAt          DateTime   @default(now())
   closedAt          DateTime?
+  /// Faz 7G: kapanış kontrol listesi (manuel kalemler: key → {done, note, at, by}) + arşiv kutusu.
+  closingChecklistJson String?
+  archiveBoxNo         String?
   /// Denormalize: en yakın gelecek duruşma tarihi — duruşma yazımlarında güncellenir
   nextHearingAt     DateTime?
   /// Dosyadaki son hareket zamanı (safahat/not/karar/duruşma yazımı)
@@ -395,6 +401,7 @@ model Case {
   @@index([clientId])
   /// Faz 6: tebligatlar.
   tebligatlar Tebligat[]
+  portalTodos PortalTodo[]
 }
 
 /// GİZLİ DOSYA ÜYESİ — dosyaya erişimi olan kullanıcı (sorumlu avukat dışında).
@@ -683,12 +690,15 @@ model Task {
   status      TaskStatus   @default(ACIK)
   priority    TaskPriority @default(NORMAL)
   dueDate     DateTime?
+  /// Faz 7C: hangi iş akışı şablonundan doğdu.
+  workflowKey String?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
   statusLogs TaskStatusLog[]
 
   @@index([tenantId, status])
+  @@index([tenantId, workflowKey])
   @@index([assigneeId, status])
   @@index([tenantId, dueDate])
   @@index([caseId])
@@ -765,6 +775,13 @@ model Document {
   /// MANUEL | UYAP | SISTEM
   source      String?
   pageCount   Int?
+  /// Faz 7: sanal klasör yolu ("/", "/Dilekçeler/2026"). Klasör tablosu yoktur; yol metindir.
+  folderPath  String            @default("/")
+  /// Faz 7: sürüm zinciri — aynı kökten türeyen belgeler rootDocumentId ile bağlanır.
+  versionNo      Int       @default(1)
+  rootDocumentId String?
+  /// Yeni sürüm yüklenince eski sürüm bu alanla işaretlenir; listelerde varsayılan gizlenir.
+  supersededAt   DateTime?
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 
@@ -773,13 +790,78 @@ model Document {
   proposals DocumentActionProposal[]
   /// Büro içi mesajlaşma ekleri
   officeAttachments OfficeMessage[] @relation("OfficeAttachment")
+  shareLinks DocumentShareLink[]
 
   @@index([tenantId])
   @@index([caseId])
   @@index([tenantId, hash])
   @@index([tenantId, ocrStatus])
+  @@index([tenantId, rootDocumentId])
+  @@index([tenantId, caseId, folderPath])
   /// Faz 1: bu belgeden türeyen süre önerileri.
   sourcedDeadlines Deadline[] @relation("DeadlineSourceDocument")
+}
+
+/// Faz 7: süreli, sayılı belge paylaşım bağlantısı. Jeton SAKLANMAZ — yalnız SHA-256 özeti.
+model DocumentShareLink {
+  id           String    @id @default(uuid())
+  tenantId     String
+  documentId   String
+  document     Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  tokenHash    String    @unique
+  expiresAt    DateTime
+  /// null → sınırsız (süre bitene kadar).
+  maxDownloads Int?
+  downloads    Int       @default(0)
+  note         String?
+  createdBy    String
+  revokedAt    DateTime?
+  lastAccessAt DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([tenantId, documentId])
+}
+
+/// Faz 7: e-posta ile belge girişi — kiracı başına tek IMAP posta kutusu. Parola AES-GCM mühürlü.
+model MailIngestConfig {
+  id            String    @id @default(uuid())
+  tenantId      String    @unique
+  enabled       Boolean   @default(false)
+  host          String
+  port          Int       @default(993)
+  secure        Boolean   @default(true)
+  username      String
+  passwordEnc   String
+  folder        String    @default("INBOX")
+  /// Dosya numarası eşleşmezse belgelerin bağlanacağı dosya (yoksa triyaj kuyruğu).
+  defaultCaseId String?
+  /// En son işlenen IMAP UID — yeniden işlemeyi önler.
+  lastUid       Int       @default(0)
+  lastSyncAt    DateTime?
+  lastError     String?
+  lastSummary   String?
+  createdBy     String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+/// Faz 7C: büro tanımlı iş akışı şablonu (dava türü → görev zinciri). Sistem şablonları koddadır.
+model WorkflowTemplate {
+  id          String    @id @default(uuid())
+  tenantId    String
+  key         String
+  name        String
+  caseType    CaseType?
+  description String?
+  /// JSON dizi: title, description, priority, offsetDays, roleHint, needsReview
+  itemsJson   String
+  isActive    Boolean   @default(true)
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([tenantId, key])
+  @@index([tenantId, caseType])
 }
 
 /// Belgenin RAG için bölünmüş parçası. İÇERİK MASKELİ SAKLANIR (KVKK):
@@ -3323,6 +3405,8 @@ model Evidence {
   /// kaydının kendisi (ve matristeki yeri) korunmalıdır.
   documentId  String?
   witnessName String? // TANIK tipinde
+  /// Faz 7G: tanık ayrıntıları (iletişim, yakınlık, celp durumu, beyan özeti) — JSON.
+  witnessInfoJson String?
   obtainedAt  DateTime?
   status      EvidenceStatus @default(PLANLANAN)
   /// Delili KİM sundu (F2 · E6): BİZ sunduğumuz delili kendi iddiamıza
@@ -4085,6 +4169,60 @@ enum PortalResourceType {
   ODEME
 }
 
+enum PortalTodoStatus {
+  ACIK
+  TAMAMLANDI
+  IPTAL
+}
+
+enum PortalConsentKind {
+  KVKK_AYDINLATMA
+  ACIK_RIZA
+  ILETISIM_EPOSTA
+  ILETISIM_SMS
+}
+
+/// Faz 7F: büronun müvekkilden istediği iş (belge, imza, bilgi). Müvekkil portalda tamamlar.
+model PortalTodo {
+  id                      String           @id @default(uuid())
+  tenantId                String
+  clientId                String
+  client                  Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  caseId                  String?
+  case                    Case?            @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  title                   String
+  description             String?
+  dueDate                 DateTime?        @db.Date
+  status                  PortalTodoStatus @default(ACIK)
+  createdBy               String
+  completedAt             DateTime?
+  completedNote           String?
+  completedByPortalUserId String?
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+
+  @@index([tenantId, clientId, status])
+  @@index([caseId])
+}
+
+/// Faz 7F: rıza kaydı — EKLEME-YALNIZ; tür başına son satır günceldir. textHash = metin sürümü kanıtı.
+model PortalConsent {
+  id           String            @id @default(uuid())
+  tenantId     String
+  clientId     String
+  portalUserId String
+  portalUser   PortalUser        @relation(fields: [portalUserId], references: [id], onDelete: Cascade)
+  kind         PortalConsentKind
+  version      String
+  accepted     Boolean
+  textHash     String
+  ip           String?
+  userAgent    String?
+  createdAt    DateTime          @default(now())
+
+  @@index([tenantId, clientId, kind, createdAt])
+}
+
 /// Portal kullanıcısı — büro `User` tablosundan TAMAMEN AYRI.
 /// Bir müvekkile (tüzel kişide şirkete) birden çok portal kullanıcısı bağlanabilir.
 model PortalUser {
@@ -4130,6 +4268,7 @@ model PortalUser {
   @@index([clientId])
   @@index([tenantId, isActive])
   @@index([email])
+  consents PortalConsent[]
 }
 
 /// Portal daveti. HAM TOKEN SAKLANMAZ — yalnız SHA-256 özeti tutulur; e-postaya

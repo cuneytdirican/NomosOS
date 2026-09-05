@@ -254,3 +254,12 @@ export const matchInboundSchema = z
     path: ["caseId"],
   });
 export type MatchInboundInput = z.infer<typeof matchInboundSchema>;
+
+/** Faz 7F — POST /outbound-messages/client-status-summary */
+export const clientStatusSummarySchema = z.object({
+  caseId: z.string().uuid(),
+  channel: z.enum(["PORTAL", "EMAIL", "WHATSAPP", "SMS"]).default("PORTAL"),
+  instruction: z.string().trim().max(500).nullable().optional(),
+  piiApproved: z.boolean().optional(),
+});
+export type ClientStatusSummaryInput = z.infer<typeof clientStatusSummarySchema>;

@@ -14,6 +14,8 @@ import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe";
 import { RequiredUuidQuery } from "../common/pipes/required-uuid-query.pipe";
 import type { AuthUser } from "../common/types";
 import { PortalAdminService } from "./portal-admin.service";
+import { PortalTodoService, createPortalTodoSchema, type CreatePortalTodoInput } from "./portal-todo.service";
+import { PortalConsentService } from "./portal-consent.service";
 import {
   portalBulkPublishSchema,
   portalInviteSchema,
@@ -38,7 +40,11 @@ import {
  */
 @Controller("portal-admin")
 export class PortalAdminController {
-  constructor(private readonly admin: PortalAdminService) {}
+  constructor(
+    private readonly admin: PortalAdminService,
+    private readonly todos: PortalTodoService,
+    private readonly consentsSvc: PortalConsentService,
+  ) {}
 
   /* ---------------------------- Kullanıcılar ---------------------------- */
 
@@ -122,6 +128,28 @@ export class PortalAdminController {
   /* ------------------------------ Denetim ------------------------------- */
 
   /** "Müvekkil neyi, ne zaman gördü?" — KVKK denetim izi. */
+  /* ------------------------- Faz 7F: yapılacaklar + rıza ------------------------- */
+
+  @Get("todos")
+  listTodos(@CurrentUser() user: AuthUser, @Query("clientId", RequiredUuidQuery("clientId", "Müvekkil")) clientId: string) {
+    return this.todos.listForOffice(user, clientId);
+  }
+
+  @Post("todos")
+  createTodo(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(createPortalTodoSchema)) body: CreatePortalTodoInput) {
+    return this.todos.create(user, body);
+  }
+
+  @Delete("todos/:id")
+  cancelTodo(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.todos.cancel(user, id);
+  }
+
+  @Get("consents")
+  consents(@CurrentUser() user: AuthUser, @Query("clientId", RequiredUuidQuery("clientId", "Müvekkil")) clientId: string) {
+    return this.consentsSvc.historyForOffice(user, clientId);
+  }
+
   @Get("audit")
   auditTrail(
     @CurrentUser() user: AuthUser,

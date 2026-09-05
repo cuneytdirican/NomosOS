@@ -23,7 +23,49 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 6 Eylül 2026, 17:30
+# 🔖 KALDIĞIM YER — 6 Eylül 2026, 22:30
+
+> Üç persona planı (`~/.claude/plans/wiggly-giggling-lighthouse.md`):
+> **Faz 0 ✅ · 1 ✅ · 2 ✅ · 3 ✅ · 4 ✅ · 5 ✅ · 6 ✅ · 7 ✅ (bu commit)** · sırada Faz 8 (büyüme; self-signup HARİÇ).
+
+**FAZ 7 — BÜRO YÖNETİMİ + BELGE + MOBİL/PORTAL TAMAMLANDI** (belge: `docs/faz7-buro-belge-mobil-portal.md`):
+- **7A belge:** sürüm zinciri (`rootDocumentId/versionNo/supersededAt`, hiçbir sürüm silinmez), sanal klasör
+  (`folderPath`), süreli+sayılı paylaşım bağlantısı (jeton yalnız SHA-256; `GET /public/paylasim/:token` 302),
+  IMAP belge girişi (`MailIngestConfig`, imapflow/mailparser adaptörü, 5 dk iş; dosya no eşleşmesi deterministik,
+  çakışma → triyaj). Web: belge sekmesi + Ayarlar→Entegrasyonlar IMAP kartı.
+- **7B arama:** `GET /search` (7 varlık, görünürlük AND altında, İ/ı varyantı) + Ctrl+K paleti; ICU `tr-TR-x-icu`
+  collation + pg_trgm dizinleri (göç ICU yoksa DURUR).
+- **7C iş akışı:** sistem/büro `WorkflowTemplate` → görev zinciri; rol matrisi `User.extraPermissions`
+  (ROLE_SETS + finans kapıları; guard önbelleği anında düşer); `POST /tasks/bulk`, review-queue, workload; web
+  toplu çubuk, kuyruk/iş yükü kartları, ek yetki rozetleri.
+- **7D dilekçe:** büro şablonu CRUD + UDF/.txt içe aktarma (deterministik başlık sezgisi, künye atılır);
+  eklenti `GET /uyap/petitions/ready` + `POST /uyap/petitions/:id/udf` → popup "UDF indir"
+  (`optional_permissions: downloads`; UYAP'a yükleme/imza kullanıcıda).
+- **7E mobil:** kamera/galeri/dosya ile belge yükleme (`app/belge/yukle.tsx`, multipart), uygulama içi belge
+  görüntüleme (`expo-web-browser`), `eas.json`, izin metinleri.
+- **7F portal:** `PortalTodo` (büro ister, müvekkil tamamlar), müvekkil belge yüklemesi (`POST /portal/documents`,
+  yayında dosyaya, otomatik yayın), `PortalConsent` ekleme-yalnız rıza kayıtları (KVKK aydınlatma/açık rıza/
+  e-posta/SMS — İYS hazırlığı; metinler v1 yer tutucu), `POST /outbound-messages/client-status-summary`
+  (CLIENT_STATUS_SUMMARY ucu, mesaj açmaz). Portal sayfaları: Yapılacaklar, Rızalar, Belgelerim→yükleme.
+- **7G dosya detayı:** Tanıklar (Evidence TANIK + `witnessInfoJson`), Harçlar (legal-core hesap + platform
+  tarifesi + HARC gideri), Vekaletname (`poa-status` + PoaTab), Finans (`/finance/cases/:id/summary`),
+  Kapanış kontrol listesi (`GET/PUT /cases/:id/closing-checklist`: sistem + manuel kalemler, arşiv kutusu).
+Testler: api 1480+ (faz7-contract 7A–7G + 9 birim dosyası), eklenti 38, web 100, portal 4, mobil tsc, lint 0.
+Canlı doğrulama (Docker test yığını): smoke_faz7ab/7c/7d/7f/7g + Playwright faz7/faz7g.
+Bulgular: guard 30 sn önbelleği yetki değişimini gizliyordu → `invalidateUserCache`; Chrome Ctrl+K adres
+çubuğuna gider → başlık düğmesi; MSYS `-F folderPath=/x` yolu Windows yoluna çeviriyor (`//x` ya da
+`MSYS_NO_PATHCONV=1`); `api-route-catalog` testi portal yollarını `/portal/...` ister; ASCII "Icra" tr-TR
+küçültmede "ıcra" (trFold).
+
+**SIRADA: FAZ 8 — büyüme (self-signup HARİÇ):** fiyat sayfası (PlanTier'dan), hakkımızda/iletişim, blog (MDX),
+`sitemap.ts`/`robots.ts`/OG görseli, UYAP eklentisi indirme sayfası; DPA/SLA/EULA/mesafeli satış şablonları +
+`TermsAcceptance` (avukat onayı gerekir); `SupportTicket` + SLA sayacı (admin) + `/status` sayfası; Danıştay
+adaptörü; mevzuat/AAÜT seed genişletme; özellik bazlı telemetri (`UsageSnapshot`) + gelir/churn; veri göçü
+sihirbazı (dosya/duruşma/belge CSV+ZIP).
+
+---
+
+## 🔖 ÖNCEKİ KALDIĞIM YER — 6 Eylül 2026, 17:30
 
 > Üç persona planı (`~/.claude/plans/wiggly-giggling-lighthouse.md`):
 > **Faz 0 ✅ · 1 ✅ · 2 ✅ · 3 ✅ · 4 ✅ · 5 ✅ · 6 ✅ (bu commit)** · sırada Faz 7 (büro yönetimi/belge/mobil/portal).

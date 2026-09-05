@@ -35,6 +35,9 @@ import { MailModule } from "./mail/mail.module";
 import { PlatformBillingModule } from "./platform-billing/platform-billing.module";
 import { TarifeModule } from "./tarife/tarife.module";
 import { TebligatModule } from "./tebligat/tebligat.module";
+import { MailIngestModule } from "./mail-ingest/mail-ingest.module";
+import { SearchModule } from "./search/search.module";
+import { WorkflowModule } from "./workflow/workflow.module";
 import { ModuleAccessGuard } from "./common/guards/module-access.guard";
 import { GlobalRateLimitGuard } from "./common/guards/global-rate-limit.guard";
 import { RandevuModule } from "./randevu/randevu.module";
@@ -226,6 +229,9 @@ function requireJwtSecret(config: ConfigService): string {
     // Faz 6 — faiz/harç tarifeleri (platform verisi) ve tebligat.
     TarifeModule,
     TebligatModule,
+    MailIngestModule,
+    SearchModule,
+    WorkflowModule,
     // --- Faz 5 modülleri ---
     // İletişim merkezi (Modül 19). CaselawModule'den SONRA: MESSAGE_DRAFT ve
     // MESSAGE_CASE_MATCH koşuları ortak AiRunnerService üzerinden gider.

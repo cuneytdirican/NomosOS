@@ -276,3 +276,43 @@ export function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message.length > 0) return error.message;
   return "Beklenmeyen bir hata oluştu.";
 }
+
+/**
+ * Faz 7E — çok parçalı (multipart) yükleme. JSON istemcisiyle aynı taban adres, kimlik,
+ * zaman aşımı (uzun: 120 sn) ve 401 davranışı; gövde FormData olduğu için Content-Type
+ * tarayıcı/RN tarafından sınır dizisiyle üretilir (elle YAZILMAZ).
+ */
+export async function apiUpload<T>(path: string, form: FormData, options: { signal?: AbortSignal } = {}): Promise<T> {
+  if (API_BASE_PROBLEM !== null) throw new ApiError(API_BASE_PROBLEM, -1, null);
+  const url = buildUrl(path, undefined);
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (authToken) headers.Authorization = `Bearer ${authToken}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 120_000);
+  const externalAbort = () => controller.abort();
+  options.signal?.addEventListener("abort", externalAbort);
+  let response: Response;
+  try {
+    response = await fetch(url, { method: "POST", headers, body: form, signal: controller.signal });
+  } catch (error) {
+    throw new ApiError(options.signal?.aborted ? "Yükleme iptal edildi." : "Sunucuya ulaşılamadı. Bağlantınızı kontrol edin.", 0, error);
+  } finally {
+    clearTimeout(timer);
+    options.signal?.removeEventListener("abort", externalAbort);
+  }
+  if (response.status === 401) {
+    onUnauthorized?.();
+    throw new ApiError("Oturum süresi doldu. Lütfen yeniden giriş yapın.", 401, null);
+  }
+  const text = await response.text();
+  let data: unknown = null;
+  if (text.length > 0) {
+    try {
+      data = JSON.parse(text) as unknown;
+    } catch {
+      data = text;
+    }
+  }
+  if (!response.ok) throw new ApiError(extractMessage(data, `Yükleme başarısız oldu (HTTP ${response.status}).`), response.status, data);
+  return data as T;
+}

@@ -37,6 +37,17 @@ interface CachedUser {
   expiresAt: number;
 }
 
+/**
+ * Faz 7C — kullanıcı çözümleme önbelleği modül düzeyindedir ki `users.service` rol/ek yetki/aktiflik
+ * değiştirdiğinde aynı süreçteki guard'ı anında düşürebilsin; aksi hâlde yeni jeton bile 30 sn
+ * eski yetkilerle çalışırdı (Faz 7D dumanında görüldü). Çok örnekli kurulumda diğer süreçler
+ * TTL (30 sn) sonunda tazelenir.
+ */
+export const USER_RESOLUTION_CACHE = new Map<string, CachedUser>();
+export function invalidateUserCache(userId: string): void {
+  USER_RESOLUTION_CACHE.delete(userId);
+}
+
 const SESSION_REVOKED_MESSAGE =
   "Oturumunuz sonlandırılmış (çıkış yapıldı veya parola değiştirildi). Lütfen tekrar giriş yapın.";
 
@@ -77,7 +88,8 @@ function isRevoked(payload: JwtPayload, sessionsValidFrom: Date | null): boolean
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   /** userId → doğrulanmış kullanıcı (kısa ömürlü). */
-  private readonly cache = new Map<string, CachedUser>();
+  /** Süreç içi kullanıcı önbelleği — rol/yetki/aktiflik değişince `invalidateUserCache` ile düşürülür (Faz 7C). */
+  private readonly cache = USER_RESOLUTION_CACHE;
   /** jti → cihaz oturumu (kısa ömürlü). */
   private readonly sessionCache = new Map<string, CachedSession>();
 
@@ -217,6 +229,7 @@ export class JwtAuthGuard implements CanActivate {
         role: true,
         isActive: true,
         sessionsValidFrom: true,
+        extraPermissions: true,
       },
     });
 
@@ -246,6 +259,7 @@ export class JwtAuthGuard implements CanActivate {
       userId: record.id,
       tenantId: record.tenantId,
       role: record.role as AuthUser["role"],
+      permissions: record.extraPermissions,
     };
     this.cache.set(payload.sub, {
       user,

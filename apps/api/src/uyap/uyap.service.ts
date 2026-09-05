@@ -22,6 +22,8 @@ import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
 import { AuditService } from "../audit/audit.service";
 import { DiskQuotaService } from "../disk-quota/disk-quota.service";
+import { PetitionsService } from "../petitions/petitions.service";
+import type { UyapTokenIdentity } from "./uyap.guard";
 import {
   UYAP_ACCESS_TOKEN_TTL_MS,
   UYAP_REFRESH_TOKEN_TTL_MS,
@@ -45,7 +47,34 @@ export class UyapService {
     private readonly storage: StorageService,
     private readonly audit: AuditService,
     private readonly diskQuota: DiskQuotaService,
+    private readonly petitions: PetitionsService,
   ) {}
+
+  /* ------------------------- Faz 7D: eklenti → dilekçe UDF ------------------------- */
+
+  /** Eklenti kimliğinden büro kullanıcısı (rol DB'den; jeton rol taşımaz). */
+  private async actorOf(identity: UyapTokenIdentity): Promise<AuthUser> {
+    const u = await this.prisma.client.user.findFirst({ where: { id: identity.userId, tenantId: identity.tenantId, isActive: true }, select: { id: true, role: true, extraPermissions: true } });
+    if (!u) throw new UnauthorizedException("Eklentiyi eşleştiren kullanıcı pasif ya da bulunamadı.");
+    return { userId: u.id, tenantId: identity.tenantId, role: u.role, permissions: u.extraPermissions } as AuthUser;
+  }
+
+  async listReadyPetitions(identity: UyapTokenIdentity) {
+    const rows = await this.prisma.client.petition.findMany({
+      where: { tenantId: identity.tenantId, status: { in: ["HAZIR", "DISA_AKTARILDI"] } },
+      orderBy: { updatedAt: "desc" },
+      take: 20,
+      select: { id: true, title: true, type: true, status: true, updatedAt: true, case: { select: { fileNumber: true, title: true, courtName: true } } },
+    });
+    return { items: rows.map((p) => ({ id: p.id, title: p.title, type: p.type, status: p.status, updatedAt: p.updatedAt, dosyaNo: p.case?.fileNumber ?? null, dosyaBaslik: p.case?.title ?? null, birim: p.case?.courtName ?? null })) };
+  }
+
+  async exportPetitionUdf(identity: UyapTokenIdentity, petitionId: string) {
+    const actor = await this.actorOf(identity);
+    const res = await this.petitions.exportUdf(actor, petitionId, { expiresIn: 300 } as Parameters<PetitionsService["exportUdf"]>[2]);
+    await this.audit.log({ tenantId: identity.tenantId, userId: identity.userId, action: "UYAP_PETITION_UDF", entity: "Petition", entityId: petitionId, detail: `eklenti ${identity.tokenId} UDF indirdi (v${res.versionNo})` });
+    return res;
+  }
 
   /* ------------------------- Web tarafı: eşleştirme ------------------------- */
 

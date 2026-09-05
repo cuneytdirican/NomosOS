@@ -29,7 +29,8 @@ import {
   uploadDocument,
 } from "@/lib/faz2";
 import type { ActionProposal, DocumentItem, PipelineRun } from "@/lib/types";
-import { Badge, Button, Card, EmptyState, ErrorBox, Select, Spinner } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, ErrorBox, Input, Select, Spinner } from "@/components/ui";
+import { createShareLink, listDocumentFolders, listDocumentVersions, moveDocument, uploadDocumentVersion, type DocumentVersionRow, type FolderInfo } from "@/lib/faz7-belge";
 import { ConfidenceMeter, FeatureUnavailable } from "@/components/ai-ui";
 import {
   DOCUMENT_CLASS_LABELS,
@@ -103,6 +104,11 @@ export function DocumentsTab({
   const [proposalsByDoc, setProposalsByDoc] = useState<Record<string, number>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  /** Faz 7A — klasörler. */
+  const [folders, setFolders] = useState<FolderInfo[]>([]);
+  const [folder, setFolder] = useState<string>("");
+  const [uploadFolder, setUploadFolder] = useState<string>("/");
+  const [shareNotice, setShareNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -111,6 +117,7 @@ export function DocumentsTab({
       const list = await listCaseDocuments(caseId);
       setDocs(list);
       setListMissing(false);
+      listDocumentFolders(caseId).then(setFolders).catch(() => setFolders([]));
     } catch (err) {
       if (isFeatureMissing(err)) {
         // Faz 1 dosya detayında gömülü gelen liste hâlâ gösterilebilir.
@@ -190,6 +197,7 @@ export function DocumentsTab({
         const doc = await uploadDocument({
           file,
           caseId,
+          folderPath: uploadFolder !== "/" ? uploadFolder : undefined,
           onProgress: (p) => update({ percent: p }),
         });
         update({ percent: 100, done: true });
@@ -235,6 +243,68 @@ export function DocumentsTab({
     }
   }
 
+  /** Faz 7A — yeni sürüm yükle (aynı hat: hash/kota/OCR; eski sürüm işaretlenir). */
+  async function handleVersion(doc: DocumentItem, file: File) {
+    const problem = preflight(file);
+    if (problem) {
+      onNotify(`${file.name}: ${problem}`, "error");
+      return;
+    }
+    setBusyId(doc.id);
+    try {
+      const res = await uploadDocumentVersion(doc.id, file);
+      onNotify(`Yeni sürüm yüklendi: v${res.document.versionNo ?? "?"} — eski sürüm zincirde saklanıyor.`, "success");
+      await load();
+      onChanged();
+    } catch (err) {
+      onNotify(errText(err, "Sürüm yüklenemedi."), "error");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  /** Faz 7A — süreli paylaşım bağlantısı. */
+  async function handleShare(doc: DocumentItem) {
+    const hoursText = window.prompt("Bağlantı kaç saat geçerli olsun? (1–168)", "24");
+    if (hoursText === null) return;
+    const ttlHours = Math.min(168, Math.max(1, Number(hoursText) || 24));
+    const maxText = window.prompt("En fazla kaç indirme? (boş = sınırsız)", "");
+    if (maxText === null) return;
+    const maxDownloads = maxText.trim() ? Math.min(100, Math.max(1, Number(maxText))) : null;
+    setBusyId(doc.id);
+    try {
+      const res = await createShareLink(doc.id, { ttlHours, maxDownloads });
+      setShareNotice(`${doc.name} → ${res.url} (${new Date(res.expiresAt).toLocaleString("tr-TR")} tarihine kadar${maxDownloads ? `, en çok ${maxDownloads} indirme` : ""})`);
+      try {
+        await navigator.clipboard.writeText(res.url);
+        onNotify("Paylaşım bağlantısı panoya kopyalandı.", "success");
+      } catch {
+        onNotify("Paylaşım bağlantısı üretildi; aşağıdan kopyalayın.", "info");
+      }
+    } catch (err) {
+      onNotify(errText(err, "Paylaşım bağlantısı üretilemedi."), "error");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  /** Faz 7A — klasöre taşı. */
+  async function handleMove(doc: DocumentItem) {
+    const target = window.prompt("Klasör yolu (ör. /Dilekçeler/2026):", doc.folderPath ?? "/");
+    if (target === null) return;
+    setBusyId(doc.id);
+    try {
+      const res = await moveDocument(doc.id, target);
+      setDocs((prev) => prev.map((d) => (d.id === doc.id ? { ...d, folderPath: res.folderPath } : d)));
+      listDocumentFolders(caseId).then(setFolders).catch(() => undefined);
+      onNotify(`Belge ${res.folderPath} klasörüne taşındı.`, "success");
+    } catch (err) {
+      onNotify(errText(err, "Belge taşınamadı."), "error");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function handleClassChange(doc: DocumentItem, next: string) {
     if (!next || next === doc.class) return;
     setBusyId(doc.id);
@@ -255,8 +325,11 @@ export function DocumentsTab({
   }
 
   const sorted = useMemo(
-    () => [...docs].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "")),
-    [docs],
+    () =>
+      [...docs]
+        .filter((d) => !folder || (d.folderPath ?? "/") === folder)
+        .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "")),
+    [docs, folder],
   );
 
   return (
@@ -355,14 +428,30 @@ export function DocumentsTab({
       )}
 
       {error && <ErrorBox message={error} />}
+      {shareNotice && (
+        <p className="break-all rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs text-emerald-900" data-testid="paylasim-baglantisi">
+          Paylaşım bağlantısı: {shareNotice}
+        </p>
+      )}
 
       {/* Belge listesi */}
       <Card
         title={`Belgeler (${sorted.length})`}
         action={
-          <Button size="sm" variant="secondary" onClick={() => void load()} disabled={loading}>
-            Yenile
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select aria-label="Klasör süz" value={folder} onChange={(e) => setFolder(e.target.value)} className="w-44 py-1 text-xs">
+              <option value="">Tüm klasörler</option>
+              {folders.map((f) => (
+                <option key={f.path} value={f.path}>
+                  {f.path} ({f.count})
+                </option>
+              ))}
+            </Select>
+            <Input aria-label="Yükleme klasörü" value={uploadFolder} onChange={(e) => setUploadFolder(e.target.value)} className="w-40 py-1 text-xs" title="Yeni yüklemeler bu klasöre gider" />
+            <Button size="sm" variant="secondary" onClick={() => void load()} disabled={loading}>
+              Yenile
+            </Button>
+          </div>
         }
       >
         {loading ? (
@@ -389,6 +478,9 @@ export function DocumentsTab({
                 onDownload={() => void handleDownload(doc)}
                 onDelete={() => void handleDelete(doc)}
                 onClassChange={(v) => void handleClassChange(doc, v)}
+                onVersion={(f) => void handleVersion(doc, f)}
+                onShare={() => void handleShare(doc)}
+                onMove={() => void handleMove(doc)}
               />
             ))}
           </ul>
@@ -408,6 +500,9 @@ function DocumentRow({
   onDownload,
   onDelete,
   onClassChange,
+  onVersion,
+  onShare,
+  onMove,
 }: {
   doc: DocumentItem;
   busy: boolean;
@@ -418,9 +513,14 @@ function DocumentRow({
   onDownload: () => void;
   onDelete: () => void;
   onClassChange: (value: string) => void;
+  onVersion: (file: File) => void;
+  onShare: () => void;
+  onMove: () => void;
 }) {
   const [editingClass, setEditingClass] = useState(false);
   const [showSteps, setShowSteps] = useState(false);
+  const [versions, setVersions] = useState<DocumentVersionRow[] | null>(null);
+  const versionInputRef = useRef<HTMLInputElement | null>(null);
   const aiClassified = doc.classSource === "AI";
   const confidence = doc.classConfidence ?? doc.confidence ?? null;
   const size = doc.size ?? doc.sizeBytes ?? null;
@@ -440,6 +540,9 @@ function DocumentRow({
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm font-medium text-slate-900">{doc.name}</p>
             <Badge tone="navy">{labelOf(DOCUMENT_CLASS_LABELS, doc.class)}</Badge>
+            {(doc.versionNo ?? 1) > 1 && <Badge tone="blue">v{doc.versionNo}</Badge>}
+            {doc.folderPath && doc.folderPath !== "/" && <Badge tone="gray">{doc.folderPath}</Badge>}
+            {doc.source === "EPOSTA" && <Badge tone="gray">e-posta</Badge>}
             {aiClassified && <Badge tone="gold">AI</Badge>}
             {pendingProposals > 0 && (
               <Link href="/app/oneriler">
@@ -565,6 +668,43 @@ function DocumentRow({
             Sınıfı Düzelt
           </Button>
         )}
+        <Button size="sm" variant="secondary" disabled={busy} onClick={() => versionInputRef.current?.click()} title="Aynı belgenin yeni sürümünü yükle; eski sürüm zincirde kalır">
+          Yeni sürüm
+        </Button>
+        <input
+          ref={versionInputRef}
+          type="file"
+          accept={ACCEPTED}
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) onVersion(f);
+            e.target.value = "";
+          }}
+        />
+        {(doc.versionNo ?? 1) > 1 || doc.rootDocumentId ? (
+          <button
+            type="button"
+            className="text-[11px] font-medium text-slate-500 hover:text-amber-600"
+            onClick={() => {
+              if (versions) {
+                setVersions(null);
+                return;
+              }
+              listDocumentVersions(doc.id)
+                .then((r) => setVersions(r.items))
+                .catch(() => setVersions([]));
+            }}
+          >
+            {versions ? "Sürümleri gizle" : "Sürümler"}
+          </button>
+        ) : null}
+        <Button size="sm" variant="secondary" disabled={busy} onClick={onShare} title="Süreli, sayılı paylaşım bağlantısı üret">
+          Paylaş
+        </Button>
+        <Button size="sm" variant="ghost" disabled={busy} onClick={onMove}>
+          Taşı
+        </Button>
         <Button size="sm" variant="ghost" disabled={busy} onClick={onDelete}>
           Sil
         </Button>
@@ -575,6 +715,20 @@ function DocumentRow({
           Asistana sor →
         </Link>
       </div>
+      {versions && (
+        <ol className="mt-2 space-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+          {versions.length === 0 && <li className="text-[11px] text-slate-500">Sürüm bilgisi alınamadı.</li>}
+          {versions.map((v) => (
+            <li key={v.id} className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+              <Badge tone={v.supersededAt ? "gray" : "green"}>v{v.versionNo}</Badge>
+              <span>{v.name}</span>
+              <span>· {fmtDateTime(v.createdAt)}</span>
+              {v.sizeBytes ? <span>· {fmtBytes(v.sizeBytes)}</span> : null}
+              {v.supersededAt ? <span className="text-slate-500">(yerini yeni sürüm aldı)</span> : <span className="text-emerald-700">güncel</span>}
+            </li>
+          ))}
+        </ol>
+      )}
     </li>
   );
 }

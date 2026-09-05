@@ -33,7 +33,7 @@ import {
   type CaseContextParty,
   type CaseContextTimelineEvent,
 } from "@nomosos/legal-ai";
-import { createPetitionUdf, type PetitionParty } from "@nomosos/udf";
+import { createPetitionUdf, readUdf, type PetitionParty } from "@nomosos/udf";
 import type { AiTaskType } from "@nomosos/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
@@ -57,6 +57,7 @@ import {
   toUdfPetitionInput,
   type PetitionSectionBody,
 } from "./petition-sections";
+import { paragraphsToTemplateSections, templateKeyFromName } from "./petition-template-import";
 import { diffSections, summarizeDiff } from "./petition-version-diff";
 import { PetitionExportStorage } from "./petition-export.storage";
 import {
@@ -70,6 +71,9 @@ import type {
   ExportUdfInput,
   GeneratePetitionInput,
   RewriteSectionInput,
+  ImportPetitionTemplateInput,
+  PetitionTemplateInput,
+  UpdatePetitionTemplateInput,
 } from "./petitions.dto";
 
 /** Dilekçe tipine göre varsayılan sistem şablonu anahtarı. */
@@ -194,6 +198,71 @@ export class PetitionsService {
       readOnly: t.tenantId === null,
       sections: parseTemplateSections(t.sectionsJson),
     }));
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Faz 7D — büro şablonları (sistem şablonları salt-okunur kalır)
+   * ------------------------------------------------------------------ */
+
+  async createTemplate(user: AuthUser, input: PetitionTemplateInput) {
+    assertRole(user, ROLE_SETS.ONAY, "dilekçe şablonu yazma");
+    const key = input.key ?? templateKeyFromName(input.name);
+    const exists = await this.prisma.client.petitionTemplate.findFirst({ where: { tenantId: user.tenantId, key } });
+    if (exists) throw new BadRequestException(`"${key}" anahtarlı bir büro şablonu zaten var.`);
+    const row = await this.prisma.client.petitionTemplate.create({
+      data: { tenantId: user.tenantId, key, name: input.name, petitionType: input.petitionType, sectionsJson: JSON.stringify(input.sections.map((x) => ({ title: x.title, hint: x.hint ?? undefined, required: x.required === true }))), isSystem: false },
+    });
+    await this.audit.log({ tenantId: user.tenantId, userId: user.userId, action: "PETITION_TEMPLATE_CREATE", entity: "PetitionTemplate", entityId: row.id, detail: `${row.key} — ${input.sections.length} bölüm` });
+    return { id: row.id, key: row.key, name: row.name, petitionType: row.petitionType, sections: parseTemplateSections(row.sectionsJson), isSystem: false, readOnly: false };
+  }
+
+  async updateTemplate(user: AuthUser, id: string, input: UpdatePetitionTemplateInput) {
+    assertRole(user, ROLE_SETS.ONAY, "dilekçe şablonu düzenleme");
+    const row = await this.prisma.client.petitionTemplate.findFirst({ where: { id, tenantId: user.tenantId } });
+    if (!row) throw new NotFoundException("Büro şablonu bulunamadı (sistem şablonları düzenlenemez).");
+    const updated = await this.prisma.client.petitionTemplate.update({
+      where: { id: row.id },
+      data: {
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.petitionType !== undefined ? { petitionType: input.petitionType } : {}),
+        ...(input.sections !== undefined ? { sectionsJson: JSON.stringify(input.sections.map((x) => ({ title: x.title, hint: x.hint ?? undefined, required: x.required === true }))) } : {}),
+      },
+    });
+    await this.audit.log({ tenantId: user.tenantId, userId: user.userId, action: "PETITION_TEMPLATE_UPDATE", entity: "PetitionTemplate", entityId: row.id, detail: updated.key });
+    return { id: updated.id, key: updated.key, name: updated.name, petitionType: updated.petitionType, sections: parseTemplateSections(updated.sectionsJson), isSystem: false, readOnly: false };
+  }
+
+  async removeTemplate(user: AuthUser, id: string) {
+    assertRole(user, ROLE_SETS.ONAY, "dilekçe şablonu silme");
+    const row = await this.prisma.client.petitionTemplate.findFirst({ where: { id, tenantId: user.tenantId } });
+    if (!row) throw new NotFoundException("Büro şablonu bulunamadı (sistem şablonları silinemez).");
+    await this.prisma.client.petitionTemplate.delete({ where: { id: row.id } });
+    await this.audit.log({ tenantId: user.tenantId, userId: user.userId, action: "PETITION_TEMPLATE_DELETE", entity: "PetitionTemplate", entityId: row.id, detail: row.key });
+    return { ok: true };
+  }
+
+  /** UDF (ya da .txt) yükle → bölüm iskeleti → büro şablonu. Kişisel veri künyesi atılır. */
+  async importTemplate(user: AuthUser, file: Express.Multer.File | undefined, input: ImportPetitionTemplateInput) {
+    assertRole(user, ROLE_SETS.ONAY, "dilekçe şablonu içe aktarma");
+    if (!file || !file.buffer || file.size === 0) throw new BadRequestException("Yüklenecek dosya bulunamadı (alan adı: file).");
+    if (file.size > 5 * 1024 * 1024) throw new BadRequestException("Şablon dosyası en fazla 5 MB olabilir.");
+    const lower = (file.originalname ?? "").toLowerCase();
+    let paragraphs: string[];
+    if (lower.endsWith(".udf")) {
+      try {
+        const doc = await readUdf(file.buffer);
+        paragraphs = doc.paragraphs.map((p: { text: string }) => p.text);
+      } catch (err) {
+        throw new BadRequestException(`UDF okunamadı: ${(err as Error).message.slice(0, 200)}`);
+      }
+    } else if (lower.endsWith(".txt") || lower.endsWith(".md")) {
+      paragraphs = file.buffer.toString("utf8").split(/\r?\n\s*\r?\n|\r?\n/).map((x) => x.trim()).filter(Boolean);
+    } else {
+      throw new BadRequestException("Yalnız .udf, .txt veya .md dosyası içe aktarılabilir.");
+    }
+    const sections = paragraphsToTemplateSections(paragraphs);
+    const created = await this.createTemplate(user, { name: input.name, petitionType: input.petitionType, sections });
+    return { ...created, importedParagraphs: paragraphs.length, source: lower.endsWith(".udf") ? "UDF" : "METIN" };
   }
 
   // ------------------------------------------------------------------ //

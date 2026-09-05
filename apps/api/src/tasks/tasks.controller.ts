@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
 import { createTaskSchema, type CreateTaskInput } from "@nomosos/shared";
 import { TasksService } from "./tasks.service";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
@@ -10,6 +10,7 @@ import {
   type UpdateTaskInput,
   type UpdateTaskStatusInput,
 } from "./tasks.dto";
+import { bulkTaskSchema, type BulkTaskInput } from "./tasks-bulk";
 
 @Controller("tasks")
 export class TasksController {
@@ -48,6 +49,25 @@ export class TasksController {
   @Post()
   create(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(createTaskSchema)) body: CreateTaskInput) {
     return this.tasksService.create(user, body);
+  }
+
+  /** Faz 7C — kontrol/onay kuyruğu: KONTROLDE (kontrolcüsü ben) + ONAY_BEKLIYOR (onay yetkim varsa). ":id"den ÖNCE. */
+  @Get("review-queue")
+  reviewQueue(@CurrentUser() user: AuthUser) {
+    return this.tasksService.reviewQueue(user);
+  }
+
+  /** Faz 7C — iş yükü: kullanıcı başına açık/geciken görev + en yakın son tarih. */
+  @Get("workload")
+  workload(@CurrentUser() user: AuthUser) {
+    return this.tasksService.workload(user);
+  }
+
+  /** Faz 7C — toplu işlem; her görev tek tek servis yolundan geçer, kısmi başarı raporlanır. */
+  @Post("bulk")
+  @HttpCode(200)
+  bulk(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(bulkTaskSchema)) body: BulkTaskInput) {
+    return this.tasksService.bulk(user, body);
   }
 
   @Get(":id")

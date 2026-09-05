@@ -32,6 +32,7 @@ import {
   rejectProposal,
 } from "@/lib/faz2";
 import type {
+  CaseSummary,
   ActionProposal,
   CaseDecision,
   CaseDetail,
@@ -114,6 +115,9 @@ import {
 import { CASE_STATUSES, COURT_TYPES, PARTY_ROLES, type CaseStatus, type PartyRole } from "@nomosos/shared";
 import { RemoteSelect } from "@/components/remote-select";
 import { TebligatTab } from "@/components/tebligat-tab";
+import { CaseFinanceTab, CasePoaTab, ClosingTab, HarcTab, WitnessTab } from "../../_components/case-tabs-faz7";
+import { WorkflowApplyModal } from "@/components/workflow-apply-modal";
+import { ClientStatusSummaryModal } from "../../_components/client-status-summary-modal";
 
 const TABS = [
   { key: "ozet", label: "Özet" },
@@ -121,6 +125,12 @@ const TABS = [
   { key: "durusmalar", label: "Duruşmalar" },
   { key: "sureler", label: "Süreler" },
   { key: "tebligatlar", label: "Tebligatlar" },
+  // ---- Faz 7G ----
+  { key: "taniklar", label: "Tanıklar" },
+  { key: "harclar", label: "Harçlar" },
+  { key: "vekaletname", label: "Vekaletname" },
+  { key: "finans", label: "Finans" },
+  { key: "kapanis", label: "Kapanış" },
   { key: "kararlar", label: "Kararlar" },
   { key: "notlar", label: "Notlar" },
   { key: "gorevler", label: "Görevler" },
@@ -153,6 +163,10 @@ export default function DosyaDetayPage({ params }: { params: Promise<{ id: strin
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>("ozet");
+  /** Faz 7C — iş akışı şablonu modalı. */
+  const [workflowOpen, setWorkflowOpen] = useState(false);
+  /** Faz 7F — müvekkil durum özeti (AI taslak) modalı. */
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   // Modallar
@@ -457,6 +471,9 @@ export default function DosyaDetayPage({ params }: { params: Promise<{ id: strin
               </Button>
               <Button size="sm" variant="secondary" onClick={() => setWizardOpen(true)}>
                 + Kuraldan Süre
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setSummaryOpen(true)} data-testid="muvekkil-ozeti" title="Müvekkile yönelik sade dilli durum özeti taslağı (AI)">
+                Müvekkil özeti (AI)
               </Button>
             </div>
           </div>
@@ -799,6 +816,33 @@ export default function DosyaDetayPage({ params }: { params: Promise<{ id: strin
         </Card>
       )}
 
+      <ClientStatusSummaryModal open={summaryOpen} caseId={id} onClose={() => setSummaryOpen(false)} />
+      <WorkflowApplyModal
+        open={workflowOpen}
+        caseId={id}
+        caseType={detail?.type ?? null}
+        onClose={() => setWorkflowOpen(false)}
+        onApplied={(msg) => {
+          setWorkflowOpen(false);
+          push(msg, "success");
+          void load();
+        }}
+      />
+
+      {/* ---------- Faz 7G sekmeleri ---------- */}
+      {tab === "taniklar" && <WitnessTab caseId={id} onNotify={push} />}
+      {tab === "harclar" && <HarcTab caseId={id} onNotify={push} />}
+      {tab === "vekaletname" && (
+        <CasePoaTab
+          caseId={id}
+          clientId={detail.client?.id ?? null}
+          cases={[{ id, title: detail.title, fileNumber: detail.fileNumber ?? null, status: detail.status ?? null } as CaseSummary]}
+          onNotify={push}
+        />
+      )}
+      {tab === "finans" && <CaseFinanceTab caseId={id} />}
+      {tab === "kapanis" && <ClosingTab caseId={id} onNotify={push} onOpenStatus={() => setStatusOpen(true)} />}
+
       {/* ---------- Tebligatlar (Faz 6) ---------- */}
       {tab === "tebligatlar" && <TebligatTab caseId={id} onDeadlineOpened={() => void load()} />}
 
@@ -842,7 +886,14 @@ export default function DosyaDetayPage({ params }: { params: Promise<{ id: strin
 
       {/* ---------- Görevler ---------- */}
       {tab === "gorevler" && (
-        <Card title="Görevler">
+        <Card
+          title="Görevler"
+          action={
+            <Button size="sm" variant="secondary" onClick={() => setWorkflowOpen(true)} data-testid="sablondan-gorev">
+              Şablondan görev zinciri
+            </Button>
+          }
+        >
           {tasks.length === 0 ? (
             <EmptyState message="Bu dosyada görev kaydı yok." />
           ) : (

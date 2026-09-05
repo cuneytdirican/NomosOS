@@ -27,7 +27,11 @@
       "adaptiveIcon": {
         "backgroundColor": "#0F172A"
       },
-      "permissions": ["android.permission.USE_BIOMETRIC", "android.permission.USE_FINGERPRINT"]
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -56,6 +60,14 @@
           "android": {
             "usesCleartextTraffic": false
           }
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Dosyaya belge eklemek için kamera kullanılır. Görüntü cihazda saklanmaz; büro sunucusuna yüklenir.",
+          "photosPermission": "Dosyaya belge eklemek için galeriden görsel seçilir. Seçilen görsel büro sunucusuna yüklenir.",
+          "microphonePermission": false
         }
       ]
     ],

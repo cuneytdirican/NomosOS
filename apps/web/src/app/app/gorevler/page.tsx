@@ -37,6 +37,9 @@ import {
   urgencyTone,
 } from "@/lib/labels";
 import { TASK_STATUSES, type TaskStatus } from "@nomosos/shared";
+import { bulkTasks } from "@/lib/faz7-is-akisi";
+import { ReviewQueueCard, WorkloadCard } from "@/components/tasks-review-workload";
+import { ToastStack, useToasts } from "@/components/ai-ui";
 
 /** İş akışında bir sonraki adım — hızlı ilerlet düğmesi için. */
 function nextStatus(status: string): TaskStatus | null {
@@ -57,6 +60,10 @@ export default function GorevlerPage() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  /** Faz 7C — toplu işlem seçimi. */
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const { toasts, push, dismiss } = useToasts();
 
   /**
    * GERÇEK SAYFALAMA (denetim bulgusu K-15).
@@ -99,6 +106,31 @@ export default function GorevlerPage() {
       setUpdateError(err instanceof ApiError ? err.message : "Görev durumu güncellenemedi.");
     } finally {
       setUpdatingId(null);
+    }
+  }
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  /** Faz 7C — toplu işlem; sunucu her görevi tek tek kapılardan geçirir, kısmi başarıyı raporlar. */
+  async function runBulk(action: "STATUS" | "ASSIGN" | "PRIORITY" | "DUE", extra: Record<string, unknown>) {
+    if (selected.size === 0) return;
+    setBulkBusy(true);
+    try {
+      const res = await bulkTasks({ ids: [...selected], action, ...extra });
+      push(res.failed.length === 0 ? `${res.ok} görev güncellendi.` : `${res.ok} görev güncellendi, ${res.failed.length} başarısız: ${res.failed[0].message}`, res.failed.length ? "error" : undefined);
+      setSelected(new Set());
+      await load(filter, page);
+    } catch (err) {
+      push(err instanceof ApiError ? err.message : "Toplu işlem yapılamadı.", "error");
+    } finally {
+      setBulkBusy(false);
     }
   }
 
@@ -179,6 +211,51 @@ export default function GorevlerPage() {
 
       {updateError && <ErrorBox message={updateError} />}
 
+      <ReviewQueueCard onChanged={() => void load(filter, page)} notify={(m, tone) => push(m, tone ?? "success")} />
+      <WorkloadCard />
+
+      {selected.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm" data-testid="toplu-cubuk">
+          <span className="font-medium text-slate-900">{selected.size} görev seçili</span>
+          <Button size="sm" variant="secondary" disabled={bulkBusy} onClick={() => void runBulk("STATUS", { status: "DEVAM_EDIYOR" })}>
+            Devam ediyor yap
+          </Button>
+          <Button size="sm" variant="secondary" disabled={bulkBusy} onClick={() => void runBulk("STATUS", { status: "TAMAMLANDI" })}>
+            Tamamla
+          </Button>
+          <Button size="sm" variant="secondary" disabled={bulkBusy} onClick={() => void runBulk("PRIORITY", { priority: "YUKSEK" })}>
+            Öncelik: Yüksek
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={bulkBusy}
+            onClick={() => {
+              const d = window.prompt("Yeni son tarih (YYYY-AA-GG; boş = kaldır):", "");
+              if (d === null) return;
+              void runBulk("DUE", { dueDate: d.trim() || null });
+            }}
+          >
+            Son tarih
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={bulkBusy}
+            onClick={() => {
+              const note = window.prompt("İptal gerekçesi:", "");
+              if (note === null) return;
+              void runBulk("STATUS", { status: "IPTAL", note });
+            }}
+          >
+            İptal et
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+            Seçimi bırak
+          </Button>
+        </div>
+      )}
+
       <Card>
         {loading ? (
           <Spinner />
@@ -192,9 +269,17 @@ export default function GorevlerPage() {
               const next = nextStatus(t.status);
               const dueDays = t.dueDate ? daysUntil(t.dueDate) : null;
               return (
-                <li key={t.id} className="rounded-lg border border-slate-200 px-4 py-3">
+                <li key={t.id} className={`rounded-lg border px-4 py-3 ${selected.has(t.id) ? "border-amber-400 bg-amber-50/40" : "border-slate-200"}`}>
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
+                    <div className="flex min-w-0 items-start gap-2">
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        aria-label={`Seç: ${t.title}`}
+                        checked={selected.has(t.id)}
+                        onChange={() => toggle(t.id)}
+                      />
+                      <div className="min-w-0">
                       <button
                         type="button"
                         onClick={() => {
@@ -223,6 +308,7 @@ export default function GorevlerPage() {
                           </>
                         ) : null}
                       </p>
+                      </div>
                     </div>
                     <div className="flex shrink-0 flex-wrap items-center gap-2">
                       {t.priority && (
@@ -298,6 +384,7 @@ export default function GorevlerPage() {
         }}
         onChanged={() => void load(filter, page)}
       />
+      <ToastStack toasts={toasts} onDismiss={dismiss} />
     </div>
   );
 }

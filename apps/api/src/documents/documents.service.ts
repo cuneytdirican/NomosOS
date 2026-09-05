@@ -23,6 +23,7 @@ import { normalizeQuery, paged, resolvePage } from "../common/pagination";
 import { touchCase } from "../common/case-denormals";
 import {
   MAX_UPLOAD_BYTES,
+  normalizeFolderPath,
   validateUpload,
   type UpdateDocumentInput,
   type UploadDocumentInput,
@@ -47,6 +48,10 @@ const DOCUMENT_LIST_SELECT = {
   hash: true,
   caseId: true,
   uploadedBy: true,
+  folderPath: true,
+  versionNo: true,
+  rootDocumentId: true,
+  supersededAt: true,
   createdAt: true,
   updatedAt: true,
   case: { select: { id: true, title: true, fileNumber: true, courtName: true } },
@@ -156,6 +161,7 @@ export class DocumentsService {
           hash,
           source: input.source ?? "MANUEL",
           ocrStatus: "BEKLIYOR",
+          folderPath: normalizeFolderPath(input.folderPath),
         },
         select: DOCUMENT_LIST_SELECT,
       });
@@ -258,6 +264,10 @@ export class DocumentsService {
       triage?: string;
       page?: string;
       limit?: string;
+      /** Faz 7: klasör yolu süzgeci (tam eşleşme). */
+      folderPath?: string;
+      /** Faz 7: "all" → eski sürümler de listelenir; varsayılan yalnız güncel sürüm. */
+      versions?: string;
     },
     viewer?: AuthUser
   ) {
@@ -266,6 +276,8 @@ export class DocumentsService {
     const pageParams = resolvePage(params);
 
     if (params.caseId) where.caseId = params.caseId;
+    if (params.folderPath) where.folderPath = normalizeFolderPath(params.folderPath);
+    if (params.versions !== "all") where.supersededAt = null;
     if (params.class) {
       if (!(DOCUMENT_CLASSES as readonly string[]).includes(params.class)) {
         throw new BadRequestException("Geçersiz belge sınıfı.");
@@ -500,7 +512,8 @@ export class DocumentsService {
       // refactor üst doğrulamayı kaldırırsa yazma kiracı sınırını aşmasın.
       await this.prisma.client.documentChunk.updateMany({
         where: { documentId: id, tenantId: user.tenantId },
-        data: { caseId: input.caseId },
+        data: {
+        ...(input.folderPath !== undefined ? { folderPath: normalizeFolderPath(input.folderPath) } : {}), caseId: input.caseId },
       });
       await this.prisma.client.documentActionProposal.updateMany({
         where: { documentId: id, tenantId: user.tenantId, status: "BEKLIYOR" },

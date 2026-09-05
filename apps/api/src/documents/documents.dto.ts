@@ -1,3 +1,4 @@
+import { BadRequestException } from "@nestjs/common";
 import { z } from "zod";
 import { DOCUMENT_CLASSES } from "@nomosos/shared";
 import { nullableUuid } from "../common/zod";
@@ -25,10 +26,12 @@ export const uploadDocumentSchema = z.object({
   class: z
     .enum(DOCUMENT_CLASSES, { errorMap: () => ({ message: "Geçersiz belge sınıfı." }) })
     .optional(),
-  /** MANUEL | UYAP | SISTEM — verilmezse MANUEL. */
-  source: z.enum(["MANUEL", "UYAP", "SISTEM"]).optional(),
+  /** MANUEL | UYAP | SISTEM | EPOSTA — verilmezse MANUEL. */
+  source: z.enum(["MANUEL", "UYAP", "SISTEM", "EPOSTA", "PORTAL"]).optional(),
   /** Yinelenen yükleme uyarısını bilerek geçmek için. */
   allowDuplicate: z.preprocess((v) => v === "true" || v === true, z.boolean()).optional(),
+  /** Faz 7: sanal klasör yolu ("/Dilekçeler/2026"); verilmezse "/". */
+  folderPath: optionalText(200, "Klasör yolu"),
 });
 export type UploadDocumentInput = z.infer<typeof uploadDocumentSchema>;
 
@@ -45,6 +48,8 @@ export const updateDocumentSchema = z
       .optional(),
     /** null gönderilirse belgenin dosya bağı kaldırılır (triyaja geri döner). */
     caseId: nullableUuid("Dosya"),
+    /** Faz 7: klasör yolu. */
+    folderPath: optionalText(200, "Klasör yolu"),
   })
   .refine((data) => Object.keys(data).length > 0, "Güncellenecek en az bir alan gönderilmelidir.");
 export type UpdateDocumentInput = z.infer<typeof updateDocumentSchema>;
@@ -136,4 +141,14 @@ export function validateUpload(fileName: string, mimeType: string | undefined): 
     message:
       `«${fileName}» yüklenemedi: dosya uzantısı (.${ext}) ile içerik türü (${mime}) uyuşmuyor.`,
   };
+}
+
+/** Faz 7: "/Dilekçeler/2026" biçimi — baştan "/", boş/çift bölü yok, ".." yok, ≤ 200 karakter. */
+export function normalizeFolderPath(input: string | null | undefined): string {
+  const raw = (input ?? "/").trim().replace(/\\/g, "/");
+  const parts = raw.split("/").map((p) => p.trim()).filter((p) => p.length > 0);
+  if (parts.some((p) => p === "." || p === "..")) throw new BadRequestException("Klasör yolu '.' veya '..' içeremez.");
+  const path = "/" + parts.join("/");
+  if (path.length > 200) throw new BadRequestException("Klasör yolu en fazla 200 karakter olabilir.");
+  return path;
 }

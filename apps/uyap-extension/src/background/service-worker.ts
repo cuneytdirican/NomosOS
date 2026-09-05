@@ -602,6 +602,12 @@ async function handleMessage(message: ExtensionMessage): Promise<unknown> {
     case "PAGE_DETECTED":
       return { acknowledged: true };
 
+    case "GET_READY_PETITIONS":
+      return api.fetchReadyPetitions();
+
+    case "DOWNLOAD_PETITION_UDF":
+      return downloadPetitionUdf(message.petitionId);
+
     default: {
       // Tip düzeyinde kapsam denetimi: yeni mesaj tipi eklenirse burada derleme hatası alınır.
       const exhaustive: never = message;
@@ -637,3 +643,25 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local" || !changes[STORAGE_KEYS.settings]) return;
   void scheduleAlarms();
 });
+
+
+/* ------------------------- Faz 7D: dilekçe UDF indirme ------------------------- */
+
+/**
+ * NomosOS'ta HAZIR dilekçenin UDF'sini kullanıcının diskine indirir (chrome.downloads, saveAs).
+ * İzin `optional_permissions` üzerinden popup'taki KULLANICI HAREKETİYLE alınır; burada yalnız
+ * doğrulanır. UYAP'a yükleme, e-imza ve gönderim eklentinin DEĞİL kullanıcının eylemidir.
+ */
+async function downloadPetitionUdf(petitionId: string): Promise<{ downloadId: number; fileName: string; warning: string | null }> {
+  const granted = await chrome.permissions.contains({ permissions: ["downloads"] });
+  if (!granted) {
+    throw new ApiError("PERMISSION_DENIED", "UDF indirmek için 'İndirmeler' izni gerekir; popup'taki düğmeyle izin verin.", null, false);
+  }
+  const res = await api.exportPetitionUdf(petitionId);
+  const url = res.downloadUrl ?? res.url;
+  if (!url) throw new ApiError("SERVER", "Sunucu indirme bağlantısı üretmedi.", null, false);
+  const fileName = res.fileName ?? `dilekce-v${res.versionNo}.udf`;
+  const downloadId = await chrome.downloads.download({ url, filename: fileName, saveAs: true, conflictAction: "uniquify" });
+  await logInfo("PETITION_UDF", `UDF indirildi: ${fileName} (dilekçe ${petitionId}, v${res.versionNo}). UYAP'a yükleme ve e-imza kullanıcıya aittir.`);
+  return { downloadId, fileName, warning: res.warning ?? null };
+}

@@ -42,6 +42,9 @@ export default function PortalHomePage() {
   const { user } = usePortalSession();
 
   const summary = useResource<DashboardSummary>(EP.dashboard);
+  /** Faz 7F — KVKK aydınlatma okunmadıysa şerit. */
+  const consentStatus = useResource<{ missingRequired?: string[] }>(EP.consents);
+  const consentMissing = (consentStatus.data?.missingRequired?.length ?? 0) > 0;
   // Özet ucu yoksa kartlar kendi listelerinden beslenir.
   const fallback = summary.missing;
 
@@ -88,6 +91,15 @@ export default function PortalHomePage() {
 
   return (
     <div>
+      {consentMissing && (
+        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="status" data-testid="kvkk-uyari">
+          Kişisel verilerinizin işlenmesine ilişkin <strong>KVKK Aydınlatma Metni</strong>&apos;ni henüz okumadınız.{" "}
+          <Link href="/rizalar" className="font-semibold underline">
+            Rızalar sayfasına gidin
+          </Link>
+          .
+        </div>
+      )}
       <header className="mb-8">
         <h1 className="font-serif text-[1.75rem] font-semibold leading-tight text-ink sm:text-[2rem]">
           {greetName ? `Hoş geldiniz, ${greetName}` : "Hoş geldiniz"}

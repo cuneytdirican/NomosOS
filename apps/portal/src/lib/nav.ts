@@ -18,11 +18,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { href: "/", label: "Ana Sayfa", short: "Ana Sayfa", exact: true },
   { href: "/dosyalarim", label: "Dosyalarım", short: "Dosyalar" },
   { href: "/belgelerim", label: "Belgelerim", short: "Belgeler" },
+  { href: "/yapilacaklar", label: "Yapılacaklar", short: "Yapılacak" },
   { href: "/durusmalarim", label: "Duruşmalarım", short: "Duruşmalar" },
   { href: "/randevularim", label: "Randevularım", short: "Randevular" },
   { href: "/odemelerim", label: "Ödemelerim", short: "Ödemeler" },
   { href: "/mesajlar", label: "Mesajlar", short: "Mesajlar" },
   { href: "/avukatim", label: "Avukatım", short: "Avukatım" },
+  { href: "/rizalar", label: "Rızalar", short: "Rızalar" },
 ] as const;
 
 export function isActivePath(pathname: string, item: NavItem): boolean {

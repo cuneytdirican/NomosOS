@@ -13,6 +13,7 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { DocumentsService } from "./documents.service";
+import { DocumentExtrasService, shareLinkSchema, type ShareLinkInput } from "./document-extras.service";
 import {
   MAX_UPLOAD_BYTES,
   updateDocumentSchema,
@@ -26,7 +27,10 @@ import type { AuthUser } from "../common/types";
 
 @Controller("documents")
 export class DocumentsController {
-  constructor(private readonly documents: DocumentsService) {}
+  constructor(
+    private readonly documents: DocumentsService,
+    private readonly extras: DocumentExtrasService,
+  ) {}
 
   /**
    * POST /api/v1/documents — multipart yükleme.
@@ -58,9 +62,56 @@ export class DocumentsController {
       triage?: string;
       page?: string;
       limit?: string;
+      folderPath?: string;
+      versions?: string;
     }
   ) {
     return this.documents.list(user.tenantId, query, user);
+  }
+
+  /** Faz 7: GET /documents/folders?caseId= — klasör yolları + sayılar (":id"den ÖNCE). */
+  @Get("folders")
+  folders(@CurrentUser() user: AuthUser, @Query("caseId") caseId?: string) {
+    return this.extras.folders(user, caseId);
+  }
+
+  /** Faz 7: DELETE /documents/shares/:shareId — paylaşım bağlantısını iptal et (":id"den ÖNCE). */
+  @Delete("shares/:shareId")
+  revokeShare(@CurrentUser() user: AuthUser, @Param("shareId") shareId: string) {
+    return this.extras.revokeShare(user, shareId);
+  }
+
+  /** Faz 7: GET /documents/:id/versions — sürüm zinciri. */
+  @Get(":id/versions")
+  versions(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.extras.versions(user, id);
+  }
+
+  /** Faz 7: POST /documents/:id/versions — yeni sürüm (multipart `file`, isteğe bağlı `note`). */
+  @Post(":id/versions")
+  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: MAX_UPLOAD_BYTES } }))
+  newVersion(@CurrentUser() user: AuthUser, @Param("id") id: string, @UploadedFile() file: Express.Multer.File, @Body() body: { note?: string }) {
+    return this.extras.newVersion(user, id, file, body?.note ?? null);
+  }
+
+  /** Faz 7: POST /documents/:id/move — klasör yolu değiştir. */
+  @Post(":id/move")
+  @HttpCode(200)
+  move(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: { folderPath?: string }) {
+    return this.extras.move(user, id, body?.folderPath ?? "/");
+  }
+
+  /** Faz 7: POST /documents/:id/share — süreli paylaşım bağlantısı üret. */
+  @Post(":id/share")
+  @HttpCode(200)
+  share(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body(new ZodValidationPipe(shareLinkSchema)) body: ShareLinkInput) {
+    return this.extras.createShare(user, id, body);
+  }
+
+  /** Faz 7: GET /documents/:id/shares — paylaşım bağlantıları (jetonsuz). */
+  @Get(":id/shares")
+  shares(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.extras.listShares(user, id);
   }
 
   /** GET /api/v1/documents/:id — meta + hat koşumları + öneriler. */

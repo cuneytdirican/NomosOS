@@ -53,11 +53,17 @@ export function assertFinanceAccess(
   roles: readonly UserRole[],
   action: string,
 ): void {
-  if (!roles.includes(user.role)) {
+  if (!canFinance(user, roles)) {
     throw new ForbiddenException(`${ROLE_LABELS[user.role]} rolü ${action} yetkisine sahip değil.`);
   }
 }
 
+/**
+ * Finans yetkisi + rol matrisi (Faz 7C): kullanıcıya EK "FINANS" yeteneği verildiyse, AVUKAT
+ * rolünün girebildiği her finans kapısından geçer (okuma, hareket yazma, taslak fatura, AI).
+ * Yalnız yönetim kümeleri (AGREEMENT_WRITE, INVOICE_ISSUE, TIME_MANAGE_OTHERS) matristen açılmaz.
+ */
 export function canFinance(user: AuthUser, roles: readonly UserRole[]): boolean {
-  return roles.includes(user.role);
+  if (roles.includes(user.role)) return true;
+  return roles.includes("AVUKAT") && Array.isArray(user.permissions) && user.permissions.includes("FINANS");
 }

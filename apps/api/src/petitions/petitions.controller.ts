@@ -1,4 +1,5 @@
-import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { PetitionsService } from "./petitions.service";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AiThrottle } from "../common/guards/ai-rate-limit.guard";
@@ -18,6 +19,12 @@ import {
   type ExportUdfInput,
   type GeneratePetitionInput,
   type RewriteSectionInput,
+  importPetitionTemplateSchema,
+  petitionTemplateSchema,
+  updatePetitionTemplateSchema,
+  type ImportPetitionTemplateInput,
+  type PetitionTemplateInput,
+  type UpdatePetitionTemplateInput,
 } from "./petitions.dto";
 
 /** Şablon kütüphanesi: sistem şablonları salt-okunur, büro şablonları listelenir. */
@@ -28,6 +35,33 @@ export class PetitionTemplatesController {
   @Get()
   list(@CurrentUser() user: AuthUser, @Query("type") type?: string) {
     return this.petitions.listTemplates(user.tenantId, type);
+  }
+
+  /** Faz 7D — büro şablonu (JSON bölümler). */
+  @Post()
+  create(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(petitionTemplateSchema)) body: PetitionTemplateInput) {
+    return this.petitions.createTemplate(user, body);
+  }
+
+  /** Faz 7D — UDF/.txt yükleyerek şablon içe aktarma (multipart: file, name, petitionType). */
+  @Post("import")
+  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: 5 * 1024 * 1024 } }))
+  importTemplate(
+    @CurrentUser() user: AuthUser,
+    @UploadedFile() file: Express.Multer.File,
+    @Body(new ZodValidationPipe(importPetitionTemplateSchema)) body: ImportPetitionTemplateInput,
+  ) {
+    return this.petitions.importTemplate(user, file, body);
+  }
+
+  @Patch(":id")
+  update(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body(new ZodValidationPipe(updatePetitionTemplateSchema)) body: UpdatePetitionTemplateInput) {
+    return this.petitions.updateTemplate(user, id, body);
+  }
+
+  @Delete(":id")
+  remove(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.petitions.removeTemplate(user, id);
   }
 }
 

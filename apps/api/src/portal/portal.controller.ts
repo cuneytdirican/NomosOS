@@ -1,4 +1,8 @@
-import { Body, Get, HttpCode, Param, ParseUUIDPipe, Post, Query } from "@nestjs/common";
+import { Body, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Req, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import type { Request } from "express";
+import { PortalTodoService, completePortalTodoSchema, type CompletePortalTodoInput } from "./portal-todo.service";
+import { PortalConsentService, consentDecisionSchema, type ConsentDecisionInput } from "./portal-consent.service";
 import { z } from "zod";
 import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe";
 import { CurrentPortalUser } from "./decorators/current-portal-user.decorator";
@@ -7,6 +11,13 @@ import { PortalController as PortalControllerDecorator } from "./decorators/port
 import { PortalRateLimit } from "./guards/portal-rate-limit.guard";
 import { PortalService } from "./portal.service";
 import { portalMessageSchema, type PortalMessageInput } from "./portal.schemas";
+
+/** Faz 7F — multipart alanları (string gelir). */
+const portalUploadSchema = z.object({
+  caseId: z.string().uuid("Dosya seçilmelidir."),
+  note: z.string().trim().max(500).nullable().optional(),
+});
+type PortalUploadInput = z.infer<typeof portalUploadSchema>;
 import type { PortalAuthUser } from "./portal.types";
 import { RandevuService } from "../randevu/randevu.service";
 
@@ -27,7 +38,9 @@ import { RandevuService } from "../randevu/randevu.service";
 export class PortalDataController {
   constructor(
     private readonly portal: PortalService,
-    private readonly randevu: RandevuService
+    private readonly randevu: RandevuService,
+    private readonly todos: PortalTodoService,
+    private readonly consentsSvc: PortalConsentService,
   ) {}
 
   /** Özet ekran: yayınlanmış dosya sayısı, yaklaşan duruşmalar, bakiye, mesajlar. */
@@ -60,6 +73,60 @@ export class PortalDataController {
     @Query("caseId") caseId?: string
   ) {
     return this.portal.listDocuments(user, caseId);
+  }
+
+  /** Faz 7F — müvekkil belge yükleme (multipart `file`, `caseId`, `note`). Dosya yayında olmalı. */
+  @PortalAudit("PORTAL_DOCUMENT_UPLOAD", "Document")
+  @PortalRateLimit({ limit: 20, windowMs: 60_000, bucket: "portal-upload" })
+  @Post("documents")
+  @HttpCode(201)
+  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: 25 * 1024 * 1024 } }))
+  uploadDocument(
+    @CurrentPortalUser() user: PortalAuthUser,
+    @UploadedFile() file: Express.Multer.File,
+    @Body(new ZodValidationPipe(portalUploadSchema)) body: PortalUploadInput
+  ) {
+    return this.portal.uploadDocument(user, file, body);
+  }
+
+  /** Faz 7F — büronun müvekkilden istedikleri. */
+  @PortalAudit("PORTAL_TODO_LIST", "PortalTodo")
+  @Get("todos")
+  listTodos(@CurrentPortalUser() user: PortalAuthUser) {
+    return this.todos.listForClient(user);
+  }
+
+  @PortalAudit("PORTAL_TODO_COMPLETE", "PortalTodo")
+  @PortalRateLimit({ limit: 30, windowMs: 60_000, bucket: "portal-todo" })
+  @Post("todos/:id/complete")
+  @HttpCode(200)
+  completeTodo(
+    @CurrentPortalUser() user: PortalAuthUser,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(completePortalTodoSchema)) body: CompletePortalTodoInput
+  ) {
+    return this.todos.complete(user, id, body);
+  }
+
+  /** Faz 7F — rıza metinleri + güncel durum. */
+  @PortalAudit("PORTAL_CONSENT_VIEW", "PortalConsent")
+  @Get("consents")
+  consents(@CurrentPortalUser() user: PortalAuthUser) {
+    return this.consentsSvc.status(user);
+  }
+
+  /** Faz 7F — rıza kararı (kabul / geri çekme) — ekleme-yalnız kayıt; IP + tarayıcı kimliği izi. */
+  @PortalAudit("PORTAL_CONSENT_DECISION", "PortalConsent")
+  @PortalRateLimit({ limit: 20, windowMs: 60_000, bucket: "portal-consent" })
+  @Post("consents")
+  @HttpCode(200)
+  decideConsent(
+    @CurrentPortalUser() user: PortalAuthUser,
+    @Body(new ZodValidationPipe(consentDecisionSchema)) body: ConsentDecisionInput,
+    @Req() req: Request
+  ) {
+    const ip = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() || req.ip || null;
+    return this.consentsSvc.decide(user, body, { ip, userAgent: (req.headers["user-agent"] as string | undefined) ?? null });
   }
 
   /** Kısa ömürlü ön-imzalı indirme bağlantısı (120 sn). */

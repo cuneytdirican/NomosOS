@@ -9,6 +9,7 @@ import { assertPasswordStrength } from "../common/password-strength";
 import * as bcrypt from "bcryptjs";
 import type { Prisma } from "@nomosos/db";
 import { PrismaService } from "../prisma/prisma.service";
+import { invalidateUserCache } from "../common/guards/jwt-auth.guard";
 import { AuditService } from "../audit/audit.service";
 import { assertRole, ROLE_SETS } from "../common/roles";
 import { CLEARED_LOCKOUT } from "../common/account-lockout";
@@ -46,6 +47,7 @@ const USER_PUBLIC_SELECT = {
   role: true,
   barNumber: true,
   isActive: true,
+  extraPermissions: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.UserSelect;
@@ -203,6 +205,8 @@ export class UsersService {
         ...(input.role !== undefined ? { role: input.role } : {}),
         ...(input.barNumber !== undefined ? { barNumber: input.barNumber ?? null } : {}),
         ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+        // Faz 7C: rol matrisi — yalnız ONAY rolü (ADMIN/PARTNER) ek yetki verebilir (çağıran kapısı yukarıda).
+        ...(input.permissions !== undefined ? { extraPermissions: input.permissions, sessionsValidFrom: new Date() } : {}),
         // PASİFLEŞTİRME OTURUMLARI DA DÜŞÜRÜR. `jwt-auth.guard.ts` `isActive`
         // kontrolü 30 sn önbellekli olduğu için tek başına ~30 sn gecikirdi;
         // damga tazelenince önbellekteki kayıt da geçersiz olur.
@@ -212,6 +216,8 @@ export class UsersService {
       },
       select: USER_PUBLIC_SELECT,
     });
+    // Faz 7C: rol / ek yetki / aktiflik değişimi aynı süreçteki guard önbelleğine anında yansır.
+    invalidateUserCache(target.id);
 
     await this.audit.log({
       tenantId: user.tenantId,

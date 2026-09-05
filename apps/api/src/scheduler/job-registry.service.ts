@@ -15,6 +15,7 @@ import { WebhookDispatchJob } from "./jobs/webhook-dispatch.job";
 import { OturumTemizligiJob } from "./jobs/oturum-temizligi.job";
 import { BildirimDagitimiJob } from "./jobs/bildirim-dagitimi.job";
 import { BildirimTemizligiJob } from "./jobs/bildirim-temizligi.job";
+import { EpostaBelgeGirisiJob } from "./jobs/eposta-belge-girisi.job";
 import type { ScheduledJobHandler } from "./scheduler.types";
 
 /**
@@ -58,7 +59,8 @@ export class JobRegistryService {
     webhookDispatch: WebhookDispatchJob,
     oturumTemizligi: OturumTemizligiJob,
     bildirimDagitimi: BildirimDagitimiJob,
-    bildirimTemizligi: BildirimTemizligiJob
+    bildirimTemizligi: BildirimTemizligiJob,
+    epostaBelgeGirisi: EpostaBelgeGirisiJob
   ) {
     const all: ScheduledJobHandler[] = [
       usageSnapshot,
@@ -80,6 +82,7 @@ export class JobRegistryService {
       oturumTemizligi,
       bildirimDagitimi,
       bildirimTemizligi,
+      epostaBelgeGirisi,
     ];
     this.handlers = new Map(all.map((h) => [h.key, h]));
   }

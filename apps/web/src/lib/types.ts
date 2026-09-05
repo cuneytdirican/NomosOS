@@ -393,6 +393,11 @@ export interface DocumentItem extends CaseDocument {
   uploadedBy?: { id: string; fullName?: string } | null;
   case?: CaseSummary | null;
   _count?: { proposals?: number; chunks?: number };
+  /** Faz 7A — klasör + sürüm zinciri. */
+  folderPath?: string;
+  versionNo?: number;
+  rootDocumentId?: string | null;
+  supersededAt?: string | null;
 }
 
 export interface PipelineStepInfo {
