@@ -69,7 +69,8 @@ const MAX_RANGE_DAYS = 62;
 /** ICS beslemesi token'ı — kiracı JWT'sinden AYRI audience; API oturumu açmaz. */
 export const AGENDA_ICS_AUDIENCE = "agenda-ics";
 const ICS_LOOKBACK_DAYS = 7;
-const ICS_LOOKAHEAD_DAYS = 55;
+/** 7 + 54 = 61 gün: `to` gün sonuna genişlediği için 62 günlük tavanın altında kalır. */
+const ICS_LOOKAHEAD_DAYS = 54;
 
 @Injectable()
 export class AgendaService {

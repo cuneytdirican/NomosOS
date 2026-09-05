@@ -22,13 +22,16 @@ export const ConfidenceSchema = z.number().min(0).max(1);
 
 /** Bir bulgunun dayandığı belge konumu. */
 export const SourceRefSchema = z.object({
-  documentId: z.string().optional(),
-  documentTitle: z.string().optional(),
   // sayfa/paragraf 0 GEÇERLİDİR: model 0-indeksli sayfa verebilir (canlı
   // bulgu: page=0 reddedilip tüm simülasyon koşusu çöpe gidiyordu).
-  page: z.number().int().min(0).optional(),
-  paragraph: z.number().int().min(0).optional(),
-  quote: z.string().optional(),
+  // Faz 1 canlı bulgusu (Gemma 4, HEARING_PREP): küçük yerel modeller sayfa/paragraf
+  // bilmediğinde `null` yazar; tek bir null tüm paketi şema reddine düşürüyordu.
+  // null = "yok" sayılır (ChatCitationSchema ile aynı tolerans).
+  page: z.number().int().min(0).nullable().optional().transform((v) => v ?? undefined),
+  paragraph: z.number().int().min(0).nullable().optional().transform((v) => v ?? undefined),
+  quote: z.string().nullable().optional().transform((v) => v ?? undefined),
+  documentId: z.string().nullable().optional().transform((v) => v ?? undefined),
+  documentTitle: z.string().nullable().optional().transform((v) => v ?? undefined),
 });
 export type SourceRefOutput = z.infer<typeof SourceRefSchema>;
 
