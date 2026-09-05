@@ -160,6 +160,36 @@ describe("entegrasyonlar: API anahtarı + webhook", () => {
   });
 });
 
+describe("SSO / OIDC kurumsal giriş", () => {
+  it("şema, akış uçları, zorlama, oturum kaynağı, ekran ve giriş düğmesi", () => {
+    for (const f of ["ssoEnabled", "ssoIssuer", "ssoClientId", "ssoClientSecret", "ssoEmailDomain", "ssoEnforced", "ssoAutoProvision", "ssoDefaultRole"]) {
+      expect(schema).toContain(`  ${f}`);
+    }
+    expect(schema).toContain("ssoSubject      String?");
+    const ctrl = read("src", "auth", "sso.controller.ts");
+    expect(ctrl).toContain('@Post("auth/sso/start")');
+    expect(ctrl).toContain('@Get("auth/sso/callback")');
+    expect(ctrl).toContain('@Put("security/sso")');
+    // Geri dönüş tarayıcı gezinmesidir: çerez + yönlendirme, JSON değil.
+    expect(ctrl).toContain("response.cookie(AUTH_COOKIE_NAME");
+    expect(ctrl).toContain("sso_error=");
+    const svc = read("src", "auth", "sso.service.ts");
+    // ID token iss/aud/nonce/exp denetimi + HTTPS/SSRF kapısı + client_secret_post.
+    for (const s of ["(iss)", "(aud)", "nonce eşleşmiyor", "süresi dolmuş", "validateProviderBaseUrl(", "grant_type: \"authorization_code\""]) {
+      expect(svc).toContain(s);
+    }
+    expect(svc).toContain('"sso"');
+    expect(read("src", "auth", "session.service.ts")).toContain('"parola" | "parola+2fa" | "sso"');
+    // Parola girişi zorlamada kapalı — ADMIN hariç.
+    const auth = read("src", "auth", "auth.service.ts");
+    expect(auth).toContain("ssoEnforced");
+    expect(auth).toContain('user.role !== "ADMIN"');
+    expect(read("..", "web", "src", "app", "app", "ayarlar", "sso", "page.tsx")).toContain("/security/sso");
+    expect(read("..", "web", "src", "app", "giris", "page.tsx")).toContain("/auth/sso/start");
+    expect(read("..", "web", "src", "app", "app", "layout.tsx")).toContain('"/app/ayarlar/sso"');
+  });
+});
+
 describe("arayüz", () => {
   it("web: güvenlik / denetim / bildirimler sayfaları + menü; giriş 2FA adımı", () => {
     expect(read("..", "web", "src", "app", "app", "ayarlar", "guvenlik", "page.tsx")).toContain("/auth/2fa/setup");

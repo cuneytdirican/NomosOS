@@ -104,6 +104,9 @@ export const AUTH_ROUTES = {
   twoFactorSetup: "/auth/2fa/setup",
   twoFactorSetupWithChallenge: "/auth/2fa/setup-with-challenge",
   twoFactorDisable: "/auth/2fa/disable",
+  /** Enterprise++ SSO (OIDC): başlat / IdP geri dönüşü. */
+  ssoStart: "/auth/sso/start",
+  ssoCallback: "/auth/sso/callback",
 } as const;
 
 /** Enterprise++: API anahtarları + webhook'lar. */
@@ -128,6 +131,9 @@ export const SECURITY_ROUTES = {
   kvkkAnonymize: (caseId: string) => `/security/kvkk/retention/cases/${caseId}/anonymize`,
   kvkkRequests: "/security/kvkk/requests",
   kvkkRespond: (id: string) => `/security/kvkk/requests/${id}/respond`,
+  /** Enterprise++ SSO yapılandırması (GET/PUT) + discovery testi. */
+  sso: "/security/sso",
+  ssoTest: "/security/sso/test",
 } as const;
 
 export const USERS_ROUTES = {

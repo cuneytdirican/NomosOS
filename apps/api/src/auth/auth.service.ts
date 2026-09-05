@@ -98,6 +98,19 @@ export class AuthService {
 
     await this.clearFailures(user.id);
 
+    // SSO ZORLAMASI (Enterprise++): büro parola girişini kapatmışsa yalnız
+    // ADMIN parola ile girebilir (IdP arızasında "cam kır"); diğerleri
+    // "Kurumsal giriş"e yönlendirilir. Parola doğrulandıktan sonra bakılır —
+    // hesap sayımı davranışı değişmesin.
+    const ssoPolicy = await this.prisma.client.tenant.findUnique({
+      where: { id: user.tenantId },
+      select: { ssoEnforced: true },
+    });
+    if (ssoPolicy?.ssoEnforced && user.role !== "ADMIN") {
+      await this.logFailedLogin(user.tenantId, user.id, input.email, "SSO zorunlu — parola girişi kapalı");
+      throw new ForbiddenException("Büronuz kurumsal girişi (SSO) zorunlu kılmış; 'Kurumsal giriş' düğmesini kullanın.");
+    }
+
     // KİRAÇI ASKI DENETİMİ (D5 / M3): `Tenant` tablosunda status alanı yoktur;
     // askı durumu tek yazıcı olan ABONELİK üzerinden ifade edilir. Askıya
     // alınan veya aboneliği iptal edilmiş büronun KULLANICIÇI girişi burada

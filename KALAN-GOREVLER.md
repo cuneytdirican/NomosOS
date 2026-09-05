@@ -23,7 +23,29 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 5 Eylül 2026, 12:30
+# 🔖 KALDIĞIM YER — 5 Eylül 2026, 14:00
+
+> **Enterprise++ beşinci paket — SSO / OIDC KURUMSAL GİRİŞ** kodlandı
+> (`docs/enterprise-guvenlik.md` §10). Docker test yığını her paket sonrası yeniden
+> kurulup canlı duman testi yapılıyor (KVKK + API anahtarı + webhook 19/19 geçti).
+
+1. **Yapılandırma:** `Tenant.sso*` (issuer HTTPS+SSRF, client id, şifreli sır, e-posta
+   alan adı, zorlama [ADMIN hariç], otomatik açma + varsayılan rol); `GET/PUT
+   /security/sso` (yalnız ADMIN yazar), `POST /security/sso/test` (discovery);
+   ekran `/app/ayarlar/sso`; `API_PUBLIC_URL` (.env.example) → redirect_uri.
+2. **Akış:** `POST /auth/sso/start {email}` → imzalı state (JWT tenant-sso, 10 dk,
+   nonce) → IdP; `GET /auth/sso/callback` → kod takası (client_secret_post) →
+   ID token iss/aud/nonce/exp → e-posta (userinfo yedeği) → alan adı → kullanıcı
+   eşleme (`User.ssoSubject`, farklı sub red, otomatik açma) → oturum "sso"
+   (2FA atlanır — IdP'nin sorumluluğu) → çerez + `/app`; hata `/giris?sso_error=`.
+3. **Zorlama:** `AuthService.login` — `ssoEnforced` ve rol ≠ ADMIN → 403 + LOGIN_FAILED.
+4. Testler: `sso.service.test.ts` (17), sözleşme; api 1218/1218, web 100/100, lint 0.
+5. Sırada: cihaz bazlı oturum listesi (son Enterprise++ adayı) → Docker + duman.
+   SAML kapsam dışı (belgede gerekçeli).
+
+---
+
+## 🔖 ÖNCEKİ KALDIĞIM YER — 5 Eylül 2026, 12:30
 
 > **Enterprise++ üçüncü + dördüncü paket — KVKK SAKLAMA/İMHA** (§8) ve
 > **API ANAHTARI + WEBHOOK** (§9) kodlandı (`docs/enterprise-guvenlik.md`).

@@ -50,6 +50,19 @@ model Tenant {
   /// (Avukatlık K. m.39 + politika matrisi K1: varsayılan 10, 10-30). Süre dolan
   /// KAPANDI dosyalar imha ADAYI olur; imha yalnız ADMIN kararıyla, gerekçeli.
   retentionYears  Int      @default(10)
+  /// ── SSO / OIDC KURUMSAL GİRİŞ (Enterprise++) ─────────────────────────
+  /// Sağlayıcı: OpenID Connect discovery destekleyen her IdP (Entra ID, Google
+  /// Workspace, Okta, Keycloak…). Sır AES-256-GCM şifreli. `ssoEmailDomain`
+  /// girişte büroyu bulur ve dönen e-postayı sınırlar. `ssoEnforced`: parola
+  /// girişi kapalı (ADMIN hariç — cam kır). SAML kapsam dışıdır.
+  ssoEnabled       Boolean  @default(false)
+  ssoIssuer        String?
+  ssoClientId      String?
+  ssoClientSecret  String?
+  ssoEmailDomain   String?
+  ssoEnforced      Boolean  @default(false)
+  ssoAutoProvision Boolean  @default(false)
+  ssoDefaultRole   UserRole @default(STAJYER)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -124,6 +137,8 @@ model User {
   /// Gizli anahtar AES-256-GCM ile şifreli (MASTER_ENCRYPTION_KEY); düz metin
   /// ASLA saklanmaz, hiçbir uçtan dönmez. null = 2FA kurulu değil.
   twoFactorSecret String?
+  /// SSO: kimlik sağlayıcının `sub` kimliği — ilk kurumsal girişte bağlanır.
+  ssoSubject      String?
   /// Son kullanılan TOTP adımı — tekrar oynatma koruması (platformla aynı desen).
   lastTotpCounter Int?
 

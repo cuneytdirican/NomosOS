@@ -59,7 +59,7 @@ export class SessionService {
    * Oturum üretir + LOGIN_SUCCESS denetim kaydı yazar.
    * `via` denetim izinde giriş yolunu (parola / parola+TOTP) belgeler.
    */
-  async issue(user: SessionUser, via: "parola" | "parola+2fa"): Promise<IssuedSession> {
+  async issue(user: SessionUser, via: "parola" | "parola+2fa" | "sso"): Promise<IssuedSession> {
     const hours = await this.sessionHoursFor(user.tenantId);
     const payload: JwtPayload = { sub: user.id, tenantId: user.tenantId, role: user.role };
     // GÜVENLİK: audience damgası (`aud: "tenant"`) — bkz. common/jwt-audience.ts.

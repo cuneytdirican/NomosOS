@@ -31,6 +31,7 @@ export default function GirisPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [ssoLoading, setSsoLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // 2FA adımı (Enterprise++)
   const [challenge, setChallenge] = useState<{ token: string; mode: "verify" | "setup"; message: string } | null>(null);
@@ -40,6 +41,36 @@ export default function GirisPage() {
   useEffect(() => {
     if (getToken()) router.replace("/app");
   }, [router]);
+
+  // SSO geri dönüşü hata ile geldiyse (/giris?sso_error=…) mesajı göster.
+  useEffect(() => {
+    try {
+      const msg = new URLSearchParams(window.location.search).get("sso_error");
+      if (msg) {
+        setError(msg);
+        window.history.replaceState(null, "", "/giris");
+      }
+    } catch {
+      /* SSR/eski tarayıcı: sessiz geç */
+    }
+  }, []);
+
+  /** Kurumsal giriş (SSO/OIDC): e-posta alan adına göre IdP'ye yönlendirir. */
+  async function handleSso() {
+    setError(null);
+    if (!email.includes("@")) {
+      setError("Kurumsal giriş için önce e-posta adresinizi yazın.");
+      return;
+    }
+    setSsoLoading(true);
+    try {
+      const res = await api<{ authorizationUrl: string }>("/auth/sso/start", { method: "POST", body: { email } });
+      window.location.assign(res.authorizationUrl);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Kurumsal giriş başlatılamadı.");
+      setSsoLoading(false);
+    }
+  }
 
   function finishLogin(data: LoginResponse) {
     const token = data.token ?? data.accessToken ?? data.access_token;
@@ -206,6 +237,11 @@ export default function GirisPage() {
 
           <Button type="submit" variant="gold" className="w-full" disabled={loading}>
             {loading ? "Giriş yapılıyor…" : "Giriş Yap"}
+          </Button>
+
+          {/* Enterprise++: büronun kimlik sağlayıcısıyla (OIDC) giriş. */}
+          <Button type="button" variant="secondary" className="w-full" disabled={ssoLoading} onClick={() => void handleSso()}>
+            {ssoLoading ? "Yönlendiriliyor…" : "Kurumsal giriş (SSO)"}
           </Button>
 
           {/* Demo incelemesi AYRI sayfadadır: rol seçerek gezme (Partner /

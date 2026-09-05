@@ -135,7 +135,29 @@ Hukuki karar `docs/kvkk-politika-matrisi.md`'den alındı: Av. K. m.39 saklama (
 - **Ekran:** `/app/ayarlar/entegrasyonlar` — anahtar oluştur (tek seferlik gösterim),
   iptal; webhook ekle/düzenle/pasifleştir/sil, test gönder, teslimatlar.
 
-## 10. Sonraki Enterprise++ adayları (kodlanmadı — karar/kapsam ister)
+## 10. SSO / OIDC kurumsal giriş (beşinci paket)
 
-- **SSO (OIDC/SAML)** — kurumsal kimlik sağlayıcı bağlantısı.
+- **Sağlayıcı:** OpenID Connect discovery destekleyen her IdP (Microsoft Entra ID, Google
+  Workspace, Okta, Keycloak…). **SAML kapsam dışıdır** — sayılan sağlayıcıların tümü OIDC
+  sunar; SAML ayrı bir paket olarak değerlendirilir.
+- **Yapılandırma** (`Tenant.sso*`, `GET/PUT /security/sso`, yalnız ADMIN yazar; `POST
+  /security/sso/test` discovery sınar): issuer (HTTPS + SSRF kapısı), client id, client
+  secret (AES-256-GCM, bir kez girilir), e-posta alan adı, otomatik kullanıcı açma +
+  varsayılan rol (ADMIN olamaz), **zorlama** (parola girişi kapalı — ADMIN hariç, IdP
+  arızasında "cam kır"). IdP'ye kaydedilecek `redirect_uri`: `$API_PUBLIC_URL/api/v1/auth/sso/callback`.
+- **Akış:** `POST /auth/sso/start {email}` → alan adından büro → imzalı `state` (JWT,
+  10 dk, nonce) → IdP `authorization_endpoint`. `GET /auth/sso/callback` → state doğrulama
+  → kod takası (`client_secret_post`) → ID token **back-channel** olduğundan imza yerine
+  `iss/aud/nonce/exp` denetimi (OIDC Core §3.1.3.7/6) → e-posta (gerekirse userinfo) →
+  alan adı denetimi → kullanıcı eşleme (`User.ssoSubject`; farklı `sub` reddedilir; yoksa
+  ve otomatik açma açıksa rastgele parolayla açılır) → abonelik askı denetimi →
+  `SessionService.issue(…, "sso")` (LOGIN_SUCCESS izi "sso"). Çerez yazılır, `/app`'e
+  yönlendirilir; hatada `/giris?sso_error=…`.
+- **2FA ilişkisi:** SSO girişi TOTP challenge'ını **atlar** — çok faktör IdP'nin
+  sorumluluğudur. Büro `require2fa` politikası parola girişleri için geçerli kalır.
+- **Ekran:** `/app/ayarlar/sso` (yapılandırma + bağlantı testi + geri dönüş adresi),
+  giriş sayfasında "Kurumsal giriş (SSO)" düğmesi (e-posta alanına göre yönlendirir).
+
+## 11. Sonraki Enterprise++ adayları (kodlanmadı — karar/kapsam ister)
+
 - **Oturum listesi (cihaz bazlı iptal)** — bugün "tümünü düşür" var.
