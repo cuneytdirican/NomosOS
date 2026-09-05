@@ -16,6 +16,7 @@ import { PipelineService } from "../pipeline/pipeline.service";
 import { DiskQuotaService } from "../disk-quota/disk-quota.service";
 import { PipelineQueueService } from "../pipeline/pipeline-queue.service";
 import { CLASS_SOURCE } from "../pipeline/pipeline.types";
+import { relatedCaseVisibilityWhere } from "../common/case-visibility";
 import type { AuthUser } from "../common/types";
 import { assertRole, ROLE_SETS } from "../common/roles";
 import { normalizeQuery, paged, resolvePage } from "../common/pagination";
@@ -255,10 +256,11 @@ export class DocumentsService {
       triage?: string;
       page?: string;
       limit?: string;
-    }
+    },
+    viewer?: AuthUser
   ) {
-    // İ-16: yumuşak silinmiş belgeler listede görünmez.
-    const where: Prisma.DocumentWhereInput = { tenantId, deletedAt: null };
+    // İ-16: yumuşak silinmiş belgeler listede görünmez. Gizli dosya süzgeci AND altında.
+    const where: Prisma.DocumentWhereInput = { tenantId, deletedAt: null, ...(viewer ? relatedCaseVisibilityWhere(viewer, { optionalCase: true }) : {}) };
     const pageParams = resolvePage(params);
 
     if (params.caseId) where.caseId = params.caseId;

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from "@nestjs/common";
 import { createCaseSchema, type CreateCaseInput } from "@nomosos/shared";
 import { CasesService } from "./cases.service";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
@@ -10,6 +10,7 @@ import {
   createCaseNoteSchema,
   createCasePartySchema,
   createTimelineEventSchema,
+  setCaseMembersSchema,
   updateCaseNoteSchema,
   updateCaseSchema,
   type ChangeCaseStatusInput,
@@ -17,6 +18,7 @@ import {
   type CreateCaseNoteInput,
   type CreateCasePartyInput,
   type CreateTimelineEventInput,
+  type SetCaseMembersInput,
   type UpdateCaseInput,
   type UpdateCaseNoteInput,
 } from "./cases.dto";
@@ -36,7 +38,7 @@ export class CasesController {
     @Query("page") page?: string,
     @Query("limit") limit?: string
   ) {
-    return this.casesService.list(user.tenantId, { status, type, q, clientId, responsibleUserId, page, limit });
+    return this.casesService.list(user.tenantId, { status, type, q, clientId, responsibleUserId, page, limit }, user);
   }
 
   @Post()
@@ -46,7 +48,23 @@ export class CasesController {
 
   @Get(":id")
   detail(@CurrentUser() user: AuthUser, @Param("id") id: string) {
-    return this.casesService.detail(user.tenantId, id);
+    return this.casesService.detail(user.tenantId, id, user);
+  }
+
+  // ---------- Gizli dosya erişim listesi (Enterprise++) ----------
+
+  @Get(":id/members")
+  listMembers(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.casesService.listMembers(user, id);
+  }
+
+  @Put(":id/members")
+  setMembers(
+    @CurrentUser() user: AuthUser,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(setCaseMembersSchema)) body: SetCaseMembersInput
+  ) {
+    return this.casesService.setMembers(user, id, body);
   }
 
   @Patch(":id")

@@ -14,6 +14,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { officialHolidaysOn, isInJudicialRecess } from "@nomosos/legal-core";
 import { PrismaService } from "../prisma/prisma.service";
+import { relatedCaseVisibilityWhere } from "../common/case-visibility";
 import type { AuthUser } from "../common/types";
 import { parseDateParam, parseRangeEnd } from "../common/dates";
 
@@ -83,11 +84,15 @@ export class AgendaService {
       throw new NotFoundException(`Aralık en fazla ${MAX_RANGE_DAYS} gün olabilir.`);
     }
     const tenantId = user.tenantId;
+    // GİZLİ DOSYA: dosyaya bağlı ajanda kalemleri görünürlüğe tabi (AND altında).
+    const visible = relatedCaseVisibilityWhere(user);
+    const visibleOptional = relatedCaseVisibilityWhere(user, { optionalCase: true });
 
     const [hearings, randevular, deadlines, tasks] = await Promise.all([
       this.prisma.client.hearing.findMany({
         where: {
           tenantId,
+          ...visible,
           date: { gte: from, lte: to },
           // Yalnız gerçekleşmemiş duruşmalar; yapılmış/iptal olanlar ajandayı şişirir.
           status: { in: ["PLANLANDI"] },
@@ -109,6 +114,7 @@ export class AgendaService {
       this.prisma.client.deadline.findMany({
         where: {
           tenantId,
+          ...visible,
           dueDate: { gte: from, lte: to },
           status: { in: ["BEKLIYOR", "ONAYLANDI"] },
         },
@@ -119,6 +125,7 @@ export class AgendaService {
       this.prisma.client.task.findMany({
         where: {
           tenantId,
+          ...visibleOptional,
           dueDate: { gte: from, lte: to },
           // tasks.service.ts ile AYNI açık görev kümesi: kontrolde / onay
           // bekliyor görevleri ajandadan düşmez (aksi hâlde incelemedeki

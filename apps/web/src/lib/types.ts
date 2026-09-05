@@ -228,9 +228,13 @@ export interface CaseSummary {
   nextHearingAt?: string | null;
   lastActivityAt?: string | null;
   client?: { id: string; name: string } | null;
+  /** Gizli dosya (Enterprise++): yalnız yönetici/ortak, sorumlu ve üyeler görür. */
+  isConfidential?: boolean;
 }
 
 export interface CaseDetail extends CaseSummary {
+  members?: Array<{ userId: string; user: { id: string; fullName: string; role: string } }>;
+  canManageConfidentiality?: boolean;
   type: CaseType;
   status: CaseStatus;
   judgeName?: string | null;

@@ -76,10 +76,29 @@ formül koruması, kiracı süzgeci, rol kapıları, oturum ömrü aralığı),
 `notification-preferences.test.ts`, `enterprise-guvenlik.contract.test.ts`
 (şema/uçlar/ekranlar/menü/mobil).
 
-## 7. Sonraki Enterprise++ adayları (kodlanmadı — karar/kapsam ister)
+## 7. Gizli dosya — dosya bazlı erişim kısıtı (ikinci paket)
 
-- **Dosya bazlı erişim kısıtı** (gizli dosya: yalnız atanan avukatlar) — her dosya
-  sorgusuna dokunur; ayrı plan.
+- **Kural (tek yer, `common/case-visibility.ts`):** ADMIN/PARTNER tüm dosyaları görür;
+  diğer roller `isConfidential=false` dosyalar + sorumlusu olduğu + `CaseMember` üyesi
+  olduğu gizli dosyalar.
+- **Global kapı `CaseAccessGuard`** (JwtAuthGuard → TenantStatusGuard → CaseAccessGuard):
+  istek bir dosyaya işaret ediyorsa (`:caseId`, `/cases/:id`, `?caseId=`, gövde `caseId`)
+  görünürlük doğrulanır; görünmeyen dosya **404** (403 değil — varlık sızmaz).
+  ADMIN/PARTNER ve platform yolu için veritabanına gidilmez; diğerleri için istek
+  başına en çok bir indeksli sorgu. 47 dosyadaki 51 `case` sorgusunu tek tek
+  değiştirmek yerine kesişen nokta.
+- **Liste süzgeçleri:** dosya listesi/detayı, duruşma, süre, görev, belge listeleri ve
+  ajanda `relatedCaseVisibilityWhere` ile (her zaman `AND` altında; dosyasız kayıt
+  serbest). Bilinçli sınır: dosyaya bağlı olmayan kayıtlar kısıta girmez.
+- **Yönetim:** `PATCH /cases/:id { isConfidential }` ve `GET/PUT /cases/:id/members`
+  (yalnız ADMIN/PARTNER ya da sorumlu avukat; büro dışı/pasif kullanıcı reddedilir;
+  denetim izi `CASE_CONFIDENTIAL_ON/OFF`, `CASE_MEMBERS_SET`). Web: dosya detayında
+  "Gizlilik ve erişim" kartı, listede "Gizli" rozeti.
+- **Testler:** `case-visibility.test.ts` (kural, `extractCaseId`, guard 404/geçiş/DB'ye
+  gitmeme), sözleşme testi.
+
+## 8. Sonraki Enterprise++ adayları (kodlanmadı — karar/kapsam ister)
+
 - **Veri saklama/imha politikası** (KVKK) — saklama sürelerinin hukuki kararı gerekir.
 - **API anahtarları / webhook'lar** (büro entegrasyonları) — yeni kimlik yüzeyi.
 - **SSO (OIDC/SAML)** — kurumsal kimlik sağlayıcı bağlantısı.

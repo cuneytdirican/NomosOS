@@ -145,6 +145,8 @@ export const CLIENTS_ROUTES = {
 } as const;
 
 export const CASES_ROUTES = {
+  /** Enterprise++ gizli dosya erişim listesi. */
+  members: (id: string) => `/cases/${id}/members`,
   list: "/cases",
   create: "/cases",
   detail: (id: string) => `/cases/${id}`,

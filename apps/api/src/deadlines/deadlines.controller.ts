@@ -51,7 +51,7 @@ export class DeadlinesController {
       q,
       page,
       limit,
-    });
+    }, user);
   }
 
   @Get("upcoming")

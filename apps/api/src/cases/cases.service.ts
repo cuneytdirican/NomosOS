@@ -3,6 +3,7 @@ import type { CaseStatus as DbCaseStatus, CaseType as DbCaseType, Prisma } from 
 import { CASE_STATUSES, CASE_TYPES, type CaseStatus, type CreateCaseInput } from "@nomosos/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
+import { canManageCaseConfidentiality, caseVisibilityWhere } from "../common/case-visibility";
 import type { AuthUser } from "../common/types";
 import { assertRole, hasRole, ROLE_SETS } from "../common/roles";
 import { refreshCaseDenormals, touchCase } from "../common/case-denormals";
@@ -14,6 +15,7 @@ import type {
   CreateCaseNoteInput,
   CreateCasePartyInput,
   CreateTimelineEventInput,
+  SetCaseMembersInput,
   UpdateCaseInput,
   UpdateCaseNoteInput,
 } from "./cases.dto";
@@ -35,9 +37,13 @@ export class CasesService {
       responsibleUserId?: string;
       page?: string;
       limit?: string;
-    }
+    },
+    /** Gizli dosya süzgeci — çağıran kullanıcı (yoksa kısıt uygulanmaz; iç kullanım). */
+    viewer?: AuthUser
   ) {
     const where: Prisma.CaseWhereInput = { tenantId };
+    // GİZLİ DOSYA: görünürlük `AND` altında — aşağıdaki arama `OR`'unu ezmez.
+    if (viewer) where.AND = [caseVisibilityWhere(viewer)];
     const pageParams = resolvePage(params);
 
     if (params.status) {
@@ -118,12 +124,13 @@ export class CasesService {
     return created;
   }
 
-  async detail(tenantId: string, id: string) {
+  async detail(tenantId: string, id: string, viewer?: AuthUser) {
     const found = await this.prisma.client.case.findFirst({
-      where: { id, tenantId },
+      where: { id, tenantId, ...(viewer ? caseVisibilityWhere(viewer) : {}) },
       include: {
         client: { select: { id: true, name: true, type: true, phone: true, email: true } },
         responsibleUser: { select: { id: true, fullName: true } },
+        members: { select: { userId: true, user: { select: { id: true, fullName: true, role: true } } } },
         parties: true,
         hearings: { orderBy: { date: "desc" } },
         deadlines: { orderBy: { dueDate: "asc" }, include: { owner: { select: { id: true, fullName: true } } } },
@@ -149,7 +156,65 @@ export class CasesService {
     return {
       ...found,
       allowedStatusTransitions: CASE_STATUS_TRANSITIONS[found.status as CaseStatus] ?? [],
+      /** Gizlilik ayarını/üyeleri bu kullanıcı düzenleyebilir mi (arayüz için). */
+      canManageConfidentiality: viewer ? canManageCaseConfidentiality(viewer, found) : false,
     };
+  }
+
+  // ---------- Gizli dosya (Enterprise++) ----------
+
+  /** GET /cases/:id/members */
+  async listMembers(user: AuthUser, id: string) {
+    const found = await this.requireCase(user.tenantId, id);
+    const rows = await this.prisma.client.caseMember.findMany({
+      where: { caseId: found.id, tenantId: user.tenantId },
+      include: { user: { select: { id: true, fullName: true, role: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+    return { caseId: found.id, items: rows.map((r) => r.user) };
+  }
+
+  /**
+   * PUT /cases/:id/members — erişim listesini TAM olarak yazar (idempotent).
+   * Yalnız ADMIN/PARTNER ya da dosyanın sorumlusu; büro dışı kullanıcı reddedilir.
+   */
+  async setMembers(user: AuthUser, id: string, input: SetCaseMembersInput) {
+    const found = await this.prisma.client.case.findFirst({
+      where: { id, tenantId: user.tenantId },
+      select: { id: true, title: true, fileNumber: true, responsibleUserId: true },
+    });
+    if (!found) throw new NotFoundException("Dosya bulunamadı.");
+    if (!canManageCaseConfidentiality(user, found)) {
+      throw new ForbiddenException("Gizli dosya erişim listesini yalnız büro yöneticisi/ortak ya da dosyanın sorumlu avukatı düzenleyebilir.");
+    }
+    const unique = [...new Set(input.userIds)];
+    if (unique.length > 0) {
+      const valid = await this.prisma.client.user.count({
+        where: { tenantId: user.tenantId, id: { in: unique }, isActive: true },
+      });
+      if (valid !== unique.length) {
+        throw new BadRequestException("Listede büronuza ait olmayan ya da pasif kullanıcı var.");
+      }
+    }
+    await this.prisma.client.$transaction(async (tx) => {
+      await tx.caseMember.deleteMany({ where: { caseId: found.id, ...(unique.length ? { userId: { notIn: unique } } : {}) } });
+      for (const userId of unique) {
+        await tx.caseMember.upsert({
+          where: { caseId_userId: { caseId: found.id, userId } },
+          create: { tenantId: user.tenantId, caseId: found.id, userId, addedBy: user.userId },
+          update: {},
+        });
+      }
+    });
+    await this.audit.log({
+      tenantId: user.tenantId,
+      userId: user.userId,
+      action: "CASE_MEMBERS_SET",
+      entity: "Case",
+      entityId: found.id,
+      detail: `${this.caseLabel(found)} — erişim listesi: ${unique.length} kullanıcı`,
+    });
+    return this.listMembers(user, id);
   }
 
   /** PATCH /cases/:id */
@@ -159,6 +224,20 @@ export class CasesService {
 
     if (input.responsibleUserId) {
       await this.requireTenantUser(user.tenantId, input.responsibleUserId);
+    }
+    // GİZLİ DOSYA: bayrağı yalnız ADMIN/PARTNER ya da sorumlu avukat değiştirir.
+    if (input.isConfidential !== undefined && input.isConfidential !== existing.isConfidential) {
+      if (!canManageCaseConfidentiality(user, existing)) {
+        throw new ForbiddenException("Dosya gizliliğini yalnız büro yöneticisi/ortak ya da dosyanın sorumlu avukatı değiştirebilir.");
+      }
+      await this.audit.log({
+        tenantId: user.tenantId,
+        userId: user.userId,
+        action: input.isConfidential ? "CASE_CONFIDENTIAL_ON" : "CASE_CONFIDENTIAL_OFF",
+        entity: "Case",
+        entityId: id,
+        detail: `${this.caseLabel(existing)} — gizli dosya ${input.isConfidential ? "AÇILDI" : "KAPATILDI"}`,
+      });
     }
 
     const updated = await this.prisma.client.case.update({
@@ -465,7 +544,7 @@ export class CasesService {
   private async requireCase(tenantId: string, id: string) {
     const found = await this.prisma.client.case.findFirst({
       where: { id, tenantId },
-      select: { id: true, title: true, fileNumber: true, status: true, closedAt: true },
+      select: { id: true, title: true, fileNumber: true, status: true, closedAt: true, responsibleUserId: true, isConfidential: true },
     });
     if (!found) {
       throw new NotFoundException("Dosya bulunamadı.");

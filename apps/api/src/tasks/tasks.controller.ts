@@ -42,7 +42,7 @@ export class TasksController {
       to,
       page,
       limit,
-    });
+    }, user);
   }
 
   @Post()

@@ -53,6 +53,7 @@ import {
   Input,
   Modal,
   Select,
+  Switch,
   Spinner,
   TruncationNotice,
   Tabs,
@@ -407,6 +408,9 @@ export default function DosyaDetayPage({ params }: { params: Promise<{ id: strin
                 {labelOf(CASE_STATUS_LABELS, detail.status)}
               </Badge>
               <Badge tone="gold">{labelOf(CASE_TYPE_LABELS, detail.type)}</Badge>
+              {detail.isConfidential && (
+                <Badge tone="danger">Gizli dosya</Badge>
+              )}
               {proposals.length > 0 && (
                 <button
                   type="button"
@@ -468,6 +472,8 @@ export default function DosyaDetayPage({ params }: { params: Promise<{ id: strin
       </div>
 
       {actionError && <ErrorBox message={actionError} />}
+
+      <ConfidentialityCard detail={detail} onChanged={() => void load()} />
 
       <Tabs tabs={tabsWithCounts} active={tab} onChange={setTab} ariaLabel="Dosya sekmeleri" idPrefix="dosya" />
 
@@ -1613,5 +1619,124 @@ function CaseEditModal({
         </div>
       </form>
     </Modal>
+  );
+}
+
+/**
+ * GİZLİ DOSYA KARTI (Enterprise++): gizlilik anahtarı + erişim listesi.
+ * Anahtarı ve listeyi yalnız yönetici/ortak ya da sorumlu avukat düzenler
+ * (sunucu `canManageConfidentiality` ile söyler; asıl yaptırım API'dedir).
+ */
+function ConfidentialityCard({ detail, onChanged }: { detail: CaseDetail; onChanged: () => void }) {
+  const [users, setUsers] = useState<Array<{ id: string; fullName: string; role?: string }>>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [addId, setAddId] = useState("");
+  const canManage = detail.canManageConfidentiality === true;
+  const members = detail.members ?? [];
+
+  useEffect(() => {
+    if (!canManage) return;
+    void api<unknown>("/users")
+      .then((rows) => setUsers(asList<{ id: string; fullName: string; role?: string }>(rows)))
+      .catch(() => undefined);
+  }, [canManage]);
+
+  if (!detail.isConfidential && !canManage) return null;
+
+  async function toggle(next: boolean) {
+    if (next && !window.confirm("Dosya GİZLİ yapılacak: yalnız yönetici/ortak, sorumlu avukat ve erişim listesindekiler görebilecek. Devam?")) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/cases/${detail.id}`, { method: "PATCH", body: { isConfidential: next } });
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Gizlilik değiştirilemedi.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveMembers(userIds: string[]) {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/cases/${detail.id}/members`, { method: "PUT", body: { userIds } });
+      setAddId("");
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Erişim listesi kaydedilemedi.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const memberIds = new Set(members.map((m) => m.userId));
+  const candidates = users.filter((u) => !memberIds.has(u.id) && u.id !== detail.responsibleUser?.id);
+
+  return (
+    <Card title="Gizlilik ve erişim">
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-slate-800">
+              {detail.isConfidential ? "Bu dosya GİZLİ" : "Dosya büro geneline açık"}
+            </p>
+            <p className="text-xs text-slate-500">
+              Gizli dosyayı yalnız yönetici/ortak, sorumlu avukat{detail.responsibleUser?.fullName ? ` (${detail.responsibleUser.fullName})` : ""} ve
+              aşağıdaki erişim listesi görür; listelerde, ajandada ve aramada diğerlerine görünmez.
+            </p>
+          </div>
+          {canManage && (
+            <Switch checked={detail.isConfidential === true} label="Gizli dosya" busy={busy} onChange={(next) => void toggle(next)} />
+          )}
+        </div>
+        {error && <ErrorBox message={error} />}
+        {detail.isConfidential && (
+          <div className="space-y-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Erişim listesi</p>
+            {members.length === 0 ? (
+              <p className="text-sm text-slate-500">Sorumlu avukat dışında kimse eklenmedi.</p>
+            ) : (
+              <ul className="flex flex-wrap gap-2">
+                {members.map((m) => (
+                  <li key={m.userId} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-800">
+                    {m.user.fullName}
+                    {canManage && (
+                      <button
+                        type="button"
+                        className="text-xs text-red-600 hover:underline"
+                        disabled={busy}
+                        onClick={() => void saveMembers(members.filter((x) => x.userId !== m.userId).map((x) => x.userId))}
+                      >
+                        çıkar
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {canManage && (
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="w-64">
+                  <Select value={addId} onChange={(e) => setAddId(e.target.value)} aria-label="Erişim listesine kullanıcı ekle">
+                    <option value="">Kullanıcı ekle…</option>
+                    {candidates.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.fullName}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <Button size="sm" variant="secondary" disabled={busy || !addId} onClick={() => void saveMembers([...members.map((m) => m.userId), addId])}>
+                  Ekle
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </Card>
   );
 }

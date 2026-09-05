@@ -189,7 +189,14 @@ export default function DosyalarPage() {
                     <td className="py-3 pr-4 text-slate-600">{c.client?.name ?? "—"}</td>
                     <td className="py-3 pr-4 text-slate-600">{labelOf(CASE_TYPE_LABELS, c.type)}</td>
                     <td className="py-3 pr-4 text-slate-600">{c.courtName ?? "—"}</td>
-                    <td className="py-3 pr-4 text-slate-600">{c.fileNumber ?? "—"}</td>
+                    <td className="py-3 pr-4 text-slate-600">
+                      {c.fileNumber ?? "—"}
+                      {c.isConfidential && (
+                        <Badge tone="danger" className="ml-2">
+                          Gizli
+                        </Badge>
+                      )}
+                    </td>
                     <td className="py-3">
                       <Badge tone={CASE_STATUS_TONES[c.status ?? ""] ?? "gray"}>
                         {labelOf(CASE_STATUS_LABELS, c.status)}

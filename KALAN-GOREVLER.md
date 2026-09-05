@@ -23,7 +23,25 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 5 Eylül 2026, 08:30
+# 🔖 KALDIĞIM YER — 5 Eylül 2026, 09:15
+
+> **Enterprise++ ikinci paket — GİZLİ DOSYA (dosya bazlı erişim kısıtı)** kodlandı
+> (`docs/enterprise-guvenlik.md` §7). Docker test yığını güncel imajlarla yeniden kuruluyor.
+
+1. `Case.isConfidential` + `CaseMember`; kural tek yerde (`common/case-visibility.ts`):
+   ADMIN/PARTNER hepsini görür, diğerleri açık + sorumlu + üye dosyaları.
+2. Global `CaseAccessGuard` (3. APP_GUARD): `:caseId` / `/cases/:id` / `?caseId` / gövde
+   `caseId` → görünmeyen dosya 404. Liste süzgeçleri: dosya, duruşma, süre, görev,
+   belge, ajanda (`AND` altında).
+3. `PATCH /cases/:id { isConfidential }`, `GET/PUT /cases/:id/members`; web dosya
+   detayında "Gizlilik ve erişim" kartı, listede "Gizli" rozeti.
+4. Testler: `case-visibility.test.ts` (kural + extractCaseId + guard), sözleşme.
+5. Sırada (Enterprise++ adayları, sırayla): KVKK saklama/imha politikası → API
+   anahtarı/webhook → SSO → cihaz bazlı oturum listesi.
+
+---
+
+## 🔖 ÖNCEKİ KALDIĞIM YER — 5 Eylül 2026, 08:30
 
 > **ENTERPRISE++ GÜVENLİK & YÖNETİŞİM PAKETİ** (iki gözle boşluk analizi: sistem
 > yöneticisi + avukat/büro). Belgede söz verilip kodda olmayan güvenlik katmanı

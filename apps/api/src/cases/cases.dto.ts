@@ -37,6 +37,8 @@ export const updateCaseSchema = z
         .optional()
     ),
     responsibleUserId: nullableUuid("Sorumlu avukat"),
+    /** Gizli dosya (Enterprise++) — yalnız ADMIN/PARTNER ya da sorumlu avukat değiştirir. */
+    isConfidential: z.boolean().optional(),
     // İ-10: status PATCH'te de değiştirilebilir; closedAt yalnız status ile.
     status: z.enum(CASE_STATUSES).optional(),
     closedAt: nullableDate("Kapanış tarihi"),
@@ -52,6 +54,12 @@ export const updateCaseSchema = z
   )
   .refine((data) => Object.keys(data).length > 0, "Güncellenecek en az bir alan gönderilmelidir.");
 export type UpdateCaseInput = z.infer<typeof updateCaseSchema>;
+
+/** PUT /cases/:id/members — gizli dosya erişim listesi (tam liste, idempotent). */
+export const setCaseMembersSchema = z.object({
+  userIds: z.array(z.string().uuid("Geçersiz kullanıcı kimliği.")).max(100, "En fazla 100 üye."),
+});
+export type SetCaseMembersInput = z.infer<typeof setCaseMembersSchema>;
 
 /** PATCH /cases/:id/status */
 export const changeCaseStatusSchema = z.object({

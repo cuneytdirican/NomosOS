@@ -26,7 +26,7 @@ export class HearingsController {
     @Query("page") page?: string,
     @Query("limit") limit?: string
   ) {
-    return this.hearingsService.list(user.tenantId, { from, to, caseId, status, page, limit });
+    return this.hearingsService.list(user.tenantId, { from, to, caseId, status, page, limit }, user);
   }
 
   @Post()

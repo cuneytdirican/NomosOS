@@ -87,6 +87,30 @@ describe("bildirim tercihleri", () => {
   });
 });
 
+describe("gizli dosya (dosya bazlı erişim kısıtı)", () => {
+  it("şema + global guard + liste süzgeçleri + uçlar", () => {
+    expect(schema).toContain("isConfidential    Boolean    @default(false)");
+    expect(schema).toContain("model CaseMember {");
+    expect(read("src", "app.module.ts")).toContain("{ provide: APP_GUARD, useClass: CaseAccessGuard }");
+    for (const f of [
+      ["src", "cases", "cases.service.ts"],
+      ["src", "hearings", "hearings.service.ts"],
+      ["src", "deadlines", "deadlines.service.ts"],
+      ["src", "tasks", "tasks.service.ts"],
+      ["src", "documents", "documents.service.ts"],
+      ["src", "agenda", "agenda.service.ts"],
+    ]) {
+      expect(read(...f)).toMatch(/caseVisibilityWhere|relatedCaseVisibilityWhere/);
+    }
+    const c = read("src", "cases", "cases.controller.ts");
+    expect(c).toContain('@Put(":id/members")');
+    expect(c).toContain("this.casesService.detail(user.tenantId, id, user)");
+    const web = read("..", "web", "src", "app", "app", "dosyalar", "[id]", "page.tsx");
+    expect(web).toContain("ConfidentialityCard");
+    expect(web).toContain("/members");
+  });
+});
+
 describe("arayüz", () => {
   it("web: güvenlik / denetim / bildirimler sayfaları + menü; giriş 2FA adımı", () => {
     expect(read("..", "web", "src", "app", "app", "ayarlar", "guvenlik", "page.tsx")).toContain("/auth/2fa/setup");

@@ -11,6 +11,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { DeadlineRulesService } from "../deadline-rules/deadline-rules.service";
+import { relatedCaseVisibilityWhere } from "../common/case-visibility";
 import type { AuthUser } from "../common/types";
 import { assertRole, hasRole, ROLE_SETS } from "../common/roles";
 import { addDays, addYears, formatTrDate, parseDateParam, parseRangeEnd, startOfDay } from "../common/dates";
@@ -89,9 +90,10 @@ export class DeadlinesService {
       q?: string;
       page?: string;
       limit?: string;
-    }
+    },
+    viewer?: AuthUser
   ) {
-    const where: Prisma.DeadlineWhereInput = { tenantId };
+    const where: Prisma.DeadlineWhereInput = { tenantId, ...(viewer ? relatedCaseVisibilityWhere(viewer) : {}) };
     const pageParams = resolvePage(params);
 
     if (params.status) {

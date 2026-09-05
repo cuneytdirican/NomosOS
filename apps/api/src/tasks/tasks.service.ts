@@ -3,6 +3,7 @@ import type { Prisma, TaskStatus as DbTaskStatus } from "@nomosos/db";
 import { TASK_PRIORITIES, TASK_STATUSES, type CreateTaskInput, type TaskStatus } from "@nomosos/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
+import { relatedCaseVisibilityWhere } from "../common/case-visibility";
 import type { AuthUser } from "../common/types";
 import { assertRole, hasRole, ROLE_SETS } from "../common/roles";
 import { parseDateParam, parseRangeEnd } from "../common/dates";
@@ -39,9 +40,10 @@ export class TasksService {
       to?: string;
       page?: string;
       limit?: string;
-    }
+    },
+    viewer?: AuthUser
   ) {
-    const where: Prisma.TaskWhereInput = { tenantId };
+    const where: Prisma.TaskWhereInput = { tenantId, ...(viewer ? relatedCaseVisibilityWhere(viewer, { optionalCase: true }) : {}) };
     const pageParams = resolvePage(params);
 
     if (params.status) {

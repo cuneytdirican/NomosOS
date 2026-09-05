@@ -62,6 +62,8 @@ import { ReportsModule } from "./reports/reports.module";
 import { SchedulerModule } from "./scheduler/scheduler.module";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
 import { TenantStatusGuard } from "./common/guards/tenant-status.guard";
+// Enterprise++: gizli dosya kapısı (caseId taşıyan her istekte görünürlük).
+import { CaseAccessGuard } from "./common/guards/case-access.guard";
 
 /** JWT imza anahtarı için asgari uzunluk (bayt). */
 const JWT_SECRET_MIN_LENGTH = 32;
@@ -260,6 +262,10 @@ function requireJwtSecret(config: ConfigService): string {
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: TenantStatusGuard },
+    // 3. `CaseAccessGuard` → istek bir dosyaya işaret ediyorsa (rota/sorgu/gövde
+    //    caseId, /cases/:id) kullanıcının o dosyayı GÖREBİLDİĞİNİ doğrular
+    //    (gizli dosya). `request.user` gerektiği için kimlik guard'ından sonra.
+    { provide: APP_GUARD, useClass: CaseAccessGuard },
   ],
 })
 export class AppModule {}

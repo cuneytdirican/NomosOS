@@ -7,6 +7,7 @@ import {
 import type { HearingStatus as DbHearingStatus, Prisma } from "@nomosos/db";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
+import { relatedCaseVisibilityWhere } from "../common/case-visibility";
 import type { AuthUser } from "../common/types";
 import { assertRole, ROLE_SETS } from "../common/roles";
 import { parseDateParam, parseRangeEnd } from "../common/dates";
@@ -35,9 +36,10 @@ export class HearingsService {
   /** GET /hearings — tarih aralığı + dosya + durum süzgeçleri. */
   async list(
     tenantId: string,
-    params: { from?: string; to?: string; caseId?: string; status?: string; page?: string; limit?: string }
+    params: { from?: string; to?: string; caseId?: string; status?: string; page?: string; limit?: string },
+    viewer?: AuthUser
   ) {
-    const where: Prisma.HearingWhereInput = { tenantId };
+    const where: Prisma.HearingWhereInput = { tenantId, ...(viewer ? relatedCaseVisibilityWhere(viewer) : {}) };
     const pageParams = resolvePage(params);
 
     const dateFilter: Prisma.DateTimeFilter = {};

@@ -60,7 +60,7 @@ export class DocumentsController {
       limit?: string;
     }
   ) {
-    return this.documents.list(user.tenantId, query);
+    return this.documents.list(user.tenantId, query, user);
   }
 
   /** GET /api/v1/documents/:id — meta + hat koşumları + öneriler. */
