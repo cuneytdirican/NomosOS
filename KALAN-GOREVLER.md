@@ -44,6 +44,14 @@
 6. Web **Ayarlar → Abonelik** (plan, önizleme, aralık, kupon, faturalar Öde/PDF); AI Kullanımı satın
    alma → ödeme akışı. Admin **Kuponlar** + **Platform Faturaları** (ödendi işaretle).
 Migration `20260926100000_faz3_gelir_hatti`. Testler: api 1354 (152 dosya), web 100; lint 0.
+Canlı doğrulandı (Docker test yığını, SIMULASYON; `d24313c` sonrası): kupon oluştur→bağla→önizleme
+%10; kredi paketi satın alma → NOM-2026-0000xx ODENDI, cüzdan +500; dönem faturası kes (idempotent
+ikinci kesim aynı fatura) → Öde → dönem 09-21→10-21, tekrar 409; havale ile mark-paid; SOLO plana
+geçince icra 403 (plan adı + yükseltme yolu), BURO 200; e-Fatura ayarı kimlik bilgisini yanıta
+sızdırmıyor; büro ve platform fatura PDF'leri Türkçe glifli. Web: Abonelik ekranı (6 fatura satırı),
+geçersiz kupon hatası, AI Kullanımı satın alma → ödendi + 500 kredi, Öde; admin Kuponlar oluşturma ve
+Platform Faturaları tablosu. İki açılış hatası dumanda yakalanıp düzeltildi: web `useSearchParams`
+Suspense (`d62b4ab`), `OdemeSaglayici` dışa aktarımı (`d24313c`) — DI sözleşme testi eklendi.
 Açık not: otomatik kredi yükleme (`tryAutoTopUp`) hâlâ ödemesiz yükler (iş kuralı 12, açık onaylı);
 iyzico canlı doğrulama sandbox anahtarı gerektirir (sözleşme sonrası).
 

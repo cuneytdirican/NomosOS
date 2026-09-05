@@ -80,3 +80,10 @@ yoksa **dürüst 503 + havale/EFT + panelden "ödendi işaretle"**.
 - Canlı (Docker test yığını, SIMULASYON): kredi paketi satın alma → fatura ODENDI + kredi; dönem
   faturası elle kesme → Öde → abonelik dönemi ilerler; PDF; kupon; modül kapısı (SOLO plana
   geçirilen büroda icra 403); panel kupon/ödendi işaretle.
+
+**Canlı sonuç (5 Eylül 2026, test yığını, SIMULASYON):** kupon → önizleme %10; kredi paketi
+satın alma → fatura ODENDI + cüzdan +500 (ödeme kesinleşince); dönem faturası kes (idempotent) →
+Öde → dönem ilerledi, tekrar ödeme 409; havale ile "ödendi işaretle"; modül kapısı SOLO → icra 403,
+BURO → 200; e-Fatura ayarı şifreli ve yanıta sızmıyor; PDF'ler Türkçe glifli (DejaVu). Web ve admin
+ekranları Playwright ile doğrulandı. Not: eski akıştan kalan numarasız TASLAK kredi faturaları
+"Öde" ile kapatılabilir (kredi zaten yüklenmişti; yalnız alacak kapanır).
