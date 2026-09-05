@@ -35,6 +35,7 @@ import { assertAiPolicyAllows, tenantAiPolicy } from "../common/ai-policy";
 import { creditRunContext } from "../credits/credit-context";
 import { providerUnreachable } from "../common/errors";
 import { assertRole, ROLE_SETS } from "../common/roles";
+import { usageProviderRef } from "../common/ai-usage-provider";
 import { readProviderHeaders } from "../common/provider-headers";
 import type { AuthUser } from "../common/types";
 import { composeSystemPrompt } from "@nomosos/legal-ai";
@@ -537,7 +538,7 @@ export class AiService {
       data: {
         tenantId: user.tenantId,
         userId: user.userId,
-        providerConfigId: config.id,
+        ...usageProviderRef(config),
         taskType: "CASE_CHAT",
         model,
         inputTokens: result.inputTokens,

@@ -30,6 +30,7 @@ import {
 } from "@nomosos/ai";
 import type { AiProviderType } from "@nomosos/shared";
 import { PrismaService } from "../prisma/prisma.service";
+import { PLATFORM_PROVIDER_ID_PREFIX } from "../common/ai-usage-provider";
 import { PlatformAuditService } from "../platform/platform-audit.service";
 import { readProviderHeaders } from "../common/provider-headers";
 import type { PlatformAuthUser } from "../platform/platform.types";
@@ -146,7 +147,7 @@ export class PlatformAiService {
     mappingJson: string | null;
   }): AiProviderConfig {
     return {
-      id: `platform:${row.id}`,
+      id: `${PLATFORM_PROVIDER_ID_PREFIX}${row.id}`,
       tenantId: "__platform__",
       name: row.name,
       type: row.type,
@@ -168,7 +169,20 @@ export class PlatformAiService {
   async tenantStatus(tenantId: string) {
     const features = await this.planFeatures(tenantId);
     if (features.allowBYOLLM) {
-      return { byoAllowed: true, platformProvider: null };
+      // BYO izni var ama büro HENÜZ kendi sağlayıcısını tanımlamamışsa görevler
+      // platform sağlayıcısına düşer (D1.3 yedeği) — bunu ekranda açıkça söyle:
+      // "kendi LLM sunucusu olmayan büro sistemde tanımlı sunucuyu kullanır".
+      const own = await this.prisma.client.aiProviderConfig.count({ where: { tenantId, isActive: true } });
+      if (own > 0) return { byoAllowed: true, platformProvider: null, fallback: false };
+      const platform = await this.resolveForTenant(tenantId);
+      return {
+        byoAllowed: true,
+        fallback: true,
+        platformProvider: platform ? { name: platform.name, type: platform.type, defaultModel: platform.defaultModel } : null,
+        note: platform
+          ? `Kendi AI sağlayıcınız tanımlı değil; AI görevleri NomosOS platform sağlayıcısından (${platform.name}) yürütülüyor. İsterseniz kendi sunucunuzu ekleyebilirsiniz.`
+          : "Kendi AI sağlayıcınız tanımlı değil ve platform sağlayıcısı da yok — AI görevleri çalışmaz. Bir sağlayıcı ekleyin ya da destek ile görüşün.",
+      };
     }
     const provider = await this.resolveForTenant(tenantId);
     if (!provider) {

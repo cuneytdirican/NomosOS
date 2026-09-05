@@ -88,6 +88,8 @@ export default function AiSaglayiciPage() {
   const [platformStatus, setPlatformStatus] = useState<{
     byoAllowed: boolean;
     platformProvider: { name: string; type: string; defaultModel: string } | null;
+    /** BYO izni var ama kendi sağlayıcısı yok → platform yedeği kullanılıyor. */
+    fallback?: boolean;
     note?: string;
   } | null>(null);
   /** D1.3b — sağlayıcıdan çekilen model listesi (form seçici için). */
@@ -118,6 +120,7 @@ export default function AiSaglayiciPage() {
       const status = await api<{
         byoAllowed: boolean;
         platformProvider: { name: string; type: string; defaultModel: string } | null;
+        fallback?: boolean;
         note?: string;
       } | null>("/ai/platform-status");
       if (status && status.byoAllowed === false) {
@@ -125,7 +128,8 @@ export default function AiSaglayiciPage() {
         setLoading(false);
         return;
       }
-      setPlatformStatus(null);
+      // BYO izni var: kendi sağlayıcısı yoksa platform yedeği bilgisi şerit olarak gösterilir.
+      setPlatformStatus(status && status.fallback ? status : null);
     } catch {
       /* durum alınamazsa yönetim görünümü denemeye devam eder */
     }
@@ -426,6 +430,22 @@ export default function AiSaglayiciPage() {
           </Button>
         </div>
       </div>
+
+      {/* ---------- Platform yedeği (kendi sağlayıcısı olmayan büro) ---------- */}
+      {platformStatus?.fallback && (
+        <div
+          className={`rounded-lg border px-4 py-3 text-sm ${
+            platformStatus.platformProvider ? "border-sky-300 bg-sky-50 text-sky-900" : "border-amber-300 bg-amber-50 text-amber-900"
+          }`}
+        >
+          <p className="font-semibold">
+            {platformStatus.platformProvider
+              ? `Sistemde tanımlı sunucu kullanılıyor: ${platformStatus.platformProvider.name} (${platformStatus.platformProvider.defaultModel})`
+              : "AI sağlayıcısı yok"}
+          </p>
+          <p className="mt-1 text-xs leading-5">{platformStatus.note}</p>
+        </div>
+      )}
 
       {/* ---------- Kredi modu (Modül 26) ---------- */}
       {wallet &&

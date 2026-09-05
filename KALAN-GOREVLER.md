@@ -23,7 +23,38 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 5 Eylül 2026, 15:30
+# 🔖 KALDIĞIM YER — 5 Eylül 2026, 17:30
+
+> **LM STUDIO (yerel Gemma 4) ENTEGRASYONU + RAG kullanımı** — kullanıcı isteği:
+> "sistemdeki RAG ile AI modelini kullanmamız lazım; avukat tarafında kendi LLM sunucusu
+> yoksa sistemde tanımlı sunucu aktif kullanılmalı". Belge: `docs/lm-studio-yerel-model.md`.
+
+1. **Tanım:** LM Studio `lms server start --port 1234 --bind 0.0.0.0` (API anahtarlı);
+   Sistem Paneli → Platform AI Sağlayıcıları'na Playwright ile (görünür tarayıcı)
+   "LM Studio (Gemma 4, yerel)" OPENAI_COMPAT + Varsayılan; büro tarafında kullanıcı
+   kendi kaydını ("LLM-GEMMA4") açtı, 33 görev rotası + EMBEDDING → nomic.
+2. **Canlı bulgu → düzeltme (kod):** (a) `resolveEmbedding` EMBEDDING rotasını okumuyordu
+   → rota öncelikli + platform yedeği; (b) platform sağlayıcısıyla koşan görevde
+   `AiUsageLog.providerConfigId` FK ihlali (500) → `platformAiProviderId` sütunu +
+   `usageProviderRef()` dört yürütücüde (migration 20260924150000); (c) küçük modelde JSON
+   reddi → `responseFormat:"json"` (json_schema → json_object → düz); (d) `fetch failed`
+   nedeni yüzeye çıkarıldı; (e) yavaş modelde `UND_ERR_HEADERS_TIMEOUT` → OpenAI-uyumlu
+   adaptör AKIŞLI (SSE) + `fetchWithTimeout` undici Agent (başlık/gövde zaman aşımı =
+   AI_TIMEOUT_MS); (f) `GET /ai/platform-status` `fallback:true` + web şeridi ("Sistemde
+   tanımlı sunucu kullanılıyor"). Testler: embedding-route 4, openai-compat-json-mode 4,
+   ai-usage-provider 2, openai-compat-stream 5, fetch-timeout-dispatcher 2; api 1248/1248, lint 0.
+3. **RAG kanıtı:** İşe iade dosyasına 3 belge → 7 parça, `retrievalMode=EMBEDDING`
+   (nomic via LM Studio); dosya sohbeti Gemma 4 ile 3/3 doğrulanmış alıntı (~2 dk).
+4. **LM Studio ayarı:** model 8192 bağlamla yeniden yüklendi (4096'da analiz "context
+   exceeded"); test compose `AI_TIMEOUT_MS=600000`, `AI_EMBEDDING_MODEL_OPENAI_COMPAT`.
+5. Canlı: büro sağlayıcısı silinmiş hâlde (kullanıcı sildi) platform LM Studio ile
+   gömme=EMBEDDING ve dosya sohbeti geçti (FK hatası yok). Tam analiz akışlı imajla
+   doğrulanacak; DİKKAT: `docker compose` komutu depo kökünden çalıştırılmalı (apps/web
+   cwd'de dosya bulunamadı, derleme sessizce atlandı).
+
+---
+
+## 🔖 ÖNCEKİ KALDIĞIM YER — 5 Eylül 2026, 15:30
 
 > **Enterprise++ altıncı (SON) paket — CİHAZ BAZLI OTURUM LİSTESİ** kodlandı
 > (`docs/enterprise-guvenlik.md` §11). Belgede söz verilen altı aday tamamlandı (§12).

@@ -1077,6 +1077,7 @@ model PlatformAiProvider {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
+  usageLogs    AiUsageLog[]
   fineTuneJobs FineTuneJob[]
 
   @@index([isActive, isDefault])
@@ -1440,6 +1441,10 @@ model AiUsageLog {
   user             User?             @relation(fields: [userId], references: [id])
   providerConfigId String?
   providerConfig   AiProviderConfig? @relation(fields: [providerConfigId], references: [id], onDelete: SetNull)
+  /// Platform sağlayıcısıyla (D1.3) koşan görev — kiracı FK'sına YAZILMAZ
+  /// (common/ai-usage-provider.ts). Kullanım raporlarında platform kaynağı görünür.
+  platformAiProviderId String?
+  platformAiProvider   PlatformAiProvider? @relation(fields: [platformAiProviderId], references: [id], onDelete: SetNull)
   taskType         String
   model            String
   inputTokens      Int?

@@ -19,6 +19,7 @@ import {
   type GuardIssue,
 } from "@nomosos/legal-ai";
 import { PrismaService } from "../prisma/prisma.service";
+import { usageProviderRef } from "../common/ai-usage-provider";
 import { PlatformAiService } from "../ai/platform-ai.service";
 import { assertAiPolicyAllows, tenantAiPolicy } from "../common/ai-policy";
 import { sanitizeExternalError } from "../common/errors";
@@ -304,7 +305,9 @@ export class AgentRunnerService {
     piiMasked: boolean;
   }): Promise<void> {
     try {
-      await this.prisma.client.aiUsageLog.create({ data: entry });
+      // Platform sağlayıcısı (`platform:<id>`) kiracı FK'sına yazılmaz.
+      const { providerConfigId, ...rest } = entry;
+      await this.prisma.client.aiUsageLog.create({ data: { ...rest, ...usageProviderRef({ id: providerConfigId }) } });
     } catch (err) {
       this.logger.warn(`AI kullanım kaydı yazılamadı: ${(err as Error).message}`);
     }

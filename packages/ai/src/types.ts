@@ -10,6 +10,14 @@ export interface LlmChatOptions {
   messages: LlmMessage[];
   maxTokens?: number;
   temperature?: number;
+  /**
+   * Çıktı biçimi ipucu. "json": sağlayıcı destekliyorsa yapısal JSON modu
+   * istenir (OpenAI `response_format: json_object`; LM Studio, vLLM, Groq…).
+   * Küçük yerel modeller serbest metinde JSON'u bozar — bu ipucu output-guard
+   * reddini belirgin azaltır. Desteklemeyen sunucu 400 dönerse ipucu düşürülüp
+   * istek YİNELENİR (davranış değişmez).
+   */
+  responseFormat?: "text" | "json";
 }
 
 export interface LlmChatResult {

@@ -10,7 +10,8 @@
     "dev": "tsc -p tsconfig.json --watch"
   },
   "dependencies": {
-    "@nomosos/shared": "workspace:*"
+    "@nomosos/shared": "workspace:*",
+    "undici": "7"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",

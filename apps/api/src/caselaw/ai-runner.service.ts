@@ -46,6 +46,7 @@ import { guardOutput, type DroppedFinding, type ExtractedCitation } from "@nomos
 import type { AiProviderType, AiTaskType } from "@nomosos/shared";
 import type { TypeOf, ZodTypeAny } from "zod";
 import { PrismaService } from "../prisma/prisma.service";
+import { usageProviderRef } from "../common/ai-usage-provider";
 import { AuditService } from "../audit/audit.service";
 import { AgentRunService } from "../agents/agent-run.service";
 import { PlatformAiService } from "../ai/platform-ai.service";
@@ -364,7 +365,7 @@ export class AiRunnerService {
       data: {
         tenantId: input.user.tenantId,
         userId: input.user.userId,
-        providerConfigId: config.id,
+        ...usageProviderRef(config),
         taskType: input.taskType,
         model,
         inputTokens: result.inputTokens,

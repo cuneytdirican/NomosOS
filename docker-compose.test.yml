@@ -154,7 +154,10 @@ services:
       # Uzun sözleşme parçaları (~24 bin karakterlik iki taraflı analiz) tek
       # AI çağrısında 60 sn'yi aşabilir; varsayılan 60 sn sözleşme analizinde
       # "sağlayıcı yanıt vermedi" (502) üretiyordu. Üst sınır 600 sn (http.ts).
-      AI_TIMEOUT_MS: "180000"
+      AI_TIMEOUT_MS: "600000"
+      # Platform sağlayıcısı LM Studio ise gömme modeli (OpenAI-uyumlu tipte varsayılan
+      # text-embedding-3-small yerel sunucuda yoktur).
+      AI_EMBEDDING_MODEL_OPENAI_COMPAT: "text-embedding-nomic-embed-text-v1.5"
       # Test panele TOTP uygulaması olmadan girilebilsin diye 2FA kapalı.
       PLATFORM_REQUIRE_2FA: "false"
       TRUSTED_PROXY_HOPS: "0"

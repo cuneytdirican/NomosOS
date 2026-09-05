@@ -34,6 +34,7 @@ import { creditRunContext } from "../credits/credit-context";
 import { providerUnreachable } from "../common/errors";
 import type { AuthUser } from "../common/types";
 import { readProviderHeaders } from "../common/provider-headers";
+import { usageProviderRef } from "../common/ai-usage-provider";
 
 function safeJsonParse<T>(value: string | null): T | undefined {
   if (!value) return undefined;
@@ -174,20 +175,48 @@ export class AssistantLlmService {
   /**
    * Gömme sağlayıcısı çözümü.
    *
-   * Yerel çalışan OLLAMA tercih edilir (veri büro dışına çıkmaz). Hiçbir uygun
-   * sağlayıcı yoksa `null` döner ve çağıran ANAHTAR KELİME yedeğine düşer —
-   * bu durum kullanıcıya bildirilir, sessizce yutulmaz.
+   * 1) ÖNCE büronun EMBEDDING görev rotası (Ayarlar → AI Sağlayıcı → görev
+   *    eşlemesi): sağlayıcı + model oradan gelir. Bu rota yokken (ya da
+   *    sağlayıcı gömme desteklemiyorken) eski sezgisel seçime düşülür.
+   *    DÜZELTME: rota hiç okunmuyordu; büro LM Studio/Ollama rotası tanımlasa
+   *    bile en ESKİ OPENAI_COMPAT kaydı ve varsayılan "text-embedding-3-small"
+   *    seçiliyor, indeksleme sessizce anahtar kelime yedeğine düşüyordu.
+   * 2) Yedek: yerel çalışan OLLAMA tercih edilir (veri büro dışına çıkmaz),
+   *    sonra ilk OPENAI_COMPAT. Hiçbir uygun sağlayıcı yoksa `null` döner ve
+   *    çağıran ANAHTAR KELİME yedeğine düşer — kullanıcıya bildirilir.
    */
   async resolveEmbedding(tenantId: string): Promise<ResolvedEmbedding | null> {
+    const route = await this.prisma.client.aiTaskRoute.findUnique({
+      where: { tenantId_taskType: { tenantId, taskType: "EMBEDDING" } },
+      include: { providerConfig: true },
+    });
+    if (route && route.providerConfig.isActive && supportsEmbeddings(route.providerConfig.type)) {
+      await assertAiPolicyAllows(this.prisma, tenantId, route.providerConfig);
+      return {
+        config: this.resolveConfig(route.providerConfig),
+        providerConfigId: route.providerConfig.id,
+        model: route.model,
+        providerType: route.providerConfig.type as EmbeddingProviderType,
+      };
+    }
+
     const configs = await this.prisma.client.aiProviderConfig.findMany({
       where: { tenantId, isActive: true, type: { in: ["OLLAMA", "OPENAI_COMPAT"] } },
       orderBy: { createdAt: "asc" },
     });
     // Yerel sağlayıcı önce.
-    const picked =
+    let picked =
       configs.find((c) => c.type === "OLLAMA") ??
       configs.find((c) => c.type === "OPENAI_COMPAT") ??
       null;
+    // 3) Büronun kendi sağlayıcısı yoksa PLATFORM sağlayıcısı (D1.3) — sohbet
+    //    yolundaki yedekle aynı kural: "kendi LLM sunucusu olmayan büro sistemde
+    //    tanımlı sunucuyu kullanır". Gömme modeli platform ortam değişkeninden
+    //    (AI_EMBEDDING_MODEL_<TİP> / AI_EMBEDDING_MODEL) ya da tip varsayılanından.
+    if (!picked) {
+      const platform = await this.platformAi.resolveForTenant(tenantId);
+      if (platform && supportsEmbeddings(platform.type)) picked = platform;
+    }
     if (!picked || !supportsEmbeddings(picked.type)) return null;
     // SADECE_YEREL politikasında dış gömme sağlayıcısı kullanılamaz; gömme
     // yerine anahtar kelime yedeğine düşülür (çağıran bunu kullanıcıya bildirir).
@@ -232,7 +261,7 @@ export class AssistantLlmService {
           data: {
             tenantId: ctx.tenantId,
             userId: ctx.userId ?? null,
-            providerConfigId: resolved.providerConfigId,
+            ...usageProviderRef({ id: resolved.providerConfigId }),
             taskType: "EMBEDDING",
             model: resolved.model,
             inputTokens: result.inputTokens,
@@ -325,6 +354,9 @@ export class AssistantLlmService {
         messages: gated.messages,
         maxTokens: options.maxTokens ?? 4096,
         temperature: 0.2,
+        // Şema doğrulamalı koşu: sağlayıcı destekliyorsa JSON modu istenir
+        // (küçük yerel modellerde output-guard JSON_PARSE reddini azaltır).
+        responseFormat: "json",
       });
     } catch (err) {
       // F2 · E1: sağlayıcı arızası iz bırakır.
@@ -370,7 +402,7 @@ export class AssistantLlmService {
       data: {
         tenantId: user.tenantId,
         userId: user.userId,
-        providerConfigId: config.id,
+        ...usageProviderRef(config),
         taskType: logTaskType,
         model,
         inputTokens: result.inputTokens,
