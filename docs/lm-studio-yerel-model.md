@@ -81,8 +81,11 @@ bir sunucuda "fetch failed" ile sessizce anahtar kelime yedeğine düşüyordu. 
 
 - LM Studio varsayılan bağlam (4096) tam dosya analizinde `Context size has been exceeded`
   (HTTP 400) verir. Modeli daha geniş bağlamla yükleyin:
-  `lms load gemma4-coding-agent --context-length 8192 --identifier gemma4-coding-agent`
-  (4 GB VRAM'de 12288 KV önbelleği sığmadı; 8192 otomatik GPU paylaşımıyla çalışır).
+  `lms load gemma4-coding-agent --context-length 16384 --gpu 0.5 --identifier gemma4-coding-agent`
+  (4 GB VRAM'de tam GPU ile 12288 KV önbelleği sığmadı; %50 GPU paylaşımıyla 16384 yüklenir —
+  tam analiz 8192'de çıktı tavanına çarpıp JSON'u kesiyordu: 2256 token üretip durdu).
+- Küçük modeller atıfta `page`/`quote` için `null` yazar; `ChatCitationSchema` null'u "yok"
+  sayar (aksi hâlde tek bir null tüm yanıtı şema reddine düşürüyordu).
 - `AI_TIMEOUT_MS` test yığınında 600000 (üst sınır); Q4 4B model ~5-8 tok/sn üretir,
   dosya sohbeti ~100-130 sn, tam analiz daha uzun sürer.
 

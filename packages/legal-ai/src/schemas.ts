@@ -197,10 +197,18 @@ export const ChatCitationSchema = z.object({
   kind: z.enum(["DOCUMENT", "TIMELINE", "DEADLINE", "CASELAW", "STATUTE"]),
   refId: z.string().optional(),
   chunkId: z.string().optional(),
-  // 0-indeksli sayfa geçerli (bkz. SourceRefSchema).
-  page: z.number().int().min(0).optional(),
+  // 0-indeksli sayfa geçerli (bkz. SourceRefSchema). Küçük yerel modeller sayfa
+  // bilmediğinde `null` yazar (canlı bulgu, Gemma 4): null "yok" sayılır, tüm
+  // yanıt şema reddine düşmez.
+  page: z
+    .number()
+    .int()
+    .min(0)
+    .nullable()
+    .optional()
+    .transform((v) => v ?? undefined),
   /** Cevabı destekleyen birebir alıntı. */
-  quote: z.string().optional(),
+  quote: z.string().nullable().optional().transform((v) => v ?? undefined),
   label: z.string().min(1),
 });
 
