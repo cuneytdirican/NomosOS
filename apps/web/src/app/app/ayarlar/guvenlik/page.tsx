@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError, clearToken } from "@/lib/api";
 import { Badge, Button, Card, ErrorBox, Field, Input, Select, Spinner, SuccessBox, Switch } from "@/components/ui";
+import { SessionsCard } from "./sessions-card";
 
 interface Me {
   id: string;
@@ -302,6 +303,9 @@ export default function GuvenlikPage() {
           </Button>
         </div>
       </Card>
+
+      {/* Enterprise++: cihaz bazlı oturum listesi — tek cihazı kapatma. */}
+      <SessionsCard />
 
       {policy && (
         <Card title="Büro güvenlik politikası">

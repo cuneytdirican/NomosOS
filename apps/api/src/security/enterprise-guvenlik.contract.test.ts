@@ -190,6 +190,34 @@ describe("SSO / OIDC kurumsal giriş", () => {
   });
 });
 
+describe("cihaz bazlı oturum listesi", () => {
+  it("şema, jti, guard iptal denetimi, uçlar, temizlik işi, ekranlar", () => {
+    expect(schema).toContain("model UserSession {");
+    expect(schema).toContain("jti         String    @unique");
+    expect(read("src", "common", "types.ts")).toContain("jti?: string;");
+    const session = read("src", "auth", "session.service.ts");
+    expect(session).toContain("this.sessions.record(");
+    expect(session).toContain("export function sessionMetaFrom(");
+    const guard = read("src", "common", "guards", "jwt-auth.guard.ts");
+    expect(guard).toContain("resolveSession(payload.jti)");
+    expect(guard).toContain("Bu cihazdaki oturum kapatılmış");
+    // Üç giriş yolu da cihaz bilgisini geçirir.
+    const authCtrl = read("src", "auth", "auth.controller.ts");
+    expect(authCtrl).toContain("this.authService.login(body, sessionMetaFrom(request))");
+    expect(authCtrl).toContain("this.twoFactor.verify(body, sessionMetaFrom(request))");
+    expect(read("src", "auth", "sso.controller.ts")).toContain("this.sso.callback(code, state, sessionMetaFrom(request))");
+    const sc = read("src", "auth", "sessions.controller.ts");
+    expect(sc).toContain('@Controller("auth/sessions")');
+    expect(sc).toContain('@Delete(":id")');
+    const uc = read("src", "users", "users.controller.ts");
+    expect(uc).toContain('@Get(":id/sessions")');
+    expect(uc).toContain('@Delete(":id/sessions/:sid")');
+    expect(read("src", "scheduler", "jobs", "oturum-temizligi.job.ts")).toContain("oturum-temizligi");
+    expect(read("..", "web", "src", "app", "app", "ayarlar", "guvenlik", "page.tsx")).toContain("<SessionsCard />");
+    expect(read("..", "web", "src", "app", "app", "ayarlar", "kullanicilar", "page.tsx")).toContain("/sessions");
+  });
+});
+
 describe("arayüz", () => {
   it("web: güvenlik / denetim / bildirimler sayfaları + menü; giriş 2FA adımı", () => {
     expect(read("..", "web", "src", "app", "app", "ayarlar", "guvenlik", "page.tsx")).toContain("/auth/2fa/setup");

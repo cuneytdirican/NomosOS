@@ -158,6 +158,27 @@ Hukuki karar `docs/kvkk-politika-matrisi.md`'den alındı: Av. K. m.39 saklama (
 - **Ekran:** `/app/ayarlar/sso` (yapılandırma + bağlantı testi + geri dönüş adresi),
   giriş sayfasında "Kurumsal giriş (SSO)" düğmesi (e-posta alanına göre yönlendirir).
 
-## 11. Sonraki Enterprise++ adayları (kodlanmadı — karar/kapsam ister)
+## 11. Cihaz bazlı oturum listesi (altıncı paket)
 
-- **Oturum listesi (cihaz bazlı iptal)** — bugün "tümünü düşür" var.
+- **Kayıt:** her giriş (parola / parola+2fa / sso) `UserSession` satırı üretir; JWT `jti`
+  taşır; User-Agent → okunur etiket (`user-agent.ts`: "Chrome · Windows", "Safari ·
+  iPhone", "NomosOS mobil (Android)"), IP, giriş yolu, son etkinlik, bitiş.
+- **Denetim:** `JwtAuthGuard.resolveSession` her istekte iptali denetler (30 sn önbellek —
+  kullanıcı önbelleğiyle aynı gecikme), `lastSeenAt`'i en fazla 5 dk'da bir yazar; jti'siz
+  eski token'lar geriye uyumlu. "Açık" = iptal yok + süre dolmamış + `sessionsValidFrom`
+  sonrası (tümünü-düşür mekanizması korunur, satırlar tek tek işaretlenmez).
+- **Uçlar:** `GET /auth/sessions` (bu cihaz işaretli), `DELETE /auth/sessions/:id` (bu cihaz
+  dâhil), `DELETE /auth/sessions` (diğer cihazlar); yönetici `GET /users/:id/sessions`,
+  `DELETE /users/:id/sessions/:sid` (ADMIN/PARTNER, kiracı sınırı). Denetim izi
+  `SESSION_REVOKE`. Temizlik işi `oturum-temizligi-gunluk` (30 günü geçmiş süresi
+  dolmuş/iptal kayıtlar; açık oturumlara dokunmaz).
+- **Ekran:** Ayarlar → Güvenlik "Açık oturumlar" kartı (Kapat / Bu cihazdan çık / Diğer
+  cihazları kapat); Kullanıcılar → "Oturumlar" penceresi (yönetici tek cihazı kapatır).
+
+## 12. Enterprise++ aday listesi — TAMAMLANDI
+
+Belgede söz verilen altı aday (2FA + politika + denetim + bildirim tercihleri; gizli
+dosya; KVKK saklama/imha; API anahtarı/webhook; SSO/OIDC; cihaz bazlı oturum) kodlandı.
+Kapsam dışı bırakılanlar, gerekçesiyle: **SAML** (§10), **IP kısıtı** (VPN/proxy arkasında
+yanlış pozitif üretir; talep gelirse `Tenant.allowedCidrs` + guard olarak eklenir).
+

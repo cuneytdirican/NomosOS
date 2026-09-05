@@ -226,7 +226,7 @@ describe("callback", () => {
     tokenEndpoint({ iss: ISSUER, aud: ["nomosos-client", "other"], nonce, exp, sub: "sub-1" }); // email yok → userinfo
     const r = await ctx.svc.callback("c", state);
     expect(r.accessToken).toBe("tok-u1");
-    expect(ctx.session.issue).toHaveBeenCalledWith(expect.objectContaining({ id: "u1", role: "AVUKAT" }), "sso");
+    expect(ctx.session.issue).toHaveBeenCalledWith(expect.objectContaining({ id: "u1", role: "AVUKAT" }), "sso", undefined);
     expect(ctx.users[0].ssoSubject).toBe("sub-1");
     expect(ctx.audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: "SSO_LINK" }));
   });

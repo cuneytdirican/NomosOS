@@ -7,6 +7,7 @@ import {
   type LoginInput,
 } from "@nomosos/shared";
 import { AuthService } from "./auth.service";
+import { sessionMetaFrom } from "./session.service";
 import { TwoFactorService } from "./two-factor.service";
 import {
   twoFactorDisableSchema,
@@ -51,7 +52,7 @@ export class AuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response
   ) {
-    const result = await this.authService.login(body);
+    const result = await this.authService.login(body, sessionMetaFrom(request));
     await this.loginThrottle.reset(request);
     // 2FA challenge yanıtında oturum yoktur — çerez yazılmaz.
     if ("accessToken" in result) {
@@ -80,7 +81,7 @@ export class AuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response
   ) {
-    const result = await this.twoFactor.verify(body);
+    const result = await this.twoFactor.verify(body, sessionMetaFrom(request));
     await this.loginThrottle.reset(request);
     response.cookie(AUTH_COOKIE_NAME, result.accessToken, {
       ...authCookieOptions(),

@@ -1,8 +1,9 @@
-import { Body, Controller, Get, HttpCode, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from "@nestjs/common";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe";
 import type { AuthUser } from "../common/types";
 import { UsersService } from "./users.service";
+import { UserSessionsService } from "../auth/user-sessions.service";
 import {
   createUserSchema,
   resetUserPasswordSchema,
@@ -25,7 +26,23 @@ import {
  */
 @Controller("users")
 export class UsersController {
-  constructor(private readonly users: UsersService) {}
+  constructor(
+    private readonly users: UsersService,
+    private readonly sessions: UserSessionsService,
+  ) {}
+
+  /** Enterprise++: kullanıcının açık cihaz oturumları (ADMIN/PARTNER). */
+  @Get(":id/sessions")
+  listSessions(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.sessions.listForUser(user, id);
+  }
+
+  /** Enterprise++: tek cihaz oturumunu kapat. */
+  @Delete(":id/sessions/:sid")
+  @HttpCode(200)
+  revokeSession(@CurrentUser() user: AuthUser, @Param("id") id: string, @Param("sid") sid: string) {
+    return this.sessions.revokeForUser(user, id, sid);
+  }
 
   @Get()
   list(@CurrentUser() user: AuthUser) {

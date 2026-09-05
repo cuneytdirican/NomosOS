@@ -19,6 +19,7 @@ import { webOrigin } from "../common/public-urls";
 import type { AuthUser } from "../common/types";
 import { LoginThrottleGuard } from "./login-throttle.guard";
 import { SsoService } from "./sso.service";
+import { sessionMetaFrom } from "./session.service";
 
 const startSchema = z.object({ email: z.string().trim().email("Geçerli bir e-posta adresi girin.").max(200) });
 const configSchema = z.object({
@@ -66,7 +67,7 @@ export class SsoController {
     if (error) return back(errorDescription ? `Kimlik sağlayıcı reddetti: ${errorDescription}` : `Kimlik sağlayıcı reddetti (${error}).`);
     if (!code || !state) return back("SSO geri dönüşü eksik (code/state).");
     try {
-      const result = await this.sso.callback(code, state);
+      const result = await this.sso.callback(code, state, sessionMetaFrom(request));
       await this.loginThrottle.reset(request);
       response.cookie(AUTH_COOKIE_NAME, result.accessToken, { ...authCookieOptions(), maxAge: result.cookieMaxAgeMs });
       return response.redirect(`${webOrigin()}/app`);

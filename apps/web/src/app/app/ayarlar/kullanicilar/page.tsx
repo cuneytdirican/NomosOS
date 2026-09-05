@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { USER_ROLE_LABELS } from "@/lib/labels";
+import { VIA_LABELS, fmtDate, type SessionRow } from "../guvenlik/sessions-card";
 import {
   Badge,
   Button,
@@ -79,6 +80,9 @@ export default function KullanicilarPage() {
   const [newPassword, setNewPassword] = useState("");
   const [pwBusy, setPwBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // Enterprise++: kullanıcının cihaz oturumları (yönetici görünümü).
+  const [sessUser, setSessUser] = useState<ManagedUser | null>(null);
+  const [sessions, setSessions] = useState<SessionRow[] | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -138,6 +142,28 @@ export default function KullanicilarPage() {
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Güncelleme başarısız.");
+    }
+  }
+
+  async function openSessions(u: ManagedUser) {
+    setSessUser(u);
+    setSessions(null);
+    try {
+      const res = await api<{ items: SessionRow[] }>(`/users/${u.id}/sessions`);
+      setSessions(res.items);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Oturumlar alınamadı.");
+      setSessUser(null);
+    }
+  }
+
+  async function revokeSession(u: ManagedUser, s: SessionRow) {
+    try {
+      await api(`/users/${u.id}/sessions/${s.id}`, { method: "DELETE" });
+      setNotice(`${u.fullName} — ${s.deviceLabel} oturumu kapatıldı.`);
+      await openSessions(u);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Oturum kapatılamadı.");
     }
   }
 
@@ -266,6 +292,9 @@ export default function KullanicilarPage() {
             }}
           >
             Parola Sıfırla
+          </Button>
+          <Button variant="secondary" onClick={() => void openSessions(u)}>
+            Oturumlar
           </Button>
           <Button variant="secondary" onClick={() => void action(u.id, "revoke-sessions", "Oturumlar düşürüldü.")}>
             Oturumları Düşür
@@ -446,6 +475,34 @@ export default function KullanicilarPage() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Enterprise++: cihaz bazlı oturum listesi — yönetici tek cihazı kapatır. */}
+      <Modal open={!!sessUser} onClose={() => setSessUser(null)} title={sessUser ? `${sessUser.fullName} — açık oturumlar` : "Oturumlar"}>
+        {sessions === null ? (
+          <Spinner label="Oturumlar yükleniyor…" />
+        ) : sessions.length === 0 ? (
+          <EmptyState message="Açık oturum yok." />
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {sessions.map((s) => (
+              <li key={s.id} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-medium text-slate-900">{s.deviceLabel}</p>
+                    <Badge tone="gray">{VIA_LABELS[s.via] ?? s.via}</Badge>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    {s.ip ? `${s.ip} · ` : ""}giriş {fmtDate(s.createdAt)} · son etkinlik {fmtDate(s.lastSeenAt)}
+                  </p>
+                </div>
+                <Button size="sm" variant="secondary" onClick={() => sessUser && void revokeSession(sessUser, s)}>
+                  Kapat
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
       </Modal>
     </div>
   );

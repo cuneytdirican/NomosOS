@@ -42,6 +42,7 @@ import { assertRole, ROLE_SETS } from "../common/roles";
 import type { AuthUser } from "../common/types";
 import { apiPublicUrl } from "../common/public-urls";
 import { SessionService, type IssuedSession } from "./session.service";
+import type { SessionMeta } from "./user-sessions.service";
 
 export const SSO_STATE_AUDIENCE = "tenant-sso";
 const STATE_TTL = "10m";
@@ -259,7 +260,7 @@ export class SsoService {
   }
 
   /** IdP geri dönüşü: kod takası → kimlik → kullanıcı → oturum. */
-  async callback(code: string, state: string): Promise<IssuedSession> {
+  async callback(code: string, state: string, meta?: SessionMeta): Promise<IssuedSession> {
     let payload: StatePayload;
     try {
       payload = await this.jwt.verifyAsync<StatePayload>(state, { audience: SSO_STATE_AUDIENCE });
@@ -348,7 +349,7 @@ export class SsoService {
     if (subscription && (subscription.status === "SUSPENDED" || subscription.status === "CANCELED")) {
       throw new ForbiddenException("Büronuzun aboneliği askıda ya da sona ermiş.");
     }
-    return this.session.issue({ id: user.id, tenantId: user.tenantId, email: user.email, fullName: user.fullName, role: user.role }, "sso");
+    return this.session.issue({ id: user.id, tenantId: user.tenantId, email: user.email, fullName: user.fullName, role: user.role }, "sso", meta);
   }
 
   // ------------------------------------------------------------------ //

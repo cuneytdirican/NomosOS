@@ -18,6 +18,7 @@ import { authenticator } from "otplib";
 import * as bcrypt from "bcryptjs";
 import { TwoFactorService } from "./two-factor.service";
 import { SessionService } from "./session.service";
+import type { UserSessionsService } from "./user-sessions.service";
 import type { PrismaService } from "../prisma/prisma.service";
 import type { AuditService } from "../audit/audit.service";
 import { resetAttemptCounterForTests } from "./attempt-counter";
@@ -91,7 +92,8 @@ function harness(opts: { require2fa?: boolean; secret?: string | null } = {}) {
   };
   const prisma = { client } as unknown as PrismaService;
   const auditSvc = { log: vi.fn(async (e: { action: string }) => void audit.push(e.action)) } as unknown as AuditService;
-  const session = new SessionService(prisma, jwt, auditSvc);
+  const sessions = { record: vi.fn(async () => undefined) } as unknown as UserSessionsService;
+  const session = new SessionService(prisma, jwt, auditSvc, sessions);
   const svc = new TwoFactorService(prisma, jwt, auditSvc, session);
   return { svc, user, audit, setSecretEncrypted: (enc: string) => void (user.twoFactorSecret = enc) };
 }

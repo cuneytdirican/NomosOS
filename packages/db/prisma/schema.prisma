@@ -139,6 +139,8 @@ model User {
   twoFactorSecret String?
   /// SSO: kimlik sağlayıcının `sub` kimliği — ilk kurumsal girişte bağlanır.
   ssoSubject      String?
+  /// Enterprise++: cihaz bazlı oturum kayıtları (JWT jti).
+  sessions        UserSession[]
   /// Son kullanılan TOTP adımı — tekrar oynatma koruması (platformla aynı desen).
   lastTotpCounter Int?
 
@@ -4538,6 +4540,30 @@ model WebhookDelivery {
 
   @@index([status, nextAttemptAt])
   @@index([tenantId, endpointId, createdAt])
+}
+
+/// CİHAZ BAZLI OTURUM (Enterprise++): her giriş bir satır (JWT `jti`).
+/// Guard her istekte iptali denetler (30 sn önbellek); "açık" = iptal yok +
+/// süre dolmamış + User.sessionsValidFrom sonrası açılmış.
+model UserSession {
+  id          String    @id @default(uuid())
+  tenantId    String
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jti         String    @unique
+  /// parola | parola+2fa | sso
+  via         String
+  userAgent   String?
+  deviceLabel String
+  ip          String?
+  createdAt   DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  revokedBy   String?
+
+  @@index([userId, revokedAt, expiresAt])
+  @@index([tenantId, createdAt])
 }
 
 /// KVKK VERİ ÖZNESİ TALEBİ (Enterprise++, politika matrisi "T" sütunu).

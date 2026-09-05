@@ -107,6 +107,9 @@ export const AUTH_ROUTES = {
   /** Enterprise++ SSO (OIDC): başlat / IdP geri dönüşü. */
   ssoStart: "/auth/sso/start",
   ssoCallback: "/auth/sso/callback",
+  /** Enterprise++: cihaz bazlı oturum listesi (GET) / diğerlerini kapat (DELETE). */
+  sessions: "/auth/sessions",
+  session: (id: string) => `/auth/sessions/${id}`,
 } as const;
 
 /** Enterprise++: API anahtarları + webhook'lar. */
@@ -143,6 +146,9 @@ export const USERS_ROUTES = {
   detail: (id: string) => `/users/${id}`,
   resetPassword: (id: string) => `/users/${id}/reset-password`,
   revokeSessions: (id: string) => `/users/${id}/revoke-sessions`,
+  /** Enterprise++: kullanıcının cihaz oturumları (yönetici). */
+  sessions: (id: string) => `/users/${id}/sessions`,
+  session: (id: string, sid: string) => `/users/${id}/sessions/${sid}`,
   unlock: (id: string) => `/users/${id}/unlock`,
   /** Enterprise++: yönetici 2FA sıfırlaması (cihaz kaybı). */
   resetTwoFactor: (id: string) => `/users/${id}/reset-2fa`,

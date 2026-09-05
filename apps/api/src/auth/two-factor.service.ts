@@ -36,6 +36,7 @@ import { attemptCounter } from "./attempt-counter";
 import { isFreshTotp, nextStoredCounter, totpCounterAt } from "../platform/auth/totp-replay";
 import { lockRemainingSeconds, recordFailure, CLEARED_LOCKOUT } from "../common/account-lockout";
 import { TENANT_LOCKOUT_POLICY } from "./auth.constants";
+import type { SessionMeta } from "./user-sessions.service";
 import { SessionService, type IssuedSession } from "./session.service";
 import type { AuthUser } from "../common/types";
 
@@ -168,7 +169,7 @@ export class TwoFactorService {
   // Doğrulama → oturum
   // ------------------------------------------------------------------ //
 
-  async verify(input: { challengeToken: string; code: string }): Promise<IssuedSession> {
+  async verify(input: { challengeToken: string; code: string }, meta?: SessionMeta): Promise<IssuedSession> {
     const challenge = await this.readChallenge(input.challengeToken);
     const user = await this.requireActive(challenge.sub);
     this.assertNotLocked(user);
@@ -213,7 +214,7 @@ export class TwoFactorService {
         entityId: user.id,
         detail: `${user.email} — iki adımlı doğrulama etkinleştirildi.`,
       });
-      return this.session.issue(this.toSessionUser(user), "parola+2fa");
+      return this.session.issue(this.toSessionUser(user), "parola+2fa", meta);
     }
 
     if (!user.twoFactorSecret) {
@@ -234,7 +235,7 @@ export class TwoFactorService {
       where: { id: user.id, OR: [{ failedAttempts: { gt: 0 } }, { lockedUntil: { not: null } }] },
       data: CLEARED_LOCKOUT,
     });
-    return this.session.issue(this.toSessionUser(user), "parola+2fa");
+    return this.session.issue(this.toSessionUser(user), "parola+2fa", meta);
   }
 
   // ------------------------------------------------------------------ //

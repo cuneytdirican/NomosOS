@@ -20,6 +20,16 @@ import { API_KEY_HEADER } from "../../integrations/api-keys.service";
  */
 const USER_CACHE_TTL_MS = 30_000;
 
+/** jti → oturum kaydı (kısa ömürlü) — iptal denetimi her istekte DB'ye gitmesin. */
+interface CachedSession {
+  id: string;
+  revoked: boolean;
+  lastSeenAt: number;
+  expiresAt: number;
+}
+/** lastSeenAt en fazla bu sıklıkla yazılır. */
+const SESSION_TOUCH_INTERVAL_MS = 5 * 60_000;
+
 interface CachedUser {
   user: AuthUser;
   /** Oturum iptal damgası — önbellekte de taşınır (bkz. `isRevoked`). */
@@ -68,6 +78,8 @@ function isRevoked(payload: JwtPayload, sessionsValidFrom: Date | null): boolean
 export class JwtAuthGuard implements CanActivate {
   /** userId → doğrulanmış kullanıcı (kısa ömürlü). */
   private readonly cache = new Map<string, CachedUser>();
+  /** jti → cihaz oturumu (kısa ömürlü). */
+  private readonly sessionCache = new Map<string, CachedSession>();
 
   constructor(
     private readonly reflector: Reflector,
@@ -122,7 +134,10 @@ export class JwtAuthGuard implements CanActivate {
     // Aksi hâlde pasifleştirilen, rolü düşürülen veya bürodan çıkarılan bir
     // kullanıcının elindeki token 12 saat boyunca eski yetkileriyle geçerli
     // kalırdı; token iptal edilemezdi (denetim bulgusu 13).
-    request.user = await this.resolveUser(payload);
+    const resolved = await this.resolveUser(payload);
+    // ENTERPRISE++ CİHAZ OTURUMU: token `jti` taşıyorsa satırı iptal için
+    // denetle ve isteğe sessionId iliştir (eski, jti'siz token geriye uyumlu).
+    request.user = payload.jti ? { ...resolved, sessionId: await this.resolveSession(payload.jti) } : resolved;
     return true;
   }
 
@@ -151,6 +166,29 @@ export class JwtAuthGuard implements CanActivate {
       void this.prisma.client.apiKey.update({ where: { id: row.id }, data: { lastUsedAt: new Date() } }).catch(() => undefined);
     }
     return { userId: `apikey:${row.id}`, tenantId: row.tenantId, role: "AVUKAT", apiKeyId: row.id };
+  }
+
+  /** Cihaz oturumu: iptal edilmiş/eksik kayıt 401; lastSeenAt seyrek tazelenir. */
+  private async resolveSession(jti: string): Promise<string> {
+    const now = Date.now();
+    let cached = this.sessionCache.get(jti);
+    if (!cached || cached.expiresAt <= now) {
+      const row = await this.prisma.client.userSession.findUnique({
+        where: { jti },
+        select: { id: true, revokedAt: true, lastSeenAt: true },
+      });
+      if (!row) throw new UnauthorizedException("Oturum kaydı bulunamadı. Lütfen tekrar giriş yapın.");
+      cached = { id: row.id, revoked: row.revokedAt !== null, lastSeenAt: row.lastSeenAt.getTime(), expiresAt: now + USER_CACHE_TTL_MS };
+      this.sessionCache.set(jti, cached);
+    }
+    if (cached.revoked) {
+      throw new UnauthorizedException("Bu cihazdaki oturum kapatılmış. Lütfen tekrar giriş yapın.");
+    }
+    if (now - cached.lastSeenAt > SESSION_TOUCH_INTERVAL_MS) {
+      cached.lastSeenAt = now;
+      void this.prisma.client.userSession.update({ where: { id: cached.id }, data: { lastSeenAt: new Date(now) } }).catch(() => undefined);
+    }
+    return cached.id;
   }
 
   /** Kullanıcıyı kısa ömürlü önbellekle doğrular; pasif kullanıcıyı reddeder. */

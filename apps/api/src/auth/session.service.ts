@@ -9,6 +9,9 @@
 
 import { Injectable } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
+import type { Request } from "express";
+import { randomBytes, randomUUID } from "node:crypto";
+import { UserSessionsService, type SessionMeta } from "./user-sessions.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import type { JwtPayload } from "../common/types";
@@ -43,6 +46,7 @@ export class SessionService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly audit: AuditService,
+    private readonly sessions: UserSessionsService,
   ) {}
 
   /** Büronun oturum ömrü politikası (saat). */
@@ -59,13 +63,26 @@ export class SessionService {
    * Oturum üretir + LOGIN_SUCCESS denetim kaydı yazar.
    * `via` denetim izinde giriş yolunu (parola / parola+TOTP) belgeler.
    */
-  async issue(user: SessionUser, via: "parola" | "parola+2fa" | "sso"): Promise<IssuedSession> {
+  async issue(user: SessionUser, via: "parola" | "parola+2fa" | "sso", meta?: SessionMeta): Promise<IssuedSession> {
     const hours = await this.sessionHoursFor(user.tenantId);
-    const payload: JwtPayload = { sub: user.id, tenantId: user.tenantId, role: user.role };
+    // Enterprise++: cihaz bazlı oturum — token `jti` taşır, UserSession satırı
+    // yazılır; guard her istekte iptali denetler (tek cihazı kapatma).
+    const jti = randomBytes(16).toString("hex");
+    const sessionId = randomUUID();
+    const payload: JwtPayload = { sub: user.id, tenantId: user.tenantId, role: user.role, jti };
     // GÜVENLİK: audience damgası (`aud: "tenant"`) — bkz. common/jwt-audience.ts.
     const accessToken = await this.jwt.signAsync(payload, {
       audience: TENANT_JWT_AUDIENCE,
       expiresIn: `${hours}h`,
+    });
+    await this.sessions.record({
+      id: sessionId,
+      tenantId: user.tenantId,
+      userId: user.id,
+      jti,
+      via,
+      expiresAt: new Date(Date.now() + hours * 3_600_000),
+      meta,
     });
     await this.audit.log({
       tenantId: user.tenantId,
@@ -73,7 +90,7 @@ export class SessionService {
       action: "LOGIN_SUCCESS",
       entity: "User",
       entityId: user.id,
-      detail: `${user.email} (${via}, oturum ${hours} sa)`,
+      detail: `${user.email} (${via}, oturum ${hours} sa, ${meta?.userAgent ? "cihaz kaydedildi" : "cihaz bilinmiyor"})`,
     });
     return {
       accessToken,
@@ -81,4 +98,10 @@ export class SessionService {
       user,
     };
   }
+}
+
+/** İstekten cihaz bilgisi (User-Agent + IP) — denetleyiciler oturum üretimine geçirir. */
+export function sessionMetaFrom(request: Request): SessionMeta {
+  const ua = request.headers["user-agent"];
+  return { userAgent: typeof ua === "string" ? ua : null, ip: request.ip ?? null };
 }

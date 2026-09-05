@@ -13,6 +13,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import type { AuthUser } from "../common/types";
 import { SessionService } from "./session.service";
+import type { SessionMeta } from "./user-sessions.service";
 import { TwoFactorService } from "./two-factor.service";
 import {
   CLEARED_LOCKOUT,
@@ -53,7 +54,7 @@ export class AuthService {
     private readonly twoFactor: TwoFactorService
   ) {}
 
-  async login(input: LoginInput) {
+  async login(input: LoginInput, meta?: SessionMeta) {
     const user = await this.prisma.client.user.findUnique({ where: { email: input.email } });
     if (!user || !user.isActive) {
       // Başarısız denemeler de denetlenir (denetim bulgusu 19). Kullanıcı
@@ -141,6 +142,7 @@ export class AuthService {
     return this.session.issue(
       { id: user.id, tenantId: user.tenantId, email: user.email, fullName: user.fullName, role: user.role },
       "parola",
+      meta,
     );
   }
 

@@ -28,6 +28,8 @@ import { AautYilbasiJob } from "./jobs/aaut-yilbasi.job";
 import { KvkkSaklamaJob } from "./jobs/kvkk-saklama.job";
 import { WebhookDispatchJob } from "./jobs/webhook-dispatch.job";
 import { IntegrationsModule } from "../integrations/integrations.module";
+import { OturumTemizligiJob } from "./jobs/oturum-temizligi.job";
+import { AuthModule } from "../auth/auth.module";
 import { VekaletUcretiModule } from "../vekalet-ucreti/vekalet-ucreti.module";
 import { SecurityModule } from "../security/security.module";
 
@@ -72,7 +74,7 @@ import { DeviceTokensService } from "./device-tokens.service";
  * ajanının işidir.
  */
 @Module({
-  imports: [PlatformModule, CreditsModule, RiskModule, VekaletUcretiModule, SecurityModule, IntegrationsModule],
+  imports: [PlatformModule, CreditsModule, RiskModule, VekaletUcretiModule, SecurityModule, IntegrationsModule, AuthModule],
   controllers: [
     // Platform (/api/admin/v1/jobs) — PlatformJwtGuard + yetki matrisi.
     PlatformJobsController,
@@ -124,6 +126,8 @@ import { DeviceTokensService } from "./device-tokens.service";
     KvkkSaklamaJob,
     // Webhook dağıtımı (Enterprise++ entegrasyonlar).
     WebhookDispatchJob,
+    // Cihaz oturumu kayıt temizliği (Enterprise++).
+    OturumTemizligiJob,
 
     // --- uç servisleri ---
     PlatformJobsService,

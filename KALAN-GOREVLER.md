@@ -23,7 +23,28 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 5 Eylül 2026, 14:00
+# 🔖 KALDIĞIM YER — 5 Eylül 2026, 15:30
+
+> **Enterprise++ altıncı (SON) paket — CİHAZ BAZLI OTURUM LİSTESİ** kodlandı
+> (`docs/enterprise-guvenlik.md` §11). Belgede söz verilen altı aday tamamlandı (§12).
+> Docker yığını yeniden kuruluyor; canlı duman testi (`smoke3.sh`: iki cihaz, tekil
+> kapatma, diğerlerini kapatma, yönetici görünümü, SSO uçları, temizlik işi) sırada.
+
+1. **Kayıt:** `UserSession` (JWT `jti`), UA → etiket (`user-agent.ts`), IP, giriş yolu;
+   üç giriş yolu (parola/2FA/SSO) `sessionMetaFrom(request)` geçirir.
+2. **Guard:** `resolveSession(jti)` — iptal 401, 30 sn önbellek, `lastSeenAt` 5 dk'da
+   bir; jti'siz eski token geriye uyumlu; `AuthUser.sessionId`.
+3. **Uçlar:** `GET/DELETE /auth/sessions`, `DELETE /auth/sessions/:id`; yönetici
+   `GET /users/:id/sessions`, `DELETE /users/:id/sessions/:sid`. İş
+   `oturum-temizligi-gunluk`. Ekranlar: Güvenlik "Açık oturumlar" kartı, Kullanıcılar
+   "Oturumlar" penceresi.
+4. Testler: `user-agent.test`, `user-sessions.service.test`, `jwt-auth.guard.session.test`,
+   sözleşme; api 1231/1231, web 100/100, lint 0.
+5. Sırada: Docker duman testi sonucu → gerekirse düzeltme; ardından bellek/özet notu.
+
+---
+
+## 🔖 ÖNCEKİ KALDIĞIM YER — 5 Eylül 2026, 14:00
 
 > **Enterprise++ beşinci paket — SSO / OIDC KURUMSAL GİRİŞ** kodlandı
 > (`docs/enterprise-guvenlik.md` §10). Docker test yığını her paket sonrası yeniden
