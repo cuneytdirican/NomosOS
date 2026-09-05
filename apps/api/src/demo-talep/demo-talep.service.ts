@@ -15,9 +15,10 @@
  * (statusChangedBy platform tarafında dolu gelir).
  */
 
-import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
+import { HttpException, HttpStatus, Injectable, Logger } from "@nestjs/common";
 import { z } from "zod";
 import { PrismaService } from "../prisma/prisma.service";
+import { MailService } from "../mail/mail.service";
 
 export const demoTalepSchema = z.object({
   fullName: z.string().trim().min(2, "Ad soyad zorunludur.").max(200),
@@ -34,11 +35,15 @@ const DEDUPE_WINDOW_MS = 10 * 60_000;
 
 @Injectable()
 export class DemoTalepService {
+  private readonly logger = new Logger(DemoTalepService.name);
   private readonly minuteHits = new Map<string, number[]>();
   private readonly hourHits = new Map<string, number[]>();
   private readonly recentEmails = new Map<string, number>();
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mail: MailService,
+  ) {}
 
   private rateLimited(ip: string): boolean {
     const now = Date.now();
@@ -87,8 +92,28 @@ export class DemoTalepService {
       },
     });
 
+    // Faz 2: satış ekibine e-posta (PLATFORM_NOTIFY_EMAIL). Gönderim başarısız
+    // olsa da talep kaydı durur; admin paneli tek doğru kaynaktır.
+    await this.notifyPlatform(row.id, input);
+
     // Yanıt minimidir: kayıt kimliği ve eylem talimatı değil, sadece alınmış
     // olduğu bilgisi (spam botuna yüzey azaltmak için).
     return { ok: true as const, id: row.id };
+  }
+
+  private async notifyPlatform(id: string, input: z.infer<typeof demoTalepSchema>): Promise<void> {
+    const to = process.env.PLATFORM_NOTIFY_EMAIL?.trim();
+    if (!to || !this.mail.configured) return;
+    const res = await this.mail.send({
+      to,
+      subject: `NomosOS — yeni demo talebi: ${input.fullName}`,
+      replyTo: input.email,
+      text:
+        `Yeni demo talebi alındı (kayıt: ${id}).\n\n` +
+        `Ad Soyad: ${input.fullName}\nE-posta: ${input.email}\nTelefon: ${input.phone ?? "-"}\n` +
+        `Baro: ${input.barAssociation ?? "-"}\nAvukat sayısı: ${input.lawyerCount ?? "-"}\n\n` +
+        `Mesaj:\n${input.message ?? "-"}\n\nAdmin paneli > Demo talepleri üzerinden yanıtlayın.`,
+    });
+    if (!res.sent) this.logger.warn(`Demo talebi e-postası gönderilemedi: ${res.reason}`);
   }
 }

@@ -37,6 +37,12 @@
       "expo-router",
       "expo-secure-store",
       [
+        "expo-notifications",
+        {
+          "color": "#D97706"
+        }
+      ],
+      [
         "expo-local-authentication",
         {
           "faceIDPermission": "Uygulamayı yüz tanıma ile açmak için kullanılır."

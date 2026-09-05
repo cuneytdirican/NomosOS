@@ -23,7 +23,34 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 5 Eylül 2026, 23:30
+# 🔖 KALDIĞIM YER — 6 Eylül 2026, 01:30
+
+> Üç persona planı (`~/.claude/plans/wiggly-giggling-lighthouse.md`) yürüyor:
+> **Faz 0 ✅ · Faz 1 ✅ · Faz 2 ✅ (bu commit)** · sırada Faz 3 (gelir hattı).
+
+**FAZ 2 — BİLDİRİM GERÇEK KANALLAR TAMAMLANDI** (belge: `docs/faz2-bildirim-kanallari.md`):
+1. **SMTP tam çalışır:** `MailService` (@Global, nodemailer, SMTP_*); tanımsızsa dürüst
+   `{sent:false,reason}`. Test yığınında **Mailpit** (`localhost:8025`).
+2. **Kanal adaptörleri:** `SmtpChannelProvider`, `NetgsmSmsProvider` (REST v2), `WhatsAppCloudProvider`
+   (Graph v20, şablon/metin) — env'e göre `ChannelProviderRegistry`'ye kaydolur; 9 fixture testi.
+3. **Push:** `ExpoPushProvider` (`PUSH_PROVIDER=expo`), mobil `push-token.ts` gerçek Expo jetonu
+   (`expo-notifications`/`expo-device`), `DeviceNotRegistered` → jeton pasif.
+4. **İşler:** `bildirim-dagitimi-5dk` (outbox → e-posta/push, `dispatchedAt` tek damga),
+   `bildirim-temizligi-gunluk` (90/180 gün).
+5. **Büro parola sıfırlama:** `POST /auth/forgot-password|reset-password`, `PasswordResetToken`
+   (SHA-256, 30 dk, tek kullanım), web `/sifre-unuttum`, `/sifre-sifirla`, giriş bağlantısı.
+6. **Demo talebi → `PLATFORM_NOTIFY_EMAIL`**; **duyurular** `GET /notifications/announcements`
+   + web `AnnouncementBanner` (TUM/PLAN_BAZLI/TENANT_BAZLI hedefleme).
+Migration `20260925100000_faz2_bildirim_kanallari`. Testler: api 1314, web 100; lint 0.
+
+**SIRADA: FAZ 3 — gelir hattı:** dönem faturası (`InvoiceRecord(type=SUBSCRIPTION)`, tenant+dönem
+tekil), iyzico adaptörü + webhook imza + kredi satın alma `BEKLIYOR→ODENDI`, dunning (PAST_DUE
+1/3/7 gün e-posta → Faz 0 guard), `@RequiresModule` guard (`features.modules`), `Coupon` modeli
+(BYO-LLM %30), yıllık fiyat/pro-rata, fatura PDF (`pdfkit`) + e-fatura ayarı tenant başına.
+
+---
+
+## 🔖 ÖNCEKİ KALDIĞIM YER — 5 Eylül 2026, 23:30
 
 > Üç persona planı (`~/.claude/plans/wiggly-giggling-lighthouse.md`) yürüyor:
 > **Faz 0 ✅ (`eaccbb4`) · Faz 1 ✅ (`8889048` + `524afaf`)** · sırada Faz 2.

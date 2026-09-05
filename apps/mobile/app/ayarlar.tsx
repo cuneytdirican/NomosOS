@@ -97,7 +97,7 @@ export default function SettingsScreen(): React.JSX.Element {
    * ║ kaydın tek etkisi bu açığı ayakta tutmaktı. Sunucu da artık          ║
    * ║ türetilmiş jetonları reddediyor (device-tokens.schemas.ts).          ║
    * ║                                                                      ║
-   * ║ FCM/APNs eklendiğinde: `getDevicePushTokenAsync()` ile alınan gerçek ║
+   * ║ Faz 2: Expo push jetonu (`getExpoPushTokenAsync`) `push-token.ts`'ten   ║
    * ║ jeton `registerDevice(token, platform)` çağrısına verilecek; bu      ║
    * ║ ekranda değişecek tek şey jetonun KAYNAĞIDIR.                        ║
    * ╚══════════════════════════════════════════════════════════════════════╝
@@ -112,11 +112,9 @@ export default function SettingsScreen(): React.JSX.Element {
     if (providerToken === null) {
       setDeviceState("unavailable");
       setDeviceMessage(
-        "Bu derlemede anlık bildirim sağlayıcısı (FCM/APNs) yapılandırılmamış; gerçek bir cihaz " +
-          "jetonu alınamıyor. Kimlikten türetilmiş sahte bir jeton KAYDEDİLMEZ — böyle bir jeton " +
-          "tahmin edilebilir olduğu için başkasının bildirimlerini bu cihaza yönlendirmeye açık " +
-          "kapı bırakırdı. Süre ve duruşma hatırlatmaları uygulama içinde tam olarak çalışmaya " +
-          "devam ediyor.",
+        "Anlık bildirim jetonu alınamadı: bildirim izni verilmemiş olabilir ya da bu bir simülatördür " +
+          "(push yalnız fiziksel cihazda çalışır). Kimlikten türetilmiş sahte bir jeton KAYDEDİLMEZ. " +
+          "Süre ve duruşma hatırlatmaları uygulama içinde tam olarak çalışmaya devam ediyor.",
       );
       return;
     }

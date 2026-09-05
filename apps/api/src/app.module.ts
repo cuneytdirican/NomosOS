@@ -31,6 +31,7 @@ import { FinanceModule } from "./finance/finance.module";
 import { BillingModule } from "./billing/billing.module";
 import { VekaletUcretiModule } from "./vekalet-ucreti/vekalet-ucreti.module";
 import { DemoTalepModule } from "./demo-talep/demo-talep.module";
+import { MailModule } from "./mail/mail.module";
 import { RandevuModule } from "./randevu/randevu.module";
 import { UyapModule } from "./uyap/uyap.module";
 import { ChatModule } from "./chat/chat.module";
@@ -155,6 +156,7 @@ function requireJwtSecret(config: ConfigService): string {
     VekaletUcretiModule,
     // Demo talepleri (pazarlama formu → DemoRequest kaydı; panel izler).
     DemoTalepModule,
+    MailModule,
     RandevuModule,
     // UYAP Köprüsü arka ucu (docs/05-uyap-entegrasyonu.md).
     UyapModule,

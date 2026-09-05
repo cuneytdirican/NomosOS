@@ -13,6 +13,9 @@ import { NotificationOutboxService } from "./notification-outbox.service";
 import { TenantRecipientsService } from "./tenant-recipients";
 import { IoredisProbe, REDIS_PROBE } from "./redis-connection";
 import { NoopPushProvider, PUSH_PROVIDER } from "./push/push-provider";
+import { ExpoPushProvider } from "./push/expo-push.provider";
+import { BildirimDagitimiJob } from "./jobs/bildirim-dagitimi.job";
+import { BildirimTemizligiJob } from "./jobs/bildirim-temizligi.job";
 
 import { UsageSnapshotJob } from "./jobs/usage-snapshot.job";
 import { DeadlineReminderJob } from "./jobs/deadline-reminder.job";
@@ -98,7 +101,8 @@ import { DeviceTokensService } from "./device-tokens.service";
      * Push sağlayıcısı: bu fazda NOOP. Gerçek FCM/APNs eklendiğinde YALNIZ bu
      * satır değişir; bildirim üreten işler ve uçlar aynı kalır.
      */
-    { provide: PUSH_PROVIDER, useClass: NoopPushProvider },
+    // Faz 2: PUSH_PROVIDER=expo → Expo Push API; aksi hâlde dürüst Noop (configured=false).
+    { provide: PUSH_PROVIDER, useFactory: () => (process.env.PUSH_PROVIDER === "expo" ? new ExpoPushProvider() : new NoopPushProvider()) },
 
     // --- işler ---
     UsageSnapshotJob,
@@ -128,6 +132,8 @@ import { DeviceTokensService } from "./device-tokens.service";
     WebhookDispatchJob,
     // Cihaz oturumu kayıt temizliği (Enterprise++).
     OturumTemizligiJob,
+    BildirimDagitimiJob,
+    BildirimTemizligiJob,
 
     // --- uç servisleri ---
     PlatformJobsService,

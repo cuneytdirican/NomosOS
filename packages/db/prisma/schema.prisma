@@ -143,6 +143,7 @@ model User {
   sessions        UserSession[]
   /// Faz 1: sorumlu avukat olduğu duruşmalar.
   attendedHearings Hearing[] @relation("HearingAttendee")
+  passwordResets   PasswordResetToken[]
   /// Son kullanılan TOTP adımı — tekrar oynatma koruması (platformla aynı desen).
   lastTotpCounter Int?
 
@@ -4490,6 +4491,8 @@ model NotificationOutbox {
   scheduledFor DateTime?
   sentAt       DateTime?
   readAt       DateTime?
+  /// Faz 2: dış kanal dağıtımı (e-posta/push) denendi mi — bir kez damgalanır.
+  dispatchedAt DateTime?
 
   createdAt DateTime @default(now())
 
@@ -4497,6 +4500,7 @@ model NotificationOutbox {
   @@index([tenantId, status, scheduledFor])
   @@index([tenantId, userId, status])
   @@index([tenantId, kind, createdAt])
+  @@index([dispatchedAt, status])
 }
 
 /// API ANAHTARI (Enterprise++ entegrasyon): SALT-OKUNUR, kapsamlı (X-Api-Key).
@@ -4638,6 +4642,22 @@ model NotificationPreference {
 /// kullanıcıya geçerse (cihaz devri, çıkış-giriş) kayıt GÜNCELLENİR —
 /// bu yüzden @@unique([token]) tenant'tan bağımsızdır ve bir cihaz iki
 /// kiracıya aynı anda bildirim alamaz.
+/// Faz 2: büro kullanıcısı parola sıfırlama jetonu (SHA-256 özeti; ham jeton yalnız e-postada).
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  tenantId  String
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  requestIp String?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, usedAt])
+}
+
 model DeviceToken {
   id       String @id @default(uuid())
   tenantId String

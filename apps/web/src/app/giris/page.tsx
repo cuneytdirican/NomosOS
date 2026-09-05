@@ -244,6 +244,12 @@ export default function GirisPage() {
             {ssoLoading ? "Yönlendiriliyor…" : "Kurumsal giriş (SSO)"}
           </Button>
 
+          <p className="text-center text-sm">
+            <Link href="/sifre-unuttum" className="text-slate-500 hover:text-amber-700 hover:underline">
+              Parolamı unuttum
+            </Link>
+          </p>
+
           {/* Demo incelemesi AYRI sayfadadır: rol seçerek gezme (Partner /
               Avukat / Sekreter / Stajyer). Demo kimlik bilgileri gerçek giriş
               ekranında durmaz (üretim derlemesinde sızdırma olmasın). */}

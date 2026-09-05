@@ -16,6 +16,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { DemoTalepService } from "./demo-talep.service";
+import type { MailService } from "../mail/mail.service";
 import type { PrismaService } from "../prisma/prisma.service";
 
 function serviceWith(over?: { existing?: unknown }) {
@@ -32,7 +33,8 @@ function serviceWith(over?: { existing?: unknown }) {
       },
     },
   } as unknown as PrismaService;
-  return { svc: new DemoTalepService(prisma), created };
+  const mail = { configured: false, send: async () => ({ sent: false, reason: "test" }) } as unknown as MailService;
+  return { svc: new DemoTalepService(prisma, mail), created };
 }
 
 const GIRIS = {

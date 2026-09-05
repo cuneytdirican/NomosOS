@@ -99,6 +99,9 @@ export const AUTH_ROUTES = {
   /** Sunucu tarafı çıkış — oturum damgası tüm cihazları düşürür (Ö-34). */
   logout: "/auth/logout",
   changePassword: "/auth/change-password",
+  /** Faz 2: büro kullanıcısı parola sıfırlama (e-posta bağlantısı). */
+  forgotPassword: "/auth/forgot-password",
+  resetPassword: "/auth/reset-password",
   /** Enterprise++ 2FA (TOTP): ikinci adım / kurulum / kapatma. */
   twoFactorVerify: "/auth/2fa/verify",
   twoFactorSetup: "/auth/2fa/setup",
@@ -461,6 +464,8 @@ export const NOTIFICATION_ROUTES = {
   read: (id: string) => `/notifications/${id}/read`,
   /** Enterprise++: bildirim tercihleri (tür × kanal). */
   preferences: "/notifications/preferences",
+  /** Faz 2: kiracıya ulaşan platform duyuruları (web şeridi). */
+  announcements: "/notifications/announcements",
 } as const;
 
 /** Mobil cihaz push token'ları (Faz 6). */

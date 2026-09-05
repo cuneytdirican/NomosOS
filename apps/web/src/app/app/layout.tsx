@@ -9,6 +9,7 @@ import { USER_ROLE_LABELS } from "@/lib/labels";
 import { getDemoRole } from "@/lib/api";
 // Modül 26 — üst çubuktaki kredi göstergesi ve %80 uyarı şeridi.
 import { CreditErrorAlert, CreditMeter, CreditWarningBanner, useWallet } from "@/components/credits";
+import { AnnouncementBanner } from "@/components/announcement-banner";
 // Faz 6 — üst çubuktaki bildirim zili (tüm /app sayfalarında).
 import { NotificationBell } from "./_components/notification-bell";
 // Modül 27 — her sayfada bağlamsal yardım (özet + bölüme tek tık + Yardım Merkezi araması).
@@ -773,6 +774,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           </button>
         </header>
         <main className="flex-1 space-y-4 p-6 print:p-0">
+          <AnnouncementBanner />
           <CreditWarningBanner wallet={wallet} />
           <CreditErrorAlert />
           {children}

@@ -98,6 +98,28 @@ export class NotificationsService {
     };
   }
 
+  /**
+   * Faz 2 — platform duyuruları. Hedefleme `targetJson`: PLAN_BAZLI → { planKeys },
+   * TENANT_BAZLI → { tenantIds }. Süresi dolan ya da yayınlanmamış duyuru görünmez.
+   */
+  async activeAnnouncements(tenantId: string) {
+    const now = new Date();
+    const [rows, subscription] = await Promise.all([
+      this.prisma.client.announcement.findMany({
+        where: { publishedAt: { lte: now }, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+        orderBy: { publishedAt: "desc" },
+        take: 20,
+        select: { id: true, title: true, body: true, severity: true, audience: true, targetJson: true, publishedAt: true, expiresAt: true },
+      }),
+      this.prisma.client.subscription.findFirst({ where: { tenantId }, select: { planKey: true } }),
+    ]);
+    const planKey = subscription?.planKey ?? null;
+    const items = rows
+      .filter((a) => announcementTargetsTenant(a, tenantId, planKey))
+      .map(({ targetJson: _t, ...rest }) => rest);
+    return { items };
+  }
+
   async list(
     user: AuthUser,
     query: { status?: string; kind?: string; unreadOnly?: string; page?: string; limit?: string }
@@ -225,4 +247,22 @@ function toDto(row: {
     // `dedupeKey` BİLİNÇLİ OLARAK DIŞA VERİLMEZ: iç idempotentlik ayrıntısıdır
     // ve kaynak kimliklerini (deadlineId, userId) düz metin taşır.
   };
+}
+
+/** Duyuru hedefi bu kiracıyı kapsıyor mu? (saf; testlenebilir) */
+export function announcementTargetsTenant(
+  a: { audience: string; targetJson: string | null },
+  tenantId: string,
+  planKey: string | null,
+): boolean {
+  if (a.audience === "TUM") return true;
+  let target: { planKeys?: unknown; tenantIds?: unknown } = {};
+  try {
+    target = a.targetJson ? (JSON.parse(a.targetJson) as typeof target) : {};
+  } catch {
+    return false;
+  }
+  if (a.audience === "PLAN_BAZLI") return Array.isArray(target.planKeys) && planKey !== null && target.planKeys.includes(planKey);
+  if (a.audience === "TENANT_BAZLI") return Array.isArray(target.tenantIds) && target.tenantIds.includes(tenantId);
+  return false;
 }

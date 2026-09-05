@@ -46,6 +46,16 @@ export class NotificationsController {
     return this.notifications.list(user, { status, kind, unreadOnly, page, limit });
   }
 
+  /**
+   * Faz 2 — platform duyuruları (Announcement) kiracıya ulaşır: yayınlanmış,
+   * süresi dolmamış ve hedefi bu büroyu (TUM / PLAN_BAZLI / TENANT_BAZLI) kapsayan
+   * duyurular. Web şeridi bunu gösterir; kapatma istemci tarafında (yerel).
+   */
+  @Get("announcements")
+  announcements(@CurrentUser() user: AuthUser) {
+    return this.notifications.activeAnnouncements(user.tenantId);
+  }
+
   /** Bildirim tercihleri — tür × kanal (Enterprise++). */
   @Get("preferences")
   preferences(@CurrentUser() user: AuthUser) {

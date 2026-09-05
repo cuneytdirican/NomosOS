@@ -75,6 +75,10 @@ export const JOB_KEYS = {
   WEBHOOK_DISPATCH: "webhook-dispatch-5dk",
   /** Cihaz oturumu kayıt temizliği — günlük. */
   OTURUM_TEMIZLIGI: "oturum-temizligi-gunluk",
+  /** Faz 2: bekleyen bildirimleri e-posta/push ile dışarı taşır (5 dk). */
+  BILDIRIM_DAGITIMI: "bildirim-dagitimi-5dk",
+  /** Faz 2: eski bildirim kutusu kayıtlarını budar (günlük). */
+  BILDIRIM_TEMIZLIGI: "bildirim-temizligi-gunluk",
 } as const;
 
 export type JobKey = (typeof JOB_KEYS)[keyof typeof JOB_KEYS];

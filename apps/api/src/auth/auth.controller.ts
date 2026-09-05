@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Post, Req, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Ip, Post, Req, Res, UseGuards } from "@nestjs/common";
 import type { Request, Response } from "express";
 import {
   changePasswordSchema,
@@ -20,6 +20,13 @@ import {
   type TwoFactorVerifyInput,
 } from "./two-factor.schemas";
 import { LoginThrottleGuard } from "./login-throttle.guard";
+import {
+  PasswordResetService,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  type ForgotPasswordInput,
+  type ResetPasswordInput,
+} from "./password-reset.service";
 import { Public } from "../common/decorators/public.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe";
@@ -31,7 +38,8 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly twoFactor: TwoFactorService,
-    private readonly loginThrottle: LoginThrottleGuard
+    private readonly loginThrottle: LoginThrottleGuard,
+    private readonly passwordReset: PasswordResetService,
   ) {}
 
   /**
@@ -158,5 +166,25 @@ export class AuthController {
     @Body(new ZodValidationPipe(changePasswordSchema)) body: ChangePasswordInput
   ) {
     return this.authService.changePassword(user, body);
+  }
+
+  /**
+   * Faz 2 — parola sıfırlama (büro kullanıcısı). Her iki uç @Public; giriş
+   * kapısıyla aynı oran sınırı (IP + e-posta başına dakikada 5). Yanıt jeneriktir.
+   */
+  @Public()
+  @UseGuards(LoginThrottleGuard)
+  @Post("auth/forgot-password")
+  @HttpCode(200)
+  forgotPassword(@Ip() ip: string, @Body(new ZodValidationPipe(forgotPasswordSchema)) body: ForgotPasswordInput) {
+    return this.passwordReset.forgot(body, ip);
+  }
+
+  @Public()
+  @UseGuards(LoginThrottleGuard)
+  @Post("auth/reset-password")
+  @HttpCode(200)
+  resetPassword(@Ip() ip: string, @Body(new ZodValidationPipe(resetPasswordSchema)) body: ResetPasswordInput) {
+    return this.passwordReset.reset(body, ip);
   }
 }

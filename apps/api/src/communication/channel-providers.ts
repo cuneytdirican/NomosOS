@@ -37,7 +37,9 @@
  *   sağlayıcı sessizce düşürür ve mesaj "gönderildi" görünür.
  */
 
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
+import { MailService } from "../mail/mail.service";
+import { NetgsmSmsProvider, SmtpChannelProvider, WhatsAppCloudProvider, netgsmConfigFromEnv, whatsappConfigFromEnv } from "./external-providers";
 import type { CommChannel } from "@nomosos/db";
 
 /** Sağlayıcıya verilecek asgari veri — KVKK: yalnız alıcı adresi ve onaylı metin. */
@@ -154,8 +156,18 @@ export class ChannelProviderRegistry {
   private readonly logger = new Logger(ChannelProviderRegistry.name);
   private readonly providers = new Map<CommChannel, MessageChannelProvider>();
 
-  constructor() {
+  /**
+   * Faz 2: gerçek sağlayıcılar ortam değişkenlerine göre kaydedilir. SMTP tanımlıysa
+   * EPOSTA; SMS_PROVIDER_* tanımlıysa Netgsm; WHATSAPP_* tanımlıysa Cloud API.
+   * Tanımsız kanal Noop kalır ve `status()` bunu ayarlar ekranına dürüstçe söyler.
+   */
+  constructor(@Optional() mail?: MailService) {
     this.register(new PortalChannelProvider());
+    if (mail?.configured) this.register(new SmtpChannelProvider(mail));
+    const sms = netgsmConfigFromEnv();
+    if (sms) this.register(new NetgsmSmsProvider(sms));
+    const wa = whatsappConfigFromEnv();
+    if (wa) this.register(new WhatsAppCloudProvider(wa));
   }
 
   register(provider: MessageChannelProvider): void {

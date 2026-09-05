@@ -13,6 +13,8 @@ import { AautYilbasiJob } from "./jobs/aaut-yilbasi.job";
 import { KvkkSaklamaJob } from "./jobs/kvkk-saklama.job";
 import { WebhookDispatchJob } from "./jobs/webhook-dispatch.job";
 import { OturumTemizligiJob } from "./jobs/oturum-temizligi.job";
+import { BildirimDagitimiJob } from "./jobs/bildirim-dagitimi.job";
+import { BildirimTemizligiJob } from "./jobs/bildirim-temizligi.job";
 import type { ScheduledJobHandler } from "./scheduler.types";
 
 /**
@@ -54,7 +56,9 @@ export class JobRegistryService {
     aautYilbasi: AautYilbasiJob,
     kvkkSaklama: KvkkSaklamaJob,
     webhookDispatch: WebhookDispatchJob,
-    oturumTemizligi: OturumTemizligiJob
+    oturumTemizligi: OturumTemizligiJob,
+    bildirimDagitimi: BildirimDagitimiJob,
+    bildirimTemizligi: BildirimTemizligiJob
   ) {
     const all: ScheduledJobHandler[] = [
       usageSnapshot,
@@ -74,6 +78,8 @@ export class JobRegistryService {
       kvkkSaklama,
       webhookDispatch,
       oturumTemizligi,
+      bildirimDagitimi,
+      bildirimTemizligi,
     ];
     this.handlers = new Map(all.map((h) => [h.key, h]));
   }
