@@ -23,6 +23,7 @@ import { CreditLowWarningJob } from "./jobs/credit-low-warning.job";
 import { RiskNightlyJob } from "./jobs/risk-nightly.job";
 import { HepoReminderJob } from "./jobs/hepo-reminder.job";
 import { CaselawIngestJob } from "./jobs/caselaw-ingest.job";
+import { KvkkKurulJob, MevzuatTohumJob, RekabetKurulJob, ResmiGazeteJob } from "./jobs/resmi-gazete.job";
 
 import { PlatformJobsController } from "./platform-jobs.controller";
 import { PlatformJobsService } from "./platform-jobs.service";
@@ -105,6 +106,12 @@ import { DeviceTokensService } from "./device-tokens.service";
     HepoReminderJob,
     // İçtihat toplama hattı: beslemeler → onay kuyruğu (havuza yazım onayla).
     CaselawIngestJob,
+    // Mevzuat besleme hattı (Faz 1): RG izleyici + çekirdek kanun tohumu —
+    // yalnızca onay kuyruğuna yazar, LegislationPoolService tek kapıdır.
+    ResmiGazeteJob,
+    MevzuatTohumJob,
+    KvkkKurulJob,
+    RekabetKurulJob,
 
     // --- uç servisleri ---
     PlatformJobsService,

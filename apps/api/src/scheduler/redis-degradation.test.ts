@@ -1,4 +1,41 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
+
+/**
+ * HERMETİK TEST: BullMQ sahtelenir. Aksi hâlde "Redis sağlamken" senaryosu
+ * gerçek bir `Queue`/`Worker` kurar, ioredis localhost:6379'a bağlanmaya çalışır
+ * ve Redis ayakta değilse test 5 sn'de zaman aşımıyla düşer — yani test paketi
+ * çalışan bir Docker yığınına gizlice bağımlı olurdu. Buradaki testlerin konusu
+ * SchedulerService'in açılış davranışıdır, BullMQ'nun kendisi değil.
+ */
+vi.mock("bullmq", () => {
+  class FakeQueue {
+    on() {
+      return this;
+    }
+    async upsertJobScheduler() {
+      return undefined;
+    }
+    async getJobSchedulers() {
+      return [];
+    }
+    async removeJobScheduler() {
+      return undefined;
+    }
+    async close() {
+      return undefined;
+    }
+  }
+  class FakeWorker {
+    on() {
+      return this;
+    }
+    async close() {
+      return undefined;
+    }
+  }
+  return { Queue: FakeQueue, Worker: FakeWorker };
+});
+
 import { resolveRedisConfig } from "./redis-connection";
 import { SchedulerService } from "./scheduler.service";
 

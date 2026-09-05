@@ -8,6 +8,7 @@ import { CreditLowWarningJob } from "./jobs/credit-low-warning.job";
 import { RiskNightlyJob } from "./jobs/risk-nightly.job";
 import { HepoReminderJob } from "./jobs/hepo-reminder.job";
 import { CaselawIngestJob } from "./jobs/caselaw-ingest.job";
+import { KvkkKurulJob, MevzuatTohumJob, RekabetKurulJob, ResmiGazeteJob } from "./jobs/resmi-gazete.job";
 import type { ScheduledJobHandler } from "./scheduler.types";
 
 /**
@@ -39,7 +40,12 @@ export class JobRegistryService {
     // Modül 28 (Faz 3) — HEPO vade hatırlatmaları
     hepoReminder: HepoReminderJob,
     // İçtihat toplama hattı — beslemeler → onay kuyruğu (havuza yazım onayla)
-    caselawIngest: CaselawIngestJob
+    caselawIngest: CaselawIngestJob,
+    // Mevzuat besleme hattı — RG izleyici + çekirdek kanun tohumu (onay kuyruğu)
+    resmiGazete: ResmiGazeteJob,
+    mevzuatTohum: MevzuatTohumJob,
+    kvkkKurul: KvkkKurulJob,
+    rekabetKurul: RekabetKurulJob
   ) {
     const all: ScheduledJobHandler[] = [
       usageSnapshot,
@@ -51,6 +57,10 @@ export class JobRegistryService {
       riskNightly,
       hepoReminder,
       caselawIngest,
+      resmiGazete,
+      mevzuatTohum,
+      kvkkKurul,
+      rekabetKurul,
     ];
     this.handlers = new Map(all.map((h) => [h.key, h]));
   }

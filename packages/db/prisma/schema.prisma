@@ -1504,6 +1504,10 @@ model CaseLawDocument {
   createdByTenantId String?
 
   references CaseLawReference[]
+  /// 1-10 kaynak güven düzeyi (retrieval sıralama metadata'sı; hukuki
+  /// geçerlilik hiyerarşisi DEĞİLDİR): 10 = RG/yetkili resmî kaynak,
+  /// 9 = Yargıtay/Danıştay/AYM.
+  authorityLevel Int?
 
   @@unique([court, caseNumber, decisionNumber])
   @@index([court])
@@ -3420,7 +3424,10 @@ model Mediation {
 /// Mevzuat kaydı — kanun / KHK / yönetmelik / tebliğ tam metni.
 model Legislation {
   id          String   @id @default(uuid())
-  tenantId    String
+  /// null = PLATFORM kaydı (onaylı resmî besleme — RG izleyici / mevzuat.gov.tr)
+  /// ve TÜM kiracılara görünür. Dolu = büronun kendi yüklemesi, yalnız sahibine
+  /// görünür (aynı desen: CaseLawDocument.createdByTenantId).
+  tenantId    String?
   /// MEVZUAT_TURU enum değeri: KANUN | KHK | YONETMELIK | TEBLIG | GENELGE | DIGER
   docType     String
   /// Resmî başlık (örn. "Türk Borçlar Kanunu").
@@ -3437,16 +3444,145 @@ model Legislation {
   preview     String   @default("")
   /// Etiketler (virgülle ayrılmış, örn. "borçlar, sözleşme, temerrüt").
   tags        String?
-  /// Yükleyen kullanıcı — denetim izi.
-  uploadedBy  String
+  /// Yükleyen kullanıcı — denetim izi. Platform kayıtlarında null.
+  uploadedBy  String?
   /// Yerel sürüm etiketi (örn. "2026-08 itibarıyla yürürlükte").
   versionNote String?
+  /// KAYNAK KÜNYESİ (SOURCE LINEAGE): kaydı getiren konektör anahtarı.
+  /// Platform kayıtlarında zorunlu (MEVZUAT_GOV | RG_GUNLUK | ...); büro
+  /// yüklemelerinde null.
+  sourceKey   String?
+  /// Kaynağın kalıcı adresi (RG doküman sayfası, mevzuat.gov.tr sayfası).
+  sourceUrl   String?
+  /// 1-10 arası kaynak güven düzeyi (retrieval sıralama metadata'sı;
+  /// hukuki geçerlilik hiyerarşisi DEĞİLDİR): 10 = RG/yetkili resmî kaynak.
+  authorityLevel Int?
+  /// Yayımlandığı Resmî Gazete tarihi (platform kayıtlarında).
+  rgDate      DateTime? @db.Date
+  /// Yayımlandığı Resmî Gazete sayısı.
+  rgNo        String?
   isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([tenantId, docType])
   @@index([tenantId, title])
+  @@index([sourceKey])
+}
+
+// ===========================================================================
+// PLATFORM MEVZUAT HAVUZU (hukuki veri kaynağı besleme planı, Faz 1)
+//
+// Kanunlar madde bazlı sürümlenir: atıf teyidi ("TCK 86") ve zamansal
+// geçerlilik ("sorgu tarihinde yürürlükteki metin") bu havuz üzerinden
+// DETERMİNİSTİK çalışır. Büro kütüphanesi (Legislation) ile KARIŞMAZ:
+// Statute kayıtları yalnızca onaylı platform beslemesinden gelir.
+// ===========================================================================
+
+/// KANUN KİMLİĞİ — mevzuat.gov.tr kayıt kimliğiyle eşsizdir
+/// (MevzuatNo + MevzuatTur). Tam metin burada, maddeler sürüm sürüm
+/// StatuteArticleVersion'da tutulur.
+model Statute {
+  id           String   @id @default(uuid())
+  /// Mevzuat numarası (örn. "5237").
+  mevzuatNo    String
+  /// mevzuat.gov.tr tür kodu: 1=Kanun, 4=KHK, 19=CB Kararnamesi.
+  mevzuatTur   Int
+  /// Düstur tertibi (kanunlarda 5).
+  tertip       Int      @default(5)
+  /// Resmî başlık (örn. "TÜRK CEZA KANUNU").
+  title        String
+  /// Atıf kısaltmaları, virgülle (örn. "TCK") — citation-verify eşleştirmesi.
+  abbrs        String?
+  /// Yayımlandığı Resmî Gazete tarihi (ilk yayın).
+  rgDate       DateTime? @db.Date
+  /// Yayımlandığı Resmî Gazete sayısı.
+  rgNo         String?
+  /// Kaynak konektör anahtarı (SOURCE LINEAGE).
+  sourceKey    String
+  sourceUrl    String?
+  /// Kaynak güven düzeyi (mevzuat.gov.tr beslemesi = 10).
+  authorityLevel Int    @default(10)
+  /// Yürürlükte mi (mülga işareti — yumuşak, geçmiş sürümler kalır).
+  isActive     Boolean  @default(true)
+  /// Konsolide tam metin (arama + görüntüleme).
+  fullText     String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  articles      StatuteArticleVersion[]
+
+  @@unique([mevzuatNo, mevzuatTur])
+  @@index([title])
+  @@index([sourceKey])
+}
+
+/// MADDE SÜRÜMÜ — bir maddenin belirli bir dönemdeki metni. Değişiklik eski
+/// sürümü EZMEZ: eski sürüm effectiveTo ile kapanır, yenisi eklenir.
+/// "Sorgu tarihinde yürürlükteki metin" = effectiveFrom <= t < effectiveTo
+/// (effectiveTo null = hâlâ yürürlükte).
+model StatuteArticleVersion {
+  id            String   @id @default(uuid())
+  statuteId     String
+  statute       Statute  @relation(fields: [statuteId], references: [id], onDelete: Cascade)
+  /// Madde numarası (örn. "86"). Fıkra/bend ayrımı metin içinde kalır.
+  articleNo     String
+  /// Aynı maddenin kaçıncı sürümü (1'den başlar; değişiklikte artar).
+  versionSeq    Int
+  /// Madde metni.
+  text          String
+  /// Bu sürümün yürürlük başlangıcı (değişiklik RG tarihi; ilk sürümde
+  /// kanunun RG tarihi).
+  effectiveFrom DateTime? @db.Date
+  /// Bu sürümün yürürlük sonu (değişiklikte kapatılır; null = yürürlükte).
+  effectiveTo   DateTime? @db.Date
+  /// Bu sürümü doğuran değişikliğin RG künyesi (SOURCE LINEAGE).
+  changeRgDate DateTime? @db.Date
+  changeRgNo   String?
+  createdAt     DateTime @default(now())
+
+  @@unique([statuteId, articleNo, versionSeq])
+  @@index([statuteId, articleNo])
+}
+
+/// MEVZUAT TOPLAMA HAZIRLIK KUYRUĞU — onaylanmadan platform havuzuna GİRMEZ
+/// (CaseLawIngestItem ile aynı desen: halüsinasyon zinciri kuyrukta kesilir).
+///
+/// Üreticileri: RG günlük izleyici (resmi-gazete-gunluk işi) ve çekirdek
+/// kanun tohumlama (mevzuat.gov.tr beslemesi). Onay: platform görevlisi.
+model LegislationIngestItem {
+  id           String    @id @default(uuid())
+  /// Çekildiği kaynak anahtarı (RG_GUNLUK | MEVZAT_TOHUM | ...).
+  sourceKey    String
+  /// Kaynak tarafındaki eşsiz kimlik (RG: tarih+bölüm sırası; mevzuat.gov.tr:
+  /// MevzuatNo.Tur.Tertip). Aynı belge ikinci kez kuyruğa girmez.
+  externalKey  String
+  /// KANUN | KHK | YONETMELIK | TEBLIG | GENELGE | DIGER
+  docType      String
+  title        String
+  /// RG/kanun numarası (çıkarılabiliyorsa).
+  number       String?
+  /// Atıf kısaltmaları (tohumlama listesinden): "TCK" — onayda Statute'a yazılır.
+  abbrs        String?
+  /// RG künyesi (izleyiciden geliyorsa).
+  rgDate       DateTime? @db.Date
+  rgNo         String?
+  /// Belgenn kaynak adresi (RG doküman sayfası).
+  sourceUrl    String?
+  /// Önizleme metni (çekildiyse).
+  fullText     String?
+  /// BEKLIYOR | ONAYLANDI | REDDEDILDI
+  status       String    @default("BEKLIYOR")
+  batchId      String
+  fetchedAt    DateTime  @default(now())
+  reviewedBy   String?
+  reviewedAt   DateTime?
+  rejectReason String?
+  /// Onay sonrası havuz kaydı (Statute.id veya Legislation.id).
+  poolRecordId String?
+  createdAt    DateTime  @default(now())
+
+  @@unique([sourceKey, externalKey])
+  @@index([status, fetchedAt])
 }
 
 // ===========================================================================

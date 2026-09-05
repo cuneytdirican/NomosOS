@@ -1,7 +1,8 @@
 /**
  * MEVZUAT KÜTÜPHANESİ (geliştirme planı D3 / A4) — büronun KENDİ metinleri.
  *
- * HİZMET SINIFI. Tüm sorgular tenantId ile süzülür (kiracı izolasyonu);
+ * HİZMET SINIFI. Tüm sorgular tenantId ile süzülür (kiracı izolasyonu;
+ * platform kayıtları tenantId=null ile HERKESE okunur);
  * yazma uçları HUKUKI rol kümesi gerektirir; her işlem denetim günlüğüne
  * yazılır (kim, ne zaman, hangi mevzuat).
  *
@@ -10,12 +11,14 @@
  * sonuç tavanı 500'dür ve büyüyen kütüphaneler için sınırlar plan dosyasında
  * (D4 / pgvector + tsvector) not edilmiştir.
  *
- * DÜRÜSTLÜK (vaat kısıtı): Resmî Gazete otomatik senkronu YOKTUR — metni
- * büro yükler, güncel tutmak büronun sorumluluğudur (versionNote alanı bunu
- * görünür kılar).
+ * DÜRÜSTLÜK (vaat kısıtı): BU KÜTÜPHANE büronun kendi yüklemeleridir; burada
+ * otomatik senkron YOKTUR. PLATFORM mevzuat havuzu (onaylı mevzuat.gov.tr/RG
+ * beslemesi, tenantId=null) okumaya açıktır; güncel tutmak platform
+ * işletmesinin sorumluluğundadır (resmi-gazete-gunluk işi + onay kuyruğu).
  */
 
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import type { Prisma } from "@nomosos/db";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { assertRole, ROLE_SETS } from "../common/roles";
@@ -53,6 +56,10 @@ export class LegislationService {
   /**
    * Liste + arama. q verilirse başlık, metin, kanun numarası ve etiketlerde
    * büyük/küçük harf duyarsız arama yapılır.
+   *
+   * GÖRÜNÜRLÜK: büronun kendi kayıtları + PLATFORM kayıtları (tenantId=null,
+   * onaylı resmî besleme). Platform kayıtları yalnızca OKUNUR; yazma uçları
+   * büronun KENDİ kaydına açıktır.
    */
   async list(
     user: AuthUser,
@@ -60,21 +67,29 @@ export class LegislationService {
   ) {
     const take = Math.min(Math.max(filters.take ?? 50, 1), 500);
     const q = filters.q?.trim();
-    const where = {
-      tenantId: user.tenantId,
+    // KİRACI İZOLASYONU: görünürlük süzgeci (büro + platform) ve arama
+    // süzgeci AYRI `OR` bloklarıdır; aynı nesnede iki `OR` anahtarı ikinciyi
+    // birinciyi EZER hâle getirir (arama yapıldığında kiracı süzgeci kaybolur).
+    // Bu yüzden ikisi de `AND` altında ayrı üyeler olarak taşınır.
+    const where: Prisma.LegislationWhereInput = {
       isActive: true,
+      AND: [
+        { OR: [{ tenantId: user.tenantId }, { tenantId: null }] },
+        ...(q
+          ? [
+              {
+                OR: [
+                  { title: { contains: q, mode: "insensitive" as const } },
+                  { fullText: { contains: q, mode: "insensitive" as const } },
+                  { number: { contains: q, mode: "insensitive" as const } },
+                  { tags: { contains: q, mode: "insensitive" as const } },
+                ],
+              },
+            ]
+          : []),
+      ],
       ...(filters.docType && (LEGISLATION_DOC_TYPES as readonly string[]).includes(filters.docType)
         ? { docType: filters.docType }
-        : {}),
-      ...(q
-        ? {
-            OR: [
-              { title: { contains: q, mode: "insensitive" as const } },
-              { fullText: { contains: q, mode: "insensitive" as const } },
-              { number: { contains: q, mode: "insensitive" as const } },
-              { tags: { contains: q, mode: "insensitive" as const } },
-            ],
-          }
         : {}),
     };
     const rows = await this.prisma.client.legislation.findMany({
@@ -90,6 +105,10 @@ export class LegislationService {
         enactedAt: true,
         tags: true,
         versionNote: true,
+        tenantId: true,
+        sourceKey: true,
+        rgDate: true,
+        rgNo: true,
         createdAt: true,
         updatedAt: true,
         // Liste görünümünde tam metin TAŞINMAZ — yalnız 2 KB'lık önizleme.
@@ -98,13 +117,15 @@ export class LegislationService {
     });
     return rows.map((row) => ({
       ...row,
+      // Platform kaydı mı (onaylı resmî besleme) — arayüz rozeti için.
+      isPlatform: row.tenantId === null,
       preview: row.preview.slice(0, 200),
     }));
   }
 
   async detail(user: AuthUser, id: string) {
     const row = await this.prisma.client.legislation.findFirst({
-      where: { id, tenantId: user.tenantId, isActive: true },
+      where: { id, isActive: true, OR: [{ tenantId: user.tenantId }, { tenantId: null }] },
     });
     if (!row) throw new NotFoundException("Mevzuat kaydı bulunamadı.");
     return row;

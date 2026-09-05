@@ -332,6 +332,8 @@ export function courtMatchesSource(court: string, source: string): boolean {
       return c.includes("anayasa");
     case "AIHM":
       return c.includes("aihm") || c.includes("insan hakları");
+    case "UYUSMAZLIK":
+      return c.includes("uyuşmazlık");
     default:
       // BILINMIYOR veya tanınmayan etiket kısıtlama üretmez.
       return true;

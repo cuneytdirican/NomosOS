@@ -10,6 +10,16 @@ import { CaselawPoolController } from "./caselaw-pool/caselaw-pool.controller";
 import { CaselawPoolService } from "./caselaw-pool/caselaw-pool.service";
 import { CaselawIngestController } from "./caselaw-ingest/caselaw-ingest.controller";
 import { CaselawIngestService } from "./caselaw-ingest/caselaw-ingest.service";
+// Mevzuat besleme hattı (Faz 1): mevzuat.gov.tr + RG izleyici → onay kuyruğu.
+// Konektörler durumsuz istemcilerdir; LegislationModule'deki örneklerden AYRI,
+// platforma özel örnekler olarak sağlanır (bu modül başka modül İÇERMEZ).
+import { LegislationIngestController } from "./legislation-ingest/legislation-ingest.controller";
+import { LegislationIngestService } from "./legislation-ingest/legislation-ingest.service";
+import { LegislationPoolService } from "./legislation-ingest/legislation-pool.service";
+import { MevzuatGovConnector } from "../legislation/connectors/mevzuat-gov.connector";
+import { ResmiGazeteClient } from "../legislation/connectors/resmi-gazete.client";
+import { KvkkClient } from "../legislation/connectors/kvkk.client";
+import { RekabetClient } from "../legislation/connectors/rekabet.client";
 // Onay Masası önizlemesi: karar metnini resmî kaynaktan okuyan canlı adaptör.
 // Durumsuz istemcidir; CaselawModule'deki örnekten AYRI, platforma özel örnektir
 // (bu modül bilinçli olarak başka modül İÇERMEZ — üstteki not).
@@ -91,6 +101,7 @@ import { PlatformUsersService } from "./users/platform-users.service";
     FineTuneController,
     CaselawPoolController,
     CaselawIngestController,
+    LegislationIngestController,
   ],
   providers: [
     PlatformJwtGuard,
@@ -103,6 +114,12 @@ import { PlatformUsersService } from "./users/platform-users.service";
     FineTuneService,
     CaselawPoolService,
     CaselawIngestService,
+    LegislationPoolService,
+    LegislationIngestService,
+    MevzuatGovConnector,
+    ResmiGazeteClient,
+    KvkkClient,
+    RekabetClient,
     YargitayLiveAdapter,
     PlatformApprovalsService,
     PlatformApprovalExecutorService,
@@ -129,6 +146,16 @@ import { PlatformUsersService } from "./users/platform-users.service";
   // CaselawIngestService dışa açılır: caselaw-ingest-daily zamanlanmış işi
   // (SchedulerModule) çekimi bu servisten yürütür — kaynak adresi
   // yapılandırmada, kodda sabit istemci yoktur.
-  exports: [UsageSnapshotService, PlatformApprovalsService, PlatformAuditService, CaselawIngestService],
+  //
+  // LegislationIngestService dışa açılır: resmi-gazete-gunluk ve
+  // mevzuat-tohumu-haftalik zamanlanmış işleri (SchedulerModule) çekimi bu
+  // servisten yürütür; havuza yazım yalnız onay kuyruğu üzerinden yapılır.
+  exports: [
+    UsageSnapshotService,
+    PlatformApprovalsService,
+    PlatformAuditService,
+    CaselawIngestService,
+    LegislationIngestService,
+  ],
 })
 export class PlatformModule {}

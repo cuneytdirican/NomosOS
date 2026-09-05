@@ -48,6 +48,21 @@ export const JOB_KEYS = {
   RISK_NIGHTLY: "risk-nightly",
   /** İçtihat toplama hattı — beslemelerden çekip ONAY KUYRUĞUNA yazar. */
   CASELAW_INGEST: "caselaw-ingest-daily",
+  /**
+   * Resmî Gazete günlük izleyici — dünün sayfasını tarar, mevzuat
+   * kalemlerini mevzuat onay kuyruğuna (LegislationIngestItem) yazar.
+   * Havuza yazım YOKTUR; onay platform görevlisindedir.
+   */
+  RG_WATCHER: "resmi-gazete-gunluk",
+  /** Çekirdek kanun tohumu — mevzuat.gov.tr künye araması → onay kuyruğu. */
+  LEGISLATION_SEED: "mevzuat-tohumu-haftalik",
+  /**
+   * KVKK Kurul kararları izleyici — Kurul Kararları listesinin ilk sayfalarını
+   * tarar, mevzuat onay kuyruğuna yazar. Havuza yazım yalnız onayla.
+   */
+  KVKK_WATCHER: "kvkk-kurul-haftalik",
+  /** Rekabet Kurulu kararları izleyici — liste → onay kuyruğu. */
+  REKABET_WATCHER: "rekabet-kurul-haftalik",
 } as const;
 
 export type JobKey = (typeof JOB_KEYS)[keyof typeof JOB_KEYS];

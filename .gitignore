@@ -12,4 +12,5 @@ coverage/
 minio-data/
 postgres-data/
 
-# Tarayýcý test anlýk görüntüleri (canlý doðrulama çýktýlarý).playwright-mcp/
+# Tarayýcý test anlýk görüntüleri (canlý doðrulama çýktýlarý)
+.playwright-mcp/

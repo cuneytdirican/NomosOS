@@ -23,7 +23,46 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 4 Eylül 2026, 11:20
+# 🔖 KALDIĞIM YER — 5 Eylül 2026, 07:10
+
+> **Mevzuat besleme hattı (Faz 1+3) + AYM/Uyuşmazlık adaptörleri (Faz 2) + derin
+> analiz düzeltme turu TAMAMLANDI ve commit/push edildi.** Plan:
+> `.mindaeon/plans/1788534218873-hukuki-veri-kaynagi-besleme-plani.md`,
+> hat belgesi `docs/mevzuat-besleme-hatti.md`.
+
+1. **Ne kuruldu:** `Statute`/`StatuteArticleVersion` (madde sürüm zinciri) +
+   `LegislationIngestItem` onay kuyruğu + platform `Legislation` (tenantId=null);
+   konektörler `MevzuatGovConnector` (mevzuat.gov.tr), `ResmiGazeteClient`,
+   `KvkkClient`, `RekabetClient`; işler `resmi-gazete-gunluk` (07:30),
+   `mevzuat-tohumu-haftalik`, `kvkk-kurul-haftalik`, `rekabet-kurul-haftalik`;
+   atıf teyidi mevzuat kolonu (`StatuteLookupService` → "TCK 86" DOGRULANDI);
+   admin **Mevzuat Onay Masası** `/yargi/mevzuat`.
+2. **Derin analiz bulguları ve düzeltmeleri (5 Eylül):**
+   - `simulation.modes.ts` cp1252 mojibake + BOM ile yazılmıştı (SIMULATION_NOTICE
+     ve beş persona promptu bozuk) → HEAD'den geri alındı, `maxTokens 12288` korundu.
+     **DERS: PowerShell `Set-Content` daima `-Encoding utf8`.**
+   - Mevzuat aramasında kiracı izolasyonu kayboluyordu (aynı nesnede iki `OR`) →
+     `AND` bloğu + sızıntı testi.
+   - AYM/Uyuşmazlık adaptörleri her künyede ağa çıkıyor, Yargıtay künyesini AYM
+     kaydıyla DOGRULANDI yapabiliyordu → kaynak kapısı + servis katmanında mahkeme
+     uyum kapısı + DI + paralel registry.
+   - Havuz kapısı alan koruması, sürüm sınırı tarih yedeği, gov-tls yönlendirme/
+     akış sınırı/sertifika uyarısı, RG "KANUNLAR", hermetik Redis testi.
+3. **Doğrulama:** api testleri 1101/1101 (Redis'siz), typecheck + lint temiz.
+4. **Açık konu (ayrı plan):** `FineTuneService.manifest/poolSnapshot` ONAYLANMIŞ
+   eğitim örneklerini kiracı süzmesi olmadan topluyor — `1788544126809-kullanici-
+   tanimli-model-egitimi.md` planında tasarım kararı gerekiyor (rıza/kapsam).
+
+## Sırada
+
+1. Plan Aşama 2: AAÜT platform tarifesi.
+2. Plan Aşama 4: içtihat havuzunu gerçek kararla doldurma (veri operasyonu).
+3. Kullanıcı tanımlı model eğitimi planı (fine-tune kiracı kapsamı dahil).
+4. `FINAL-COMPLETION-REPORT.md` üretimi (Aşama 9 kapanışı).
+
+---
+
+## 🔖 ÖNCEKİ KALDIĞIM YER — 4 Eylül 2026, 11:20
 
 > **AI kalıcılık + detay + URL doğrulama turu tamamlandı.**
 

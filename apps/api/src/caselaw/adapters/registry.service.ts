@@ -10,6 +10,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { LocalDbCaseLawAdapter } from "./local-db.adapter";
 import { ManualEntryCaseLawAdapter } from "./manual-entry.adapter";
+import { AymLiveAdapter } from "./aym-live.adapter";
+import { UyusmazlikLiveAdapter } from "./uyusmazlik-live.adapter";
 import type {
   CaseLawAdapterHealth,
   CaseLawCitationLookup,
@@ -32,8 +34,17 @@ export class CaseLawAdapterRegistry {
   private readonly logger = new Logger(CaseLawAdapterRegistry.name);
   private readonly adapters: CaseLawSourceAdapter[];
 
-  constructor(localDb: LocalDbCaseLawAdapter, manual: ManualEntryCaseLawAdapter) {
-    this.adapters = [localDb, manual];
+  constructor(
+    localDb: LocalDbCaseLawAdapter,
+    manual: ManualEntryCaseLawAdapter,
+    // AYM + Uyuşmazlık canlı adaptörleri: yalnız künye teyidi (canSearch kapalı —
+    // karar metinleri bugün çekilemiyor; bkz. dosya başlıkları). DI ile gelir:
+    // testte sahtelenebilir, modülde tek örnek. Sıra önemlidir — ilk FOUND kazanır;
+    // yerel havuz ve elle giriş canlı kaynaklardan ÖNCE gelir.
+    aym: AymLiveAdapter,
+    uyusmazlik: UyusmazlikLiveAdapter,
+  ) {
+    this.adapters = [localDb, manual, aym, uyusmazlik];
   }
 
   list(): readonly CaseLawSourceAdapter[] {
@@ -88,19 +99,24 @@ export class CaseLawAdapterRegistry {
    *  - En az bir adaptör arama YAPAMADI ve bulan yok → SEARCH_FAILED (asla doğrulanmış sayılmaz).
    */
   async fetchByCitationAll(query: CaseLawCitationQuery): Promise<AggregatedCitationLookup> {
-    const perAdapter: CaseLawCitationLookup[] = [];
-    for (const adapter of this.adapters) {
-      if (!adapter.canFetchByCitation) continue;
-      try {
-        perAdapter.push(await adapter.fetchByCitation(query));
-      } catch (err) {
-        perAdapter.push({
-          outcome: "SEARCH_FAILED",
-          note: `Adaptör beklenmedik hata verdi: ${(err as Error).message}`,
-          adapterKey: adapter.key,
-        });
-      }
-    }
+    // Adaptörler PARALEL sorgulanır (canlı kaynaklar 12 sn'ye kadar bekletebilir;
+    // ardışık çağrı her atfı toplam süreye ekliyordu). Sonuç sırası adaptör
+    // sırasıyla aynı kalır — "ilk FOUND kazanır" kuralı değişmez.
+    const perAdapter: CaseLawCitationLookup[] = await Promise.all(
+      this.adapters
+        .filter((adapter) => adapter.canFetchByCitation)
+        .map(async (adapter): Promise<CaseLawCitationLookup> => {
+          try {
+            return await adapter.fetchByCitation(query);
+          } catch (err) {
+            return {
+              outcome: "SEARCH_FAILED",
+              note: `Adaptör beklenmedik hata verdi: ${(err as Error).message}`,
+              adapterKey: adapter.key,
+            };
+          }
+        }),
+    );
 
     const found = perAdapter.find((r) => r.outcome === "FOUND");
     if (found) return { outcome: "FOUND", lookup: found, perAdapter };

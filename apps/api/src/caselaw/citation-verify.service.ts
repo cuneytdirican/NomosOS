@@ -15,10 +15,11 @@
  * FAIL-CLOSED: erişilemeyen kaynak, tanınmayan biçim, birden çok eşleşme ve
  * mahkeme uyuşmazlığı ASLA DOGRULANDI üretmez.
  *
- * MEVZUAT ATIFLARI: Statute/StatuteArticleVersion havuzu Faz 2 şemasında yoktur
- * (Faz 3). Bu yüzden "HMK m.317" gibi atıflar DOGRULANDI olamaz; BELIRSIZ döner
- * ve dilekçe teyit kapısı bunlar için avukatın AÇIK BEYANINI ister. Sessizce
- * doğrulanmış saymak, tam da önlemeye çalıştığımız hatayı üretirdi.
+ * MEVZUAT ATIFLARI: platform kanun havuzu (Statute/StatuteArticleVersion,
+ * mevzuat.gov.tr beslemesi) üzerinden DETERMİNİSTİK doğrulanır. Havuz
+ * kısmi bir havuzdur: kanun havuzda DEĞİLSE sonuç BULUNAMADI değil BELIRSIZ'dir
+ * (havuzun kapsamı dışında olması atfın yanlış olduğu anlamına gelmez);
+ * kanun havuzda ama madde yoksa BULUNAMADI'dır (mülga/yanlış numara olası).
  */
 
 import { Injectable } from "@nestjs/common";
@@ -31,17 +32,35 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { CaseLawAdapterRegistry } from "./adapters/registry.service";
 import { isDemoRecord } from "./adapters/types";
+import { courtMatchesSource } from "./adapters/local-db.adapter";
+import { StatuteLookupService } from "../legislation/statute-lookup.service";
 import type { AuthUser } from "../common/types";
 
 /** Atıf türü — TANINMADI, biçimi ayrıştırılamayan ham metindir. */
 export type CitationKind = "ICTIHAT" | "MEVZUAT" | "TANINMADI";
+
+/** Eşleşen kanun/madde künyesi (yalnız MEVZUAT DOGRULANDI'sında dolu). */
+export interface MatchedStatute {
+  id: string;
+  title: string;
+  mevzuatNo: string;
+  articleNo: string;
+  versionSeq: number;
+  /** Bu madde sürümünün yürürlük başlangıcı (ISO tarih ya da null). */
+  effectiveFrom?: string | null;
+  /** Bu sürümü doğuran değişiklik RG künyesi (SOURCE LINEAGE). */
+  changeRgDate?: string | null;
+  changeRgNo?: string | null;
+  sourceKey: string;
+  sourceUrl?: string | null;
+}
 
 export interface CitationVerificationResult {
   /** Doğrulamaya giren ham künye metni. */
   raw: string;
   kind: CitationKind;
   status: CitationStatus;
-  /** Eşleşen havuz kaydı (yalnız DOGRULANDI'da dolu olabilir). */
+  /** Eşleşen içtihat havuz kaydı (yalnız ICTIHAT DOGRULANDI'sında dolu). */
   caseLawId?: string;
   matchedRecord?: {
     id: string;
@@ -52,6 +71,8 @@ export interface CitationVerificationResult {
     decisionDate?: string;
     sourceAdapter: string;
   };
+  /** Eşleşen kanun/madde künyesi (yalnız MEVZUAT DOGRULANDI'sında dolu). */
+  matchedStatute?: MatchedStatute;
   /**
    * Eşleşen kayıt seed/demo verisi mi? Demo kayıt "gerçek karar" değildir;
    * dilekçe teyit kapısı bunu HAZIR statüsüne geçirmez.
@@ -81,15 +102,16 @@ export interface CitationVerificationReport {
 }
 
 const NO_STATUTE_POOL_NOTE =
-  "Mevzuat atfı deterministik olarak doğrulanamadı: madde metni ve yürürlük havuzu " +
-  "(Statute/StatuteArticleVersion) henüz sistemde yok. Madde numarasını yürürlükteki " +
-  "mevzuattan elle teyit edin.";
+  "Mevzuat atfı deterministik olarak doğrulanamadı: kanun, platform mevzuat havuzunda " +
+  "bulunamadı (havuz kısmi olabilir). Madde numarasını yürürlükteki mevzuattan elle teyit edin.";
 
 @Injectable()
 export class CitationVerifyService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly adapters: CaseLawAdapterRegistry,
+    /** Mevzuat teyidi: Statute/StatuteArticleVersion platform havuzu (Faz 1). */
+    private readonly statutes: StatuteLookupService,
   ) {}
 
   /** Serbest metinden atıfları çıkarır (dilekçe/sohbet/analiz çıktısı için). */
@@ -227,17 +249,10 @@ export class CitationVerifyService {
     }
 
     if (parsed.kind === "MEVZUAT") {
-      return {
-        raw,
-        kind: "MEVZUAT",
-        status: "BELIRSIZ",
-        isDemo: false,
-        note: `${NO_STATUTE_POOL_NOTE} (Atıf: ${parsed.statuteRef ?? "?"} m.${parsed.articleNo ?? "?"})`,
-        adapterNotes: [],
-      };
+      return this.verifyStatute(raw, parsed);
     }
 
-    if (!parsed.esasNo || !parsed.kararNo) {
+    if (!parsed.esasNo || (!parsed.kararNo && parsed.source !== "AYM")) {
       return {
         raw,
         kind: "ICTIHAT",
@@ -250,13 +265,16 @@ export class CitationVerifyService {
       };
     }
 
+    // AYM bireysel başvuru künyesinde karar numarası YOKTUR ("2019/12345 başvuru
+    // numaralı karar"): boş kararNo ile devam edilir; AYM canlı adaptörü
+    // başvuru numarasıyla arar, diğer adaptörler eşleşmez.
     const aggregated = await this.adapters.fetchByCitationAll({
       // Görünürlük süzgeci: başka büronun elle girdiği kayıt bu atfı doğrulayamaz.
       tenantId,
       source: parsed.source && parsed.source !== "BILINMIYOR" ? parsed.source : undefined,
       chamber: parsed.chamber,
       caseNumber: parsed.esasNo,
-      decisionNumber: parsed.kararNo,
+      decisionNumber: parsed.kararNo ?? "",
     });
     const adapterNotes = aggregated.perAdapter.map((r) => `${r.adapterKey}: ${r.outcome} — ${r.note}`);
 
@@ -304,6 +322,24 @@ export class CitationVerifyService {
       };
     }
 
+    // MAHKEME UYUMU — adaptör ne dönerse dönsün burada YENİDEN denetlenir:
+    // künye "Yargıtay" diyorsa eşleşen kayıt Anayasa Mahkemesi olamaz. Adaptörler
+    // kendi kapılarını uygular; bu satır ikinci kilittir (fail-closed).
+    if (parsed.source && parsed.source !== "BILINMIYOR" && !courtMatchesSource(record.court, parsed.source)) {
+      return {
+        raw,
+        kind: "ICTIHAT",
+        status: "BELIRSIZ",
+        caseLawId: record.id,
+        matchedRecord: toMatched(record),
+        isDemo: demo,
+        note:
+          `Künyedeki mahkeme (${parsed.source}) eşleşen kayıtla (${record.court}) uyuşmuyor; ` +
+          "aynı numaralı farklı bir mahkemenin kararı olabilir.",
+        adapterNotes,
+      };
+    }
+
     // Daire bilgisi künyede varsa kayıtla bağdaşmalıdır; bağdaşmıyorsa BELIRSIZ.
     if (parsed.chamber && !chamberAgrees(parsed.chamber, record.chamber, record.court)) {
       return {
@@ -330,9 +366,83 @@ export class CitationVerifyService {
       note: demo
         ? `[DEMO VERİ] Eşleşen kayıt gerçek bir mahkeme kararı değildir (kaynak: ${record.sourceAdapter}); ` +
           "arayüz denemesi içindir, dilekçede kullanılamaz."
-        : `Havuzdaki kayıtla birebir eşleşti: ${record.court} ${record.caseNumber} E. ` +
-          `${record.decisionNumber} K. (kaynak: ${record.sourceAdapter})`,
+        : record.decisionNumber
+          ? `Havuzdaki kayıtla birebir eşleşti: ${record.court} ${record.caseNumber} E. ` +
+            `${record.decisionNumber} K. (kaynak: ${record.sourceAdapter})`
+          : // AYM bireysel başvurusu gibi karar numarası taşımayan künyeler.
+            `Kayıtla birebir eşleşti: ${record.court} ${record.caseNumber} başvuru no ` +
+            `(kaynak: ${record.sourceAdapter})`,
       adapterNotes,
+    };
+  }
+
+  /**
+   * MEVZUAT ATFI DOĞRULAMASI — kanun havuzu (Statute) üzerinden deterministik.
+   *
+   *  - Kanun havuzda yok  → BELIRSIZ (havuz kısmidir; kapsam dışı olmak atfın
+   *    yanlış olduğunu KANITLAMAZ — fail-closed, ama iftira da değil).
+   *  - Kanun var, madde yok → BULUNAMADI (mülga ya da yanlış madde no).
+   *  - İkisi de var → DOGRULANDI; sürüm künyesi (RG tarihi/sayısı) lineage
+   *    olarak taşınır.
+   */
+  private async verifyStatute(
+    raw: string,
+    parsed: NonNullable<ReturnType<typeof extractCitations>[number]>,
+  ): Promise<CitationVerificationResult> {
+    const ref = parsed.statuteRef ?? "";
+    const articleNo = parsed.articleNo ?? "";
+
+    const lookup = await this.statutes.findArticle(ref, articleNo);
+    if (!lookup) {
+      return {
+        raw,
+        kind: "MEVZUAT",
+        status: "BELIRSIZ",
+        isDemo: false,
+        note: `${NO_STATUTE_POOL_NOTE} (Atıf: ${ref || "?"} m.${articleNo || "?"})`,
+        adapterNotes: [],
+      };
+    }
+
+    if (!lookup.article) {
+      return {
+        raw,
+        kind: "MEVZUAT",
+        status: "BULUNAMADI",
+        isDemo: false,
+        note:
+          `Kanun havuzda bulundu (${lookup.statute.title}) ancak "${articleNo}" numaralı madde ` +
+          "mevcut sürümde yok: madde mülga/ildırılmış ya da madde numarası hatalı olabilir. " +
+          "Madde numarasını yürürlükteki metinden teyit edin.",
+        adapterNotes: [],
+      };
+    }
+
+    const a = lookup.article;
+    return {
+      raw,
+      kind: "MEVZUAT",
+      status: "DOGRULANDI",
+      matchedStatute: {
+        id: lookup.statute.id,
+        title: lookup.statute.title,
+        mevzuatNo: lookup.statute.mevzuatNo,
+        articleNo: a.articleNo,
+        versionSeq: a.versionSeq,
+        effectiveFrom: a.effectiveFrom ? a.effectiveFrom.toISOString().slice(0, 10) : null,
+        changeRgDate: a.changeRgDate ? a.changeRgDate.toISOString().slice(0, 10) : null,
+        changeRgNo: a.changeRgNo,
+        sourceKey: lookup.statute.sourceKey,
+        sourceUrl: lookup.statute.sourceUrl,
+      },
+      isDemo: false,
+      note:
+        `Havuzdaki kanunla eşleşti: ${lookup.statute.title} m.${a.articleNo} ` +
+        `(sürüm ${a.versionSeq}` +
+        `${a.effectiveFrom ? `, yürürlük ${a.effectiveFrom.toISOString().slice(0, 10)}` : ""}` +
+        `${a.changeRgNo ? `, RG ${a.changeRgNo}` : ""}` +
+        `; kaynak: ${lookup.statute.sourceKey})`,
+      adapterNotes: [],
     };
   }
 

@@ -6,7 +6,7 @@
  * Bu katman "doğrulama" yapmaz, yalnızca "burada bir künye var" der.
  */
 
-export type CaseLawSource = "YARGITAY" | "DANISTAY" | "BAM" | "AYM" | "AIHM" | "BILINMIYOR";
+export type CaseLawSource = "YARGITAY" | "DANISTAY" | "BAM" | "AYM" | "AIHM" | "UYUSMAZLIK" | "BILINMIYOR";
 
 export interface ExtractedCitation {
   kind: "ICTIHAT" | "MEVZUAT";
@@ -74,7 +74,7 @@ const CASELAW_FORM_D = new RegExp(
 
 /** Mahkeme/kaynak belirteçleri (künyenin solunda aranır). */
 const COURT_TOKEN =
-  /(Yargıtay|Yarg\.|Danıştay|Dan\.|Bölge Adliye Mahkemesi|BAM|Anayasa Mahkemesi|AYM|AİHM|AIHM)/gi;
+  /(Yargıtay|Yarg\.|Danıştay|Dan\.|Bölge Adliye Mahkemesi|BAM|Anayasa Mahkemesi|AYM|AİHM|AIHM|Uyuşmazlık Mahkemesi|Uyuşmazlık)/gi;
 
 /**
  * YÜKSEK MAHKEME İZLERİ — negatif tarama için (denetim bulgusu K-10).
@@ -85,7 +85,7 @@ const COURT_TOKEN =
  * doğrulanamaz demektir ve kapı FAIL-CLOSED davranmalıdır.
  */
 const HIGH_COURT_SIGNAL =
-  /(Yargıtay|Yarg\.|Danıştay|Dan(?:\.|ıştay)|Bölge Adliye Mahkemesi|BAM|Anayasa Mahkemesi|AYM|AİHM|AIHM|HGK|Hukuk Genel Kurulu|İBBGK|İçtihadı Birleştirme|CGK|Ceza Genel Kurulu)/gi;
+  /(Yargıtay|Yarg\.|Danıştay|Dan(?:\.|ıştay)|Bölge Adliye Mahkemesi|BAM|Anayasa Mahkemesi|AYM|AİHM|AIHM|HGK|Hukuk Genel Kurulu|İBBGK|İçtihadı Birleştirme|CGK|Ceza Genel Kurulu|Uyuşmazlık Mahkemesi|Uyuşmazlık)/gi;
 
 /** Daire ifadesi: "9. HD", "10. Daire", "27. Hukuk Dairesi", "3. CD" */
 const CHAMBER_PATTERN =
@@ -195,6 +195,8 @@ function detectSourceAndChamber(prefix: string): {
   else if (token === "aym" || token.startsWith("anayasa")) source = "AYM";
   // Türkçe küçültmede "AİHM" → "aihm", "AIHM" → "aıhm" olur.
   else if (token === "aihm" || token === "aıhm") source = "AIHM";
+  // Uyuşmazlık Mahkemesi: adli/idari yargı görev-hüküm uyuşmazlıkları.
+  else if (token.startsWith("uyuşmazlık")) source = "UYUSMAZLIK";
 
   const after = prefix.slice(last.index + last[0].length);
   const chamberMatch = CHAMBER_PATTERN.exec(after);

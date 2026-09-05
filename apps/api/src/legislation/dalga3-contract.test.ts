@@ -49,10 +49,16 @@ describe("A4: mevzuat kütüphanesi (yerel yükleme modeli)", () => {
     expect(s).toContain("isActive: false");
   });
 
-  it("VAAT KISITI: RG otomatik senkron YOKTUR — kodda senkron işi olmamalı", () => {
+  it("VAAT KISITI (faz 1 sonrası): RG izleyici ONAY KUYRUĞUYLA çalışır — otomatik havuz yazımı yoktur", () => {
+    // Faz 1 (hukuki veri kaynağı besleme): platform mevzuat havuzu kuruldu.
+    // Yeni vaat: RG izleyici vardır ama yalnızca ONAY KUYRUĞUNA yazar;
+    // hiçbir RG belgesi otomatik yayınlanmaz (halüsinasyon zinciri kuyrukta kesilir).
+    const rgJob = read("src", "scheduler", "jobs", "resmi-gazete.job.ts");
+    expect(rgJob).toContain("HAVUZA YAZIM BU İŞTE YAPILMAZ");
+    // Kiracı kütüphanesi hâlâ elle yüklemeye dayanır: büro kaydı kiracıya aittir.
     const s = read("src", "legislation", "legislation.service.ts");
     expect(s).toContain("YOKTUR");
-    // Otomatik senkron iddiası taşıyan bir istemci/planlayıcı işi eklenmemiş olmalı.
+    // Zamanlayıcı çekirdeği mevzuat bilmez; iş tanımı job dosyasındadır.
     const scheduler = read("src", "scheduler", "scheduler.service.ts");
     expect(scheduler).not.toContain("legislation");
   });

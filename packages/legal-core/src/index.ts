@@ -117,3 +117,4 @@ export * from "./vekalet-ucreti";
 export * from "./kidem-ihbar";
 export * from "./faiz";
 export * from "./harc";
+export * from "./statute-parser";

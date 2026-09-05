@@ -23,6 +23,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { href: "/yargi", label: "Yargı & Noter Kataloğu", action: "judicial.view" },
   { href: "/yargi/havuz", label: "İçtihat Havuzu", action: "aiProvider.view" },
   { href: "/ictihat/onay", label: "İçtihat Onay Masası", action: "aiProvider.view" },
+  { href: "/yargi/mevzuat", label: "Mevzuat Onay Masası", action: "aiProvider.view" },
   { href: "/ai-saglayicilar", label: "Platform AI Sağlayıcıları", action: "aiProvider.view" },
   { href: "/egitim", label: "AI Eğitim İşleri", action: "aiProvider.view" },
   { href: "/onaylar", label: "Onay Kuyruğu", action: "approval.view" },

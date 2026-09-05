@@ -23,6 +23,24 @@ interface LegislationRow {
   versionNote: string | null;
   preview: string;
   updatedAt: string;
+  /** Platform kaydı (onaylı resmî besleme, tenantId=null) — yalnız okunur. */
+  isPlatform?: boolean;
+  tenantId?: string | null;
+  sourceKey?: string | null;
+  rgDate?: string | null;
+  rgNo?: string | null;
+}
+
+/** Platform kaydı mı? Liste isPlatform taşır; detay ucu ham satırı (tenantId) döner. */
+function isPlatformRow(row: { isPlatform?: boolean; tenantId?: string | null }): boolean {
+  return row.isPlatform ?? row.tenantId === null;
+}
+
+function rgLabel(row: { rgDate?: string | null; rgNo?: string | null }): string | null {
+  if (!row.rgDate) return null;
+  const d = new Date(row.rgDate);
+  const date = Number.isNaN(d.getTime()) ? row.rgDate : d.toLocaleDateString("tr-TR");
+  return `RG ${date}${row.rgNo ? ` / ${row.rgNo}` : ""}`;
 }
 
 const DOC_TYPE_LABELS: Record<string, string> = {
@@ -200,9 +218,15 @@ export default function MevzuatPage() {
                 <Badge tone={DOC_TYPE_TONES[row.docType] ?? "gray"}>
                   {DOC_TYPE_LABELS[row.docType] ?? row.docType}
                 </Badge>
+                {isPlatformRow(row) ? (
+                  <span title="Onaylı resmî kaynak (mevzuat.gov.tr / Resmî Gazete) — platform kaydı, yalnız okunur">
+                    <Badge tone="green">Resmî kaynak</Badge>
+                  </span>
+                ) : null}
                 <span className="font-semibold text-slate-900">{row.title}</span>
                 {row.number ? <span className="text-sm text-slate-500">No. {row.number}</span> : null}
                 {row.year ? <span className="text-sm text-slate-500">({row.year})</span> : null}
+                {rgLabel(row) ? <span className="text-sm text-slate-500">{rgLabel(row)}</span> : null}
               </div>
               <p className="mt-2 line-clamp-2 text-sm text-slate-600">{row.preview}…</p>
               {row.versionNote ? (
@@ -277,10 +301,18 @@ export default function MevzuatPage() {
               <Badge tone={DOC_TYPE_TONES[viewRow.docType] ?? "gray"}>
                 {DOC_TYPE_LABELS[viewRow.docType] ?? viewRow.docType}
               </Badge>
+              {isPlatformRow(viewRow) ? <Badge tone="green">Resmî kaynak · platform kaydı</Badge> : null}
               {viewRow.number ? <span className="text-sm text-slate-500">No. {viewRow.number}</span> : null}
               {viewRow.year ? <span className="text-sm text-slate-500">({viewRow.year})</span> : null}
               {viewRow.tags ? <span className="text-sm text-slate-500">{viewRow.tags}</span> : null}
+              {rgLabel(viewRow) ? <span className="text-sm text-slate-500">{rgLabel(viewRow)}</span> : null}
             </div>
+            {isPlatformRow(viewRow) ? (
+              <p className="text-xs text-slate-500">
+                Bu kayıt platformun onaylı resmî beslemesinden gelir (kaynak: {viewRow.sourceKey ?? "resmî"}); büro
+                tarafından değiştirilemez ve silinemez. Güncelliği platform işletmesi Resmî Gazete izleyicisiyle sağlar.
+              </p>
+            ) : null}
             {viewRow.versionNote ? (
               <p className="text-sm font-medium text-slate-700">Sürüm: {viewRow.versionNote}</p>
             ) : null}
@@ -291,13 +323,15 @@ export default function MevzuatPage() {
               <Button variant="secondary" onClick={() => setViewRow(null)}>
                 Kapat
               </Button>
-              <Button
-                variant="secondary"
-                className="text-red-700"
-                onClick={() => void remove(viewRow.id)}
-              >
-                Sil
-              </Button>
+              {isPlatformRow(viewRow) ? null : (
+                <Button
+                  variant="secondary"
+                  className="text-red-700"
+                  onClick={() => void remove(viewRow.id)}
+                >
+                  Sil
+                </Button>
+              )}
             </div>
           </div>
         ) : null}

@@ -11,8 +11,13 @@ import { CaseLawAdapterRegistry } from "./adapters/registry.service";
 import { LocalDbCaseLawAdapter } from "./adapters/local-db.adapter";
 import { ManualEntryCaseLawAdapter } from "./adapters/manual-entry.adapter";
 import { YargitayLiveAdapter, EMSAL_LIVE, EMSAL_LIVE_CONFIG } from "./adapters/yargitay-live.adapter";
+import { AymLiveAdapter } from "./adapters/aym-live.adapter";
+import { UyusmazlikLiveAdapter } from "./adapters/uyusmazlik-live.adapter";
 // D1.3: BYO yetkisi + platform sağlayıcı yedeği için.
 import { AiModule } from "../ai/ai.module";
+// Faz 1 (mevzuat besleme): CitationVerifyService mevzuat atıflarını platform
+// kanun havuzundan (Statute) doğrular — arama servisi Legislation modülündedir.
+import { LegislationModule } from "../legislation/legislation.module";
 
 /**
  * İçtihat & Mevzuat modülü (Modül 23).
@@ -25,7 +30,7 @@ import { AiModule } from "../ai/ai.module";
  * NOT: NestJS modül kaydı (app.module.ts) Entegrasyon ajanının işidir.
  */
 @Module({
-  imports: [AiModule],
+  imports: [AiModule, LegislationModule],
   controllers: [CaselawController, CaseCaselawController, CaseLawReferencesController],
   providers: [
     // CANLI katman: resmî karararama.yargitay.gov.tr arama istemcisi.
@@ -39,6 +44,10 @@ import { AiModule } from "../ai/ai.module";
     CaseLawAdapterRegistry,
     LocalDbCaseLawAdapter,
     ManualEntryCaseLawAdapter,
+    // Canlı künye teyidi adaptörleri (Faz 2) — kaynak kapılı, yalnız kendi
+    // mahkemesini adlandıran künyelerde ağa çıkar.
+    AymLiveAdapter,
+    UyusmazlikLiveAdapter,
   ],
   exports: [CaselawService, CitationVerifyService, AiRunnerService, CaseLawAdapterRegistry],
 })

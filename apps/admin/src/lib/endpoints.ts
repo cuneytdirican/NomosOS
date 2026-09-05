@@ -168,4 +168,19 @@ export const EP = {
     /** Onay ÖNCESİ karar metni (Onay Masası okuma bölmesi) — fullText ya da canlı kaynak. */
     preview: (id: string) => `/caselaw-ingest/items/${encodeURIComponent(id)}/preview`,
   },
+
+  /**
+   * Mevzuat toplama hattı (hukuki veri kaynağı besleme planı, Faz 1+3) —
+   * mevzuat.gov.tr tohumu, RG izleyici, KVKK/Rekabet izleyicileri → onay kuyruğu.
+   * Onay tek kapıdan (LegislationPoolService) havuza yazar; panel havuza doğrudan yazmaz.
+   */
+  legislationIngest: {
+    stats: "/legislation-ingest/stats",
+    health: "/legislation-ingest/health",
+    items: "/legislation-ingest/items",
+    preview: (id: string) => `/legislation-ingest/items/${encodeURIComponent(id)}/preview`,
+    approve: (id: string) => `/legislation-ingest/items/${encodeURIComponent(id)}/approve`,
+    reject: (id: string) => `/legislation-ingest/items/${encodeURIComponent(id)}/reject`,
+    run: (source: "tohum" | "rg" | "kvkk" | "rekabet") => `/legislation-ingest/run/${source}`,
+  },
 } as const;

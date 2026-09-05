@@ -3,19 +3,92 @@
 > Hedef: Türkiye hukuk bilgi altyapısını resmî kaynaklardan kurmak; her kaynak doğrulanmış,
 > soyutlanmış konektörlerle bağlanır. Yeni kaynak = yeni konektör, mimari değişikliği değil.
 
+## UYGULAMA DURUMU (2026-09-04 — Faz 1 kodlandı ve canlı doğrulandı)
+
+- **DB:** `Statute` + `StatuteArticleVersion` (madde sürüm zinciri), `LegislationIngestItem`
+  (onay kuyruğu), `Legislation` tenantId/uploadedBy nullable + source/lineage alanları,
+  `CaseLawDocument.authorityLevel`. Migration: `20260904210000_hukuki_veri_kaynagi_besleme_faz1`.
+- **Konektörler** (`apps/api/src/legislation/connectors/`): `MevzuatGovConnector`
+  (`POST /anasayfa/MevzuatDatatable` — AranacakIfade base64(UTF-8), çerez gerekmez;
+  `GET /anasayfa/MevzuatFihristDetayIframe` — konsolide metin) ve `ResmiGazeteClient`
+  (gün sayfası `/eskiler/YYYY/MM/YYYYMMDD.htm`, windows-1254). `gov-tls.ts`: tccb siteleri
+  zincirde ara sertifika GÖNDERMİYOR → sabit CA paketi (GeoTrust TLS RSA CA G1 + DigiCert
+  Global Root G2; ara sertifika 02.11.2027'de dolar — healthCheck TLS hatasıyla düşürür).
+- **Ayrıştırma:** `statute-parser.ts` (legal-core) — madde başlıkları + künye başlığı +
+  `diffStatuteArticles` sürüm farkı.
+- **Hatt:** tohum (15 çekirdek kanun, abbrs'li) + `resmi-gazete-gunluk` işi →
+  `LegislationIngestItem` onay kuyruğu → tek kapı `LegislationPoolService`. RG KANUN
+  onayı: etkilenen kanun(lar)ın konsolide metni mevzuat.gov.tr'den çekilip sürümlenir.
+- **Atıf teyidi:** `StatuteLookupService` — kanun yok → BELIRSIZ (havuz kısmi), kanun var
+  madde yok → BULUNAMADI, ikisi de var → DOGRULANDI (RG künyesi lineage ile).
+- **Uçlar:** `/api/admin/v1/legislation-ingest` (stats/health/items/preview/run/approve/reject);
+  kiracı `GET /legislation` platform kayıtlarını (tenantId=null) okur.
+- **Doğrulama:** canlı duman testleri (TCK 5237 → 324 madde; RG 04.09.2026 → sayı 33360,
+  4 kalem); 1033 test + lint + typecheck geçti.
+
+**Derin analiz düzeltme turu (2026-09-05):**
+- **Kiracı sızıntısı kapatıldı:** `LegislationService.list` arama `OR`'u görünürlük
+  `OR`'unu eziyordu (aramada diğer büroların kayıtları görünüyordu) → `AND` altında ayrı
+  bloklar; iki kiracılı sızıntı testi (`legislation.service.test.ts`).
+- **Kaynak kapısı:** AYM/Uyuşmazlık canlı adaptörleri yalnız kendi mahkemesini adlandıran
+  künyede ağa çıkar (`query.source`); citation-verify birleştirme sonrası `courtMatchesSource`
+  ile ikinci kilit (Yargıtay künyesi ↔ AYM kaydı = BELIRSIZ). Adaptörler DI'ya alındı,
+  registry adaptörleri PARALEL sorgular.
+- **Mevzuat Onay Masası** paneli: `/yargi/mevzuat` (kuyruk + okuma bölmesi + tarama
+  düğmeleri + sağlık kontrolü). Web mevzuat sayfasında "Resmî kaynak" rozeti; platform
+  kaydında Sil yok.
+- **Havuz kapısı:** `importLegislation` yeniden onayda künyeyi silmez; sürüm sınırı RG
+  künyesi yoksa tespit tarihiyle kurulur (null bırakılmaz, denetim izi "yaklaşık" der).
+- **gov-tls:** aynı ana makineye 3 yönlendirme izlenir, gövde sınırı akış sırasında,
+  ara sertifika (02.11.2027) 90 gün kala healthCheck uyarısı; TLS zincir hatası adlandırılır.
+- **RG:** "KANUNLAR" başlığı KANUN sayılır (çoklu kanun günü). Testler: RG ayrıştırıcı,
+  mevzuat.gov.tr konektörü (sahte govFetch), gov-tls, registry, mahkeme kapısı, havuz koruması.
+- **Test paketi hermetik:** redis-degradation testi BullMQ sahtesiyle (Redis'siz geçer).
+- `simulation.modes.ts` kodlama bozulması (mojibake+BOM) HEAD'den geri alındı; yalnız
+  `maxTokens: 12288` korundu.
+
+**Faz 2 bulguları / ilerleme:**
+- **AYM canlı künye teyidi KODLANDI ve canlı doğrulandı** (`aym-live.adapter.ts`,
+  `AYM_CANLI`, registry'ye kayıtlı): `POST /api/core/public/search` — `basvuruNo`
+  (bireysel, birebir) ve `esasNo`+`kararNo` (norm denetimi) filtreleri doğrulandı.
+  citation-verify, AYM künyelerinde karar no ZORUNLULUĞUNU kaldırdı (bireysel başvuruda
+  karar no yoktur). Karar metni ucu kırık (dosyalar → .udf URL 404) → canSearch kapalı.
+  Canlı duman testi: 2013/1821 FOUND, 2022/129 E. 2023/189 K. FOUND, 2099/999999 NOT_FOUND.
+- **Danıştay** (karararama.danistay.gov.tr): `POST /detayliArama` ({data:{...}}) +
+  **reCaptcha korumalı** — captcha'sız otomatik konektör güvenilmez; resmî erişim gerekir.
+- **Uyuşmazlık Mahkemesi canlı künye teyidi KODLANDI ve canlı doğrulandı**
+  (`uyusmazlik-live.adapter.ts`, `UYUSMAZLIK_CANLI`): kararlar.uyusmazlik.gov.tr
+  WebForms akışı (GET gizli alanlar → POST txtSearch/rblSearchScope=EsasNo) Node'dan
+  çerezsiz doğrulandı. EsasNo araması KISMİ eşleşir ("1999/1" → 11 benzer künye) —
+  adaptör birebir filtre uygular. Atıf desenlerine "Uyuşmazlık Mahkemesi"/UYUSMAZLIK
+  kaynağı eklendi (COURT_TOKEN + courtMatchesSource). Kararlar PDF-only → canSearch
+  kapalı. Canlı duman: 2026/366 E. 2026/343 K. FOUND; 1999/99 NOT_FOUND.
+- **KVKK Kurul kararları izleyici KODLANDI ve canlı doğrulandı** (Faz 3 regülatör
+  kaynak 1; `kvkk.client.ts` + `kvkk-kurul-haftalik` işi + `POST run/kvkk`):
+  liste `GET /Icerik/5419/kurul-kararlari?page=N`, detay `/Icerik/{id}/{slug}`
+  (Karar Tarihi/Karar No/Konu Özeti) Node'dan çerezsiz doğrulandı. Onay kuyruğu →
+  Legislation platform kaydı. Canlı duman: 10 kalem + detay 4892 karakter, künye
+  14/12/2023-2023/2135 çıkarıldı.
+- **Rekabet Kurulu kararları izleyici KODLANDI ve canlı doğrulandı** (Faz 3
+  regülatör kaynak 2; `rekabet.client.ts` + `rekabet-kurul-haftalik` işi +
+  `POST run/rekabet`): liste `GET /tr/Kararlar?page=N` (`table.yantablo1` künye
+  blokları + tam başlık), detay `/Karar?kararId={uuid}` doğrudan PDF. Künye
+  (karar sayısı/tarihi/türü) listeden alınır; onay künyeyle Legislation platform
+  kaydı yazar. Canlı duman: 10 kalem, künye 25-44/1086-615 çıkarıldı.
+
 ## 0. Doğrulanmış kaynak envanteri (araştırma sonucu)
 
 | Kaynak | URL | Erişim modeli | Kod durumu |
 |---|---|---|---|
-| Mevzuat Bilgi Sistemi (TCCB) | mevzuat.gov.tr | Web; kanun/KHK/CBK/yönetmelik/tebliğ/genelge + mülga; doc/pdf çıktı var (`/MevzuatMetin/{id}.pdf/.doc`) | ❌ bağlı değil |
-| Resmî Gazete | resmigazete.gov.tr | Web; günlük sayı + arşiv `/eskiler/YYYY/MM/DD`, metin başına `.htm`, sayı PDF `/eskiler/YYYY/MM/YYYYMMDD.pdf` | ❌ bağlı değil |
+| Mevzuat Bilgi Sistemi (TCCB) | mevzuat.gov.tr | POST /anasayfa/MevzuatDatatable (base64) + iframe konsolide metin; çerez gerekmez | ✅ `MevzuatGovConnector` (canlı doğrulandı) |
+| Resmî Gazete | resmigazete.gov.tr | Gün sayfası `/eskiler/YYYY/MM/YYYYMMDD.htm` (windows-1254), belge `YYYYMMDD-N.htm` | ✅ `ResmiGazeteClient` + `resmi-gazete-gunluk` işi |
 | Yargıtay Karar Arama | karararama.yargitay.gov.tr | Web (`POST /aramalist`, `GET /getDokuman?id=`) | ✅ `yargitay-live.adapter.ts` |
 | Emsal (UYAP karar arama) | emsal.uyap.gov.tr | Aynı sözleşme (arama/getDokuman) | ✅ aynı adaptör (EMSAL_UYAP) |
-| AYM Kararlar Bilgi Bankası | kararlarbilgibankasi.anayasa.gov.tr | JS SPA — uç noktalar impl. öncesi keşfedilecek | ❌ |
-| Danıştay karar arama | danistay.gov.tr | Web — uç noktalar impl. sırasında doğrulanacak | ❌ |
-| Uyuşmazlık Mahkemesi | uyusmazlikmahkemesi.gov.tr | Web — doğrulanacak | ❌ |
+| AYM Kararlar Bilgi Bankası | kararlarbilgibankasi.anayasa.gov.tr | AÇIK JSON API (`POST /api/core/public/search`; `basvuruNo`/`esasNo`+`kararNo` birebir) | ✅ `aym-live.adapter.ts` (künye teyidi; metin ucu kırık) |
+| Danıştay karar arama | karararama.danistay.gov.tr | `POST /detayliArama` + reCaptcha | ❌ captcha engeli — resmî erişim gerekir |
+| Uyuşmazlık Mahkemesi | kararlar.uyusmazlik.gov.tr | WebForms (GET VIEWSTATE → POST EsasNo/KararNo); PDF-only | ✅ `uyusmazlik-live.adapter.ts` (künye teyidi) |
 | TBMM kanun teklifleri | tbmm.gov.tr | Web — doğrulanacak | ❌ |
-| KVKK | kvkk.gov.tr | Web (kurul kararları, rehberler) | ❌ |
+| KVKK | kvkk.gov.tr | Liste `/Icerik/5419/kurul-kararlari?page=N` + detay `/Icerik/{id}/{slug}` | ✅ `kvkk.client.ts` + `kvkk-kurul-haftalik` işi |
 | Rekabet Kurumu | rekabet.gov.tr | Web (kurul kararları) | ❌ |
 | EUR-Lex | eur-lex.europa.eu | SPARQL + REST (üluslararası faz) | ❌ |
 | HUDOC (AİHM) | hudoc.echr.coe.int | REST benzeri arama (üluslararası faz) | ❌ |
