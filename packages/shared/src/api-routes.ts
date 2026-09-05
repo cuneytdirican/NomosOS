@@ -112,6 +112,11 @@ export const SECURITY_ROUTES = {
   audit: "/security/audit",
   auditActions: "/security/audit/actions",
   auditExportCsv: "/security/audit/export.csv",
+  /** KVKK saklama/imha + veri öznesi talepleri. */
+  kvkkRetention: "/security/kvkk/retention",
+  kvkkAnonymize: (caseId: string) => `/security/kvkk/retention/cases/${caseId}/anonymize`,
+  kvkkRequests: "/security/kvkk/requests",
+  kvkkRespond: (id: string) => `/security/kvkk/requests/${id}/respond`,
 } as const;
 
 export const USERS_ROUTES = {

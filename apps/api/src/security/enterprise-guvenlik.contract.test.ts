@@ -111,6 +111,26 @@ describe("gizli dosya (dosya bazlı erişim kısıtı)", () => {
   });
 });
 
+describe("KVKK saklama/imha + veri öznesi talepleri", () => {
+  it("şema, uçlar, iş, politika alanı, ekran", () => {
+    expect(schema).toContain("retentionYears  Int      @default(10)");
+    expect(schema).toContain("anonymizedAt      DateTime?");
+    expect(schema).toContain("model KvkkRequest {");
+    expect(schema).toContain("KVKK_SAKLAMA");
+    const c = read("src", "security", "kvkk.controller.ts");
+    expect(c).toContain('@Controller("security/kvkk")');
+    expect(c).toContain('@Post("retention/cases/:id/anonymize")');
+    const s = read("src", "security", "kvkk.service.ts");
+    // Otomatik silme YOK; imha yalnız ADMIN + gerekçe + süresi dolmuş KAPANDI.
+    expect(s).toContain('assertRole(user, ["ADMIN"], "KVKK imhası uygulama")');
+    expect(s).toContain("KVKK_RESPONSE_DAYS = 30");
+    expect(read("src", "scheduler", "jobs", "kvkk-saklama.job.ts")).toContain("hiçbir veriyi SİLMEZ");
+    expect(read("src", "security", "security.service.ts")).toContain("retentionYears");
+    expect(read("..", "web", "src", "app", "app", "ayarlar", "kvkk", "page.tsx")).toContain("/security/kvkk/retention");
+    expect(read("..", "web", "src", "app", "app", "layout.tsx")).toContain('"/app/ayarlar/kvkk"');
+  });
+});
+
 describe("arayüz", () => {
   it("web: güvenlik / denetim / bildirimler sayfaları + menü; giriş 2FA adımı", () => {
     expect(read("..", "web", "src", "app", "app", "ayarlar", "guvenlik", "page.tsx")).toContain("/auth/2fa/setup");

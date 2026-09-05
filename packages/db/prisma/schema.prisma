@@ -46,11 +46,16 @@ model Tenant {
   require2fa      Boolean  @default(false)
   /// Oturum ömrü (saat, 1-24). null = varsayılan 12 saat.
   sessionMaxHours Int?
+  /// KVKK SAKLAMA POLİTİKASI: dosya kapanışından itibaren saklama yılı
+  /// (Avukatlık K. m.39 + politika matrisi K1: varsayılan 10, 10-30). Süre dolan
+  /// KAPANDI dosyalar imha ADAYI olur; imha yalnız ADMIN kararıyla, gerekçeli.
+  retentionYears  Int      @default(10)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   users             User[]
   notificationPreferences NotificationPreference[]
+  kvkkRequests      KvkkRequest[]
   clients           Client[]
   cases             Case[]
   deadlineRules     DeadlineRule[]
@@ -191,6 +196,7 @@ model Client {
   contacts         ClientContact[]
   cases            Case[]
   caseParties      CaseParty[]
+  kvkkRequests     KvkkRequest[]
   powerOfAttorneys PowerOfAttorney[]
   financialEntries FinancialEntry[]
   feeAgreements    FeeAgreement[]
@@ -301,6 +307,9 @@ model Case {
   /// GİZLİ DOSYA (Enterprise++): açıkken yalnız ADMIN/PARTNER, sorumlu avukat ve
   /// CaseMember üyeleri görür (common/case-visibility.ts; guard + liste süzgeçleri).
   isConfidential    Boolean    @default(false)
+  /// KVKK İMHA uygulandı: belgeler ve RAG parçaları silindi (saklama süresi doldu,
+  /// ADMIN gerekçeli karar). Künye/safahat kalır (denetim izi + m.39).
+  anonymizedAt      DateTime?
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 
@@ -4291,6 +4300,8 @@ enum NotificationKind {
   /// Sözleşme Analizi — analizde KRİTİK şerh çıktığında avukata bildirim
   /// (yalnızca ContractNotifySetting = OTOMATIK iken üretilir).
   SOZLESME_KRITIK_SHERH
+  /// KVKK: saklama süresi dolan dosya adayları / süresi geçen veri öznesi talebi (aylık, ADMIN).
+  KVKK_SAKLAMA
 }
 
 enum NotificationStatus {
@@ -4447,6 +4458,35 @@ model NotificationOutbox {
   @@index([tenantId, status, scheduledFor])
   @@index([tenantId, userId, status])
   @@index([tenantId, kind, createdAt])
+}
+
+/// KVKK VERİ ÖZNESİ TALEBİ (Enterprise++, politika matrisi "T" sütunu).
+/// Müvekkil erişim/silme/düzeltme/itiraz/taşıma talebi KAYDA geçer; KVKK m.13/2
+/// gereği 30 gün içinde GEREKÇELİ yanıt verilir. Silme talebinde saklama
+/// yükümlülüğü (Av. K. m.39) varsa gerekçeli ret — talep ve gerekçe iz bırakır.
+model KvkkRequest {
+  id          String   @id @default(uuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  /// ERISIM | SILME | DUZELTME | ITIRAZ | TASIMA
+  type        String
+  /// ACIK | YANITLANDI | REDDEDILDI
+  status      String   @default("ACIK")
+  subject     String
+  requestedAt DateTime @default(now())
+  /// Yasal yanıt süresi (KVKK m.13/2: en geç 30 gün).
+  dueAt       DateTime
+  decision    String?
+  respondedAt DateTime?
+  respondedBy String?
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId, status, dueAt])
+  @@index([clientId])
 }
 
 /// KULLANICI BİLDİRİM TERCİHİ (Enterprise++): bildirim türü × kanal.

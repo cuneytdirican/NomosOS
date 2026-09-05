@@ -25,7 +25,9 @@ import { HepoReminderJob } from "./jobs/hepo-reminder.job";
 import { CaselawIngestJob } from "./jobs/caselaw-ingest.job";
 import { KvkkKurulJob, MevzuatTohumJob, RekabetKurulJob, ResmiGazeteJob } from "./jobs/resmi-gazete.job";
 import { AautYilbasiJob } from "./jobs/aaut-yilbasi.job";
+import { KvkkSaklamaJob } from "./jobs/kvkk-saklama.job";
 import { VekaletUcretiModule } from "../vekalet-ucreti/vekalet-ucreti.module";
+import { SecurityModule } from "../security/security.module";
 
 import { PlatformJobsController } from "./platform-jobs.controller";
 import { PlatformJobsService } from "./platform-jobs.service";
@@ -68,7 +70,7 @@ import { DeviceTokensService } from "./device-tokens.service";
  * ajanının işidir.
  */
 @Module({
-  imports: [PlatformModule, CreditsModule, RiskModule, VekaletUcretiModule],
+  imports: [PlatformModule, CreditsModule, RiskModule, VekaletUcretiModule, SecurityModule],
   controllers: [
     // Platform (/api/admin/v1/jobs) — PlatformJwtGuard + yetki matrisi.
     PlatformJobsController,
@@ -116,6 +118,8 @@ import { DeviceTokensService } from "./device-tokens.service";
     RekabetKurulJob,
     // AAÜT yıl başı platform tarife denetimi — rakam üretmez, eksikse uyarır.
     AautYilbasiJob,
+    // KVKK saklama denetimi — aylık, veri silmez.
+    KvkkSaklamaJob,
 
     // --- uç servisleri ---
     PlatformJobsService,

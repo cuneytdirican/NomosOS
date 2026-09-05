@@ -502,6 +502,17 @@ const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
     ),
   },
   {
+    // Enterprise++: KVKK saklama/imha politikası + veri öznesi talepleri (ADMIN/PARTNER).
+    href: "/app/ayarlar/kvkk",
+    label: "KVKK",
+    roles: ["ADMIN", "PARTNER"],
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path fillRule="evenodd" d="M9.661 2.237a.531.531 0 0 1 .678 0 11.947 11.947 0 0 0 7.078 2.749.5.5 0 0 1 .479.425c.069.52.104 1.05.104 1.59 0 5.162-3.26 9.563-7.834 11.256a.48.48 0 0 1-.332 0C5.26 16.564 2 12.163 2 7c0-.538.035-1.069.104-1.589a.5.5 0 0 1 .48-.425 11.947 11.947 0 0 0 7.077-2.75Zm4.196 5.954a.75.75 0 0 0-1.214-.882l-3.236 4.53L7.53 9.97a.75.75 0 0 0-1.06 1.06l2.5 2.5a.75.75 0 0 0 1.137-.089l3.75-5.25Z" clipRule="evenodd" />
+      </svg>
+    ),
+  },
+  {
     // Kullanıcı tanımlı model eğitimi — lisanslı büro kendi modelini/RAG'ını eğitir.
     href: "/app/ayarlar/model-egitimi",
     label: "Model Eğitimi",

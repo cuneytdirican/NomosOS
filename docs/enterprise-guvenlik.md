@@ -97,9 +97,29 @@ formül koruması, kiracı süzgeci, rol kapıları, oturum ömrü aralığı),
 - **Testler:** `case-visibility.test.ts` (kural, `extractCaseId`, guard 404/geçiş/DB'ye
   gitmeme), sözleşme testi.
 
-## 8. Sonraki Enterprise++ adayları (kodlanmadı — karar/kapsam ister)
+## 8. KVKK saklama / imha politikası + veri öznesi talepleri (üçüncü paket)
 
-- **Veri saklama/imha politikası** (KVKK) — saklama sürelerinin hukuki kararı gerekir.
+Hukuki karar `docs/kvkk-politika-matrisi.md`'den alındı: Av. K. m.39 saklama (kapanış +
+10 yıl varsayılan), KVKK m.7 saklama istisnasıyla gerekçeli ret, m.13/2 30 gün yanıt.
+
+- **Politika:** `Tenant.retentionYears` (10-30; `PATCH /security/policy`, yalnız ADMIN).
+- **Otomatik silme YOK.** `GET /security/kvkk/retention` süresi dolan KAPANDI dosyaları
+  imha ADAYI olarak listeler; `POST /security/kvkk/retention/cases/:id/anonymize { reason }`
+  imhayı yalnız ADMIN, gerekçeyle, yalnız süresi dolmuş KAPANDI dosyada uygular:
+  belgeler yumuşak silinir + S3 nesnesi silinmeye çalışılır (en iyi çaba, başarısızlar
+  izde sayılır), RAG parçaları silinir, `Case.anonymizedAt` damgalanır; künye/safahat/
+  denetim izi KALIR (`KVKK_IMHA`).
+- **Veri öznesi talepleri:** `KvkkRequest` (ERISIM/SILME/DUZELTME/ITIRAZ/TASIMA;
+  `dueAt = talep + 30 gün`); `GET/POST /security/kvkk/requests`,
+  `POST /security/kvkk/requests/:id/respond { YANITLANDI | REDDEDILDI, decision ≥ 10 }` —
+  gerekçe zorunlu, denetim izi `KVKK_REQUEST_*`.
+- **Aylık iş `kvkk-saklama-aylik`:** aday ve süresi geçen talep sayısını ADMIN/PARTNER'a
+  `KVKK_SAKLAMA` bildirimi olarak yazar (ay başına bir kez, dedupe); veri silmez.
+- **Ekran:** `/app/ayarlar/kvkk` — politika, imha adayları (gerekçeli imha), talepler
+  (kayıt + yanıt/ret).
+
+## 9. Sonraki Enterprise++ adayları (kodlanmadı — karar/kapsam ister)
+
 - **API anahtarları / webhook'lar** (büro entegrasyonları) — yeni kimlik yüzeyi.
 - **SSO (OIDC/SAML)** — kurumsal kimlik sağlayıcı bağlantısı.
 - **Oturum listesi (cihaz bazlı iptal)** — bugün "tümünü düşür" var.

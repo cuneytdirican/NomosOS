@@ -18,6 +18,7 @@ export const NOTIFICATION_KIND_LABELS: Record<NotificationKind, string> = {
   SOZLESME_YENILEME: "Sözleşme yenileme",
   VEKALET_SURESI: "Vekalet süresi",
   SOZLESME_KRITIK_SHERH: "Kritik sözleşme şerhi",
+  KVKK_SAKLAMA: "KVKK saklama süresi denetimi",
 };
 const KIND_LABELS = NOTIFICATION_KIND_LABELS;
 

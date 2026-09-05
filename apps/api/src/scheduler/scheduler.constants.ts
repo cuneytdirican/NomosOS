@@ -69,6 +69,8 @@ export const JOB_KEYS = {
    * tarife rakamı üretilmez, yalnız hatırlatır.
    */
   AAUT_YILBASI: "aaut-tarife-yilbasi",
+  /** KVKK saklama denetimi — aylık; veri silmez, yöneticiyi uyarır. */
+  KVKK_SAKLAMA: "kvkk-saklama-aylik",
 } as const;
 
 export type JobKey = (typeof JOB_KEYS)[keyof typeof JOB_KEYS];

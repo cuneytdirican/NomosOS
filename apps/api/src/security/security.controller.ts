@@ -21,9 +21,10 @@ const policySchema = z
   .object({
     require2fa: z.boolean().optional(),
     sessionMaxHours: z.number().int().min(1).max(24).nullable().optional(),
+    retentionYears: z.number().int().min(10).max(30).optional(),
   })
-  .refine((v) => v.require2fa !== undefined || v.sessionMaxHours !== undefined, {
-    message: "Güncellenecek bir alan gönderin (require2fa, sessionMaxHours).",
+  .refine((v) => v.require2fa !== undefined || v.sessionMaxHours !== undefined || v.retentionYears !== undefined, {
+    message: "Güncellenecek bir alan gönderin (require2fa, sessionMaxHours, retentionYears).",
   });
 type PolicyInput = z.infer<typeof policySchema>;
 

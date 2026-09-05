@@ -25,6 +25,8 @@ import { SESSION_HOURS_MAX, SESSION_HOURS_MIN } from "../auth/session.service";
 export interface SecurityPolicyInput {
   require2fa?: boolean;
   sessionMaxHours?: number | null;
+  /** KVKK saklama yılı (kapanış + N; 10-30). */
+  retentionYears?: number;
 }
 
 export interface AuditQuery {
@@ -63,7 +65,7 @@ export class SecurityService {
   async getPolicy(user: AuthUser) {
     const tenant = await this.prisma.client.tenant.findUnique({
       where: { id: user.tenantId },
-      select: { require2fa: true, sessionMaxHours: true },
+      select: { require2fa: true, sessionMaxHours: true, retentionYears: true },
     });
     const [total, withTwoFactor] = await Promise.all([
       this.prisma.client.user.count({ where: { tenantId: user.tenantId, isActive: true } }),
@@ -74,6 +76,7 @@ export class SecurityService {
     return {
       require2fa: tenant?.require2fa ?? false,
       sessionMaxHours: tenant?.sessionMaxHours ?? null,
+      retentionYears: tenant?.retentionYears ?? 10,
       /** Ekran için: aktif kullanıcıların kaçında 2FA kurulu. */
       users: { total, withTwoFactor },
       canEdit: user.role === "ADMIN",
@@ -91,16 +94,23 @@ export class SecurityService {
     ) {
       throw new BadRequestException(`Oturum ömrü ${SESSION_HOURS_MIN}-${SESSION_HOURS_MAX} saat aralığında olmalıdır.`);
     }
+    if (
+      input.retentionYears !== undefined &&
+      (!Number.isInteger(input.retentionYears) || input.retentionYears < 10 || input.retentionYears > 30)
+    ) {
+      throw new BadRequestException("Saklama süresi 10-30 yıl aralığında olmalıdır (Avukatlık K. m.39 asgari 10 yıl).");
+    }
     const data: Prisma.TenantUpdateInput = {};
     if (input.require2fa !== undefined) data.require2fa = input.require2fa;
     if (input.sessionMaxHours !== undefined) data.sessionMaxHours = input.sessionMaxHours;
+    if (input.retentionYears !== undefined) data.retentionYears = input.retentionYears;
     if (Object.keys(data).length === 0) {
-      throw new BadRequestException("Güncellenecek bir alan gönderin (require2fa, sessionMaxHours).");
+      throw new BadRequestException("Güncellenecek bir alan gönderin (require2fa, sessionMaxHours, retentionYears).");
     }
     const updated = await this.prisma.client.tenant.update({
       where: { id: user.tenantId },
       data,
-      select: { require2fa: true, sessionMaxHours: true },
+      select: { require2fa: true, sessionMaxHours: true, retentionYears: true },
     });
     await this.audit.log({
       tenantId: user.tenantId,
@@ -110,7 +120,7 @@ export class SecurityService {
       entityId: user.tenantId,
       detail:
         `2FA zorunlu=${updated.require2fa ? "evet" : "hayır"}, ` +
-        `oturum ömrü=${updated.sessionMaxHours ?? "varsayılan (12 sa)"}`,
+        `oturum ömrü=${updated.sessionMaxHours ?? "varsayılan (12 sa)"}, saklama=${updated.retentionYears} yıl`,
     });
     return updated;
   }
