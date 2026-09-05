@@ -1,6 +1,6 @@
 # NomosOS — FINAL COMPLETION REPORT
 
-**Tarih:** 1 Eylül 2026 · **Karar:** **NOT PRODUCTION READY** (bkz. §18)
+**Tarih:** 1 Eylül 2026 · **Güncelleme:** 5 Eylül 2026 (§19) · **Karar:** **NOT PRODUCTION READY — iç iş kalemleri kapandı, dış sözleşmeler bekliyor** (bkz. §18, §19)
 
 ---
 
@@ -203,6 +203,51 @@ Bağımsız makro denetim bulguları:
 - [ ] Sızma testi
 - [ ] Kalan İYİLEŞTİRMELER (JWT cookie dahil)
 - [ ] Yedekleme/geri yükleme prosedürünün canlı testi
+
+## 19. Ek — 5 Eylül 2026 Kapanış Güncellemesi (Aşama 9)
+
+### 19.1 1–5 Eylül arasında teslim edilenler
+
+| Alan | Teslim | Kanıt |
+|---|---|---|
+| İçtihat | Yargıtay + Emsal (UYAP) canlı arama, karar metni okuma, Onay Masası, caselaw-ingest besleme hattı, AYM/Uyuşmazlık canlı künye teyidi (kaynak kapılı) | `1a100f8`, `890bcfe`, `5e75120` |
+| Mevzuat (Faz 1+3) | `Statute`/`StatuteArticleVersion` madde sürüm zinciri, mevzuat.gov.tr + Resmî Gazete konektörleri (gov-tls sabit CA), KVKK/Rekabet izleyicileri, onay kuyruğu, atıf teyidi mevzuat kolonu ("TCK 86" → DOGRULANDI), admin Mevzuat Onay Masası | `5e75120`, `docs/mevzuat-besleme-hatti.md` |
+| Derin analiz düzeltme turu | `simulation.modes.ts` kodlama onarımı; mevzuat aramasında kiracı sızıntısı; AYM/Uyuşmazlık kaynak kapısı + mahkeme uyum kilidi; hermetik Redis testi; gov-tls yönlendirme/sertifika uyarısı | `8234919`, `1fc86bb`, `5e75120` |
+| Kullanıcı tanımlı model eğitimi | Model yalnız katalogdan; lisanslı kiracı kendi modelinde eğitim işi (`/ai-training/fine-tune-jobs`, web `/app/ayarlar/model-egitimi`); eğitilmiş model kaydı içe aktarma (origin=IMPORTED); terminoloji "Model Eğitim İşleri" | `.mindaeon/plans/1788544126809-*.md` |
+| AAÜT platform tarifesi | `PlatformVekaletTarife` (RG künyeli), büro > platform > 404 çözümü, admin `/yargi/aaut`, `aaut-tarife-yilbasi` işi, hesap aracında kaynak notu | `plans/acilis-oncesi-hazir-veri-havuzu-plani.md` Aşama 2 |
+| Okuma deneyimi | Tam ekran okuma modu (web + admin), içtihat detay sayfası | `313b9a9` |
+
+### 19.2 Doğrulama (5 Eylül 2026, Redis/Docker KAPALIYKEN)
+
+| Paket | Test |
+|---|---|
+| api | 1133 |
+| legal-core | 111 |
+| web | 100 |
+| legal-ai | 79 |
+| udf | 44 |
+| e-signature | 37 |
+| uyap-extension | 35 |
+| **TOPLAM** | **1539** (1 Eylül: 1014) |
+
+typecheck api/web/admin temiz · `eslint --max-warnings 0` temiz · migration sayısı 47 (son: `20260923090000_kullanici_tanimli_model_ve_aaut_platform`).
+
+### 19.3 Derin analizde bulunup kapatılan sınıflar
+
+1. **Sessiz kodlama bozulması** — UTF-8 dosya cp1252 mojibake+BOM ile yazılmış; hiçbir kapı yakalamıyordu. Düzeltildi; her tur mojibake taraması çalışma kuralı oldu.
+2. **Prisma `where` çift `OR`** — görünürlük süzgeci arama süzgeciyle eziliyor, kiracı sızıntısı. `AND` bloğu + iki kiracılı test.
+3. **Canlı adaptörlerde kaynak kapısı yokluğu** — Yargıtay künyesi AYM kaydıyla doğrulanabiliyordu. Adaptör kapısı + servis katmanında `courtMatchesSource` ikinci kilit.
+4. **Test paketinin gizli altyapı bağımlılığı** — bir test canlı Redis istiyordu; BullMQ sahtesiyle hermetik.
+
+### 19.4 Kalan işler (değişmedi — dış bağımlılık ve veri)
+
+- **Veri operasyonu:** içtihat havuzu ilk 10.000 künye partisi resmî/lisanslı kaynak sözleşmesi bekliyor (araçlar hazır: caselaw-ingest, `/caselaw-pool/import`, onay masası). Tatil takvimi 2028+ ve tam yargı/noter/vergi kataloğu veri girişi.
+- **§18 ön koşulları** aynen geçerli: sanal POS, GİB entegratör, SMS sözleşmeleri; yük testi; sızma testi; JWT httpOnly cookie geçişi.
+- **AAÜT rakamları:** platform tarifesi altyapısı hazır; yılın rakamları platform görevlisince Resmî Gazete'den girilecek (sistem üretmez).
+
+### 19.5 Karar
+
+Depo içinde kodla kapatılabilecek açık iş kalmadı; `KALAN-GOREVLER.md` Aşama 8 ve 9 ✅. Üretim kararı §18'deki dış sözleşmeler ve testler tamamlanınca yeniden verilir.
 
 ---
 

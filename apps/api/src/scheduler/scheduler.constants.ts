@@ -63,6 +63,12 @@ export const JOB_KEYS = {
   KVKK_WATCHER: "kvkk-kurul-haftalik",
   /** Rekabet Kurulu kararları izleyici — liste → onay kuyruğu. */
   REKABET_WATCHER: "rekabet-kurul-haftalik",
+  /**
+   * AAÜT yıl başı denetimi — yeni yılın PLATFORM tarifesi (Resmî Gazete)
+   * girilmiş mi? Girilmemişse iş BAŞARISIZ raporlanır (panelde görünür uyarı);
+   * tarife rakamı üretilmez, yalnız hatırlatır.
+   */
+  AAUT_YILBASI: "aaut-tarife-yilbasi",
 } as const;
 
 export type JobKey = (typeof JOB_KEYS)[keyof typeof JOB_KEYS];

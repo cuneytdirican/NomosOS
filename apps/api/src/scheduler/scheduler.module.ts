@@ -24,6 +24,8 @@ import { RiskNightlyJob } from "./jobs/risk-nightly.job";
 import { HepoReminderJob } from "./jobs/hepo-reminder.job";
 import { CaselawIngestJob } from "./jobs/caselaw-ingest.job";
 import { KvkkKurulJob, MevzuatTohumJob, RekabetKurulJob, ResmiGazeteJob } from "./jobs/resmi-gazete.job";
+import { AautYilbasiJob } from "./jobs/aaut-yilbasi.job";
+import { VekaletUcretiModule } from "../vekalet-ucreti/vekalet-ucreti.module";
 
 import { PlatformJobsController } from "./platform-jobs.controller";
 import { PlatformJobsService } from "./platform-jobs.service";
@@ -66,7 +68,7 @@ import { DeviceTokensService } from "./device-tokens.service";
  * ajanının işidir.
  */
 @Module({
-  imports: [PlatformModule, CreditsModule, RiskModule],
+  imports: [PlatformModule, CreditsModule, RiskModule, VekaletUcretiModule],
   controllers: [
     // Platform (/api/admin/v1/jobs) — PlatformJwtGuard + yetki matrisi.
     PlatformJobsController,
@@ -112,6 +114,8 @@ import { DeviceTokensService } from "./device-tokens.service";
     MevzuatTohumJob,
     KvkkKurulJob,
     RekabetKurulJob,
+    // AAÜT yıl başı platform tarife denetimi — rakam üretmez, eksikse uyarır.
+    AautYilbasiJob,
 
     // --- uç servisleri ---
     PlatformJobsService,

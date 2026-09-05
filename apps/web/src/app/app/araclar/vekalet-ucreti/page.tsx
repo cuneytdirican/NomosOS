@@ -28,6 +28,9 @@ interface HesapSonucu {
   toplamKurus: string;
   iz: string[];
   not: string;
+  /** BURO = büronun girişi; PLATFORM = platformun RG'den girdiği resmî tarife. */
+  tarifeKaynagi?: "BURO" | "PLATFORM";
+  rgKunye?: string | null;
 }
 
 interface Tarife {
@@ -36,6 +39,8 @@ interface Tarife {
   tekrar: { esikKurus: string; birimKurus: string; ucretKurus: string } | null;
   nispiOranYuzde: string;
   kdvOrani: string;
+  kaynak?: "BURO" | "PLATFORM";
+  rgKunye?: string | null;
 }
 
 const kurusToTr = (kurus: string): string => {
@@ -112,9 +117,9 @@ export default function VekaletUcretiAraciPage() {
       {tarifeGerekli && (
         <div className="mt-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800" role="status">
           <p>
-            <strong>{yil}</strong> yılı için AAÜT tarifesi henüz girilmemiş.
-            Hesap yapabilmek için büronuzda (Ayarlar → Vekalet Ücreti Tarifesi)
-            yılın tarife rakamlarını Resmî Gazete'den girmeniz gerekir.
+            <strong>{yil}</strong> yılı için AAÜT tarifesi bulunamadı: büronuz girmemiş ve platformun
+            resmî tarife kaydı da henüz yayımlanmamış. Hesap yapabilmek için büronuzda
+            (Ayarlar → Vekalet Ücreti Tarifesi) yılın tarife rakamlarını Resmî Gazete'den girmeniz gerekir.
           </p>
           <p className="mt-2 text-xs">
             Tarife girildiğinde bu araç otomatik olarak hesaplama yapabilir.
@@ -127,6 +132,16 @@ export default function VekaletUcretiAraciPage() {
           <strong>{yil} tarifesi:</strong> {tarife.kademeler.length} kademe · nispi %
           {tarife.nispiOranYuzde} · KDV %{tarife.kdvOrani}
           {tarife.tekrar && ` · tekrar dilimi: her ${kurusToTr(tarife.tekrar.birimKurus)} TL için ${kurusToTr(tarife.tekrar.ucretKurus)} TL`}
+          <p className="mt-1">
+            {tarife.kaynak === "PLATFORM" ? (
+              <>
+                Kaynak: <strong>platformun Resmî Gazete'den girdiği resmî tarife</strong>
+                {tarife.rgKunye ? ` (${tarife.rgKunye})` : ""}. Büronuz kendi tarifesini girerse o kullanılır.
+              </>
+            ) : (
+              <>Kaynak: büronuzun girdiği tarife.</>
+            )}
+          </p>
         </div>
       )}
 

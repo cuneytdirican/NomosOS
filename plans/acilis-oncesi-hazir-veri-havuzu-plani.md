@@ -35,6 +35,13 @@ Yapılacak:
 
 ## AŞAMA 2 — AAÜT tarifesini platform beslemesi (KOD — yarım gün)
 
+> **DURUM (2026-09-05): TAMAMLANDI.** `PlatformVekaletTarife` (yıl @unique, RG künyesi
+> zorunlu) + `VekaletUcretiService.tarifeCoz` (büro > platform > 404; yanıtta
+> `tarifeKaynagi`/`rgKunye`) + admin `/yargi/aaut` (judicial.view/manage;
+> `/api/admin/v1/vekalet-tarife`) + `aaut-tarife-yilbasi` işi (2 Ocak 07:00, Aralık'ta
+> gelecek yıl da; eksikse BAŞARISIZ + denetim izi) + web hesap aracında kaynak notu.
+> Rakam girişi platform görevlisinindir — sistem tarife üretmez.
+
 1. `VekaletTarife` için platform varsayılanı: büro kendi tarifesini girmediyse
    sistem O YILIN resmî tarifesini kullanır (kaynak: Resmî Gazete; tarife
    motoru `packages/legal-core/vekalet-ucreti.ts` zaten veri odurlu).
@@ -52,6 +59,12 @@ Yapılacak:
    "listede yok → serbest metin" kaçamağı yine de kalır (kasıtlı).
 
 ## AŞAMA 4 — İçtihat havuzu doldurma (VERİ — en büyük iş)
+
+> **DURUM (2026-09-05): ARAÇLAR HAZIR, VERİ OPERASYONU BEKLİYOR.** Kod tarafı tamam:
+> `caselaw-ingest` besleme hattı + onay masası, `/caselaw-pool/import` toplu parti,
+> Yargıtay/Emsal canlı arama, AYM/Uyuşmazlık künye teyidi. Eksik olan KOD değil VERİDİR:
+> 10.000 künye+özet partisi resmî yayın/lisanslı kaynak sözleşmesi ve KVKK maskeli içe
+> aktarma operasyonu gerektirir — bu depo içinde üretilemez (uydurma veri yasağı).
 
 1. Kaynak: Yargıtay/Danıştay/Bölge Adliye Mahkemeleri RESMÎ KARAR YAYINLARI
    (kararlar.yargitay.gov.tr vb.). UYAP kazıması DEĞİL — resmî yayın;

@@ -7,6 +7,7 @@ import { NotFoundException } from "@nestjs/common";
 import { VekaletUcretiService } from "./vekalet-ucreti.service";
 import type { PrismaService } from "../prisma/prisma.service";
 import type { AuditService } from "../audit/audit.service";
+import type { PlatformAuditService } from "../platform/platform-audit.service";
 
 const TARIFE_ROW = {
   id: "t1",
@@ -33,10 +34,13 @@ function serviceWith(row: unknown = TARIFE_ROW) {
         findUnique: async () => row,
         upsert: async (args: { create: Record<string, unknown> }) => ({ id: "t1", ...args.create }),
       },
+      // Bu testler BÜRO tarifesini sınar; platform varsayılanı yok.
+      platformVekaletTarife: { findUnique: async () => null },
     },
   } as unknown as PrismaService;
   const audit = { log: async (e: unknown) => { audits.push(e); } } as unknown as AuditService;
-  return { svc: new VekaletUcretiService(prisma, audit), audits };
+  const platformAudit = { log: async () => undefined } as unknown as PlatformAuditService;
+  return { svc: new VekaletUcretiService(prisma, audit, platformAudit), audits };
 }
 
 describe("Vekalet ücreti — hesap ucu", () => {

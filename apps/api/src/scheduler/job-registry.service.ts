@@ -9,6 +9,7 @@ import { RiskNightlyJob } from "./jobs/risk-nightly.job";
 import { HepoReminderJob } from "./jobs/hepo-reminder.job";
 import { CaselawIngestJob } from "./jobs/caselaw-ingest.job";
 import { KvkkKurulJob, MevzuatTohumJob, RekabetKurulJob, ResmiGazeteJob } from "./jobs/resmi-gazete.job";
+import { AautYilbasiJob } from "./jobs/aaut-yilbasi.job";
 import type { ScheduledJobHandler } from "./scheduler.types";
 
 /**
@@ -45,7 +46,9 @@ export class JobRegistryService {
     resmiGazete: ResmiGazeteJob,
     mevzuatTohum: MevzuatTohumJob,
     kvkkKurul: KvkkKurulJob,
-    rekabetKurul: RekabetKurulJob
+    rekabetKurul: RekabetKurulJob,
+    // AAÜT yıl başı platform tarife denetimi (hazır veri planı Aşama 2/6).
+    aautYilbasi: AautYilbasiJob
   ) {
     const all: ScheduledJobHandler[] = [
       usageSnapshot,
@@ -61,6 +64,7 @@ export class JobRegistryService {
       mevzuatTohum,
       kvkkKurul,
       rekabetKurul,
+      aautYilbasi,
     ];
     this.handlers = new Map(all.map((h) => [h.key, h]));
   }

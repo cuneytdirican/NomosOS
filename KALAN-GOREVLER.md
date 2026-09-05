@@ -23,7 +23,37 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 5 Eylül 2026, 07:10
+# 🔖 KALDIĞIM YER — 5 Eylül 2026, 07:45
+
+> **AÇIK GÖREVLER KAPATILDI:** kullanıcı tanımlı model eğitimi planı (7/7 adım),
+> AAÜT platform tarifesi (Aşama 2), FINAL-COMPLETION-REPORT güncellemesi (Aşama 9).
+> İçtihat havuzu doldurma (Aşama 4) kod olarak hazır, VERİ operasyonu dış kaynak bekliyor.
+
+1. **Model eğitimi (kullanıcı tanımlı model):** model yalnız katalogdan seçilir
+   (serbest metin yok); lisanslı kiracı kendi modelinde iş açar
+   (`/ai-training/fine-tune-jobs`, web `/app/ayarlar/model-egitimi`, manifest
+   yalnız kendi örnekleri, allowBYOLLM 403); dışarıda eğitilmiş model KAYDI içe
+   aktarma (`/ai/providers/import`, admin `/ai/providers/import`, origin=IMPORTED).
+   Platform manifest kapsamı plandaki karara göre korundu, `tenantCount` ile şeffaf.
+   Plan: `.mindaeon/plans/1788544126809-kullanici-tanimli-model-egitimi.md`.
+2. **AAÜT platform tarifesi:** `PlatformVekaletTarife` + büro>platform>404 çözümü +
+   admin `/yargi/aaut` + `aaut-tarife-yilbasi` işi + web kaynak notu. Rakamları
+   platform görevlisi RG'den girer; sistem üretmez.
+3. **Doğrulama:** api 1133, web 100, legal-ai 79, legal-core 111, e-imza 37, udf 44,
+   eklenti 35 (toplam 1539); typecheck api/web/admin + lint temiz.
+4. **Kapanış raporu:** `docs/FINAL-COMPLETION-REPORT.md` §19 (5 Eylül eki).
+
+## Sırada
+
+1. **Veri operasyonu (Aşama 4):** resmî/lisanslı içtihat kaynağı sözleşmesi → ilk
+   10.000 künye partisi (`/caselaw-pool/import`, KVKK maskeli) — kod hazır, kaynak bekliyor.
+2. **Aşama 5 (tatil takvimi 2028+) ve Aşama 3 (tam yargı/noter/vergi kataloğu)** veri girişi.
+3. Üretim ön koşulları (FINAL rapor §18): sanal POS, GİB entegratör, SMS sözleşmeleri;
+   yük testi; sızma testi; JWT httpOnly cookie geçişi.
+
+---
+
+## 🔖 ÖNCEKİ KALDIĞIM YER — 5 Eylül 2026, 07:10
 
 > **Mevzuat besleme hattı (Faz 1+3) + AYM/Uyuşmazlık adaptörleri (Faz 2) + derin
 > analiz düzeltme turu TAMAMLANDI ve commit/push edildi.** Plan:
@@ -590,8 +620,8 @@ yeni ve dar kapsamlı bir workflow açmak** — denetim ve rapor zaten bitti.
 | 7 | Üretim dağıtımı — `docs/uretim-dagitimi.md`, CI, Docker üretim profili | ✅ ⚠️ |
 | 5 | Faz 5 — Müvekkil portalı, iletişim merkezi, vekaletname, sözleşme + e-imza | ✅ |
 | 6 | Faz 6 — Kurumsal raporlama, zamanlanmış işler, bildirimler, mobil | ✅ |
-| 8 | **DERİN DENETİM** (aşağıdaki prompt) | ⏳ |
-| 9 | Final GitHub gönderimi + kapanış raporu | ⏳ |
+| 8 | **DERİN DENETİM** (aşağıdaki prompt) | ✅ (31 Ağustos raporu + 5 Eylül derin analiz turu) |
+| 9 | Final GitHub gönderimi + kapanış raporu | ✅ (`docs/FINAL-COMPLETION-REPORT.md` §19, 5 Eylül 2026) |
 
 ### ✅ Çözülen engel — CI dosyaları
 
