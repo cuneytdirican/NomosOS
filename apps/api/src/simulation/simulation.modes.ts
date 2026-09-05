@@ -383,7 +383,7 @@ export const SIMULATION_MODES: Record<SimulationMode, SimulationModeSpec> = {
     schema: OpponentSimulationOutputSchema,
     findingPaths: ["arguments"],
     requiresDocument: false,
-    maxTokens: 3072,
+    maxTokens: 12288,
     build: (input) =>
       buildOpponentSimulationMessages({
         caseContextText: contextBlock(input),
@@ -410,7 +410,7 @@ export const SIMULATION_MODES: Record<SimulationMode, SimulationModeSpec> = {
     schema: JudgeViewOutputSchema,
     findingPaths: ["proceduralIssues", "meritsAssessment", "missingElements"],
     requiresDocument: false,
-    maxTokens: 3072,
+    maxTokens: 12288,
     build: (input) => buildMessages(judgeViewPrompt, contextBlock(input)),
     normalize: (output) => [
       ...listOf(output, "proceduralIssues").map((row) => ({
@@ -445,7 +445,7 @@ export const SIMULATION_MODES: Record<SimulationMode, SimulationModeSpec> = {
     schema: LossFactorsOutputSchema,
     findingPaths: ["factors"],
     requiresDocument: false,
-    maxTokens: 3072,
+    maxTokens: 12288,
     build: (input) => buildMessages(lossFactorsPrompt, contextBlock(input)),
     normalize: (output) =>
       listOf(output, "factors").map((row) => ({
@@ -465,7 +465,7 @@ export const SIMULATION_MODES: Record<SimulationMode, SimulationModeSpec> = {
     schema: BriefWeaknessOutputSchema,
     findingPaths: ["weaknesses"],
     requiresDocument: true,
-    maxTokens: 3072,
+    maxTokens: 12288,
     build: (input) =>
       buildMessages(
         briefWeaknessPrompt,
@@ -500,7 +500,7 @@ export const SIMULATION_MODES: Record<SimulationMode, SimulationModeSpec> = {
     schema: ExpertFocusOutputSchema,
     findingPaths: ["focusPoints"],
     requiresDocument: false,
-    maxTokens: 3072,
+    maxTokens: 12288,
     build: (input) => buildMessages(expertFocusPrompt, contextBlock(input)),
     normalize: (output) =>
       listOf(output, "focusPoints").map((row) => ({

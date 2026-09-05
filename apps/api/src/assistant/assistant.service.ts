@@ -375,7 +375,11 @@ export class AssistantService {
       schema: CaseFullAnalysisOutputSchema,
       findingPaths: CASE_FULL_ANALYSIS_FINDING_PATHS,
       piiApproved: input?.piiApproved,
-      maxTokens: 6144,
+      // ÇIKTI TAVANI: tam dosya analizi (özet + bulgular + birebir alıntılar)
+      // 6144 tokenı aşıp JSON ortadan bölünebiliyordu (guard "doğrulanamadı"
+      // hatası üretiyordu). Alıntı güvenliği için GİRİŞİ küçültmek yerine
+      // çıktı tavanı yükseltildi (sözleşme analizindeki ile aynı sınıf).
+      maxTokens: 16384,
       auditDetail: `caseId=${caseId} retrieval=${retrieved.mode} parca=${retrieved.chunks.length}`,
       policyOverrides: context.built.policyOverrides,
     });
