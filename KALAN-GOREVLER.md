@@ -47,9 +47,10 @@
    (nomic via LM Studio); dosya sohbeti Gemma 4 ile 3/3 doğrulanmış alıntı (~2 dk).
 4. **LM Studio ayarı:** model 8192 bağlamla yeniden yüklendi (4096'da analiz "context
    exceeded"); test compose `AI_TIMEOUT_MS=600000`, `AI_EMBEDDING_MODEL_OPENAI_COMPAT`.
-5. Canlı: büro sağlayıcısı silinmiş hâlde (kullanıcı sildi) platform LM Studio ile
-   gömme=EMBEDDING ve dosya sohbeti geçti (FK hatası yok). Tam analiz akışlı imajla
-   doğrulanacak; DİKKAT: `docker compose` komutu depo kökünden çalıştırılmalı (apps/web
+5. Canlı SON DURUM (08:30): büro sağlayıcısı yokken platform LM Studio ile
+   `platform-status fallback:true`, gömme=EMBEDDING, dosya sohbeti 55 sn (2/2 doğrulanmış
+   atıf), TAM DOSYA ANALİZİ 3 dk 35 sn tam yapısal rapor (model 16384 bağlam, `--gpu 0.5`;
+   kaynaksız 2 bulgu guard'da elendi). Atıf şeması `page/quote` null toleransı (`3e13ee7`); DİKKAT: `docker compose` komutu depo kökünden çalıştırılmalı (apps/web
    cwd'de dosya bulunamadı, derleme sessizce atlandı).
 
 ---
