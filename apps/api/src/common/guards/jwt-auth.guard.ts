@@ -7,6 +7,9 @@ import { PrismaService } from "../../prisma/prisma.service";
 import type { AuthUser, JwtPayload } from "../types";
 import { TENANT_JWT_AUDIENCE } from "../jwt-audience";
 import { AUTH_COOKIE_NAME } from "../auth-cookie";
+import { createHash } from "node:crypto";
+import { pathAllowedByScopes } from "../../integrations/webhook-events";
+import { API_KEY_HEADER } from "../../integrations/api-keys.service";
 
 /**
  * Kullanıcı doğrulama önbelleği ömrü (ms).
@@ -80,6 +83,14 @@ export class JwtAuthGuard implements CanActivate {
     if (isPublic) return true;
 
     const request = context.switchToHttp().getRequest<Request & { user?: AuthUser }>();
+
+    // ENTERPRISE++ API ANAHTARI: `X-Api-Key` → salt-okunur, kapsamlı kiracı kimliği.
+    const apiKeyHeader = request.headers[API_KEY_HEADER];
+    if (typeof apiKeyHeader === "string" && apiKeyHeader.length > 0) {
+      request.user = await this.resolveApiKey(apiKeyHeader, request);
+      return true;
+    }
+
     const authHeader = request.headers.authorization;
     // İ-46: öncelik Authorization başlığı (mobil/portal); tarayıcı oturumu
     // httpOnly çerezle taşınır — XSS belirteci okuyamaz, çerezi tarayıcı gönderir.
@@ -113,6 +124,33 @@ export class JwtAuthGuard implements CanActivate {
     // kalırdı; token iptal edilemezdi (denetim bulgusu 13).
     request.user = await this.resolveUser(payload);
     return true;
+  }
+
+  /**
+   * API anahtarı doğrulaması: özet eşleşmeli, iptal/süre dolmamış, YALNIZ GET,
+   * yol kapsam kümesinde. Kimlik `apikey:<id>` ve rol AVUKAT (gizli dosyalar
+   * görünmez; yazma zaten yöntem kapısında kesilir).
+   */
+  private async resolveApiKey(plain: string, request: Request): Promise<AuthUser> {
+    const row = await this.prisma.client.apiKey.findUnique({
+      where: { keyHash: createHash("sha256").update(plain).digest("hex") },
+      select: { id: true, tenantId: true, scopes: true, revokedAt: true, expiresAt: true, lastUsedAt: true },
+    });
+    if (!row || row.revokedAt || (row.expiresAt && row.expiresAt.getTime() < Date.now())) {
+      throw new UnauthorizedException("API anahtarı geçersiz, iptal edilmiş ya da süresi dolmuş.");
+    }
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      throw new UnauthorizedException("API anahtarları salt-okunurdur; yazma işlemleri için kullanıcı oturumu gerekir.");
+    }
+    const scopes = row.scopes.split(",").filter(Boolean);
+    if (!pathAllowedByScopes(request.path ?? "", scopes)) {
+      throw new UnauthorizedException("Bu API anahtarının kapsamı bu uca erişime izin vermiyor.");
+    }
+    // lastUsedAt: dakikada en fazla bir yazım (yük üretmesin).
+    if (!row.lastUsedAt || Date.now() - row.lastUsedAt.getTime() > 60_000) {
+      void this.prisma.client.apiKey.update({ where: { id: row.id }, data: { lastUsedAt: new Date() } }).catch(() => undefined);
+    }
+    return { userId: `apikey:${row.id}`, tenantId: row.tenantId, role: "AVUKAT", apiKeyId: row.id };
   }
 
   /** Kullanıcıyı kısa ömürlü önbellekle doğrular; pasif kullanıcıyı reddeder. */

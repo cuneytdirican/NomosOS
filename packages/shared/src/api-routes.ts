@@ -106,6 +106,17 @@ export const AUTH_ROUTES = {
   twoFactorDisable: "/auth/2fa/disable",
 } as const;
 
+/** Enterprise++: API anahtarları + webhook'lar. */
+export const INTEGRATION_ROUTES = {
+  events: "/integrations/events",
+  apiKeys: "/integrations/api-keys",
+  apiKey: (id: string) => `/integrations/api-keys/${id}`,
+  webhooks: "/integrations/webhooks",
+  webhook: (id: string) => `/integrations/webhooks/${id}`,
+  webhookTest: (id: string) => `/integrations/webhooks/${id}/test`,
+  webhookDeliveries: (id: string) => `/integrations/webhooks/${id}/deliveries`,
+} as const;
+
 /** Enterprise++: büro güvenlik politikası + denetim izi. */
 export const SECURITY_ROUTES = {
   policy: "/security/policy",

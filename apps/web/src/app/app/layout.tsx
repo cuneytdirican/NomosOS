@@ -513,6 +513,17 @@ const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
     ),
   },
   {
+    // Enterprise++: API anahtarları + webhook'lar (ADMIN/PARTNER).
+    href: "/app/ayarlar/entegrasyonlar",
+    label: "Entegrasyonlar",
+    roles: ["ADMIN", "PARTNER"],
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path fillRule="evenodd" d="M12.207 2.232a.75.75 0 0 0 .025 1.06l1.482 1.482-3.176 3.177-2.28-2.28a.75.75 0 0 0-1.06 0L4.68 8.19a2.5 2.5 0 0 0-.316 3.147l-2.586 2.586a.75.75 0 0 0 1.06 1.06l2.587-2.586a2.5 2.5 0 0 0 3.146-.316l2.52-2.52a.75.75 0 0 0 0-1.06l-2.28-2.28 3.176-3.176 1.483 1.482a.75.75 0 1 0 1.06-1.06l-4-4a.75.75 0 0 0-1.06.025Z" clipRule="evenodd" />
+      </svg>
+    ),
+  },
+  {
     // Kullanıcı tanımlı model eğitimi — lisanslı büro kendi modelini/RAG'ını eğitir.
     href: "/app/ayarlar/model-egitimi",
     label: "Model Eğitimi",

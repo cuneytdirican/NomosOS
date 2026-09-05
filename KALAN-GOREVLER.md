@@ -23,7 +23,32 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 5 Eylül 2026, 09:15
+# 🔖 KALDIĞIM YER — 5 Eylül 2026, 12:30
+
+> **Enterprise++ üçüncü + dördüncü paket — KVKK SAKLAMA/İMHA** (§8) ve
+> **API ANAHTARI + WEBHOOK** (§9) kodlandı (`docs/enterprise-guvenlik.md`).
+
+1. **KVKK:** `Tenant.retentionYears` (10-30), saklama raporu, kapalı dosya
+   anonimleştirme (ADMIN, gerekçe), veri öznesi talepleri (30 gün), aylık iş
+   `kvkk-saklama-aylik`, `/app/ayarlar/kvkk`.
+2. **API anahtarı:** `ApiKey` (yalnız SHA-256 özeti), `X-Api-Key` →
+   `JwtAuthGuard.resolveApiKey`: yalnız GET/HEAD, kapsam-yol eşlemesi
+   (`webhook-events.ts` API_KEY_SCOPES), kimlik `apikey:<id>` rol AVUKAT (gizli
+   dosya görünmez). `GET/POST/DELETE /integrations/api-keys`.
+3. **Webhook:** olay kaynağı DENETİM İZİ (`AuditService.subscribe` → `fanOut`);
+   katalog = gerçek eylem adları (sözleşme testi her birini servislerde doğrular);
+   HTTPS + SSRF kapısı; HMAC-SHA256 `X-NomosOS-Signature`; dağıtım işi
+   `webhook-dispatch-5dk` (10 sn zaman aşımı; 1 dk → 5 dk → 30 dk → 2 sa → 12 sa;
+   5 yeniden deneme sonra BASARISIZ). `/integrations/webhooks` CRUD + `/test` +
+   `/deliveries`; ekran `/app/ayarlar/entegrasyonlar`.
+4. Testler: `api-keys.service.test`, `webhooks.service.test`,
+   `jwt-auth.guard.apikey.test`, sözleşme. api 1202/1202, web 100/100, lint 0.
+5. Sırada (Enterprise++ adayları): SSO (OIDC) → cihaz bazlı oturum listesi.
+   Docker test yığını her paket sonrası yeniden kuruluyor (canlı duman testi).
+
+---
+
+## 🔖 ÖNCEKİ KALDIĞIM YER — 5 Eylül 2026, 09:15
 
 > **Enterprise++ ikinci paket — GİZLİ DOSYA (dosya bazlı erişim kısıtı)** kodlandı
 > (`docs/enterprise-guvenlik.md` §7). Docker test yığını güncel imajlarla yeniden kuruluyor.

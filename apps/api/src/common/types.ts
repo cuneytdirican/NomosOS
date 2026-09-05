@@ -26,4 +26,6 @@ export interface AuthUser {
   userId: string;
   tenantId: string;
   role: UserRole;
+  /** Enterprise++: istek API anahtarıyla geldiyse (salt-okunur, kapsamlı). */
+  apiKeyId?: string;
 }

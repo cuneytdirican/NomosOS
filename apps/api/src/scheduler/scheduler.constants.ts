@@ -71,6 +71,8 @@ export const JOB_KEYS = {
   AAUT_YILBASI: "aaut-tarife-yilbasi",
   /** KVKK saklama denetimi — aylık; veri silmez, yöneticiyi uyarır. */
   KVKK_SAKLAMA: "kvkk-saklama-aylik",
+  /** Webhook dağıtımı — 5 dakikada bir, HMAC imzalı, geri çekilmeli. */
+  WEBHOOK_DISPATCH: "webhook-dispatch-5dk",
 } as const;
 
 export type JobKey = (typeof JOB_KEYS)[keyof typeof JOB_KEYS];

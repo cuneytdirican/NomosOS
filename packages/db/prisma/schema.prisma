@@ -56,6 +56,8 @@ model Tenant {
   users             User[]
   notificationPreferences NotificationPreference[]
   kvkkRequests      KvkkRequest[]
+  apiKeys           ApiKey[]
+  webhookEndpoints  WebhookEndpoint[]
   clients           Client[]
   cases             Case[]
   deadlineRules     DeadlineRule[]
@@ -4458,6 +4460,69 @@ model NotificationOutbox {
   @@index([tenantId, status, scheduledFor])
   @@index([tenantId, userId, status])
   @@index([tenantId, kind, createdAt])
+}
+
+/// API ANAHTARI (Enterprise++ entegrasyon): SALT-OKUNUR, kapsamlı (X-Api-Key).
+/// Yalnız SHA-256 özeti saklanır; düz anahtar bir kez gösterilir.
+model ApiKey {
+  id         String    @id @default(uuid())
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name       String
+  /// nos_<prefix>_… — listede tanıma için (gizli değil).
+  keyPrefix  String
+  keyHash    String    @unique
+  /// Virgülle: cases:read,clients:read,… (webhook-events.ts API_KEY_SCOPES)
+  scopes     String
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  createdBy  String?
+  createdAt  DateTime  @default(now())
+
+  @@index([tenantId, revokedAt])
+}
+
+/// WEBHOOK UCU (Enterprise++): olay aboneliği. Olaylar = denetim izi eylemleri
+/// (webhook-events.ts kataloğu). HMAC sırrı AES-256-GCM ile şifreli.
+model WebhookEndpoint {
+  id              String   @id @default(uuid())
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  url             String
+  description     String?
+  encryptedSecret String
+  /// Virgülle eylem adları.
+  events          String
+  isActive        Boolean  @default(true)
+  createdBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  deliveries WebhookDelivery[]
+
+  @@index([tenantId, isActive])
+}
+
+/// WEBHOOK TESLİMATI — giden kutusu (deneme, geri çekilme, yanıt kodu).
+model WebhookDelivery {
+  id               String          @id @default(uuid())
+  tenantId         String
+  endpointId       String
+  endpoint         WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  event            String
+  payloadJson      String
+  /// BEKLIYOR | GONDERILDI | BASARISIZ
+  status           String          @default("BEKLIYOR")
+  attempts         Int             @default(0)
+  nextAttemptAt    DateTime        @default(now())
+  lastResponseCode Int?
+  lastError        String?
+  deliveredAt      DateTime?
+  createdAt        DateTime        @default(now())
+
+  @@index([status, nextAttemptAt])
+  @@index([tenantId, endpointId, createdAt])
 }
 
 /// KVKK VERİ ÖZNESİ TALEBİ (Enterprise++, politika matrisi "T" sütunu).

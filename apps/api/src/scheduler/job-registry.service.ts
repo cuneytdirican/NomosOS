@@ -11,6 +11,7 @@ import { CaselawIngestJob } from "./jobs/caselaw-ingest.job";
 import { KvkkKurulJob, MevzuatTohumJob, RekabetKurulJob, ResmiGazeteJob } from "./jobs/resmi-gazete.job";
 import { AautYilbasiJob } from "./jobs/aaut-yilbasi.job";
 import { KvkkSaklamaJob } from "./jobs/kvkk-saklama.job";
+import { WebhookDispatchJob } from "./jobs/webhook-dispatch.job";
 import type { ScheduledJobHandler } from "./scheduler.types";
 
 /**
@@ -50,7 +51,8 @@ export class JobRegistryService {
     rekabetKurul: RekabetKurulJob,
     // AAÜT yıl başı platform tarife denetimi (hazır veri planı Aşama 2/6).
     aautYilbasi: AautYilbasiJob,
-    kvkkSaklama: KvkkSaklamaJob
+    kvkkSaklama: KvkkSaklamaJob,
+    webhookDispatch: WebhookDispatchJob
   ) {
     const all: ScheduledJobHandler[] = [
       usageSnapshot,
@@ -68,6 +70,7 @@ export class JobRegistryService {
       rekabetKurul,
       aautYilbasi,
       kvkkSaklama,
+      webhookDispatch,
     ];
     this.handlers = new Map(all.map((h) => [h.key, h]));
   }

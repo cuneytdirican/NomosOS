@@ -26,6 +26,8 @@ import { CaselawIngestJob } from "./jobs/caselaw-ingest.job";
 import { KvkkKurulJob, MevzuatTohumJob, RekabetKurulJob, ResmiGazeteJob } from "./jobs/resmi-gazete.job";
 import { AautYilbasiJob } from "./jobs/aaut-yilbasi.job";
 import { KvkkSaklamaJob } from "./jobs/kvkk-saklama.job";
+import { WebhookDispatchJob } from "./jobs/webhook-dispatch.job";
+import { IntegrationsModule } from "../integrations/integrations.module";
 import { VekaletUcretiModule } from "../vekalet-ucreti/vekalet-ucreti.module";
 import { SecurityModule } from "../security/security.module";
 
@@ -70,7 +72,7 @@ import { DeviceTokensService } from "./device-tokens.service";
  * ajanının işidir.
  */
 @Module({
-  imports: [PlatformModule, CreditsModule, RiskModule, VekaletUcretiModule, SecurityModule],
+  imports: [PlatformModule, CreditsModule, RiskModule, VekaletUcretiModule, SecurityModule, IntegrationsModule],
   controllers: [
     // Platform (/api/admin/v1/jobs) — PlatformJwtGuard + yetki matrisi.
     PlatformJobsController,
@@ -120,6 +122,8 @@ import { DeviceTokensService } from "./device-tokens.service";
     AautYilbasiJob,
     // KVKK saklama denetimi — aylık, veri silmez.
     KvkkSaklamaJob,
+    // Webhook dağıtımı (Enterprise++ entegrasyonlar).
+    WebhookDispatchJob,
 
     // --- uç servisleri ---
     PlatformJobsService,

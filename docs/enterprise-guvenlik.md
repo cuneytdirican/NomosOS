@@ -118,8 +118,24 @@ Hukuki karar `docs/kvkk-politika-matrisi.md`'den alındı: Av. K. m.39 saklama (
 - **Ekran:** `/app/ayarlar/kvkk` — politika, imha adayları (gerekçeli imha), talepler
   (kayıt + yanıt/ret).
 
-## 9. Sonraki Enterprise++ adayları (kodlanmadı — karar/kapsam ister)
+## 9. API anahtarları + webhook'lar (dördüncü paket)
 
-- **API anahtarları / webhook'lar** (büro entegrasyonları) — yeni kimlik yüzeyi.
+- **API anahtarı** (`ApiKey`): `nos_<prefix>_<gizli>`; yalnız SHA-256 özeti saklanır, düz
+  anahtar bir kez gösterilir. `X-Api-Key` başlığı `JwtAuthGuard` içinde çözülür:
+  **yalnız GET/HEAD**, yol anahtarın kapsam kümesinde olmalı (`cases:read` → `/api/v1/cases`
+  …), iptal/süre dolumu anında düşer, kimlik `apikey:<id>` ve rol AVUKAT (gizli dosyalar
+  görünmez). Uçlar: `GET/POST /integrations/api-keys`, `DELETE /integrations/api-keys/:id`.
+- **Webhook** (`WebhookEndpoint` + `WebhookDelivery`): olay kaynağı DENETİM İZİ —
+  `AuditService.subscribe` ile `WebhooksService.fanOut`; olaylar katalogdaki gerçek eylem
+  adlarıdır (`webhook-events.ts`; sözleşme testi her birinin bir serviste yazıldığını
+  doğrular). Kayıtta SSRF denetimi (`validateProviderBaseUrl`) + HTTPS zorunlu; sır
+  AES-256-GCM şifreli, bir kez gösterilir. Dağıtım `webhook-dispatch-5dk`: HMAC-SHA256
+  (`X-NomosOS-Signature: sha256=…`), 10 sn zaman aşımı, geri çekilme 1 dk → 5 dk →
+  30 dk → 2 sa → 12 sa (5 yeniden deneme; sonuncusu da düşerse BASARISIZ); teslimat geçmişi ekranda.
+- **Ekran:** `/app/ayarlar/entegrasyonlar` — anahtar oluştur (tek seferlik gösterim),
+  iptal; webhook ekle/düzenle/pasifleştir/sil, test gönder, teslimatlar.
+
+## 10. Sonraki Enterprise++ adayları (kodlanmadı — karar/kapsam ister)
+
 - **SSO (OIDC/SAML)** — kurumsal kimlik sağlayıcı bağlantısı.
 - **Oturum listesi (cihaz bazlı iptal)** — bugün "tümünü düşür" var.

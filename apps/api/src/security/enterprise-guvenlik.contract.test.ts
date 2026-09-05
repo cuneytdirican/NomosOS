@@ -5,7 +5,7 @@
  * büro denetim izi, bildirim tercihleri. Metin tabanlı (dalga5 deseni).
  */
 
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -128,6 +128,35 @@ describe("KVKK saklama/imha + veri öznesi talepleri", () => {
     expect(read("src", "security", "security.service.ts")).toContain("retentionYears");
     expect(read("..", "web", "src", "app", "app", "ayarlar", "kvkk", "page.tsx")).toContain("/security/kvkk/retention");
     expect(read("..", "web", "src", "app", "app", "layout.tsx")).toContain('"/app/ayarlar/kvkk"');
+  });
+});
+
+describe("entegrasyonlar: API anahtarı + webhook", () => {
+  it("şema, guard, olay kataloğu = denetim izi eylemleri, dağıtım işi, ekran", () => {
+    expect(schema).toContain("model ApiKey {");
+    expect(schema).toContain("model WebhookEndpoint {");
+    expect(schema).toContain("model WebhookDelivery {");
+    const guard = read("src", "common", "guards", "jwt-auth.guard.ts");
+    expect(guard).toContain("resolveApiKey(");
+    expect(guard).toContain('request.method !== "GET" && request.method !== "HEAD"');
+    expect(guard).toContain("pathAllowedByScopes(");
+    // Katalogdaki her olay gerçek bir denetim eylemidir.
+    const catalog = read("src", "integrations", "webhook-events.ts");
+    const actions = [...catalog.matchAll(/action: "([A-Z_]+)"/g)].map((m) => m[1]);
+    expect(actions.length).toBeGreaterThanOrEqual(15);
+    const walk = (dir: string): string[] =>
+      readdirSync(dir).flatMap((n) => {
+        const p = join(dir, n);
+        return statSync(p).isDirectory() ? walk(p) : p.endsWith(".service.ts") ? [p] : [];
+      });
+    const services = walk(join(process.cwd(), "src")).map((p) => readFileSync(p, "utf-8")).join("\n");
+    for (const a of actions) {
+      expect(services.includes(`action: "${a}"`), `denetim eylemi bulunamadı: ${a}`).toBe(true);
+    }
+    expect(read("src", "audit", "audit.service.ts")).toContain("subscribe(listener: AuditListener)");
+    expect(read("src", "scheduler", "jobs", "webhook-dispatch.job.ts")).toContain("webhook-dispatch");
+    expect(read("..", "web", "src", "app", "app", "ayarlar", "entegrasyonlar", "page.tsx")).toContain("/integrations/api-keys");
+    expect(read("..", "web", "src", "app", "app", "layout.tsx")).toContain('"/app/ayarlar/entegrasyonlar"');
   });
 });
 
