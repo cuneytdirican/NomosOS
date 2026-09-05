@@ -42,6 +42,13 @@
 6. **Demo talebi → `PLATFORM_NOTIFY_EMAIL`**; **duyurular** `GET /notifications/announcements`
    + web `AnnouncementBanner` (TUM/PLAN_BAZLI/TENANT_BAZLI hedefleme).
 Migration `20260925100000_faz2_bildirim_kanallari`. Testler: api 1314, web 100; lint 0.
+Canlı doğrulandı (Docker + Mailpit): forgot → Mailpit'te bağlantı → reset 200 → ikinci kullanım
+401 → yeni parola ile giriş; demo talebi e-postası (reply-to talep sahibi); duyuru TUM görünür /
+TENANT_BAZLI (başka kiracı) ve süresi dolmuş görünmez; dağıtım işi 2 outbox → 2 e-posta, ikinci koşu
+0 (tek damga); kanal durumu EPOSTA AKTIF(SMTP). Web Playwright: giriş → Parolamı unuttum →
+/sifre-unuttum → e-postadaki bağlantı → /sifre-sifirla → /app; duyuru şeridi görünür + Kapat.
+NOT: demo parolası `Demo1234!` 9 karakter; change-password/reset 10 ister → duman sonrası
+`scratchpad/restore_demo_pw.sh` (bcrypt + psql) ile geri yüklenir.
 
 **SIRADA: FAZ 3 — gelir hattı:** dönem faturası (`InvoiceRecord(type=SUBSCRIPTION)`, tenant+dönem
 tekil), iyzico adaptörü + webhook imza + kredi satın alma `BEKLIYOR→ODENDI`, dunning (PAST_DUE

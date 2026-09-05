@@ -71,3 +71,8 @@ SMS/WhatsApp **adaptör + fixture sözleşme testi** (sağlayıcı hesabı sözl
   `bildirim-dagitimi.job`, `password-reset.service`, `announcements`, `faz2-…contract`.
 - Canlı (Docker test yığını + Mailpit): parola sıfırlama e-postası Mailpit'te → bağlantı → yeni
   parola ile giriş; demo talebi e-postası; duyuru ucu; dağıtım işi elle tetik → e-posta.
+
+**Canlı sonuç (5 Eylül 2026, test yığını):** parola sıfırlama uçtan uca (Mailpit bağlantısı → reset →
+ikinci kullanım 401 → yeni parolayla giriş, web sayfaları dahil); demo talebi e-postası reply-to ile;
+duyuru hedefleme/süre filtresi; dağıtım işi 2 outbox → 2 e-posta, ikinci koşu 0; kanal durumu
+`EPOSTA: AKTIF (SMTP e-posta)`, SMS/WhatsApp `yok` (sözleşme sonrası env ile açılır).
