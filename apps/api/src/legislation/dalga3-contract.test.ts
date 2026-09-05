@@ -128,7 +128,8 @@ describe("C6: izleme + DR", () => {
     expect(ctrl).toContain("METRICS_TOKEN");
     // Üretimde token'sız uç VAROLMAZ.
     expect(ctrl).toContain("NotFoundException");
-    expect(ctrl).toContain("nomosos_db_up");
+    // Faz 4: metrik tanımları prom-client kayıt defterine taşındı.
+    expect(read("src", "metrics", "metrics.registry.ts")).toContain("nomosos_db_up");
   });
 
   it("genel önekten hariçtir (standart /metrics yolu)", () => {

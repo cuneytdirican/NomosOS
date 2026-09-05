@@ -1,29 +1,45 @@
 /**
- * İZLEME METRİKLERİ (geliştirme planı D3 / C6) — Prometheus metin biçimi.
+ * İZLEME METRİKLERİ — Prometheus metin biçimi (Faz 4: prom-client kayıt defteri).
  *
- * UÇ: GET /metrics  — genel önekten HARİÇTİR (Prometheus standart yolu).
+ * UÇ: GET /metrics — genel önekten HARİÇTİR (Prometheus standart yolu).
  *
  * GÜVENLİK:
  *   - METRICS_TOKEN tanımlıysa `Authorization: Bearer <token>` zorunludur.
- *   - Üretimde (NODE_ENV=production) token TANIMSIZSA uç 404 döner — metrik
- *     kurulumu tamamlanmamış bir üretim dağıtımı bilgi sızmamalıdır.
- *   - Geliştirme/test ortamında token'sız erişim serbesttir (Prometheus
- *     henüz yokken maliyeti sıfır; Docker healthcheck /health ucunu kullanır).
+ *   - Üretimde (NODE_ENV=production) token TANIMSIZSA uç 404 döner.
+ *   - Geliştirme/test ortamında token'sız erişim serbesttir.
  *
- * KAPSAM (bilinçli dar): süreç metrikleri + DB erişilebilirliği + birkaç iş
- * sayacı. Histogram'lar ve kuyruk derinliği ilk istekte (müşteri dağıtımında
- * Prometheus kurulunca) eklenir; bu uç ÖLÇÜLEBİLİR bir temel sağlar —
- * "metrik yok" bulgusunu kapatır, abartılı bir gözlem yığını kurmaz.
+ * Kazıma anında (scrape) yenilenen iş göstergeleri: DB erişimi, kiracı/kullanıcı/dosya
+ * sayıları, abonelik durumları, vadesi geçmiş platform faturaları, eksi bakiyeli
+ * cüzdanlar, kuyruk derinliği (BullMQ varsa), yedek tazeliği. Sayaç/histogramlar istek
+ * ve iş akışı sırasında dolar (`metrics.registry.ts`).
  */
 
-import { Controller, Get, Header, HttpCode, NotFoundException, Req, UnauthorizedException } from "@nestjs/common";
+import { Controller, Get, Header, HttpCode, NotFoundException, Optional, Req, UnauthorizedException } from "@nestjs/common";
 import type { Request } from "express";
 import { Public } from "../common/decorators/public.decorator";
 import { PrismaService } from "../prisma/prisma.service";
+import { PipelineQueueService } from "../pipeline/pipeline-queue.service";
+import {
+  casesOpen,
+  creditWalletsNegative,
+  dbCheckDuration,
+  dbUp,
+  platformInvoicesOverdue,
+  queueJobs,
+  renderMetrics,
+  subscriptionsByStatus,
+  tenantsTotal,
+  usersActive,
+} from "./metrics.registry";
+
+const SUBSCRIPTION_STATUSES = ["TRIAL", "ACTIVE", "PAST_DUE", "SUSPENDED", "CANCELED"] as const;
 
 @Controller("metrics")
 export class MetricsController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly queue?: PipelineQueueService,
+  ) {}
 
   @Public()
   @Get()
@@ -31,59 +47,63 @@ export class MetricsController {
   @Header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
   async metrics(@Req() request: Request): Promise<string> {
     this.assertAllowed(request);
+    await this.refreshGauges();
+    return renderMetrics();
+  }
 
-    const lines: string[] = [];
-    const push = (name: string, help: string, type: "gauge" | "counter", value: number) => {
-      lines.push(`# HELP ${name} ${help}`);
-      lines.push(`# TYPE ${name} ${type}`);
-      lines.push(`${name} ${value}`);
-    };
-
-    // --- Süreç metrikleri ---
-    const mem = process.memoryUsage();
-    push("nomosos_process_uptime_seconds", "API sürecinin çalışma süresi (saniye).", "gauge", process.uptime());
-    push("nomosos_process_resident_memory_bytes", "Süreç bellek kullanımı (RSS, bayt).", "gauge", mem.rss);
-    push("nomosos_process_heap_used_bytes", "Öbek kullanımı (bayt).", "gauge", mem.heapUsed);
-
-    // --- Veritabanı ---
-    const dbStart = Date.now();
-    let dbUp = 1;
+  /** Kazıma anında yenilenen göstergeler; DB kapalıysa iş sayaçları dokunulmaz (yanlış sıfır basmaz). */
+  async refreshGauges(): Promise<void> {
+    const start = Date.now();
+    let up = 1;
     try {
       await this.prisma.client.$queryRaw`SELECT 1`;
     } catch {
-      dbUp = 0;
+      up = 0;
     }
-    const dbMs = (Date.now() - dbStart) / 1000;
-    push("nomosos_db_up", "Veritabanı erişimi (1=ayakta, 0=erişilemiyor).", "gauge", dbUp);
-    push("nomosos_db_check_duration_seconds", "SELECT 1 ölçüm süresi (saniye).", "gauge", dbMs);
+    dbUp.set(up);
+    dbCheckDuration.set((Date.now() - start) / 1000);
 
-    // --- İş sayaçları (DB ayaktaysa; değilse atlanır — yanlış sıfır basmaz) ---
-    if (dbUp === 1) {
+    if (up === 1) {
       try {
-        const [tenants, users, cases] = await Promise.all([
+        const now = new Date();
+        const [tenants, users, cases, subs, overdue, negative] = await Promise.all([
           this.prisma.client.tenant.count(),
           this.prisma.client.user.count({ where: { isActive: true } }),
           this.prisma.client.case.count({ where: { status: "ACIK" } }),
+          this.prisma.client.subscription.groupBy({ by: ["status"], _count: { _all: true } }),
+          this.prisma.client.invoiceRecord.count({ where: { status: { in: ["GONDERILDI", "KISMI_ODENDI"] }, dueDate: { lt: now } } }),
+          this.prisma.client.$queryRaw<Array<{ n: bigint | number }>>`SELECT COUNT(*)::int AS n FROM "CreditWallet" WHERE ("includedCredits" - "includedConsumed" + "purchasedCredits" - "reservedCredits") < 0`,
         ]);
-        push("nomosos_tenants_total", "Kayıtlı büro (kiracı) sayısı.", "gauge", tenants);
-        push("nomosos_users_active_total", "Aktif kullanıcı sayısı.", "gauge", users);
-        push("nomosos_cases_open_total", "ACIK durumdaki dosya sayısı.", "gauge", cases);
+        tenantsTotal.set(tenants);
+        usersActive.set(users);
+        casesOpen.set(cases);
+        const counts = new Map(subs.map((s) => [s.status, s._count._all]));
+        for (const st of SUBSCRIPTION_STATUSES) subscriptionsByStatus.labels(st).set(counts.get(st) ?? 0);
+        platformInvoicesOverdue.set(overdue);
+        creditWalletsNegative.set(Number(negative[0]?.n ?? 0));
       } catch {
         // Sayaçlar opsiyoneldir; süreç/DB metrikleri yeter.
       }
     }
 
-    return `${lines.join("\n")}\n`;
+    if (this.queue) {
+      try {
+        const s = await this.queue.stats();
+        queueJobs.labels("waiting").set(s.waiting);
+        queueJobs.labels("active").set(s.active);
+        queueJobs.labels("failed").set(s.failed);
+      } catch {
+        /* kuyruk kapalı */
+      }
+    }
   }
 
   /** Token kapısı — üretimde tanımsızsa uç VAROLMAZ (404). */
   private assertAllowed(request: Request): void {
     const token = process.env.METRICS_TOKEN?.trim();
     if (!token) {
-      if (process.env.NODE_ENV === "production") {
-        throw new NotFoundException();
-      }
-      return; // geliştirme/test: serbest
+      if (process.env.NODE_ENV === "production") throw new NotFoundException();
+      return;
     }
     const header = request.headers.authorization;
     if (header !== `Bearer ${token}`) {

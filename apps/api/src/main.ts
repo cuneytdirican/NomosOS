@@ -10,6 +10,8 @@ import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { ADMIN_ROUTE_PREFIX, assertTwoFactorPolicy } from "./platform/platform.constants";
 import { resolveTrustedProxy } from "./common/trusted-proxy";
+import { createAppLogger } from "./common/json-logger";
+import { requestContextMiddleware } from "./common/request-context";
 
 /** Kiracı (büro) API'sinin genel öneki. */
 const TENANT_ROUTE_PREFIX = "api/v1";
@@ -146,7 +148,9 @@ async function bootstrap(): Promise<void> {
   // denetim bulgusu Ö-08: geçersiz/eksik vekil ayarı UYGULAMA AÇILMADAN önce
   // fark edilir; sessizce 0'a düşen eski davranış kaldırıldı.
   const proxy = resolveTrustedProxy();
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // Faz 4: JSON günlük (LOG_FORMAT=json; üretim varsayılanı) + x-request-id bağlamı.
+  const appLogger = createAppLogger();
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: appLogger.logger });
   app.set("trust proxy", proxy.hops);
   app.setGlobalPrefix(TENANT_ROUTE_PREFIX, {
     exclude: [
@@ -156,6 +160,7 @@ async function bootstrap(): Promise<void> {
     ],
   });
 
+  app.use(requestContextMiddleware({ log: appLogger.access }));
   app.use(securityHeaders());
 
   // JSON gövde tavanı AÇIKÇA belirlenir (Express varsayılanına güvenilmez).
@@ -174,6 +179,16 @@ async function bootstrap(): Promise<void> {
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
   });
 
+  // Faz 4: OpenAPI belgesi yalnız geliştirme/test (üretimde saldırı yüzeyi + gövde şemaları zod'dadır).
+  if (process.env.NODE_ENV !== "production" && process.env.API_DOCS_ENABLED !== "false") {
+    const { DocumentBuilder, SwaggerModule } = await import("@nestjs/swagger");
+    const doc = SwaggerModule.createDocument(
+      app,
+      new DocumentBuilder().setTitle("NomosOS API").setDescription("Kiracı (/api/v1) ve platform (/api/admin/v1) uçları. Gövde şemaları zod ile doğrulanır; bu belge rota envanteridir.").setVersion(process.env.npm_package_version ?? "0.1.0").addBearerAuth().addCookieAuth("nomosos_token").build(),
+    );
+    SwaggerModule.setup("api/docs", app, doc, { customSiteTitle: "NomosOS API" });
+  }
+
   const port = Number(process.env.API_PORT ?? 3001);
   await app.listen(port);
   console.log(`NomosOS API hazır: http://localhost:${port}/${TENANT_ROUTE_PREFIX}`);
@@ -182,6 +197,7 @@ async function bootstrap(): Promise<void> {
   // denetim bulgusu Ö-08: karar açılış günlüğüne AÇIKÇA basılır — "hangi IP'yi
   // gerçek istemci sayıyoruz" sorusu üretimde log'dan yanıtlanabilmelidir.
   console.log(`Ters vekil: ${proxy.summary}`);
+  console.log(`Günlük biçimi: ${appLogger.format}${process.env.NODE_ENV !== "production" ? " · OpenAPI: /api/docs" : ""}`);
 }
 
 void bootstrap();

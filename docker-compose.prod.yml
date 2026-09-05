@@ -243,7 +243,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    image: nomosos/api:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-nomosos}/api:${IMAGE_TAG:-latest}
     container_name: nomosos-prod-api
     environment:
       NODE_ENV: production
@@ -311,6 +311,15 @@ services:
       PLATFORM_LEGAL_ADDRESS: ${PLATFORM_LEGAL_ADDRESS:-}
       PLATFORM_TAX_NUMBER: ${PLATFORM_TAX_NUMBER:-}
       PLATFORM_TAX_OFFICE: ${PLATFORM_TAX_OFFICE:-}
+      # Faz 4 — operasyon: JSON günlük, global oran sınırı, yedek tazeliği metriği.
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      LOG_LEVEL: ${LOG_LEVEL:-log}
+      RATE_LIMIT_GLOBAL_PER_IP: ${RATE_LIMIT_GLOBAL_PER_IP:-300}
+      RATE_LIMIT_GLOBAL_PER_USER: ${RATE_LIMIT_GLOBAL_PER_USER:-600}
+      BACKUP_STATUS_FILE: /backups/last-success.json
+    volumes:
+      # Yedek durumu (salt okunur): backup servisi last-success.json yazar, API metrik üretir.
+      - backups:/backups:ro
 
       # --- Zaman aşımı ---
       # Uzun sözleşme analiz parçaları tek AI çağrısında 60 sn'yi aşabilir;
@@ -412,7 +421,7 @@ services:
         # Demo giriş sayfası (/demo-giris, Demo1234! hesapları) ÜRETİM PAKETİNE
         # GÖMÜLMEZ. Derleme anı değişkenidir; çalışma anında verilmesi yetmez.
         NEXT_PUBLIC_DISABLE_DEMO: "1"
-    image: nomosos/web:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-nomosos}/web:${IMAGE_TAG:-latest}
     container_name: nomosos-prod-web
     environment:
       NODE_ENV: production
@@ -462,7 +471,7 @@ services:
       dockerfile: apps/admin/Dockerfile
       args:
         NEXT_PUBLIC_ADMIN_API_URL: ${NEXT_PUBLIC_ADMIN_API_URL:?NEXT_PUBLIC_ADMIN_API_URL zorunlu - ornek https://api.ornek-buro.com}
-    image: nomosos/admin:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-nomosos}/admin:${IMAGE_TAG:-latest}
     container_name: nomosos-prod-admin
     environment:
       NODE_ENV: production
@@ -510,7 +519,7 @@ services:
       dockerfile: apps/portal/Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?zorunlu}
-    image: nomosos/portal:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-nomosos}/portal:${IMAGE_TAG:-latest}
     container_name: nomosos-prod-portal
     environment:
       NODE_ENV: production
@@ -540,6 +549,79 @@ services:
         reservations:
           memory: 256M
 
+  # ==========================================================================
+  # Faz 4 — YEDEK (PostgreSQL) — her BACKUP_INTERVAL_HOURS saatte pg_dump; /backups
+  # birimine yazar; last-success.json → API `nomosos_backup_last_success_timestamp_seconds`.
+  # Yedek diski konteyner dışına da kopyalanmalıdır (rsync/rclone; uretim-dagitimi §5).
+  # ==========================================================================
+  backup:
+    <<: *hardening
+    image: postgres:16-alpine
+    container_name: nomosos-prod-backup
+    environment:
+      PGHOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:?zorunlu}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?zorunlu}
+      POSTGRES_DB: ${POSTGRES_DB:?zorunlu}
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+      BACKUP_DIR: /backups
+    volumes:
+      - backups:/backups
+      - ./scripts/backup-container.sh:/usr/local/bin/nomosos-backup.sh:ro
+    entrypoint: ["sh", "/usr/local/bin/nomosos-backup.sh"]
+    networks: [internal]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # MinIO kovası aynası — belge dosyaları (mc mirror --watch; anlık çoğaltma).
+  backup-minio:
+    <<: *hardening
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    container_name: nomosos-prod-backup-minio
+    environment:
+      MC_HOST_kaynak: http://${MINIO_ROOT_USER:?zorunlu}:${MINIO_ROOT_PASSWORD:?zorunlu}@minio:9000
+      S3_BUCKET: ${S3_BUCKET:?zorunlu}
+    volumes:
+      - backups:/backups
+    entrypoint: ["sh", "-c", "mkdir -p /backups/minio && exec mc mirror --watch --overwrite kaynak/$$S3_BUCKET /backups/minio/$$S3_BUCKET"]
+    networks: [internal]
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ==========================================================================
+  # Faz 4 — CADDY ters vekil (isteğe bağlı): `--profile edge` ile açılır; deploy/Caddyfile
+  # Let's Encrypt + HSTS + panel IP kısıtı. Kendi vekiliniz varsa bu servisi kullanmayın.
+  # ==========================================================================
+  caddy:
+    image: caddy:2-alpine
+    container_name: nomosos-prod-caddy
+    profiles: [edge]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      WEB_DOMAIN: ${WEB_DOMAIN:-ornek-buro.com}
+      API_DOMAIN: ${API_DOMAIN:-api.ornek-buro.com}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:-panel.ornek-buro.com}
+      PORTAL_DOMAIN: ${PORTAL_DOMAIN:-portal.ornek-buro.com}
+      ADMIN_ALLOWED_IPS: ${ADMIN_ALLOWED_IPS:-10.0.0.0/8 192.168.0.0/16}
+      ACME_EMAIL: ${ACME_EMAIL:-ops@ornek-buro.com}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [edge]
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
 networks:
   # Veri katmanı: dışa çıkışı yoktur (internal: true). Postgres/Redis/MinIO
   # internete erişemez; sızma hâlinde veriyi dışarı taşımak zorlaşır.
@@ -561,3 +643,10 @@ volumes:
     name: nomosos-prod-redis-data
   minio-data:
     name: nomosos-prod-minio-data
+  # Faz 4: yedekler (pg_dump + MinIO aynası) ve Caddy sertifika deposu.
+  backups:
+    name: nomosos-prod-backups
+  caddy-data:
+    name: nomosos-prod-caddy-data
+  caddy-config:
+    name: nomosos-prod-caddy-config

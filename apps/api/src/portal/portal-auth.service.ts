@@ -7,6 +7,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
+import { assertPasswordStrength } from "../common/password-strength";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
 import { PrismaService } from "../prisma/prisma.service";
@@ -282,6 +283,7 @@ export class PortalAuthService {
       );
     }
 
+    assertPasswordStrength(input.password, [invite.email]);
     const passwordHash = await bcrypt.hash(input.password, PORTAL_BCRYPT_ROUNDS);
     const now = new Date();
 
@@ -533,6 +535,7 @@ export class PortalAuthService {
       );
     }
 
+    assertPasswordStrength(input.password, [record.email]);
     const passwordHash = await bcrypt.hash(input.password, PORTAL_BCRYPT_ROUNDS);
     await this.prisma.client.$transaction(async (tx) => {
       const consumed = await tx.portalInvite.updateMany({

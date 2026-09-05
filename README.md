@@ -7,6 +7,21 @@ duruşma, süre, görev, icra ve finans yönetimini tek platformda toplayan, üz
 > Merkez AI değil, **DOSYA**. AI, büronun bütün operasyonel verisinin üzerinde
 > çalışan zekâ katmanıdır.
 
+## Durum (Eylül 2026)
+
+Üç persona (firma sahibi · yazılımcı/sistem yöneticisi · avukat/büro) boşluk analizinin
+fazları: **Faz 0** gelir kaçağı + güvenlik, **Faz 1** avukat çekirdeği (OCR, HEARING_PREP, 52 süre
+kuralı, ICS), **Faz 2** gerçek bildirim kanalları (SMTP, SMS/WhatsApp adaptörleri, Expo push,
+parola sıfırlama), **Faz 3** gelir hattı (dönem faturası, checkout/iyzico, kupon, modül kapısı,
+fatura PDF), **Faz 4** operasyon/SRE (readiness, JSON günlük + `x-request-id`, 12 metrik + uyarı
+kuralları, yedek/geri yükleme, CD, Caddy, global oran sınırı, parola gücü, anahtar rotasyonu) —
+belgeler `docs/faz*.md`. Sırada Faz 5 (RAG ölçek + test altyapısı), 6 (UYAP/icra/finans),
+7 (büro yönetimi), 8 (büyüme). Çalışma sözleşmesi ve kaldığım yer: `KALAN-GOREVLER.md`.
+
+Kalite kapıları: `pnpm lint` (0 uyarı) · `pnpm typecheck` · `pnpm test` (api 1370+, web 100,
+legal-core 120, legal-ai 81) · Docker test yığını (`docker-compose.test.yml`, Mailpit dâhil) canlı
+duman · `git commit` öncesi husky + lint-staged.
+
 ## Doküman Haritası
 
 | Doküman | İçerik |

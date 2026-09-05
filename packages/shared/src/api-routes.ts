@@ -497,6 +497,8 @@ export const DASHBOARD_ROUTES = {
 
 export const HEALTH_ROUTES = {
   root: "/health",
+  /** Faz 4: readiness (DB/Redis/S3 gerçek yoklama; biri düşükse 503). */
+  ready: "/health/ready",
   live: "/health/live",
 };
 

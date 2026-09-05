@@ -1,5 +1,6 @@
-import { Controller, Get } from "@nestjs/common";
+import { Controller, Get, HttpException, HttpStatus } from "@nestjs/common";
 import { Public } from "../common/decorators/public.decorator";
+import { ReadinessService } from "./readiness.service";
 
 /**
  * SAĞLIK UÇLARI.
@@ -10,32 +11,36 @@ import { Public } from "../common/decorators/public.decorator";
  * ╚══════════════════════════════════════════════════════════════════════════╝
  *
  * Denetim bulgusu K-02: `TenantStatusGuard` bakım tam kilidini `@Public()`
- * kontrolünden ÖNCE uyguluyordu ve `/health` de 503 dönüyordu. Dağıtımdaki
- * healthcheck bunu `unhealthy` sayıyor, `web` ve `admin` servisleri
- * `depends_on: service_healthy` taşıdığı için kilidi kapatabilecek tek arayüz
- * (admin paneli) bir daha ayağa kalkmıyordu. Guard'daki sıra düzeltildi;
- * buradaki `/health/live` ise İKİNCİ savunma katmanıdır: guard'a hiçbir yeni
- * iş kuralı eklenmese bile dağıtım katmanı bu uca bağlanmalıdır.
+ * kontrolünden ÖNCE uyguluyordu ve `/health` de 503 dönüyordu. Guard'daki sıra
+ * düzeltildi; `/health/live` İKİNCİ savunma katmanıdır: konteyner healthcheck'i
+ * buna bağlanır ve hiçbir bağımlılığa bakmaz.
+ *
+ * Faz 4: `/health/ready` bağımlılık yoklaması (DB/Redis/S3) — yük dengeleyici ve
+ * rolling update bu uca bakar; biri düşükse 503 + hangi bağımlılık.
  */
 @Controller("health")
 export class HealthController {
+  constructor(private readonly readiness: ReadinessService) {}
+
   @Public()
   @Get()
   check(): { status: string; time: string } {
     return { status: "ok", time: new Date().toISOString() };
   }
 
-  /**
-   * LIVENESS — süreç ayakta mı?
-   *
-   * Konteyner healthcheck'i bu uca bakar. Yanıt hiçbir veritabanı/Redis
-   * çağrısı yapmaz ve hiçbir iş kuralına bakmaz: bir kiracının aboneliği ya da
-   * bakım kilidi, sürecin canlı olup olmadığıyla ilgili DEĞİLDİR. Bir
-   * bağımlılığın sağlığı gerekiyorsa readiness ayrı bir uçta ölçülmelidir.
-   */
+  /** LIVENESS — süreç ayakta mı? Veritabanı/Redis çağrısı YAPMAZ. */
   @Public()
   @Get("live")
   live(): { status: string; time: string } {
     return { status: "ok", time: new Date().toISOString() };
+  }
+
+  /** READINESS — DB + Redis + S3 gerçek yoklama; biri düşükse 503. */
+  @Public()
+  @Get("ready")
+  async ready() {
+    const report = await this.readiness.check();
+    if (report.status !== "ready") throw new HttpException(report, HttpStatus.SERVICE_UNAVAILABLE);
+    return report;
   }
 }

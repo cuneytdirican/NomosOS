@@ -97,10 +97,13 @@ trafik yönlendirilmez.
 
 - `GET /metrics` (Prometheus metin biçimi; `METRICS_TOKEN` taşıyıcısı gerekir)
   süreç, DB erişimi (`nomosos_db_up`) ve iş sayaçlarını yayınlar.
-- **Alarm kuralları (asgari):**
-  - `nomosos_db_up == 0` 1 dk → kritik.
-  - Yedekleme işi 24 saat koşmadı → kritik (cron log kontrolü).
-  - `nomosos_process_resident_memory_bytes` 24 saatte iki katına çıkış → uyarı.
+- **Faz 4:** `docker-compose.prod.yml` `backup` servisi (pg_dump, `BACKUP_INTERVAL_HOURS`,
+  `BACKUP_RETENTION_DAYS`) ve `backup-minio` (mc mirror --watch) yedekleri `backups` birimine
+  yazar; her başarılı koşuda `/backups/last-success.json` güncellenir ve API bunu
+  `nomosos_backup_last_success_timestamp_seconds` metriğiyle yayınlar. Geri yükleme:
+  `scripts/prod-restore.sh --dump <dosya> [--minio <tar.gz>] [--target-db nomosos_tatbikat]`.
+- **Alarm kuralları** (`prometheus/alerts.yml`): `NomosOSDatabaseDown` (1 dk), `NomosOSBackupStale`
+  (yedek > 36 sa ya da hiç yok → kritik), `NomosOSHighMemory`, 5xx/429/AI/kuyruk/OCR kuralları.
 
 ## 6. Sorumluluklar
 

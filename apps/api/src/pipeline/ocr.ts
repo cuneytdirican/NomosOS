@@ -17,6 +17,7 @@
  */
 
 import { Logger } from "@nestjs/common";
+import { observeOcr } from "../metrics/metrics.registry";
 
 export const OCR_MAX_PAGES = Number.parseInt(process.env.OCR_MAX_PAGES ?? "", 10) || 30;
 export const OCR_PAGE_TIMEOUT_MS = Number.parseInt(process.env.OCR_TIMEOUT_MS ?? "", 10) || 120_000;
@@ -104,12 +105,14 @@ async function getWorker(): Promise<TesseractWorkerLike> {
 /** Tek görüntüyü (JPEG/PNG) tanır; zaman aşımında hata fırlatır. */
 export async function ocrImage(image: Buffer, page = 1): Promise<OcrPageResult> {
   const worker = await getWorker();
+  const startedAt = Date.now();
   const result = await Promise.race([
     worker.recognize(image),
     new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error(`OCR zaman aşımı (${Math.round(OCR_PAGE_TIMEOUT_MS / 1000)} sn, sayfa ${page})`)), OCR_PAGE_TIMEOUT_MS),
     ),
   ]);
+  observeOcr(Date.now() - startedAt);
   return { page, text: result.data.text ?? "", confidence: Math.round(result.data.confidence ?? 0) };
 }
 

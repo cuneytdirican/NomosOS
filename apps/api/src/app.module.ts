@@ -34,6 +34,7 @@ import { DemoTalepModule } from "./demo-talep/demo-talep.module";
 import { MailModule } from "./mail/mail.module";
 import { PlatformBillingModule } from "./platform-billing/platform-billing.module";
 import { ModuleAccessGuard } from "./common/guards/module-access.guard";
+import { GlobalRateLimitGuard } from "./common/guards/global-rate-limit.guard";
 import { RandevuModule } from "./randevu/randevu.module";
 import { UyapModule } from "./uyap/uyap.module";
 import { ChatModule } from "./chat/chat.module";
@@ -270,6 +271,8 @@ function requireJwtSecret(config: ConfigService): string {
    *    için kimlik guard'ından SONRA gelmek zorundadır.
    */
   providers: [
+    // 0. Faz 4: kaba global oran sınırı (IP/kullanıcı, dakikalık) — kimlikten önce.
+    { provide: APP_GUARD, useClass: GlobalRateLimitGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: TenantStatusGuard },
     // 2b. Faz 3: plan modülü kapısı (@RequiresModule) — abonelik durumundan sonra.

@@ -1,0 +1,31 @@
+# NomosOS — örnek Prometheus yapılandırması (Faz 4).
+# Üretimde METRICS_TOKEN zorunludur; bearer_token_file ile verin (dosya chmod 600).
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+rule_files:
+  - alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  - job_name: nomosos-api
+    metrics_path: /metrics
+    scheme: http
+    # authorization:
+    #   type: Bearer
+    #   credentials_file: /etc/prometheus/metrics-token
+    static_configs:
+      - targets: ["api:3001"]
+
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+
+  - job_name: redis
+    static_configs:
+      - targets: ["redis-exporter:9121"]

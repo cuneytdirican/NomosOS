@@ -7,6 +7,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
+import { assertPasswordStrength } from "../common/password-strength";
 import * as bcrypt from "bcryptjs";
 import type { ChangePasswordInput, LoginInput } from "@nomosos/shared";
 import { PrismaService } from "../prisma/prisma.service";
@@ -212,6 +213,8 @@ export class AuthService {
     if (await bcrypt.compare(input.newPassword, record.passwordHash)) {
       throw new UnauthorizedException("Yeni parola mevcut parolayla aynı olamaz.");
     }
+    // Faz 4: parola gücü (zxcvbn ≥ 3; e-posta/ad soyad parçası içeremez).
+    assertPasswordStrength(input.newPassword, [record.email, record.fullName]);
 
     await this.prisma.client.user.update({
       where: { id: record.id },

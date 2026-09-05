@@ -1,0 +1,105 @@
+name: Dağıtım
+
+# NomosOS sürekli dağıtım (Faz 4).
+#   v1.2.3 etiketi → 4 imaj GHCR'ye (api, web, admin, portal) → SSH ile sunucuda
+#   `IMAGE_TAG=v1.2.3 docker compose pull` → yedek + `prisma migrate deploy`
+#   (scripts/prod-migrate.sh) → `up -d` → /health/ready dumanı.
+#
+# GEREKEN SIRLAR (repo → Settings → Secrets):
+#   DEPLOY_HOST        sunucu adresi                 DEPLOY_USER   ssh kullanıcısı
+#   DEPLOY_SSH_KEY     özel anahtar (ed25519)        DEPLOY_PATH   /srv/nomosos (compose + .env.prod.local burada)
+#   NEXT_PUBLIC_API_URL / NEXT_PUBLIC_ADMIN_API_URL  web/admin/portal derleme argümanları (dışa açık API adresi)
+# GHCR için GITHUB_TOKEN yeter (packages: write). İmajlar: ghcr.io/<owner>/nomosos-<uygulama>:<tag>.
+# Sunucuda .env.prod.local: IMAGE_REGISTRY=ghcr.io/<owner>/nomosos
+#
+# Elle tetik (workflow_dispatch) mevcut bir etiketi yeniden dağıtır (geri alma için).
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Dağıtılacak imaj etiketi (örn. v1.2.3)"
+        required: true
+
+concurrency:
+  group: dagitim
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_BASE: ghcr.io/${{ github.repository_owner }}/nomosos
+
+jobs:
+  imajlar:
+    name: İmajları derle ve GHCR'ye gönder
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    timeout-minutes: 45
+    strategy:
+      matrix:
+        app: [api, web, admin, portal]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Derle ve gönder
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_BASE }}-${{ matrix.app }}:${{ github.ref_name }}
+            ${{ env.IMAGE_BASE }}-${{ matrix.app }}:latest
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
+            NEXT_PUBLIC_ADMIN_API_URL=${{ secrets.NEXT_PUBLIC_ADMIN_API_URL }}
+            NEXT_PUBLIC_DISABLE_DEMO=1
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+
+  dagit:
+    name: Sunucuda güncelle (yedek → göç → up)
+    runs-on: ubuntu-latest
+    needs: [imajlar]
+    if: always() && (needs.imajlar.result == 'success' || github.event_name == 'workflow_dispatch')
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - name: Etiketi belirle
+        id: tag
+        run: echo "tag=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+      - name: SSH ile dağıt
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.DEPLOY_PATH }}"
+            export IMAGE_TAG="${{ steps.tag.outputs.tag }}"
+            echo "Dağıtım: $IMAGE_TAG"
+            # Etiketi kalıcı yaz (bir sonraki `up -d` aynı sürümü kullansın).
+            if grep -q '^IMAGE_TAG=' .env.prod.local; then sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$IMAGE_TAG/" .env.prod.local; else echo "IMAGE_TAG=$IMAGE_TAG" >> .env.prod.local; fi
+            docker compose -f docker-compose.prod.yml --env-file .env.prod.local pull api web admin portal
+            # Yedek + göç (betik yedek alamazsa göç YAPMAZ).
+            ./scripts/prod-migrate.sh
+            docker compose -f docker-compose.prod.yml --env-file .env.prod.local up -d --remove-orphans
+            # Readiness dumanı: 90 sn içinde hazır olmalı.
+            for i in $(seq 1 18); do
+              if docker compose -f docker-compose.prod.yml --env-file .env.prod.local exec -T api wget -q -O - http://127.0.0.1:3001/api/v1/health/ready | grep -q '"ready"'; then echo "API hazır"; exit 0; fi
+              sleep 5
+            done
+            echo "API 90 sn içinde hazır olmadı"; docker compose -f docker-compose.prod.yml --env-file .env.prod.local logs --tail 50 api; exit 1

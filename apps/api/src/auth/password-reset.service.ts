@@ -22,6 +22,7 @@ import { MailService } from "../mail/mail.service";
 import { webOrigin } from "../common/public-urls";
 import { CLEARED_LOCKOUT } from "../common/account-lockout";
 import { PASSWORD_HASH_ROUNDS } from "./auth.constants";
+import { assertPasswordStrength } from "../common/password-strength";
 
 export const RESET_TTL_MINUTES = 30;
 
@@ -118,9 +119,11 @@ export class PasswordResetService {
     }
     const user = await this.prisma.client.user.findUnique({
       where: { id: record.userId },
-      select: { id: true, email: true, isActive: true },
+      select: { id: true, email: true, fullName: true, isActive: true },
     });
     if (!user || !user.isActive) throw new UnauthorizedException("Hesap etkin değil.");
+    // Faz 4: parola gücü.
+    assertPasswordStrength(input.newPassword, [user.email, user.fullName]);
 
     await this.prisma.client.$transaction([
       this.prisma.client.passwordResetToken.update({ where: { id: record.id }, data: { usedAt: new Date() } }),

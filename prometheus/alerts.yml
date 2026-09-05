@@ -1,0 +1,119 @@
+# NomosOS — Prometheus uyarı kuralları (Faz 4). `prometheus.yml` içinde rule_files ile yüklenir.
+# Eşikler başlangıç değerleridir; ilk 2 haftanın gerçek dağılımına göre ayarlayın.
+groups:
+  - name: nomosos-api
+    rules:
+      - alert: NomosOSApiDown
+        expr: up{job="nomosos-api"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "API kazınamıyor"
+          description: "nomosos-api /metrics 2 dakikadır yanıt vermiyor (süreç ya da ağ)."
+
+      - alert: NomosOSDatabaseDown
+        expr: nomosos_db_up == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "PostgreSQL erişilemiyor"
+          description: "API SELECT 1 yoklaması başarısız; tüm yazma/okuma durur."
+
+      - alert: NomosOSHighLatencyP95
+        expr: histogram_quantile(0.95, sum(rate(nomosos_http_request_duration_seconds_bucket{route!~"/api/v1/(assistant|contracts|hearings/.*/prep|documents).*"}[5m])) by (le)) > 1
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "p95 gecikme > 1 sn (AI uçları hariç)"
+          description: "Son 10 dakikada HTTP p95 1 saniyeyi aşıyor; DB havuzu / CPU / kuyruk kontrol edin."
+
+      - alert: NomosOSHigh5xxRate
+        expr: sum(rate(nomosos_http_requests_total{status=~"5.."}[5m])) / sum(rate(nomosos_http_requests_total[5m])) > 0.02
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "5xx oranı > %2"
+          description: "Sunucu hatası oranı 5 dakikadır %2'nin üstünde; günlükte reqId ile hata referanslarına bakın."
+
+      - alert: NomosOSHigh429Rate
+        expr: sum(rate(nomosos_http_requests_total{status="429"}[5m])) > 1
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Oran sınırı sık tetikleniyor"
+          description: "Saniyede 1'den fazla 429; kötüye kullanım ya da sınır çok düşük (RATE_LIMIT_GLOBAL_*)."
+
+      - alert: NomosOSAiFailureRate
+        expr: sum(rate(nomosos_ai_calls_total{outcome="provider_error"}[15m])) / sum(rate(nomosos_ai_calls_total[15m])) > 0.2
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "AI sağlayıcı hata oranı > %20"
+          description: "Platform/kiracı LLM sağlayıcısı arızalı ya da zaman aşımı (AI_TIMEOUT_MS)."
+
+      - alert: NomosOSQueueBacklog
+        expr: nomosos_queue_jobs{state="waiting"} > 200
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "Belge hattı kuyruğu birikiyor"
+          description: "200'den fazla bekleyen belge işi; OCR/AI kapasitesi ya da worker düşmüş olabilir."
+
+      - alert: NomosOSQueueFailures
+        expr: increase(nomosos_queue_jobs{state="failed"}[1h]) > 20
+        labels: { severity: warning }
+        annotations:
+          summary: "Saatte 20+ başarısız belge işi"
+          description: "DLQ dolmaya başladı; admin panelinden başarısız işleri inceleyin."
+
+      - alert: NomosOSOcrSlow
+        expr: histogram_quantile(0.95, sum(rate(nomosos_ocr_duration_seconds_bucket[30m])) by (le)) > 60
+        for: 30m
+        labels: { severity: warning }
+        annotations:
+          summary: "OCR p95 > 60 sn/sayfa"
+          description: "tesseract CPU'ya aç; OCR_MAX_PAGES / kaynak sınırlarını gözden geçirin."
+
+      - alert: NomosOSBackupStale
+        expr: (time() - nomosos_backup_last_success_timestamp_seconds) > 36 * 3600 or nomosos_backup_last_success_timestamp_seconds == 0
+        for: 30m
+        labels: { severity: critical }
+        annotations:
+          summary: "Yedek 36 saatten eski ya da hiç yok"
+          description: "backup konteyneri çalışmıyor ya da BACKUP_STATUS_FILE yazılamıyor (KVKK yedekleme yükümlülüğü)."
+
+      - alert: NomosOSCreditReconciliationDrift
+        expr: nomosos_credit_wallets_negative_total > 0
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Eksi bakiyeli kredi cüzdanı var"
+          description: "Kredi mutabakatı sapması; GET /credits/reconcile ile kiracı bazında inceleyin."
+
+      - alert: NomosOSPastDueSubscriptionsRising
+        expr: nomosos_subscriptions{status="PAST_DUE"} > 0 and increase(nomosos_subscriptions{status="PAST_DUE"}[24h]) > 2
+        labels: { severity: info }
+        annotations:
+          summary: "Ödemesi geciken abonelik sayısı artıyor"
+          description: "Dunning e-postaları gidiyor; 14. günde yazma kapanır. Satış/tahsilat ekibi bilgilendirilmeli."
+
+      - alert: NomosOSOverduePlatformInvoices
+        expr: nomosos_platform_invoices_overdue_total > 5
+        for: 1h
+        labels: { severity: info }
+        annotations:
+          summary: "5'ten fazla vadesi geçmiş platform faturası"
+
+      - alert: NomosOSSchedulerJobFailing
+        expr: increase(nomosos_scheduler_job_failures_total[1h]) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: "Zamanlanmış iş hata verdi ({{ $labels.job }})"
+          description: "Admin paneli → Zamanlanmış İşler → koşu geçmişinde hata ayrıntısı."
+
+      - alert: NomosOSHighMemory
+        expr: process_resident_memory_bytes{job="nomosos-api"} > 1.6e9
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "API RSS > 1.6 GB (compose sınırı 2 GB)"

@@ -1,0 +1,3 @@
+# NomosOS — commit öncesi: değişen dosyalarda lint (+ json/yaml biçim denetimi) — lint-staged.
+# Atlamak için: git commit --no-verify (yalnız acil durumda; CI yine denetler).
+pnpm exec lint-staged

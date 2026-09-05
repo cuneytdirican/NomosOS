@@ -1,0 +1,81 @@
+# =============================================================================
+# NomosOS — Caddy ters vekil (Faz 4). docker-compose.prod.yml `--profile edge` ile
+# `caddy` servisi bu dosyayı /etc/caddy/Caddyfile olarak bağlar.
+#
+# Ortam değişkenleri (.env.prod.local):
+#   WEB_DOMAIN     ornek-buro.com        (büro paneli + tanıtım sitesi)
+#   API_DOMAIN     api.ornek-buro.com
+#   ADMIN_DOMAIN   panel.ornek-buro.com  (platform yönetim paneli — IP kısıtlı)
+#   PORTAL_DOMAIN  portal.ornek-buro.com (müvekkil portalı)
+#   ADMIN_ALLOWED_IPS  "10.0.0.0/8 192.168.0.0/16 203.0.113.7/32"  (boşlukla ayrılmış)
+#   ACME_EMAIL     sertifika bildirimleri için e-posta
+#
+# TLS: Let's Encrypt otomatik (80/443 dışa açık olmalı). HSTS 1 yıl, preload.
+# API'de TRUSTED_PROXY_HOPS=1 ve API_FORCE_HSTS=true ayarlanmalıdır.
+# =============================================================================
+
+{
+	email {$ACME_EMAIL}
+	servers {
+		# Gerçek istemci IP'si API denetim izine yazılır; bu başlıklar yalnız Caddy'den gelir.
+		trusted_proxies static private_ranges
+	}
+}
+
+(guvenlik-basliklari) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+}
+
+# Büro paneli + tanıtım sitesi
+{$WEB_DOMAIN} {
+	import guvenlik-basliklari
+	encode zstd gzip
+	reverse_proxy web:3000 {
+		header_up X-Request-Id {http.request.uuid}
+	}
+}
+
+# API — belge yüklemesi büyük olabilir; gövde tavanı API ile uyumlu (MAX_UPLOAD_BYTES ~50 MB)
+{$API_DOMAIN} {
+	import guvenlik-basliklari
+	encode zstd gzip
+	request_body {
+		max_size 60MB
+	}
+	# /metrics dışarıya KAPALI: Prometheus iç ağdan kazır.
+	@metrics path /metrics
+	respond @metrics 404
+	reverse_proxy api:3001 {
+		header_up X-Request-Id {http.request.uuid}
+		transport http {
+			read_timeout 620s
+		}
+	}
+}
+
+# Platform yönetim paneli — ASLA herkese açılmaz: IP beyaz listesi (+ tercihen VPN).
+{$ADMIN_DOMAIN} {
+	import guvenlik-basliklari
+	encode zstd gzip
+	@izinli remote_ip {$ADMIN_ALLOWED_IPS}
+	handle @izinli {
+		reverse_proxy admin:3002
+	}
+	handle {
+		respond "Erişim yok" 403
+	}
+}
+
+# Müvekkil portalı
+{$PORTAL_DOMAIN} {
+	import guvenlik-basliklari
+	encode zstd gzip
+	reverse_proxy portal:3003
+}

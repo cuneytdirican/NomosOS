@@ -19,16 +19,17 @@ geleceği belirtilerek işaretlenmiştir. Etiketli bir maddeyi "var" sanarak ür
 Aşağıdakiler koddan doğrulanmış kısıtlardır. Kapasite planı ve topoloji seçimi
 bunlara bağlıdır.
 
-| Kısıt | Gerçek | Sonucu |
+| Kısıt | Gerçek (Eylül 2026, Faz 4 sonrası) | Sonucu |
 |---|---|---|
-| **API tek örnek çalışmalıdır** | Hız sınırı sayacı süreç-içi `Map`'tir (`common/guards/ai-rate-limit.guard.ts`); abonelik/bakım durumu 30 sn süreç-içi önbellektedir | 2 örnek çalıştırırsanız AI hız sınırı fiilen 2× olur. Yatay ölçekleme **Faz 5'te** Redis sayacıyla gelir. Bugün: dikey ölçekleyin. |
-| **Kuyruk yoktur** | `apps/api/package.json` içinde BullMQ **yok**; Redis yalnızca sağlık yoklamasında (ham TCP `PING`) kullanılıyor | Belge → aksiyon hattı senkrondur. "Kuyruk derinliği" metriği bugün **ölçülemez** (⛔ EKSİK, Faz 5). Redis yine de kurulmalıdır: sağlık ucu ve gelecek kuyruk onu bekler. |
-| **Kiracı açma ucu yoktur** | Platform API'sinde `POST /tenants` yok (`platform-tenants.controller.ts`: list/get/patch/suspend/activate/support-access). Kiracı API'sinde `auth/login` ve `GET me` dışında kayıt ucu yok | İlk kiracı elle açılır (§4.3). Otomatik onboarding ⛔ EKSİK. |
-| **`pnpm db:seed` üretim tohumu DEĞİLDİR** | Tek parçadır: demo kiracı, demo müvekkil/dosya/duruşma ve **sabit parolalı** (`Demo1234!`) hesaplar üretir | Üretimde olduğu gibi **çalıştırılmaz**. Ama sistem verisi (süre kuralları, resmi tatiller, plan/kredi tabloları) de aynı betiktedir — §4.4'e bakın. Ayrık üretim tohumu ⛔ EKSİK. |
-| **`apps/admin` imajı yoktur** | `apps/api/Dockerfile` ve `apps/web/Dockerfile` var; `apps/admin` altında Dockerfile **yok** | Platform paneli bugün ya kaynaktan (`pnpm --filter @nomosos/admin start`) ya da §6.5'teki referans Dockerfile ile çalıştırılır. ⛔ EKSİK. |
-| **Sır kasası entegrasyonu yoktur** | Tüm sırlar `process.env` üzerinden okunur (`crypto.ts`, `app.module.ts`, `platform.constants.ts`) | Kasa kullanılacaksa sırlar konteyner başlatılırken ortama enjekte edilir (§8.4). Doğrudan kasa istemcisi ⛔ EKSİK, Faz 5. |
-| **Otomatik yedekleme yoktur** | Depoda yedekleme betiği veya zamanlayıcı yok | §5 el ile / platform araçlarıyla kurulacak prosedürü tanımlar. Betikler ⛔ EKSİK, Faz 5. |
-| **Anahtar rotasyon komutu yoktur** | [03-ai-katmani-byo-llm.md](03-ai-katmani-byo-llm.md) §Anahtar Güvenliği'nde "Faz 3" denmişti; kodda yeniden şifreleme komutu **yok** | `MASTER_ENCRYPTION_KEY` rotasyonu bugün §3.4'teki elle prosedürdür. ⛔ EKSİK. |
+| **API çok örnekli çalışabilir** | Oran sınırı, giriş denemesi ve global sayaçlar `REDIS_URL` tanımlıysa Redis'te paylaşılır (`common/rate-limit/counter-store.ts`, `RATE_LIMIT_BACKEND`); abonelik/plan modülü durumu 30-60 sn süreç-içi önbellek | Yatay ölçeklemede `RATE_LIMIT_BACKEND=redis` zorunlu; önbellek gecikmesi kabul edilebilir (askı en geç 60 sn'de etkili). |
+| **Kuyruk vardır (BullMQ)** | Belge → aksiyon hattı ve zamanlanmış işler BullMQ ile Redis'te; Redis kapalıysa hat HTTP dışında senkron koşar (`ARKA_PLAN` durumu) | Kuyruk derinliği `nomosos_queue_jobs{state}` ile ölçülür; `NomosOSQueueBacklog` uyarısı. |
+| **Kiracı açma platform panelinden, dört-göz** | `POST /api/admin/v1/tenants` onay talebi → ikinci imza → kiracı + yönetici + abonelik + **kredi cüzdanı** birlikte açılır | Self-signup bilinçli olarak YOK; demo talebi `PLATFORM_NOTIFY_EMAIL`'e düşer. |
+| **`pnpm db:seed` üretimde ÇALIŞMAZ** | Seed `NODE_ENV=production` iken `SEED_ALLOW_PROD=true` olmadan hata verir | Sistem verisi (süre kuralları, tatiller, planlar, fiyatlar) §4.4'teki ayrık yolla yüklenir. |
+| **Dört uygulama imajı var** | `apps/{api,web,admin,portal}/Dockerfile`; `deploy.yml` etiketle GHCR'ye gönderir (`IMAGE_REGISTRY`, `IMAGE_TAG`) | Sunucu `docker compose pull` ile günceller; geri alma önceki etiket. |
+| **Sır kasası entegrasyonu yoktur** | Sırlar `process.env`; şifreli sütunlar `MASTER_ENCRYPTION_KEY` (AES-256-GCM) | Kasa varsa sırlar konteyner başlarken enjekte edilir (§8.4). Rotasyon: `pnpm --filter @nomosos/api key:rotate` (§3.4). |
+| **Yedekleme otomatik** | `backup` (pg_dump, `BACKUP_INTERVAL_HOURS`) ve `backup-minio` (mc mirror --watch) servisleri; `scripts/prod-restore.sh` geri yükler | Yedek tazeliği `nomosos_backup_last_success_timestamp_seconds`; `NomosOSBackupStale` uyarısı. Yedek birimi konteyner dışına da kopyalanmalı. |
+| **PITR yoktur** | WAL arşivi yapılandırılmadı | RPO = yedek aralığı (varsayılan 24 sa; 6 sa önerilir). |
+| **Çevrimiçi ödeme sözleşmeye bağlı** | `ODEME_SAGLAYICI=IYZICO` + anahtarlar; tanımsızsa 503 ve havale/EFT + panelden "ödendi işaretle" | Sözleşme öncesi gelir manuel tahsil edilir; fatura/dönem takibi yine sistemde. |
 
 ---
 
@@ -313,20 +314,24 @@ mühürlü zarf), erişim kaydı tutulur, ve **anahtarın kendisi asla veritaban
 yedeğiyle aynı yere konmaz.** Aynı yere konursa yedeği ele geçiren tüm kiracıların
 LLM anahtarlarını da ele geçirmiş olur.
 
-### 3.4 Rotasyon prosedürü (taslak)
+### 3.4 Rotasyon prosedürü
 
-⛔ **EKSİK:** yeniden şifreleme komutu henüz yazılmadı
-([03-ai-katmani-byo-llm.md](03-ai-katmani-byo-llm.md)'de "Faz 3" denmişti, gerçekleşmedi).
-Aşağıdaki sıra, o komut yazıldığında izlenecek prosedürdür; komut olmadan
-uygulanamaz.
+Komut (Faz 4): `apps/api/src/scripts/rotate-master-key.ts` — tüm şifreli sütunları
+(AI sağlayıcı anahtarları/başlıkları, SSO istemci sırrı, kullanıcı TOTP, e-Fatura kimlik
+bilgisi, webhook sırrı) eski anahtarla çözüp yeni anahtarla TEK transaction'da yeniden
+şifreler; biri çözülemezse hiçbir satır yazılmaz. Önce `--dry-run`.
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod.local exec \
+  -e OLD_MASTER_ENCRYPTION_KEY=<eski> -e NEW_MASTER_ENCRYPTION_KEY=<yeni> api \
+  node dist/scripts/rotate-master-key.js --dry-run     # sonra --dry-run olmadan
+```
 
 1. **Bakım banner'ı** aç (§6.4) — kullanıcıya "AI özellikleri kısa süre
    kullanılamayacak" duyurusu.
 2. Yeni anahtar üret: `openssl rand -hex 32`. Eski anahtarı **silme**.
 3. Veritabanının anlık tam yedeğini al (geri dönülecek nokta).
-4. Yeniden şifreleme komutunu çalıştır: her `AiProviderConfig.encryptedApiKey`
-   eski anahtarla çözülür, yeni anahtarla şifrelenir. Komut **atomik** olmalı ve
-   yarıda kalırsa hangi satırlara kadar geldiğini kaydetmelidir.
+4. Yeniden şifreleme komutunu çalıştır (yukarıdaki `rotate-master-key`): tek
+   transaction, çözülemeyen satır varsa hiçbir şey yazılmaz ve satır listesi basılır.
 5. `PLATFORM_2FA_ENCRYPTION_KEY` **ayrı tanımlı değilse**, master anahtar
    değişimi TOTP kayıtlarını da geçersiz kılar. Rotasyondan önce bu değişkeni
    **açıkça tanımlayın** ki panel 2FA'sı master rotasyonundan etkilenmesin.
@@ -450,7 +455,8 @@ indirilebiliyor; aynı nesnenin doğrudan URL'si tarayıcıda **403** dönüyor.
 
 | Uç | Kimlik | Ne yapar |
 |---|---|---|
-| `GET /api/v1/health` | Açık (`@Public`) | Sabit `{status:"ok", time}` döner. **Yük dengeleyici içindir**, bağımlılıkları yoklamaz |
+| `GET /api/v1/health` / `/health/live` | Açık (`@Public`) | Sabit `{status:"ok", time}` döner. **Konteyner liveness** içindir, bağımlılıkları yoklamaz |
+| `GET /api/v1/health/ready` | Açık (`@Public`) | **Readiness (Faz 4):** PostgreSQL `SELECT 1`, Redis `PING` (REDIS_URL varsa), S3 `HeadBucket`; 2 sn zaman aşımı; biri düşükse **503** + bileşen ayrıntısı. Yük dengeleyici / rolling update bu uca bakar |
 | `GET /api/admin/v1/health` | Platform token'ı | **Gerçek yoklama**: PostgreSQL `SELECT 1`, Redis ham TCP `PING`→`+PONG`, S3 kova erişimi. Her biri için gecikme (ms) ve durum (`ok`/`degraded`/`down`) döner |
 
 İki ucun farkı bilinçlidir: LB ucu ucuz ve her saniye çağrılabilir olmalı;
@@ -460,7 +466,7 @@ tanı ucu pahalıdır ve yetki ister. `ANALYST_READONLY` rolü tanı ucunda yaln
 Ham hata mesajları istemciye **verilmez** (bağlantı dizesi/parola sızabilir);
 ayrıntı sunucu günlüğündedir.
 
-*Çıkış kriteri:* `/api/admin/v1/health` üç bileşen için de `ok` dönüyor.
+*Çıkış kriteri:* `/api/v1/health/ready` `"ready"` ve `/api/admin/v1/health` üç bileşen için de `ok` dönüyor.
 
 ---
 
@@ -480,11 +486,14 @@ kurulacak olan hedeftir.
 
 ### 5.1 PostgreSQL
 
-**Mantıksal yedek (asgari):**
-```bash
-pg_dump --format=custom --compress=9 "$DATABASE_URL" > nomosos-$(date +%F-%H%M).dump
-```
-Günde en az bir kez, tercihen 6 saatte bir.
+**Otomatik (Faz 4):** `docker-compose.prod.yml` `backup` servisi `BACKUP_INTERVAL_HOURS`
+(varsayılan 24; 6 önerilir) aralıkla `pg_dump -Fc` alır, `BACKUP_RETENTION_DAYS` sonra siler ve
+`/backups/last-success.json` yazar (metrik + `NomosOSBackupStale` uyarısı). `backup-minio`
+belge kovasını `mc mirror --watch` ile aynalar. Elle: `scripts/prod-backup.sh`.
+
+**Geri yükleme:** `scripts/prod-restore.sh --dump <dosya> [--minio <tar.gz>]` — uygulamaları
+durdurur, güvenlik yedeği alır, DB'yi yeniden yaratır, `migrate deploy`, readiness bekler ve
+RTO süresini basar. Tatbikat için `--target-db nomosos_tatbikat` (üretim DB'sine dokunmaz).
 
 **PITR (point-in-time recovery) — önerilen:** WAL arşivlemesi ile herhangi bir
 ana geri dönüş. Yönetilen PostgreSQL kullanıyorsanız çoğunlukla bir ayardır;
@@ -614,8 +623,13 @@ tehdit eden bir olay için ayrılmıştır ve iki ayrı `SUPER_ADMIN` imzası is
 | Uygulama | Dockerfile | Durum |
 |---|---|---|
 | `apps/api` | `apps/api/Dockerfile` | ✔ Çok aşamalı, `node:22-alpine`, `CMD node dist/main.js` |
-| `apps/web` | `apps/web/Dockerfile` | ✔ Tek aşamalı (üretim için çok aşamalıya çevrilmesi önerilir) |
-| `apps/admin` | — | ⛔ **EKSİK** |
+| `apps/web` | `apps/web/Dockerfile` | ✔ (`NEXT_PUBLIC_DISABLE_DEMO=1` build arg) |
+| `apps/admin` | `apps/admin/Dockerfile` | ✔ |
+| `apps/portal` | `apps/portal/Dockerfile` | ✔ |
+
+CD (Faz 4): `vX.Y.Z` etiketi → `.github/workflows/deploy.yml` dört imajı GHCR'ye gönderir
+(`ghcr.io/<owner>/nomosos/<uygulama>:<etiket>`) ve sunucuda `pull → prod-migrate.sh → up -d →
+/health/ready` dumanı koşar. Sunucu `.env.prod.local`: `IMAGE_REGISTRY=ghcr.io/<owner>/nomosos`.
 
 `apps/admin` için referans (henüz dosya olarak eklenmedi; monorepo kökünden
 derlenir, `apps/web/Dockerfile` deseniyle aynıdır):
@@ -667,32 +681,38 @@ yaptıysanız buradan anlarsınız — ve tam olarak burada anlamalısınız.
 
 ### 7.2 Log toplama
 
-- API günlükleri `stdout`'a yazar (NestJS `Logger`) → konteyner günlüğü →
-  merkezî toplayıcı.
-- Hata yanıtları **korelasyon kimliği** taşır (`AllExceptionsFilter`); kullanıcı
-  bir hata bildirdiğinde ilgili günlük satırı bu kimlikle bulunur.
+- API günlükleri `stdout`'a **JSON** yazar (`LOG_FORMAT=json`, üretim varsayılanı; pino
+  uyumlu `level/time/msg/context/reqId`) → konteyner günlüğü → Loki/ELK/Datadog. Her istek
+  için tek satır erişim günlüğü (yöntem, rota kalıbı, durum, süre, kiracı) — gövde/sorgu yok.
+- `x-request-id`: ters vekilden gelir ya da API üretir; yanıt başlığında döner, tüm günlük
+  satırlarına `reqId` olarak eklenir. Hata yanıtındaki `ref` bu kimliktir
+  (`AllExceptionsFilter`); kullanıcı bildirdiğinde günlük satırı `reqId` ile bulunur.
 - **Günlüğe kişisel veri yazılmaz.** Günlükler de KVKK kapsamındadır ve
   genellikle daha gevşek erişim kontrolüyle saklanır — bu yüzden en tehlikeli
   sızıntı yüzeyidir. Günlük saklama süresi belirlenir (öneri: 90 gün).
-- ⛔ **EKSİK:** Yapılandırılmış (JSON) günlük biçimi ve merkezî toplayıcı
-  entegrasyonu tanımlı değil, Faz 5.
+- Merkezî toplayıcı kurulumu (Loki/Promtail ya da Datadog agent) müşteri altyapısına göre
+  yapılır; API tarafı hazırdır.
 
 ### 7.3 Ölçülmesi gereken metrikler
 
-| Metrik | Neden | Öneri eşiği (başlangıç) |
+| Metrik (`GET /metrics`, prom-client) | Neden | Uyarı (`prometheus/alerts.yml`) |
 |---|---|---|
-| İstek gecikmesi **p95** (uç bazında) | Kullanıcı deneyiminin tek dürüst göstergesi; ortalama arızayı gizler | AI dışı uçlar > 800 ms, 5 dk sürerse uyar |
-| **Hata oranı** (5xx / toplam) | | > %1, 5 dk → uyar; > %5 → çağır |
-| **AI çağrı başarısızlık oranı** | BYO-LLM'de sağlayıcı arızası müşteriye NomosOS arızası gibi görünür | > %10, 15 dk → uyar |
-| **AI çağrı gecikmesi p95** | `AI_TIMEOUT_MS`'e (60 sn) yaklaşıyorsa sağlayıcı sorunlu | > 30 sn → incele |
-| **429 oranı** (AI hız sınırı) | Sınır çok mu sıkı, yoksa kötüye kullanım mı? | Ani artış → incele |
-| **Kredi tüketim anomalisi** | Bir kiracının tüketimi kendi 7 günlük ortalamasının 3 katına çıkarsa: ya otomasyon döngüsü var ya kötüye kullanım | 3× sapma → uyar |
-| **Kredi mutabakatı** | `CreditTransaction` toplamı ile `CreditWallet` bakiyesi **her zaman** tutmalıdır (defter append-only, `balanceAfter` alanı bunun için var) | Tutmuyorsa **kritik** — faturalama güvenilirliği bozulmuş demektir |
-| **Veritabanı bağlantı havuzu doluluğu** | Tükenirse tüm istekler kuyruğa girer | > %80 → uyar |
-| **Disk doluluğu** (DB + nesne deposu) | | > %80 uyar, > %90 çağır |
-| **Sertifika bitiş süresi** | | < 21 gün → uyar |
-| **Yedek tazeliği** | Son başarılı yedek ne zaman? | > 26 saat → **kritik** |
-| **Kuyruk derinliği** | Belge → aksiyon hattının sağlığı | ⛔ **Bugün ölçülemez** — kuyruk yok (§0), Faz 5 |
+| `nomosos_http_request_duration_seconds` p95 (rota kalıbı) | Ortalama arızayı gizler | AI dışı uçlar > 1 sn, 10 dk → `NomosOSHighLatencyP95` |
+| `nomosos_http_requests_total{status=~"5.."}` oranı | Sunucu hatası | > %2, 5 dk → kritik |
+| `nomosos_http_requests_total{status="429"}` | Oran sınırı sıklığı | > 1/sn, 10 dk → uyarı |
+| `nomosos_ai_calls_total{outcome}` başarısızlık oranı | BYO-LLM arızası müşteriye NomosOS arızası görünür | provider_error > %20, 15 dk |
+| `nomosos_ai_call_duration_seconds` | `AI_TIMEOUT_MS`'e yaklaşıyorsa sağlayıcı sorunlu | p95 > 60 sn → incele |
+| `nomosos_queue_jobs{state}` | Belge hattı sağlığı | waiting > 200 (15 dk); failed +20/saat |
+| `nomosos_ocr_duration_seconds` | OCR CPU darboğazı | p95 > 60 sn/sayfa |
+| `nomosos_backup_last_success_timestamp_seconds` | Yedek tazeliği | > 36 sa ya da 0 → **kritik** |
+| `nomosos_credit_wallets_negative_total` | Kredi mutabakatı sapması | > 0, 10 dk → uyarı; `GET /credits/reconcile` |
+| `nomosos_subscriptions{status="PAST_DUE"}` / `nomosos_platform_invoices_overdue_total` | Gelir sağlığı | artış / > 5 → bilgi |
+| `nomosos_db_up`, `nomosos_db_check_duration_seconds` | Veritabanı erişimi | 0, 1 dk → **kritik** |
+| `nomosos_scheduler_job_failures_total{job}` | Zamanlanmış iş hatası | saatte > 0 → uyarı |
+| `process_resident_memory_bytes` (varsayılan) | Bellek sızıntısı | > 1.6 GB, 15 dk |
+
+Dış ölçümler (exporter): disk doluluğu (node_exporter), sertifika bitişi (blackbox), DB havuzu
+(postgres_exporter). Örnek `prometheus/prometheus.yml`.
 
 Eşikler başlangıç noktasıdır; ilk 30 günün gerçek dağılımına göre düzeltilir.
 Sürekli çalan bir alarm, hiç çalmayan alarmdan kötüdür — susturulur ve gerçek

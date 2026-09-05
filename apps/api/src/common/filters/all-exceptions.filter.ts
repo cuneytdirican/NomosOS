@@ -22,6 +22,7 @@ import {
 } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { newCorrelationId } from "../errors";
+import { currentRequestId } from "../request-context";
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -45,7 +46,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
       return;
     }
 
-    const ref = newCorrelationId();
+    // Faz 4: korelasyon kimliği = istek kimliği (x-request-id); günlük ve yanıt aynı kodu taşır.
+    const ref = currentRequestId() ?? newCorrelationId();
     const raw = exception instanceof Error ? `${exception.name}: ${exception.message}` : String(exception);
     this.logger.error(
       `[${ref}] ${request.method} ${request.url} → beklenmeyen hata: ${raw}`,

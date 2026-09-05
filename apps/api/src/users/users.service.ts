@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { assertPasswordStrength } from "../common/password-strength";
 import * as bcrypt from "bcryptjs";
 import type { Prisma } from "@nomosos/db";
 import { PrismaService } from "../prisma/prisma.service";
@@ -150,6 +151,8 @@ export class UsersService {
     if (existing) {
       throw new ConflictException("Bu e-posta adresi zaten kullanılıyor.");
     }
+    // Faz 4: parola gücü (zxcvbn ≥ 3; e-posta/ad soyad parçası içeremez).
+    assertPasswordStrength(input.password, [input.email, input.fullName]);
     await this.assertSeatAvailable(user.tenantId);
 
     const created = await this.prisma.client.user.create({

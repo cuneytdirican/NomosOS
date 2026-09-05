@@ -23,7 +23,39 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 6 Eylül 2026, 04:30
+# 🔖 KALDIĞIM YER — 6 Eylül 2026, 08:00
+
+> Üç persona planı (`~/.claude/plans/wiggly-giggling-lighthouse.md`) yürüyor:
+> **Faz 0 ✅ · Faz 1 ✅ · Faz 2 ✅ · Faz 3 ✅ · Faz 4 ✅ (bu commit)** · sırada Faz 5 (RAG ölçek + test altyapısı).
+
+**FAZ 4 — OPERASYON/SRE TAMAMLANDI** (CHANGELOG "Yayımlanmamış", `docs/uretim-dagitimi.md` §0/§3.4/§4.6/§5.1/§7.2/§7.3/§6.5 güncel):
+1. **Readiness** `GET /health/ready` (DB/Redis/S3 gerçek yoklama, 2 sn, 503 + bileşen); compose liveness `/health/live` kaldı.
+2. **JSON günlük** (`common/json-logger.ts`, `LOG_FORMAT=json` üretim varsayılanı, pino uyumlu) + **`x-request-id`**
+   (`common/request-context.ts`, AsyncLocalStorage; erişim günlüğü rota kalıbıyla; hata `ref` = reqId).
+3. **Metrikler**: prom-client kaydı (`metrics/metrics.registry.ts`, 12 iş metriği + varsayılan süreç), HTTP
+   histogram/sayaç ara katmandan, AI (`observeAiCall`), OCR, kuyruk, yedek tazeliği, eksi bakiye cüzdanı,
+   abonelik durumu, vadesi geçmiş fatura, iş hatası; `prometheus/alerts.yml` (15 kural) + `prometheus.yml`.
+4. **Global oran sınırı** (`GlobalRateLimitGuard`, IP 300/dk, kullanıcı 600/dk, Redis/süreç-içi, fail-open).
+5. **Parola gücü** (`common/password-strength.ts`, zxcvbn ≥ 3 + Türkçe sözlük + hesap parçası yasağı) —
+   kullanıcı oluşturma, değiştirme, sıfırlama, portal (2).
+6. **Anahtar rotasyonu** `scripts/rotate-master-key.ts` (`key:rotate`, `--dry-run`, tek transaction, 6 model).
+7. **Yedek/geri yükleme**: compose `backup` + `backup-minio` servisleri, `scripts/backup-container.sh`
+   (last-success.json), `scripts/prod-restore.sh` (tatbikat `--target-db`, RTO çıktısı).
+8. **CD** `.github/workflows/deploy.yml` (v* etiketi → GHCR 4 imaj → SSH pull/migrate/up → readiness dumanı),
+   compose `IMAGE_REGISTRY`; **Caddy** `deploy/Caddyfile` + `--profile edge` (HSTS, panel IP kısıtı).
+9. **OpenAPI** `/api/docs` (yalnız dev/test), prettier + husky + lint-staged, CHANGELOG, CONTRIBUTING, README durum;
+   kök ekran görüntüleri kaldırıldı.
+Testler: api 1380 (160 dosya), lint 0. Canlı duman: readiness 200/503, metrik çıktısı, x-request-id, 429, JSON günlük,
+zayıf parola 400, rotasyon dry-run (bu commit sonrası Docker'da koşulacak — aşağıya işlenecek).
+
+**SIRADA: FAZ 5 — RAG ölçek + test altyapısı:** pgvector migration (HNSW) + `ORDER BY embedding <=> $1 LIMIT k`,
+`[tenantId,caseId]` indeksi, `pg_trgm` GIN; eski JS yolu bayrakla; Supertest + Testcontainers entegrasyon iskeleti
+(ilk 10 kritik uç); grep-tabanlı 35 testten en kırılgan 10'u davranış testine; admin/portal Vitest; mobil `tsc` CI'da;
+Playwright dumanı CI'da.
+
+---
+
+## 🔖 ÖNCEKİ KALDIĞIM YER — 6 Eylül 2026, 04:30
 
 > Üç persona planı (`~/.claude/plans/wiggly-giggling-lighthouse.md`) yürüyor:
 > **Faz 0 ✅ · Faz 1 ✅ · Faz 2 ✅ · Faz 3 ✅ (bu commit)** · sırada Faz 4 (operasyon/SRE).

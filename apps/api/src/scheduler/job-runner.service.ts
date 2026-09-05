@@ -1,5 +1,6 @@
 import { ConflictException, Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { schedulerFailures } from "../metrics/metrics.registry";
 import { safeNextRun } from "./cron-expression";
 import {
   resolveJobStatus,
@@ -183,6 +184,8 @@ export class JobRunnerService implements OnModuleInit {
       const status = resolveJobStatus(result);
       const finishedAt = new Date();
       const durationMs = finishedAt.getTime() - startedAt.getTime();
+      // Faz 4: iş hatası metriği (uyarı kuralı NomosOSSchedulerJobFailing).
+      if (errorMessage) schedulerFailures.labels(handler.key).inc();
       // İş içinden gelen tekil hatalar (tek kiracı patladı) da mesaja girer.
       if (!errorMessage && result.errors?.length) {
         errorMessage = result.errors.join(" | ");

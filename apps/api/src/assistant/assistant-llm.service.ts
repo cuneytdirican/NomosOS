@@ -6,6 +6,7 @@ import {
   ServiceUnavailableException,
   UnprocessableEntityException,
 } from "@nestjs/common";
+import { observeAiCall } from "../metrics/metrics.registry";
 import type { AiProviderConfig } from "@nomosos/db";
 import {
   createProvider,
@@ -373,11 +374,13 @@ export class AssistantLlmService {
         errorMessage: (err as Error).message,
       });
       // Ham sağlayıcı gövdesi sızdırılmaz; korelasyon kimliği ile günlüğe yazılır.
+      observeAiCall("provider_error", Date.now() - startedAt);
       throw providerUnreachable(this.logger, err);
     }
     const durationMs = Date.now() - startedAt;
 
     const guarded = guardOutput(schema, result.content, { findingPaths });
+    observeAiCall(guarded.ok ? "ok" : "guard_reject", durationMs);
 
     // F2 · E1: guard reddi ve başarılı koşu — iz durumu ayrım kuralı için
     // AiRunnerService ile aynı üç durum kümesini kullanır.
