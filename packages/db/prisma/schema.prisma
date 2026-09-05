@@ -393,6 +393,8 @@ model Case {
   @@index([tenantId, lastActivityAt])
   @@index([tenantId, isConfidential])
   @@index([clientId])
+  /// Faz 6: tebligatlar.
+  tebligatlar Tebligat[]
 }
 
 /// GİZLİ DOSYA ÜYESİ — dosyaya erişimi olan kullanıcı (sorumlu avukat dışında).
@@ -1800,6 +1802,93 @@ model AuditLog {
 // Prisma.Decimal veya tamsayı kuruş aritmetiği zorunludur.
 
 /// İcra takibinin türü (İİK)
+/// Faz 6: dönemli faiz oranları (3095 s.K. kanuni faiz, TCMB avans, ticari temerrüt).
+/// Platform panelinden girilir; icra bakiyesi ve faiz hesabı dönem sınırlarında oran değiştirir.
+model InterestRatePeriod {
+  id          String           @id @default(uuid())
+  kind        InterestRateKind
+  validFrom   DateTime
+  ratePercent Decimal          @db.Decimal(6, 2)
+  source      String?
+  createdBy   String?
+  createdAt   DateTime         @default(now())
+
+  @@unique([kind, validFrom])
+}
+
+enum InterestRateKind {
+  YASAL
+  AVANS
+  TICARI_TEMERRUT
+}
+
+/// Faz 6: tebligat varlığı — kanal (UETS/KEP/PTT/elden), yön, tebliğ tarihi. Tebliğ tarihi +
+/// kural anahtarı verildiğinde süre motoru süreyi otomatik açar (`deadlineId`).
+model Tebligat {
+  id              String         @id @default(uuid())
+  tenantId        String
+  caseId          String
+  case            Case           @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  documentId      String?
+  channel         TebligatKanali
+  direction       TebligatYonu   @default(GELEN)
+  subject         String
+  counterparty    String?
+  sentAt          DateTime?
+  servedAt        DateTime?
+  externalRef     String?
+  deadlineRuleKey String?
+  deadlineId      String?
+  note            String?
+  createdBy       String
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([tenantId, caseId])
+  @@index([tenantId, servedAt])
+}
+
+enum TebligatKanali {
+  UETS
+  KEP
+  PTT
+  ELDEN
+  EPOSTA
+  DIGER
+}
+
+enum TebligatYonu {
+  GELEN
+  GIDEN
+}
+
+/// Faz 6: çalışan kronometre (kullanıcı başına tek). Durdurulunca TimeEntry'ye dönüşür.
+model TimeTimer {
+  id          String   @id @default(uuid())
+  tenantId    String
+  userId      String   @unique
+  caseId      String?
+  clientId    String?
+  description String
+  startedAt   DateTime @default(now())
+}
+
+/// Faz 6: Harçlar Kanunu (1) sayılı tarife — yıl bazlı platform kaydı (nispi binde oranları +
+/// maktu kalemler). Rakam üretilmez; Resmî Gazete'den platform görevlisi girer.
+model PlatformHarcTarifesi {
+  id                String   @id @default(uuid())
+  yil               Int      @unique
+  pesinBinde        Decimal  @db.Decimal(6, 2)
+  istinafBinde      Decimal  @db.Decimal(6, 2)
+  temyizBinde       Decimal  @db.Decimal(6, 2)
+  /// [{"kod":"BASVURMA","ad":"Başvurma harcı","tutarKurus":"..."}, …]
+  maktuKalemlerJson String
+  kaynak            String?
+  updatedBy         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
 enum EnforcementType {
   ILAMLI
   ILAMSIZ
@@ -1840,6 +1929,9 @@ model EnforcementFile {
   principalAmount      Decimal          @db.Decimal(18, 2)
   /// Yıllık faiz oranı (%). Faiz hesabı DETERMİNİSTİKTİR, AI hesaplamaz.
   interestRate         Decimal?         @db.Decimal(5, 2)
+  /// Faz 6: faiz türü — YASAL/AVANS/TICARI_TEMERRUT dönem tablosundan (InterestRatePeriod);
+  /// null = dosyadaki sabit `interestRate`.
+  interestKind         InterestRateKind?
   currency             String           @default("TRY")
   requestDate          DateTime // Takip talebi tarihi
   /// FAİZ BAŞLANGICI — temerrüt/vade/ihtar tarihi. Takip talebinde faiz
@@ -2181,11 +2273,17 @@ model TimeEntry {
   /// Faturalandıysa Invoice.id — İLİŞKİ DEĞİL, skaler (fatura iptalinde
   /// zaman kaydı silinmez, alan boşaltılır).
   invoiceId   String?
+  /// Faz 6: onay akışı — yalnız ONAYLANDI kayıtlar faturaya girer.
+  status          TimeEntryStatus @default(TASLAK)
+  approvedBy      String?
+  approvedAt      DateTime?
+  rejectionReason String?
   createdAt   DateTime @default(now())
 
   @@index([tenantId, date])
   @@index([userId, date])
   @@index([caseId])
+  @@index([tenantId, status])
   @@index([clientId])
   @@index([tenantId, invoiceId])
   @@index([tenantId, billable, date])
@@ -2297,6 +2395,13 @@ enum PaymentMethod {
 
 /// Müvekkilden alınan tahsilat (tenant içi). Platform aboneliği tahsilatı
 /// AYRI modeldir: PaymentRecord.
+enum TimeEntryStatus {
+  TASLAK
+  ONAY_BEKLIYOR
+  ONAYLANDI
+  REDDEDILDI
+}
+
 model Payment {
   id        String        @id @default(uuid())
   tenantId  String
@@ -2318,6 +2423,10 @@ model Payment {
   date      DateTime
   method    PaymentMethod
   reference String? // Dekont / işlem referansı
+  /// Faz 6: storno — kayıt silinmez, ters kayıtla kapatılır (kanıt durur).
+  stornoAt     DateTime?
+  stornoBy     String?
+  stornoReason String?
   note      String?
   createdBy String // User id
   createdAt DateTime      @default(now())

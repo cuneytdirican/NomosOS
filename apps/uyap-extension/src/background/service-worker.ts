@@ -346,7 +346,7 @@ async function queueFiles(message: Extract<ExtensionMessage, { type: "TRANSFER_F
   const detay = message.detay ?? null;
   const files = message.files.map((file) =>
     detay && detay.dosyaNo === file.dosyaNo
-      ? toSyncFileDto(file, { konu: detay.konu, taraflar: detay.taraflar })
+      ? toSyncFileDto(file, { konu: detay.konu, taraflar: detay.taraflar, icra: detay.icra ?? null })
       : toSyncFileDto(file),
   );
   if (files.length === 0) return { queued: 0, duplicates: 0 };

@@ -19,6 +19,7 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common";
+import { createCaseFromQueueSchema, type CreateCaseFromQueueInput } from "./uyap.dto";
 import { z } from "zod";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { Public } from "../common/decorators/public.decorator";
@@ -139,6 +140,12 @@ export class UyapWebController {
   }
 
   /** Kuyruktaki dosyayı NomosOS dosyasına bağla. */
+  /** Faz 6 — kuyruktaki UYAP dosyasından yeni dosya aç (müvekkil seçimi zorunlu; onaylı işlem). */
+  @Post("match-queue/:id/create-case")
+  createCase(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body(new ZodValidationPipe(createCaseFromQueueSchema)) body: CreateCaseFromQueueInput) {
+    return this.uyap.createCaseFromQueue(user, id, body);
+  }
+
   @Post("match-queue/:id/resolve")
   @HttpCode(200)
   resolveMatch(

@@ -39,6 +39,7 @@ import {
 } from "@/components/ui";
 import { FeatureUnavailable, ToastStack, useToasts } from "@/components/ai-ui";
 import { fmtAmount, sharePercent, sumKurus, toKurus } from "@/lib/money";
+import { downloadFinanceExport, type FinanceExportFormat } from "@/lib/faz6-icra-finans";
 import {
   AGING_BUCKET_LABELS,
   AGING_BUCKET_TONES,
@@ -79,7 +80,21 @@ export default function FinansPage() {
   const [entriesTotal, setEntriesTotal] = useState(0);
   const [entriesTotalPages, setEntriesTotalPages] = useState(1);
   const [open, setOpen] = useState(false);
+  const [exporting, setExporting] = useState<FinanceExportFormat | null>(null);
   const { toasts, push, dismiss } = useToasts();
+
+  /** Faz 6 — muhasebe programına CSV (Luca / Logo). Dönem ve müvekkil süzgeci uygulanır. */
+  async function exportCsv(format: FinanceExportFormat) {
+    setExporting(format);
+    try {
+      await downloadFinanceExport(format, { from: dateFrom, to: dateTo, clientId: clientFilter || undefined });
+      push(`${format === "luca" ? "Luca" : "Logo"} CSV indirildi.`);
+    } catch (err) {
+      push(errText(err, "Dışa aktarım başarısız."), "error");
+    } finally {
+      setExporting(null);
+    }
+  }
 
   const loadReport = useCallback(async () => {
     setReportLoading(true);
@@ -154,9 +169,17 @@ export default function FinansPage() {
             deterministik hesaptan gelir.
           </p>
         </div>
-        <Button variant="gold" onClick={() => setOpen(true)} disabled={entriesMissing}>
-          + Finans Hareketi
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => void exportCsv("luca")} disabled={entriesMissing || exporting !== null} title="Luca muhasebe fiş içe aktarma CSV'si">
+            {exporting === "luca" ? "Hazırlanıyor…" : "Luca CSV"}
+          </Button>
+          <Button variant="secondary" onClick={() => void exportCsv("logo")} disabled={entriesMissing || exporting !== null} title="Logo (Tiger/Go) muhasebe fişi CSV'si">
+            {exporting === "logo" ? "Hazırlanıyor…" : "Logo CSV"}
+          </Button>
+          <Button variant="gold" onClick={() => setOpen(true)} disabled={entriesMissing}>
+            + Finans Hareketi
+          </Button>
+        </div>
       </div>
 
       <Card title="Dönem">

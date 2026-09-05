@@ -1,6 +1,7 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Res } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Res } from "@nestjs/common";
 import type { Response } from "express";
 import { PrismaService } from "../prisma/prisma.service";
+import { TimeTimerService, timerStartSchema, timerStopSchema, type TimerStartInput, type TimerStopInput } from "./time-timer.service";
 import { EInvoiceService, eInvoiceSettingsSchema, type EInvoiceSettingsInput } from "./e-invoice/e-invoice.service";
 import { renderInvoicePdf } from "./pdf/invoice-pdf";
 import { FINANCE_ACCESS, assertFinanceAccess } from "../finance/finance-access";
@@ -53,6 +54,7 @@ export class BillingController {
     private readonly payments: PaymentsService,
     private readonly prisma: PrismaService,
     private readonly eInvoice: EInvoiceService,
+    private readonly timeTimer: TimeTimerService,
   ) {}
 
   // =================================================== ÜCRET SÖZLEŞMELERİ
@@ -138,6 +140,48 @@ export class BillingController {
       page,
       limit,
     });
+  }
+
+  /** Faz 6 — kronometre (kullanıcı başına tek). Sabit yollar `time-entries/:id`'den ÖNCE. */
+  @Get("time-entries/timer")
+  timer(@CurrentUser() user: AuthUser) {
+    return this.timeTimer.current(user);
+  }
+
+  @Post("time-entries/timer/start")
+  timerStart(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(timerStartSchema)) body: TimerStartInput) {
+    return this.timeTimer.start(user, body);
+  }
+
+  @Post("time-entries/timer/stop")
+  timerStop(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(timerStopSchema)) body: TimerStopInput) {
+    return this.timeTimer.stop(user, body);
+  }
+
+  @Delete("time-entries/timer")
+  timerCancel(@CurrentUser() user: AuthUser) {
+    return this.timeTimer.cancel(user);
+  }
+
+  /** Faz 6 — onay kuyruğu + onay/ret. */
+  @Get("time-entries/pending")
+  pendingTimeEntries(@CurrentUser() user: AuthUser) {
+    return this.timeEntries.pending(user);
+  }
+
+  @Post("time-entries/:id/submit")
+  submitTimeEntry(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.timeEntries.submit(user, id);
+  }
+
+  @Post("time-entries/:id/approve")
+  approveTimeEntry(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.timeEntries.decide(user, id, "ONAYLANDI");
+  }
+
+  @Post("time-entries/:id/reject")
+  rejectTimeEntry(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: { reason?: string }) {
+    return this.timeEntries.decide(user, id, "REDDEDILDI", body?.reason ?? null);
   }
 
   @Post("time-entries")
@@ -323,6 +367,14 @@ export class BillingController {
     @Query("limit") limit?: string,
   ) {
     return this.payments.list(user, { clientId, invoiceId, method, from, to, page, limit });
+  }
+
+  /** Faz 6 — storno (ters kayıt; silme yerine). */
+  @Post("payments/:id/storno")
+  stornoPayment(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: { reason?: string }) {
+    const reason = (body?.reason ?? "").trim();
+    if (reason.length < 3) throw new BadRequestException("Storno gerekçesi zorunludur (en az 3 karakter).");
+    return this.payments.storno(user, id, reason);
   }
 
   @Post("payments")

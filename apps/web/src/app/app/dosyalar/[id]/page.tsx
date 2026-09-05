@@ -113,12 +113,14 @@ import {
 } from "@/lib/labels";
 import { CASE_STATUSES, COURT_TYPES, PARTY_ROLES, type CaseStatus, type PartyRole } from "@nomosos/shared";
 import { RemoteSelect } from "@/components/remote-select";
+import { TebligatTab } from "@/components/tebligat-tab";
 
 const TABS = [
   { key: "ozet", label: "Özet" },
   { key: "safahat", label: "Safahat" },
   { key: "durusmalar", label: "Duruşmalar" },
   { key: "sureler", label: "Süreler" },
+  { key: "tebligatlar", label: "Tebligatlar" },
   { key: "kararlar", label: "Kararlar" },
   { key: "notlar", label: "Notlar" },
   { key: "gorevler", label: "Görevler" },
@@ -796,6 +798,9 @@ export default function DosyaDetayPage({ params }: { params: Promise<{ id: strin
           )}
         </Card>
       )}
+
+      {/* ---------- Tebligatlar (Faz 6) ---------- */}
+      {tab === "tebligatlar" && <TebligatTab caseId={id} onDeadlineOpened={() => void load()} />}
 
       {/* ---------- Kararlar ---------- */}
       {tab === "kararlar" && (

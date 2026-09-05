@@ -484,6 +484,26 @@ export const SUBSCRIPTION_ROUTES = {
   paymentWebhook: "/billing/odeme/webhook",
 } as const;
 
+/** Faz 6 — icra portföyü, tebligat, tarifeler, kronometre, storno, muhasebe dışa aktarımı. */
+export const FAZ6_ROUTES = {
+  enforcementPortfolio: "/enforcement/portfolio",
+  tebligatlar: (caseId: string) => `/cases/${caseId}/tebligatlar`,
+  tebligat: (id: string) => `/tebligatlar/${id}`,
+  tebligatSaglayici: "/tebligatlar/saglayici",
+  faizOranlari: "/finance/faiz-oranlari",
+  harcTarifesi: (yil: number) => `/finance/harc-tarifesi/${yil}`,
+  timer: "/billing/time-entries/timer",
+  timerStart: "/billing/time-entries/timer/start",
+  timerStop: "/billing/time-entries/timer/stop",
+  timeEntriesPending: "/billing/time-entries/pending",
+  timeEntrySubmit: (id: string) => `/billing/time-entries/${id}/submit`,
+  timeEntryApprove: (id: string) => `/billing/time-entries/${id}/approve`,
+  timeEntryReject: (id: string) => `/billing/time-entries/${id}/reject`,
+  paymentStorno: (id: string) => `/billing/payments/${id}/storno`,
+  financeExport: "/finance/export",
+  uyapCreateCase: (id: string) => `/uyap/match-queue/${id}/create-case`,
+} as const;
+
 /** Mobil cihaz push token'ları (Faz 6). */
 export const DEVICE_TOKEN_ROUTES = {
   list: "/device-tokens",

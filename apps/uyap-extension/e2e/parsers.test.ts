@@ -14,6 +14,7 @@ import { dosyaDetayParser } from "../src/content/parsers/dosya-detay";
 import { dosyaListesiParser } from "../src/content/parsers/dosya-listesi";
 import { durusmaParser } from "../src/content/parsers/durusma";
 import { evrakListesiParser } from "../src/content/parsers/evrak-listesi";
+import { icraDosyaParser, parseTrMoney } from "../src/content/parsers/icra-dosya";
 import { safahatParser } from "../src/content/parsers/safahat";
 import { detectPageKinds } from "../src/content/parsers";
 import type { PageContext } from "../src/types/parser";
@@ -302,5 +303,41 @@ describe("sayfa tespiti", () => {
   it("dosya detay sayfasında yalnızca detay parser'ı eşleşir", () => {
     const ctx = loadFixture("dosya-detay.html", "dosya/detay.jsf?dosyaId=1234567");
     expect(detectPageKinds(ctx)).toEqual(["DOSYA_DETAY"]);
+  });
+});
+
+describe("icra dosyası parser (Faz 6)", () => {
+  it("takip alanlarını künyeden, borçlu/alacaklıyı taraflardan okur", () => {
+    const ctx = loadFixture("icra-dosya.html", "icra/dosyaDetay.jsf?dosyaId=9988776");
+    expect(icraDosyaParser.matches(ctx)).toBe(true);
+    expect(detectPageKinds(ctx)).toEqual(["ICRA_DOSYA", "DOSYA_DETAY"]);
+
+    const result = icraDosyaParser.parse(ctx);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.dosyaNo).toBe("2026/8841");
+    expect(result.data.birim).toBe("Ankara 7. İcra Dairesi");
+    expect(result.data.uyapDosyaId).toBe("9988776");
+    expect(result.data.icra).toEqual({
+      takipTuru: "İlamsız Takip (Genel Haciz Yolu)",
+      takipTarihi: "2026-03-05",
+      alacakTutari: "125750.40",
+      asama: "Haciz",
+      borclu: "Hasan Kara",
+      alacakli: "Kuzey Yapı Malzemeleri Ltd. Şti.",
+    });
+  });
+
+  it("hukuk dosyası detayında icra parser'ı EŞLEŞMEZ (yanlış pozitif yok)", () => {
+    const ctx = loadFixture("dosya-detay.html", "dosya/detay.jsf?dosyaId=1234567");
+    expect(icraDosyaParser.matches(ctx)).toBe(false);
+    expect(detectPageKinds(ctx)).not.toContain("ICRA_DOSYA");
+  });
+
+  it("tutar okuma: TR biçimi → ondalık metin; bozuk metin → null", () => {
+    expect(parseTrMoney("125.750,40 TL")).toBe("125750.40");
+    expect(parseTrMoney("1.000 TL")).toBe("1000.00");
+    expect(parseTrMoney("")).toBeNull();
+    expect(parseTrMoney("bilinmiyor")).toBeNull();
   });
 });

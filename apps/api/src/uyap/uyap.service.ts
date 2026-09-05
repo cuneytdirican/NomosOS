@@ -16,6 +16,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
+import { ROLE_SETS, assertRole } from "../common/roles";
 import type { AuthUser } from "../common/types";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
@@ -151,9 +152,72 @@ export class UyapService {
   }
 
   /** Kuyruktaki UYAP dosyasını bir NomosOS dosyasına bağlar. */
+  /**
+   * Faz 6 — kuyruktaki UYAP dosyasından YENİ NomosOS dosyası açar (avukat onayıyla: müvekkil ve
+   * tür seçilir), bağlantıyı kurar ve sahnelenmiş olayları işler. İcra birimi/ekranıysa icra dosyası
+   * da açılır (tutar/tarih eklenti payload'ından; yoksa avukat sonradan doldurur).
+   */
+  async createCaseFromQueue(user: AuthUser, id: string, input: { clientId: string; type?: "DAVA" | "ICRA" | "CEZA" | "ARABULUCULUK" | "DANISMANLIK"; responsibleUserId?: string | null; title?: string | null }) {
+    assertRole(user, ROLE_SETS.OPERASYON, "UYAP dosyasından dosya açma");
+    const queued = await this.prisma.client.uyapMatchQueue.findFirst({ where: { id, tenantId: user.tenantId, resolvedAt: null } });
+    if (!queued) throw new NotFoundException("Kuyrukta böyle bir kayıt yok.");
+    const client = await this.prisma.client.client.findFirst({ where: { id: input.clientId, tenantId: user.tenantId }, select: { id: true } });
+    if (!client) throw new NotFoundException("Müvekkil bulunamadı.");
+    let payload: Record<string, unknown> = {};
+    try {
+      payload = JSON.parse(queued.payloadJson) as Record<string, unknown>;
+    } catch {
+      payload = {};
+    }
+    const birim = String(payload.birim ?? "");
+    const konu = payload.konu ? String(payload.konu) : null;
+    const inferredType = input.type ?? inferCaseType(birim, String(payload.dosyaTuru ?? ""));
+    const icra = (payload.icra ?? null) as { alacakTutari?: string | null; takipTuru?: string | null; takipTarihi?: string | null; borclu?: string | null } | null;
+    const created = await this.prisma.client.$transaction(async (tx) => {
+      const c = await tx.case.create({
+        data: {
+          tenantId: user.tenantId,
+          clientId: input.clientId,
+          type: inferredType,
+          title: input.title?.trim() || `${birim || "UYAP"} ${queued.uyapDosyaNo}${konu ? ` — ${konu.slice(0, 120)}` : ""}`.slice(0, 300),
+          courtName: birim || null,
+          fileNumber: queued.uyapDosyaNo,
+          subject: konu,
+          responsibleUserId: input.responsibleUserId ?? user.userId,
+        },
+        select: { id: true, title: true },
+      });
+      if (inferredType === "ICRA") {
+        const amount = icra?.alacakTutari && /^[0-9]+(\.[0-9]{1,2})?$/.test(icra.alacakTutari) ? icra.alacakTutari : "0.00";
+        await tx.enforcementFile.create({
+          data: {
+            tenantId: user.tenantId,
+            caseId: c.id,
+            officeName: birim || "İcra Dairesi",
+            fileNumber: queued.uyapDosyaNo,
+            trackingType: trackingTypeFrom(icra?.takipTuru ?? null),
+            principalAmount: amount,
+            requestDate: icra?.takipTarihi ? new Date(icra.takipTarihi) : new Date(),
+            debtorInfo: icra?.borclu ?? null,
+          },
+        });
+      }
+      await tx.uyapCaseLink.upsert({
+        where: { tenantId_uyapDosyaNo: { tenantId: user.tenantId, uyapDosyaNo: queued.uyapDosyaNo } },
+        create: { tenantId: user.tenantId, uyapDosyaNo: queued.uyapDosyaNo, caseId: c.id, matchedBy: user.userId },
+        update: { caseId: c.id, matchedBy: user.userId },
+      });
+      await tx.uyapMatchQueue.update({ where: { id }, data: { resolvedAt: new Date(), resolvedCaseId: c.id } });
+      return c;
+    });
+    // Sahnelenmiş olaylar aynı yoldan işlenir.
+    const replay = await this.resolveMatch(user, id, created.id).catch(() => ({ ok: true, replayed: 0 }));
+    return { ok: true, caseId: created.id, title: created.title, type: inferredType, replayed: (replay as { replayed?: number }).replayed ?? 0, icraDosyasi: inferredType === "ICRA" };
+  }
+
   async resolveMatch(user: AuthUser, id: string, caseId: string) {
     const queued = await this.prisma.client.uyapMatchQueue.findFirst({
-      where: { id, tenantId: user.tenantId, resolvedAt: null },
+      where: { id, tenantId: user.tenantId, OR: [{ resolvedAt: null }, { resolvedCaseId: caseId }] },
     });
     if (!queued) throw new NotFoundException("Kuyrukta böyle bir kayıt yok.");
     const targetCase = await this.prisma.client.case.findFirst({
@@ -613,4 +677,29 @@ export class UyapService {
       pendingApprovalCount,
     };
   }
+}
+
+/** Birim adından dosya türü çıkarımı — avukat isterse override eder. */
+/** Türkçe duyarsız küçültme: "İcra" ve ASCII "Icra" ikisi de "icra" olur (tr-TR küçültmede I → ı tuzağı). */
+function trFold(input: string): string {
+  return input.replace(/İ/g, "i").replace(/I/g, "i").toLocaleLowerCase("tr-TR").replace(/ı/g, "i");
+}
+
+export function inferCaseType(birim: string, dosyaTuru: string): "DAVA" | "ICRA" | "CEZA" | "ARABULUCULUK" | "DANISMANLIK" {
+  const b = trFold(`${birim} ${dosyaTuru}`);
+  if (b.includes("icra")) return "ICRA";
+  if (b.includes("ceza") || b.includes("ağır ceza") || b.includes("sulh ceza")) return "CEZA";
+  if (b.includes("arabulucu")) return "ARABULUCULUK";
+  return "DAVA";
+}
+
+export function trackingTypeFrom(takipTuru: string | null): "ILAMLI" | "ILAMSIZ" | "KAMBIYO" | "REHNIN_PARAYA_CEVRILMESI" | "IPOTEGIN_PARAYA_CEVRILMESI" | "NAFAKA" | "TAHLIYE" {
+  const t = trFold(takipTuru ?? "");
+  if (t.includes("kambiyo")) return "KAMBIYO";
+  if (t.includes("ilamli")) return "ILAMLI";
+  if (t.includes("rehin") || t.includes("rehn")) return "REHNIN_PARAYA_CEVRILMESI";
+  if (t.includes("ipote")) return "IPOTEGIN_PARAYA_CEVRILMESI"; // "ipoteğin" (ğ) da yakalanır
+  if (t.includes("nafaka")) return "NAFAKA";
+  if (t.includes("tahliye")) return "TAHLIYE";
+  return "ILAMSIZ";
 }

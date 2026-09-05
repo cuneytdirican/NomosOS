@@ -246,6 +246,8 @@ export class InvoicesService {
         clientId: input.clientId,
         billable: true,
         invoiceId: null,
+        // Faz 6: yalnız onaylı zaman kayıtları faturaya girer.
+        status: "ONAYLANDI",
         date: { gte: from, lte: to },
         ...(input.caseId ? { caseId: input.caseId } : {}),
         ...(input.timeEntryIds?.length ? { id: { in: input.timeEntryIds } } : {}),
@@ -1076,7 +1078,8 @@ export class InvoicesService {
     // 400 ile reddediyor, ama bu ikinci kapıdır: geçmişten kalan ya da başka bir
     // yoldan yazılmış uyumsuz bir satır faturayı "ÖDENDİ" yapamaz.
     const agg = await tx.payment.aggregate({
-      where: { invoiceId, tenantId, currency: invoice.currency },
+      // Faz 6: storno edilen tahsilat (stornoAt dolu) toplama GİRMEZ.
+      where: { invoiceId, tenantId, currency: invoice.currency, stornoAt: null },
       _sum: { amount: true },
     });
     const paid = fromSum(agg._sum.amount);
@@ -1103,6 +1106,7 @@ export class InvoicesService {
     // toplar — EUR faturaya sonradan bağlanan TRY tahsilat, kalan bakiyeyi
     // yanıltıyordu.
     const paid = invoice.payments
+      .filter((p) => !p.stornoAt) // Faz 6: storno edilen tahsilat sayılmaz
       .filter((p) => p.currency === invoice.currency)
       .reduce((acc, p) => acc.plus(dec(p.amount)), new Prisma.Decimal(0));
     const remaining = dec(invoice.total).minus(paid);
@@ -1150,6 +1154,9 @@ export class InvoicesService {
         date: p.date,
         method: p.method,
         reference: p.reference,
+        note: p.note,
+        stornoAt: p.stornoAt,
+        stornoReason: p.stornoReason,
       })),
       paidTotal: moneyOut(paid),
       remaining: moneyOut(remaining),

@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { TarifeModule } from "../tarife/tarife.module";
 import { CaselawModule } from "../caselaw/caselaw.module";
 import { DeadlineRulesModule } from "../deadline-rules/deadline-rules.module";
 import { EnforcementBalanceService } from "./balance.service";
@@ -27,7 +28,7 @@ import { EnforcementService } from "./enforcement.service";
  * `CaselawModule`'den SONRA import edilmelidir.
  */
 @Module({
-  imports: [CaselawModule, DeadlineRulesModule],
+  imports: [TarifeModule, CaselawModule, DeadlineRulesModule],
   controllers: [EnforcementController, EnforcementActionsController, AssetsController],
   providers: [
     EnforcementService,

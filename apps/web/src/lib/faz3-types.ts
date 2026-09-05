@@ -405,6 +405,10 @@ export interface TimeEntry {
   hourlyRate?: Money;
   /** Skaler — ilişki DEĞİL. Dolu ise kayıt faturalanmıştır. */
   invoiceId?: string | null;
+  /** Faz 6 — timesheet onayı: TASLAK | ONAY_BEKLIYOR | ONAYLANDI | REDDEDILDI. Yalnız ONAYLANDI faturalanır. */
+  status?: string;
+  approvedAt?: string | null;
+  rejectionReason?: string | null;
   createdAt?: string;
   user?: { id: string; fullName?: string } | null;
   case?: { id: string; title: string; fileNumber?: string | null } | null;
@@ -434,6 +438,9 @@ export interface InvoicePayment {
   note?: string | null;
   createdBy?: string | null;
   createdAt?: string;
+  /** Faz 6 — storno: dolu ise tahsilat ters kayıtla kapatılmıştır (bakiyede sayılmaz). */
+  stornoAt?: string | null;
+  stornoReason?: string | null;
 }
 
 export interface Invoice {

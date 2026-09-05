@@ -1,4 +1,6 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Res } from "@nestjs/common";
+import type { Response } from "express";
+import { renderExport, type ExportFormat } from "./finance-export";
 import { RequiresModule } from "../common/decorators/requires-module.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe";
@@ -64,6 +66,27 @@ export class FinanceController {
   }
 
   // -------------------------------------------------------------- hareketler
+
+  /** Faz 6 — muhasebe dışa aktarımı (Luca / Logo CSV). */
+  @Get("export")
+  async exportCsv(
+    @CurrentUser() user: AuthUser,
+    @Res() res: Response,
+    @Query("format") format?: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+    @Query("clientId") clientId?: string,
+  ) {
+    if (format !== undefined && format !== "luca" && format !== "logo") {
+      throw new BadRequestException("Geçersiz dışa aktarım biçimi; 'luca' ya da 'logo' olmalıdır.");
+    }
+    const fmt: ExportFormat = format === "logo" ? "logo" : "luca";
+    const entries = await this.finance.exportEntries(user, { from, to, clientId });
+    const out = renderExport(fmt, entries);
+    res.setHeader("Content-Type", out.contentType);
+    res.setHeader("Content-Disposition", `attachment; filename="${out.filename}"`);
+    res.send(out.body);
+  }
 
   @Get("entries")
   listEntries(

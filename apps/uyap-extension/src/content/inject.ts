@@ -25,6 +25,7 @@ import {
   dosyaListesiParser,
   durusmaParser,
   evrakListesiParser,
+  icraDosyaParser,
   queryFirst,
   safahatParser,
   SELECTOR_SET_VERSION,
@@ -232,13 +233,17 @@ async function transferDosyaListesi(
 }
 
 async function transferDosyaDetay(trigger: SyncTrigger, counts: TransferCounts): Promise<void> {
-  const result = dosyaDetayParser.parse(ctx());
+  // Faz 6: icra dosyası ekranıysa takip alanlarını da okuyan parser kullanılır.
+  const page = ctx();
+  const icra = icraDosyaParser.matches(page);
+  const kind: UyapPageKind = icra ? "ICRA_DOSYA" : "DOSYA_DETAY";
+  const result = icra ? icraDosyaParser.parse(page) : dosyaDetayParser.parse(page);
   if (!result.ok) {
-    const message = await reportFailure("DOSYA_DETAY", result);
+    const message = await reportFailure(kind, result);
     if (message) counts.errors.push(message);
     return;
   }
-  await reportOk("DOSYA_DETAY", result.selectorVersion);
+  await reportOk(kind, result.selectorVersion);
 
   const detay = result.data;
   const response = await sendMessage({
@@ -451,7 +456,7 @@ async function runScan(trigger: SyncTrigger): Promise<ContentScanResult> {
   const counts = emptyCounts();
   const kinds = detectPageKinds(ctx());
 
-  if (kinds.includes("DOSYA_DETAY")) {
+  if (kinds.includes("ICRA_DOSYA") || kinds.includes("DOSYA_DETAY")) {
     await transferDosyaDetay(trigger, counts);
   } else if (kinds.includes("DOSYA_LISTESI")) {
     await transferDosyaListesi(trigger, counts);
@@ -575,8 +580,9 @@ function injectPanelButtons(kinds: readonly UyapPageKind[]): void {
   if (kinds.length === 0) return;
   ensurePanel();
 
-  if (kinds.includes("DOSYA_DETAY")) {
-    addPanelButton("nomosos-btn-detay", "Bu dosyayı NomosOS'a aktar", async () => {
+  if (kinds.includes("ICRA_DOSYA") || kinds.includes("DOSYA_DETAY")) {
+    const etiket = kinds.includes("ICRA_DOSYA") ? "Bu icra dosyasını NomosOS'a aktar" : "Bu dosyayı NomosOS'a aktar";
+    addPanelButton("nomosos-btn-detay", etiket, async () => {
       const counts = emptyCounts();
       await transferDosyaDetay("PAGE_ACTION", counts);
       setStatus(

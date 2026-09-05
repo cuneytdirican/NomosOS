@@ -288,6 +288,39 @@ export class EnforcementDeadlinesService {
         date: startOfDay(file.objectionDate),
         label: "İtiraz tarihi",
       });
+      // Faz 6: itirazın kaldırılması (İİK m.68 — 6 ay) aynı tetikleyiciden.
+      triggers.push({
+        ruleKey: "IIK_ITIRAZIN_KALDIRILMASI",
+        date: startOfDay(file.objectionDate),
+        label: "İtiraz tarihi",
+      });
+    }
+
+    // Faz 6: tahliye takibinde ödeme emri → İİK m.269 tahliye emrine itiraz.
+    if (file.paymentOrderServedAt && file.trackingType === "TAHLIYE") {
+      triggers.push({
+        ruleKey: "IIK_TAHLIYE_EMRI_ITIRAZ",
+        date: startOfDay(file.paymentOrderServedAt),
+        label: "Tahliye emri tebliğ tarihi",
+      });
+    }
+
+    // Faz 6: haciz uygulaması → İİK m.106 satış isteme süresi; kıymet takdiri → m.128a itiraz.
+    const haciz = await this.prisma.client.enforcementAction.findFirst({
+      where: { tenantId, enforcementFileId: file.id, type: "HACIZ_UYGULAMA" },
+      orderBy: { date: "desc" },
+      select: { date: true },
+    });
+    if (haciz) {
+      triggers.push({ ruleKey: "IIK_SATIS_ISTEME", date: startOfDay(haciz.date), label: "Haciz tarihi" });
+    }
+    const kiymet = await this.prisma.client.enforcementAction.findFirst({
+      where: { tenantId, enforcementFileId: file.id, type: "KIYMET_TAKDIRI" },
+      orderBy: { date: "desc" },
+      select: { date: true },
+    });
+    if (kiymet) {
+      triggers.push({ ruleKey: "IIK_KIYMET_TAKDIRI_ITIRAZ", date: startOfDay(kiymet.date), label: "Kıymet takdiri tebliğ/işlem tarihi" });
     }
 
     const auction = await this.prisma.client.enforcementAction.findFirst({

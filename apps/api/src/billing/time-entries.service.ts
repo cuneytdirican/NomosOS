@@ -218,6 +218,39 @@ export class TimeEntriesService {
     };
   }
 
+  /** Faz 6 — onay akışı: TASLAK → ONAY_BEKLIYOR (sahibi) → ONAYLANDI/REDDEDILDI (ADMIN/PARTNER). */
+  async submit(user: AuthUser, id: string) {
+    const entry = await this.requireEntry(user.tenantId, id);
+    if (entry.userId !== user.userId && !canFinance(user, FINANCE_ACCESS.TIME_MANAGE_OTHERS)) {
+      throw new ForbiddenException("Yalnız kendi zaman kaydınızı onaya gönderebilirsiniz.");
+    }
+    if (entry.invoiceId) throw new BadRequestException("Faturalanmış kayıt onaya gönderilemez.");
+    const updated = await this.prisma.client.timeEntry.update({ where: { id }, data: { status: "ONAY_BEKLIYOR", rejectionReason: null }, include: TIME_INCLUDE });
+    await this.audit.log({ tenantId: user.tenantId, userId: user.userId, action: "TIME_ENTRY_SUBMIT", entity: "TimeEntry", entityId: id, detail: `${updated.minutes} dk onaya gönderildi` });
+    return this.serialize(updated);
+  }
+
+  async decide(user: AuthUser, id: string, decision: "ONAYLANDI" | "REDDEDILDI", reason?: string | null) {
+    assertFinanceAccess(user, FINANCE_ACCESS.TIME_MANAGE_OTHERS, "zaman kaydı onayı");
+    const entry = await this.requireEntry(user.tenantId, id);
+    if (entry.invoiceId) throw new BadRequestException("Faturalanmış kaydın onay durumu değiştirilemez.");
+    if (decision === "REDDEDILDI" && !reason?.trim()) throw new BadRequestException("Ret gerekçesi zorunludur.");
+    const updated = await this.prisma.client.timeEntry.update({
+      where: { id },
+      data: { status: decision, approvedBy: user.userId, approvedAt: new Date(), rejectionReason: decision === "REDDEDILDI" ? reason?.trim() ?? null : null },
+      include: TIME_INCLUDE,
+    });
+    await this.audit.log({ tenantId: user.tenantId, userId: user.userId, action: decision === "ONAYLANDI" ? "TIME_ENTRY_APPROVE" : "TIME_ENTRY_REJECT", entity: "TimeEntry", entityId: id, detail: `${updated.minutes} dk — ${decision}${reason ? `: ${reason}` : ""}` });
+    return this.serialize(updated);
+  }
+
+  /** Onay bekleyenler (yöneticiler için kuyruk). */
+  async pending(user: AuthUser) {
+    assertFinanceAccess(user, FINANCE_ACCESS.TIME_MANAGE_OTHERS, "onay kuyruğu");
+    const rows = await this.prisma.client.timeEntry.findMany({ where: { tenantId: user.tenantId, status: "ONAY_BEKLIYOR" }, include: TIME_INCLUDE, orderBy: { date: "asc" }, take: 200 });
+    return { items: rows.map((e) => this.serialize(e)), total: rows.length };
+  }
+
   async create(user: AuthUser, input: CreateTimeEntryInput) {
     assertFinanceAccess(user, FINANCE_ACCESS.TIME_WRITE, "zaman kaydı oluşturma");
 
@@ -333,6 +366,10 @@ export class TimeEntriesService {
       hours: minutesToHours(e.minutes).toFixed(2),
       description: e.description,
       billable: e.billable,
+      status: e.status,
+      approvedBy: e.approvedBy,
+      approvedAt: e.approvedAt,
+      rejectionReason: e.rejectionReason,
       hourlyRate: e.hourlyRate === null ? null : moneyOut(e.hourlyRate),
       invoiceId: e.invoiceId,
       /** Faturalanmış kayıt kilitlidir. */

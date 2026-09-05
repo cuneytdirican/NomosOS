@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import type { ExportEntry } from "./finance-export";
 import { Prisma, type FinancialEntryType } from "@nomosos/db";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
@@ -68,6 +69,23 @@ export class FinanceService {
   ) {}
 
   // ------------------------------------------------------------------ liste
+
+  /** Faz 6 — Luca/Logo dışa aktarımı için düz kayıt listesi (en fazla 5000). */
+  async exportEntries(user: AuthUser, params: { from?: string; to?: string; clientId?: string }): Promise<ExportEntry[]> {
+    assertFinanceAccess(user, FINANCE_ACCESS.READ, "muhasebe dışa aktarımı");
+    const where = this.buildWhere(user.tenantId, { from: params.from, to: params.to, clientId: params.clientId });
+    const rows = await this.prisma.client.financialEntry.findMany({ where, include: ENTRY_INCLUDE, orderBy: [{ date: "asc" }, { createdAt: "asc" }], take: 5000 });
+    return rows.map((r) => ({
+      date: r.date,
+      type: r.type,
+      amount: r.amount.toFixed(2),
+      currency: r.currency,
+      description: r.description,
+      clientName: (r as { client?: { name?: string } | null }).client?.name ?? null,
+      caseLabel: (r as { case?: { title?: string; fileNumber?: string | null } | null }).case ? `${(r as { case?: { fileNumber?: string | null } }).case?.fileNumber ?? ""} ${(r as { case?: { title?: string } }).case?.title ?? ""}`.trim() : null,
+      vatRate: r.vatRate ? r.vatRate.toFixed(2) : null,
+    }));
+  }
 
   async list(user: AuthUser, params: FinanceEntryListParams) {
     assertFinanceAccess(user, FINANCE_ACCESS.READ, "finans kayıtlarını görüntüleme");

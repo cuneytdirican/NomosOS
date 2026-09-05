@@ -11,8 +11,7 @@ import type {
   UyapDosyaOzeti,
   UyapDurusmaKaydi,
   UyapSafahatKaydi,
-  UyapTaraf,
-} from "./uyap";
+  UyapTaraf, UyapIcraDosya } from "./uyap";
 
 /** Eklentinin kendini tanıttığı üstveri — teşhis ve parser sürüm takibi içindir. */
 export interface ClientInfo {
@@ -82,6 +81,8 @@ export interface SyncFileDto {
   readonly konu: string | null;
   readonly taraflar: readonly UyapTaraf[];
   readonly detayUrl: string | null;
+  /** Faz 6: icra dosyası ekranından okunan takip alanları (API: syncFiles `icra`). */
+  readonly icra?: UyapIcraDosya | null;
 }
 
 export interface SyncFilesRequest {
@@ -237,7 +238,7 @@ export interface PendingDocument {
 /** Dosya listesi/detay çıktısını aktarım DTO'suna çevirir. */
 export function toSyncFileDto(
   ozet: UyapDosyaOzeti,
-  extras?: { readonly konu?: string | null; readonly taraflar?: readonly UyapTaraf[] },
+  extras?: { readonly konu?: string | null; readonly taraflar?: readonly UyapTaraf[]; readonly icra?: UyapIcraDosya | null },
 ): SyncFileDto {
   return {
     uyapDosyaNo: ozet.dosyaNo,
@@ -249,6 +250,7 @@ export function toSyncFileDto(
     konu: extras?.konu ?? null,
     taraflar: extras?.taraflar ?? [],
     detayUrl: ozet.detayUrl,
+    ...(extras?.icra ? { icra: extras.icra } : {}),
   };
 }
 

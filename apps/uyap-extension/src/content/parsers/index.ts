@@ -14,11 +14,12 @@ import { dosyaDetayParser } from "./dosya-detay";
 import { dosyaListesiParser } from "./dosya-listesi";
 import { durusmaParser } from "./durusma";
 import { evrakListesiParser } from "./evrak-listesi";
+import { icraDosyaParser } from "./icra-dosya";
 import { safahatParser } from "./safahat";
 import type { PageContext } from "../../types/parser";
 import type { UyapPageKind } from "../../types/uyap";
 
-export { dosyaDetayParser, dosyaListesiParser, durusmaParser, evrakListesiParser, safahatParser };
+export { dosyaDetayParser, dosyaListesiParser, durusmaParser, evrakListesiParser, icraDosyaParser, safahatParser };
 export * from "./base";
 
 /** Bu sürümde yayınlanan selector seti. */
@@ -29,6 +30,7 @@ export const SELECTOR_SET_VERSION = "v1";
  * genel dosya listesi en sonda kalır.
  */
 export const PARSER_ORDER: readonly UyapPageKind[] = [
+  "ICRA_DOSYA",
   "DOSYA_DETAY",
   "SAFAHAT",
   "EVRAK_LISTESI",
@@ -39,6 +41,7 @@ export const PARSER_ORDER: readonly UyapPageKind[] = [
 /** Sayfada eşleşen tüm parser türlerini döndürür. */
 export function detectPageKinds(ctx: PageContext): UyapPageKind[] {
   const found: UyapPageKind[] = [];
+  if (icraDosyaParser.matches(ctx)) found.push("ICRA_DOSYA");
   if (dosyaDetayParser.matches(ctx)) found.push("DOSYA_DETAY");
   if (safahatParser.matches(ctx)) found.push("SAFAHAT");
   if (evrakListesiParser.matches(ctx)) found.push("EVRAK_LISTESI");

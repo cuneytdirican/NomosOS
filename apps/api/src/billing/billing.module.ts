@@ -10,6 +10,7 @@ import { InvoicesService } from "./invoices.service";
 import { PaymentsService } from "./payments.service";
 import { InvoiceNumberService } from "./invoice-number.service";
 import { EInvoiceService } from "./e-invoice/e-invoice.service";
+import { TimeTimerService } from "./time-timer.service";
 
 /**
  * Modül 09 — Faturalama, e-Fatura / e-Arşiv.
@@ -37,6 +38,8 @@ import { EInvoiceService } from "./e-invoice/e-invoice.service";
     // E8 (rakip analizi) — portal ödeme bağlantısı.
     OdemeSaglayici,
     OdemeLinkiService,
+    // Faz 6: kronometre.
+    TimeTimerService,
   ],
   // Faz 3: PlatformBillingModule (checkout) OdemeSaglayici'yi kullanır.
   exports: [FeeAgreementsService, InvoicesService, TimeEntriesService, EInvoiceService, OdemeLinkiService, OdemeSaglayici],

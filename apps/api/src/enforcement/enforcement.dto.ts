@@ -122,6 +122,8 @@ export const createEnforcementSchema = z.object({
   trackingType: z.enum(ENFORCEMENT_TYPES, { errorMap: () => ({ message: "Geçersiz takip tipi." }) }),
   principalAmount: money("Asıl alacak"),
   interestRate: percent("Faiz oranı"),
+  /** Faz 6: YASAL/AVANS/TICARI_TEMERRUT → dönem tablosu; boş = sabit interestRate. */
+  interestKind: z.enum(["YASAL", "AVANS", "TICARI_TEMERRUT"]).nullable().optional(),
   currency: z.string().length(3, "Para birimi 3 harfli olmalıdır (örn. TRY).").optional().default("TRY"),
   requestDate: z.coerce.date({ invalid_type_error: "Takip talebi tarihi geçerli olmalıdır." }),
   /** Faiz başlangıcı (temerrüt/vade/ihtar). Boşsa takip talebi tarihi kullanılır. */
@@ -139,6 +141,7 @@ export const updateEnforcementSchema = z
     trackingType: z.enum(ENFORCEMENT_TYPES, { errorMap: () => ({ message: "Geçersiz takip tipi." }) }).optional(),
     principalAmount: money("Asıl alacak").optional(),
     interestRate: percent("Faiz oranı"),
+    interestKind: z.enum(["YASAL", "AVANS", "TICARI_TEMERRUT"]).nullable().optional(),
     currency: z.string().length(3).optional(),
     requestDate: z.coerce.date().optional(),
     /**

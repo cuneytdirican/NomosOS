@@ -48,6 +48,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@nomosos/db";
 import { PrismaService } from "../prisma/prisma.service";
+import { TarifeService } from "../tarife/tarife.service";
 import { formatTrDate, startOfDay, trCalendarDay } from "../common/dates";
 
 const ZERO = new Prisma.Decimal(0);
@@ -140,7 +141,10 @@ export interface EnforcementBalance {
 
 @Injectable()
 export class EnforcementBalanceService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly tarife: TarifeService,
+  ) {}
 
   /**
    * Bakiyeyi hesaplar. `asOf` verilmezse bugün (UTC gün başı) alınır.
@@ -161,6 +165,7 @@ export class EnforcementBalanceService {
         currency: true,
         principalAmount: true,
         interestRate: true,
+        interestKind: true,
         requestDate: true,
         interestStartDate: true,
       },
@@ -168,6 +173,8 @@ export class EnforcementBalanceService {
     // Prisma'nın `findFirstOrThrow`'u ham P2025 fırlatır ve filtrede 500'e düşer;
     // kiracı dışı bir kimlik sorulduğunda kullanıcı Türkçe 404 görmelidir.
     if (!file) throw new NotFoundException("İcra dosyası bulunamadı.");
+    // Faz 6: dönemli faiz — türe göre oran tablosu (tarih → yıllık oran).
+    const ratePeriods = file.interestKind ? await this.tarife.periodsFor(file.interestKind) : [];
 
     const [expenseActions, collections, feeEntries] = await Promise.all([
       this.prisma.client.enforcementAction.findMany({
@@ -238,7 +245,22 @@ export class EnforcementBalanceService {
     }
 
     // ---- Faiz: DİLİMLİ hesap + eşzamanlı mahsup ------------------------
-    const rate = file.interestRate === null ? null : new Prisma.Decimal(file.interestRate);
+    const fixedRate = file.interestRate === null ? null : new Prisma.Decimal(file.interestRate);
+    const rateAt = (d: Date): Prisma.Decimal | null => {
+      if (file.interestKind) {
+        const p = [...ratePeriods].reverse().find((x) => x.validFrom.getTime() <= d.getTime());
+        return p ? new Prisma.Decimal(p.ratePercent) : null;
+      }
+      return fixedRate;
+    };
+    const rate = file.interestKind ? (ratePeriods.length > 0 ? new Prisma.Decimal(ratePeriods[ratePeriods.length - 1].ratePercent) : null) : fixedRate;
+    if (file.interestKind) {
+      warnings.push(
+        ratePeriods.length > 0
+          ? `Faiz, ${file.interestKind} türü için platform dönem tablosundan (${ratePeriods.length} dönem) tarihe göre DEĞİŞKEN oranla hesaplanmıştır; dilimler dönem sınırlarında bölünür.`
+          : `Faiz türü ${file.interestKind} seçili ancak platformda tanımlı dönem oranı yok; faiz HESAPLANMAMIŞTIR. Platform panelinden oran girilmelidir.`,
+      );
+    }
     const totalDays = Math.max(
       0,
       Math.round((asOf.getTime() - interestStart.getTime()) / MS_PER_DAY),
@@ -295,16 +317,15 @@ export class EnforcementBalanceService {
     const steps: BalanceStep[] = [];
 
     /** Bir dilimde faiz tahakkuk ettirir ve dökümüne yazar. */
-    const accrue = (from: Date, to: Date): void => {
-      if (rate === null) return;
+    const accrueOne = (from: Date, to: Date, segRate: Prisma.Decimal): void => {
       const days = Math.max(0, Math.round((to.getTime() - from.getTime()) / MS_PER_DAY));
       if (days === 0) return;
       // Her dilim KURUŞA yuvarlanır: bileşenlerin toplamı toplam borca eşit kalsın.
       const segInterest = round(
-        runningPrincipal.mul(rate).div(100).mul(new Prisma.Decimal(days)).div(DAYS_IN_YEAR),
+        runningPrincipal.mul(segRate).div(100).mul(new Prisma.Decimal(days)).div(DAYS_IN_YEAR),
       );
       const formula =
-        `${runningPrincipal.toFixed(2)} × (${rate.toFixed(2)} / 100) × ${days} / 365 = ` +
+        `${runningPrincipal.toFixed(2)} × (${segRate.toFixed(2)} / 100) × ${days} / 365 = ` +
         segInterest.toFixed(2);
       grossInterest = grossInterest.plus(segInterest);
       openInterest = openInterest.plus(segInterest);
@@ -322,6 +343,21 @@ export class EnforcementBalanceService {
         amount: segInterest.toFixed(2),
         explanation: `${days} gün, matrah ${runningPrincipal.toFixed(2)}. ${formula}`,
       });
+    };
+    /** Faz 6: [from,to) aralığını dönem sınırlarında böler; her dilim o günkü oranla işler. */
+    const accrue = (from: Date, to: Date): void => {
+      if (rate === null) return;
+      if (!file.interestKind) {
+        accrueOne(from, to, rate);
+        return;
+      }
+      const cuts = [from.getTime(), ...ratePeriods.map((p) => p.validFrom.getTime()).filter((t) => t > from.getTime() && t < to.getTime()), to.getTime()];
+      const uniq = [...new Set(cuts)].sort((a, b) => a - b);
+      for (let i = 0; i < uniq.length - 1; i++) {
+        const segRate = rateAt(new Date(uniq[i]));
+        if (segRate === null) continue; // tanımlı dönem yok → faizsiz dilim (uyarı yukarıda)
+        accrueOne(new Date(uniq[i]), new Date(uniq[i + 1]), segRate);
+      }
     };
 
     /**

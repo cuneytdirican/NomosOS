@@ -83,6 +83,12 @@ export class EnforcementController {
 
   // ---------- Takip dosyası ----------
 
+  /** Faz 6 — portföy özeti (aşama dağılımı, alacak/tahsilat, vadesi geçmiş süreler, hareketsiz dosyalar). */
+  @Get("portfolio")
+  portfolio(@CurrentUser() user: AuthUser) {
+    return this.enforcement.portfolio(user);
+  }
+
   @Get()
   list(
     @CurrentUser() user: AuthUser,

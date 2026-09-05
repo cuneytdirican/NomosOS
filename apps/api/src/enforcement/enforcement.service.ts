@@ -252,6 +252,7 @@ export class EnforcementService {
           requestDate: input.requestDate,
           interestStartDate: input.interestStartDate ?? null,
           paymentOrderServedAt: input.paymentOrderServedAt ?? null,
+          interestKind: input.interestKind ?? null,
           debtorInfo: input.debtorInfo ?? null,
           stage: input.paymentOrderServedAt ? "ODEME_EMRI_TEBLIG" : "TAKIP_TALEBI",
         },
@@ -403,6 +404,7 @@ export class EnforcementService {
     if (input.requestDate !== undefined) data.requestDate = input.requestDate;
     if (input.interestStartDate !== undefined) data.interestStartDate = input.interestStartDate;
     if (input.paymentOrderServedAt !== undefined) data.paymentOrderServedAt = input.paymentOrderServedAt;
+    if (input.interestKind !== undefined) data.interestKind = input.interestKind;
     if (input.objectionDate !== undefined) data.objectionDate = input.objectionDate;
     if (input.finalizedAt !== undefined) data.finalizedAt = input.finalizedAt;
     if (input.debtorInfo !== undefined) data.debtorInfo = input.debtorInfo;
@@ -677,7 +679,8 @@ export class EnforcementService {
         data: { objectionDate: input.date },
       });
       deadlineSuggestions = await this.proposeDeadlines(user, updated);
-    } else if (input.type === "IHALE") {
+    } else if (input.type === "IHALE" || input.type === "HACIZ_UYGULAMA" || input.type === "KIYMET_TAKDIRI") {
+      // Faz 6: haciz → İİK m.106 satış isteme; kıymet takdiri → İİK m.128a itiraz; ihale → m.134 fesih.
       const current = await this.prisma.client.enforcementFile.findUniqueOrThrow({ where: { id: fileId } });
       deadlineSuggestions = await this.proposeDeadlines(user, current);
     }
@@ -1081,6 +1084,76 @@ export class EnforcementService {
   // ================================================================== //
 
   /** Öneri sürelerini BEKLIYOR statüsünde açar; hata iş akışını kesmez. */
+  /**
+   * Faz 6 — PORTFÖY ÖZETİ: aşama dağılımı, toplam asıl alacak / tahsilat, vadesi geçmiş açık
+   * süreler, 90 gündür işlem görmeyen dosyalar, en büyük 10 alacak.
+   */
+  async portfolio(user: AuthUser) {
+    assertFinanceAccess(user, FINANCE_ACCESS.READ, "icra portföy özeti");
+    const tenantId = user.tenantId;
+    const now = new Date();
+    const staleCutoff = new Date(now.getTime() - 90 * 86_400_000);
+    const files = await this.prisma.client.enforcementFile.findMany({
+      where: { tenantId },
+      select: {
+        id: true,
+        caseId: true,
+        officeName: true,
+        fileNumber: true,
+        stage: true,
+        trackingType: true,
+        principalAmount: true,
+        currency: true,
+        requestDate: true,
+        updatedAt: true,
+        interestKind: true,
+        actions: { orderBy: { date: "desc" }, take: 1, select: { date: true, type: true } },
+        collections: { select: { amount: true } },
+      },
+    });
+    const byStage: Record<string, number> = {};
+    let principal = new Prisma.Decimal(0);
+    let collected = new Prisma.Decimal(0);
+    const stale: Array<{ id: string; label: string; stage: string; sonIslem: Date | null }> = [];
+    for (const f of files) {
+      byStage[f.stage] = (byStage[f.stage] ?? 0) + 1;
+      if (f.stage !== "KAPANDI") principal = principal.add(f.principalAmount);
+      for (const c of f.collections) collected = collected.add(c.amount);
+      const last = f.actions[0]?.date ?? f.requestDate;
+      if (f.stage !== "KAPANDI" && last < staleCutoff) stale.push({ id: f.id, label: `${f.officeName} ${f.fileNumber}`, stage: f.stage, sonIslem: f.actions[0]?.date ?? null });
+    }
+    const caseIds = files.filter((f) => f.stage !== "KAPANDI").map((f) => f.caseId);
+    const overdue = caseIds.length
+      ? await this.prisma.client.deadline.count({ where: { tenantId, caseId: { in: caseIds }, status: { in: ["BEKLIYOR", "ONAYLANDI"] }, dueDate: { lt: now } } })
+      : 0;
+    const upcoming = caseIds.length
+      ? await this.prisma.client.deadline.findMany({
+          where: { tenantId, caseId: { in: caseIds }, status: { in: ["BEKLIYOR", "ONAYLANDI"] }, dueDate: { gte: now, lte: new Date(now.getTime() + 14 * 86_400_000) } },
+          orderBy: { dueDate: "asc" },
+          take: 10,
+          select: { id: true, caseId: true, title: true, dueDate: true, ruleKey: true },
+        })
+      : [];
+    const top = [...files]
+      .filter((f) => f.stage !== "KAPANDI")
+      .sort((a, b) => b.principalAmount.comparedTo(a.principalAmount))
+      .slice(0, 10)
+      .map((f) => ({ id: f.id, label: `${f.officeName} ${f.fileNumber}`, stage: f.stage, trackingType: f.trackingType, principalAmount: f.principalAmount.toFixed(2), currency: f.currency, interestKind: f.interestKind }));
+    return {
+      toplamDosya: files.length,
+      acikDosya: files.filter((f) => f.stage !== "KAPANDI").length,
+      asamaDagilimi: byStage,
+      toplamAsilAlacak: principal.toFixed(2),
+      toplamTahsilat: collected.toFixed(2),
+      tahsilatOrani: principal.gt(0) ? collected.div(principal).mul(100).toDecimalPlaces(1).toNumber() : 0,
+      vadesiGecmisSure: overdue,
+      yaklasanSureler: upcoming,
+      hareketsizDosyalar: stale.slice(0, 20),
+      hareketsizSayisi: stale.length,
+      enBuyukAlacaklar: top,
+    };
+  }
+
   private async proposeDeadlines(user: AuthUser, file: EnforcementFile) {
     try {
       const candidates = await this.deadlines.computeCandidates(user.tenantId, file);

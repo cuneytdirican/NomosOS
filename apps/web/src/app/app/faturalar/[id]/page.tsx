@@ -22,6 +22,7 @@ import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ApiError } from "@/lib/api";
 import { errText, isMissingEndpoint } from "@/lib/faz2";
+import { stornoPayment } from "@/lib/faz6-icra-finans";
 import {
   approveInvoice,
   cancelInvoice,
@@ -73,6 +74,23 @@ export default function FaturaDetayPage({ params }: { params: Promise<{ id: stri
   const [busy, setBusy] = useState<string | null>(null);
   const [sendResult, setSendResult] = useState<EInvoiceSendResult | null>(null);
   const [paymentOpen, setPaymentOpen] = useState(false);
+  const [stornoBusy, setStornoBusy] = useState<string | null>(null);
+
+  /** Faz 6 — storno: tahsilat SİLİNMEZ; ters kayıtla kapatılır ve fatura durumu sunucuda yeniden hesaplanır. */
+  async function storno(paymentId: string) {
+    const reason = window.prompt("Storno gerekçesi (zorunlu; denetim iziyle saklanır):") ?? "";
+    if (reason.trim().length < 3) return;
+    setStornoBusy(paymentId);
+    try {
+      const res = await stornoPayment(paymentId, reason.trim());
+      push(`Tahsilat storno edildi${res.invoiceStatus ? ` · fatura durumu: ${res.invoiceStatus}` : ""}.`);
+      await load();
+    } catch (err) {
+      push(errText(err, "Storno yapılamadı."), "error");
+    } finally {
+      setStornoBusy(null);
+    }
+  }
   const { toasts, push, dismiss } = useToasts();
 
   const load = useCallback(async () => {
@@ -410,7 +428,22 @@ export default function FaturaDetayPage({ params }: { params: Promise<{ id: stri
                     {p.reference ? ` · ${p.reference}` : ""}
                   </p>
                 </div>
-                {p.note && <span className="text-xs text-slate-500">{p.note}</span>}
+                <div className="flex items-center gap-2">
+                  {p.note && <span className="text-xs text-slate-500">{p.note}</span>}
+                  {p.stornoAt ? (
+                    <Badge tone="red">Storno{p.stornoReason ? ` · ${p.stornoReason}` : ""}</Badge>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={stornoBusy === p.id}
+                      title="Tahsilatı ters kayıtla kapat (silinmez; denetim izi korunur)"
+                      onClick={() => void storno(p.id)}
+                    >
+                      Storno
+                    </Button>
+                  )}
+                </div>
               </li>
             ))}
           </ul>

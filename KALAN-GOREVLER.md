@@ -23,7 +23,41 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 6 Eylül 2026, 11:00
+# 🔖 KALDIĞIM YER — 6 Eylül 2026, 17:30
+
+> Üç persona planı (`~/.claude/plans/wiggly-giggling-lighthouse.md`):
+> **Faz 0 ✅ · 1 ✅ · 2 ✅ · 3 ✅ · 4 ✅ · 5 ✅ · 6 ✅ (bu commit)** · sırada Faz 7 (büro yönetimi/belge/mobil/portal).
+
+**FAZ 6 — UYAP / İCRA / FİNANS TAMAMLANDI** (belge: `docs/faz6-uyap-icra-finans.md`):
+1. **UYAP → dosya:** `POST /uyap/match-queue/:id/create-case` (müvekkil zorunlu; tür birimden çıkarılır;
+   icra biriminde `EnforcementFile` de açılır; kuyruk çözülür + sahnelenmiş olaylar işlenir). Eklenti
+   `ICRA_DOSYA` parser'ı (takip türü/tarihi, alacak tutarı, aşama, borçlu/alacaklı; `SyncFileDto.icra`).
+   Web UYAP kuyruğunda "Yeni dosya olarak aç" modalı.
+2. **Dönemli faiz:** `InterestRatePeriod` (platform yönetir; göç yalnız YASAL %9 — avans oranı koda
+   gömülmez), `EnforcementFile.interestKind`; legal-core `calculatePeriodInterest` (dönem sınırında bölme,
+   elle hesaplı fixture); bakiye dilimleri dönemlere böler, oran yoksa faiz HESAPLANMAZ + uyarı.
+   Tarife uçları: kiracı `GET /finance/faiz-oranlari`, `/finance/harc-tarifesi/:yil`; platform
+   `/api/admin/v1/faiz-oranlari`, `/harc-tarifesi/:yil` (`PlatformHarcTarifesi`).
+3. **İİK süreleri + portföy:** HACIZ_UYGULAMA → İİK 106 satış isteme, KIYMET_TAKDIRI → 128a itiraz,
+   ödeme emri → İİK 68 itirazın kaldırılması, tahliye emri itirazı; `GET /enforcement/portfolio` + web kartı.
+4. **Tebligat:** `Tebligat` varlığı (kanal/yön/tebliğ tarihi/kural), tebliğ tarihi + kural → süre otomatik
+   (ONAYLI, `ETEBLIGAT/POSTA/ELDEN`), KEP/UETS sağlayıcı arayüzü (`TEBLIGAT_SAGLAYICI`, Noop), dosya
+   detayında "Tebligatlar" sekmesi.
+5. **Finans:** kronometre (`TimeTimer`, kullanıcı başına tek; stop → TASLAK kayıt), timesheet onayı
+   (`TimeEntry.status`, submit/approve/reject/pending; yalnız ONAYLANDI faturalanır), storno (silme yok,
+   IADE ters kayıt, faturaya bağlı tahsilat sert silinemez), Luca/Logo CSV (`GET /finance/export`, TCKN yok).
+Testler: api 1418 (166 dosya; +faz6-contract, finance-export, time-timer, tebligat, uyap-create-case),
+legal-core 123, eklenti 38, lint 0. Tuzak: CSV BOM'u kaynakta literal U+FEFF olarak yazınca ESLint
+`no-irregular-whitespace` → `\uFEFF` kaçışı kullanılır.
+
+**SIRADA: FAZ 7 — büro yönetimi + belge + mobil/portal:** `DocumentVersion` + klasör + süreli paylaşım
+linki + IMAP belge girişi; Ctrl+K global arama (pg_trgm) + Türkçe collation; `WorkflowTemplate` + rol
+matrisi + toplu işlem; büro dilekçe şablonu yükleme + UDF'yi UYAP'a gönderme; mobil kamera/belge; portal
+`PortalTodo` + müvekkil yükleme + KVKK rıza; dosya detayı tanık/harç/vekaletname/finans sekmeleri + kapanış listesi.
+
+---
+
+## 🔖 ÖNCEKİ KALDIĞIM YER — 6 Eylül 2026, 11:00
 
 > Üç persona planı (`~/.claude/plans/wiggly-giggling-lighthouse.md`):
 > **Faz 0 ✅ · 1 ✅ · 2 ✅ · 3 ✅ · 4 ✅ · 5 ✅ (bu commit)** · sırada Faz 6 (UYAP/icra/finans).

@@ -21,7 +21,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
-import { Badge, Button, Card, EmptyState, ErrorBox, Select, Spinner } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, ErrorBox, Field, Input, Modal, Select, Spinner } from "@/components/ui";
+import { RemoteSelect } from "@/components/remote-select";
+import { createCaseFromUyapQueue } from "@/lib/faz6-icra-finans";
+import type { Client } from "@/lib/types";
 
 /* ------------------------------- Tipler ------------------------------- */
 
@@ -78,6 +81,8 @@ export default function UyapEklentisiPage() {
   const [resolveBusy, setResolveBusy] = useState<string | null>(null);
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [resolveNotice, setResolveNotice] = useState<string | null>(null);
+  /** Faz 6 — kuyruktaki UYAP dosyasını YENİ NomosOS dosyası olarak açma. */
+  const [createFor, setCreateFor] = useState<MatchQueueRow | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -341,9 +346,17 @@ export default function UyapEklentisiPage() {
                             </Select>
                           </div>
                           {resolveBusy === row.id && <Badge tone="blue">bağlanıyor…</Badge>}
+                          <Button size="sm" variant="secondary" onClick={() => setCreateFor(row)} disabled={resolveBusy === row.id}>
+                            Yeni dosya olarak aç
+                          </Button>
                         </>
                       ) : (
-                        <span className="text-xs text-slate-500">dosya listesi yükleniyor…</span>
+                        <>
+                          <span className="text-xs text-slate-500">dosya listesi yükleniyor…</span>
+                          <Button size="sm" variant="secondary" onClick={() => setCreateFor(row)}>
+                            Yeni dosya olarak aç
+                          </Button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -359,6 +372,120 @@ export default function UyapEklentisiPage() {
           )}
         </div>
       </Card>
+
+      <CreateCaseFromQueueModal
+        row={createFor}
+        onClose={() => setCreateFor(null)}
+        onCreated={(msg) => {
+          setCreateFor(null);
+          setResolveNotice(msg);
+          void load();
+        }}
+      />
     </div>
+  );
+}
+
+/**
+ * Faz 6 — UYAP'tan dosya oluşturma: eşleşmeyen UYAP dosyası için müvekkil + tür seçilir,
+ * sunucu Case (+ icra dosyası) yaratır ve sahnelenmiş UYAP olaylarını işler. Onaylı adım:
+ * müvekkil seçilmeden dosya açılmaz (kimliksiz dosya = KVKK/muhasebe riski).
+ */
+function CreateCaseFromQueueModal({
+  row,
+  onClose,
+  onCreated,
+}: {
+  row: MatchQueueRow | null;
+  onClose: () => void;
+  onCreated: (message: string) => void;
+}) {
+  const [clientId, setClientId] = useState("");
+  const [clientLabel, setClientLabel] = useState("");
+  const [type, setType] = useState<"" | "DAVA" | "ICRA" | "CEZA" | "ARABULUCULUK" | "DANISMANLIK">("");
+  const [title, setTitle] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!row) return;
+    setClientId("");
+    setClientLabel("");
+    setType(row.birim && /icra/i.test(row.birim) ? "ICRA" : "");
+    setTitle("");
+    setError(null);
+  }, [row]);
+
+  if (!row) return null;
+
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!row || !clientId) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await createCaseFromUyapQueue(row.id, {
+        clientId,
+        ...(type ? { type } : {}),
+        title: title.trim() || null,
+      });
+      onCreated(
+        `${res.icraDosyasi ? "İcra dosyası" : "Dosya"} açıldı: ${res.title}` +
+          (res.replayed > 0 ? ` · ${res.replayed} bekleyen UYAP olayı işlendi.` : "."),
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Dosya oluşturulamadı.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal open={Boolean(row)} title={`UYAP ${row.uyapDosyaNo} → yeni NomosOS dosyası`} onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <p className="text-xs text-slate-500">
+          {row.birim ?? "birim bilinmiyor"}
+          {row.dosyaTuru ? ` · ${row.dosyaTuru}` : ""}
+          {row.durum ? ` · ${row.durum}` : ""}
+        </p>
+        <Field label="Müvekkil" hint="Dosya bu müvekkile bağlanır; zorunlu.">
+          <RemoteSelect<Client>
+            path="/clients"
+            value={clientId}
+            selectedLabel={clientLabel}
+            onChange={(id, opt) => {
+              setClientId(id);
+              setClientLabel(opt?.label ?? "");
+            }}
+            toOption={(c) => ({ id: c.id, label: c.name })}
+            placeholder="Müvekkil ara…"
+            emptyMessage="Eşleşen müvekkil yok."
+            ariaLabel="Müvekkil seç"
+          />
+        </Field>
+        <Field label="Dosya türü" hint="Boş bırakılırsa birim adından çıkarılır (İcra Dairesi → İcra).">
+          <Select value={type} onChange={(e) => setType(e.target.value as typeof type)}>
+            <option value="">Otomatik</option>
+            <option value="DAVA">Dava</option>
+            <option value="ICRA">İcra</option>
+            <option value="CEZA">Ceza</option>
+            <option value="ARABULUCULUK">Arabuluculuk</option>
+            <option value="DANISMANLIK">Danışmanlık</option>
+          </Select>
+        </Field>
+        <Field label="Başlık (isteğe bağlı)">
+          <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={`${row.birim ?? "UYAP"} ${row.uyapDosyaNo}`} maxLength={300} />
+        </Field>
+        {error && <ErrorBox message={error} />}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Vazgeç
+          </Button>
+          <Button type="submit" variant="gold" disabled={saving || !clientId}>
+            {saving ? "Açılıyor…" : "Dosyayı aç"}
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }

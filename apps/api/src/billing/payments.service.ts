@@ -259,6 +259,27 @@ export class PaymentsService {
    * Yalnızca ADMIN/PARTNER siler: parasal kaydın geri alınması denetlenebilir
    * olmalıdır ve AuditLog'a yazılır.
    */
+  /**
+   * Faz 6 — STORNO: tahsilat SİLİNMEZ, ters kayıtla kapatılır (kanıt durur, denetim izi kırılmaz).
+   * Storno edilen tahsilat fatura ödeme durumunda ve bakiyede SAYILMAZ; finans defterine IADE düşer.
+   */
+  async storno(user: AuthUser, id: string, reason: string) {
+    assertFinanceAccess(user, FINANCE_ACCESS.INVOICE_ISSUE, "tahsilat stornosu");
+    const existing = await this.prisma.client.payment.findFirst({ where: { id, tenantId: user.tenantId }, select: { id: true, invoiceId: true, amount: true, currency: true, clientId: true, stornoAt: true } });
+    if (!existing) throw new NotFoundException("Tahsilat kaydı bulunamadı.");
+    if (existing.stornoAt) throw new BadRequestException("Bu tahsilat zaten storno edilmiş.");
+    const reconciliation = await this.prisma.client.$transaction(async (tx) => {
+      await tx.payment.update({ where: { id }, data: { stornoAt: new Date(), stornoBy: user.userId, stornoReason: reason } });
+      await tx.financialEntry.deleteMany({ where: { tenantId: user.tenantId, type: "TAHSILAT", description: { startsWith: `${AUTO_COLLECTION_MARKER}:${id} ` } } });
+      await tx.financialEntry.create({
+        data: { tenantId: user.tenantId, clientId: existing.clientId, caseId: null, type: "IADE", amount: existing.amount, currency: existing.currency, date: new Date(), description: `STORNO:${id} ${reason}`.slice(0, 500), isBillable: false },
+      });
+      return existing.invoiceId ? this.invoices.recalcPaymentStatus(tx, user.tenantId, existing.invoiceId) : null;
+    });
+    await this.audit.log({ tenantId: user.tenantId, userId: user.userId, action: "PAYMENT_STORNO", entity: "Payment", entityId: id, detail: `${moneyOut(existing.amount)} ${existing.currency} storno — ${reason}${reconciliation ? ` · fatura durumu: ${reconciliation.status}` : ""}` });
+    return { ok: true, id, invoiceStatus: reconciliation?.status ?? null };
+  }
+
   async remove(user: AuthUser, id: string) {
     assertFinanceAccess(user, FINANCE_ACCESS.INVOICE_ISSUE, "tahsilat kaydı silme");
     const existing = await this.prisma.client.payment.findFirst({
@@ -266,6 +287,8 @@ export class PaymentsService {
       select: { id: true, invoiceId: true, amount: true, clientId: true },
     });
     if (!existing) throw new NotFoundException("Tahsilat kaydı bulunamadı.");
+    // Faz 6: faturaya bağlı tahsilat SİLİNMEZ — muhasebe izi için storno (ters kayıt) kullanılır.
+    if (existing.invoiceId) throw new BadRequestException("Faturaya bağlı tahsilat silinemez; storno (ters kayıt) kullanın.");
 
     const reconciliation = await this.prisma.client.$transaction(async (tx) => {
       await tx.financialEntry.deleteMany({

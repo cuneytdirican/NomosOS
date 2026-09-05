@@ -50,6 +50,18 @@ export const syncFilesSchema = z.object({
         konu: z.string().max(2000).nullable(),
         taraflar: z.array(tarafSchema).max(60),
         detayUrl: z.string().max(500).nullable(),
+        /** Faz 6: icra dosya ekranından okunan alanlar (eklenti ICRA_DOSYA ayrıştırıcısı). */
+        icra: z
+          .object({
+            alacakTutari: z.string().max(40).nullable(),
+            takipTuru: z.string().max(120).nullable(),
+            takipTarihi: z.string().max(40).nullable(),
+            borclu: z.string().max(300).nullable(),
+            alacakli: z.string().max(300).nullable(),
+            asama: z.string().max(120).nullable(),
+          })
+          .nullable()
+          .optional(),
       }),
     )
     .min(1)
@@ -125,3 +137,12 @@ export const resolveMatchSchema = z.object({
   caseId: z.string().uuid("Geçerli bir dosya kimliği seçin."),
 });
 export type ResolveMatchInput = z.infer<typeof resolveMatchSchema>;
+
+/** Faz 6 — POST /uyap/match-queue/:id/create-case */
+export const createCaseFromQueueSchema = z.object({
+  clientId: z.string().uuid("Müvekkil seçilmelidir."),
+  type: z.enum(["DAVA", "ICRA", "CEZA", "ARABULUCULUK", "DANISMANLIK"]).optional(),
+  responsibleUserId: z.string().uuid().nullable().optional(),
+  title: z.string().trim().max(300).nullable().optional(),
+});
+export type CreateCaseFromQueueInput = z.infer<typeof createCaseFromQueueSchema>;

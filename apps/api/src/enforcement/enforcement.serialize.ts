@@ -37,6 +37,7 @@ interface FileLike {
 }
 
 export function serializeFile<T extends FileLike>(file: T) {
+  // Faz 6: interestKind alanı FileLike içinde geliyorsa olduğu gibi geçer (spread).
   return { ...file, principalAmount: requiredMoney(file.principalAmount), interestRate: percent(file.interestRate) };
 }
 

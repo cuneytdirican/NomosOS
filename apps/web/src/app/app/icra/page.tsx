@@ -43,6 +43,7 @@ import {
 } from "@/components/ui";
 import { FeatureUnavailable, ToastStack, useToasts } from "@/components/ai-ui";
 import { fmtAmount } from "@/lib/money";
+import { fetchEnforcementPortfolio, type EnforcementPortfolio } from "@/lib/faz6-icra-finans";
 import {
   ENFORCEMENT_STAGES,
   ENFORCEMENT_STAGE_LABELS,
@@ -82,8 +83,16 @@ export default function IcraListPage() {
   const [trackingType, setTrackingType] = useState("");
   const [clientId, setClientId] = useState("");
   const [open, setOpen] = useState(false);
+  /** Faz 6 — portföy özeti (sunucu hesabı: toplam alacak, tahsilat, vadesi geçmiş süre). */
+  const [portfolio, setPortfolio] = useState<EnforcementPortfolio | null>(null);
 
   const { toasts, push, dismiss } = useToasts();
+
+  useEffect(() => {
+    fetchEnforcementPortfolio()
+      .then(setPortfolio)
+      .catch(() => setPortfolio(null));
+  }, [files]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -170,6 +179,35 @@ export default function IcraListPage() {
           tone="gold"
         />
       </div>
+
+      {portfolio && (
+        <Card title="Portföy Özeti">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard label="Toplam Asıl Alacak" value={fmtAmount(portfolio.toplamAsilAlacak, "TRY")} tone="navy" hint={`${portfolio.acikDosya} açık dosya`} />
+            <StatCard label="Toplam Tahsilat" value={fmtAmount(portfolio.toplamTahsilat, "TRY")} tone="gold" hint={`Tahsilat oranı %${portfolio.tahsilatOrani}`} />
+            <StatCard label="Vadesi Geçmiş Süre" value={portfolio.vadesiGecmisSure} tone={portfolio.vadesiGecmisSure > 0 ? "red" : "slate"} hint="İcra dosyalarında geçmiş, kapanmamış süreler" />
+            <StatCard label="14 Gün İçindeki Süre" value={portfolio.yaklasanSureler.length} tone="slate" />
+          </div>
+          {portfolio.yaklasanSureler.length > 0 && (
+            <ul className="mt-4 divide-y divide-slate-100">
+              {portfolio.yaklasanSureler.map((d) => (
+                <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                  <Link href={`/app/dosyalar/${d.caseId}`} className="text-slate-800 hover:text-amber-600">
+                    {d.title}
+                  </Link>
+                  <span className="text-xs text-slate-500">
+                    {d.ruleKey ? `${d.ruleKey} · ` : ""}
+                    {new Date(d.dueDate).toLocaleDateString("tr-TR")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-3 text-[11px] leading-5 text-slate-500">
+            Tutarlar sunucudaki deterministik hesaptan gelir; faiz dahil güncel bakiye için dosya bakiyesi ekranına bakın.
+          </p>
+        </Card>
+      )}
 
       <Card title="Filtre">
         <div className="grid gap-4 sm:grid-cols-3">

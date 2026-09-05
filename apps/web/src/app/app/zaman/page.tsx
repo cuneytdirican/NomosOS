@@ -17,6 +17,18 @@ import Link from "next/link";
 import { ApiError, api, asList, SERVER_MAX_PAGE_SIZE } from "@/lib/api";
 import { errText, isMissingEndpoint } from "@/lib/faz2";
 import { createTimeEntry, deleteTimeEntry, listTimeEntries } from "@/lib/billing";
+import {
+  TIME_ENTRY_STATUS_LABELS,
+  approveTimeEntry,
+  cancelTimer,
+  fetchPendingTimeEntries,
+  fetchTimer,
+  rejectTimeEntry,
+  startTimer,
+  stopTimer,
+  submitTimeEntry,
+  type TimerState,
+} from "@/lib/faz6-icra-finans";
 import type { TimeEntry } from "@/lib/faz3-types";
 import type { CaseSummary, TenantUser } from "@/lib/types";
 import {
@@ -165,6 +177,20 @@ export default function ZamanPage() {
     }
   }
 
+  /** Faz 6 — taslak kaydı onaya gönder (yalnız ONAYLANDI kayıtlar faturalanır). */
+  async function sendForApproval(t: TimeEntry) {
+    setBusyId(t.id);
+    try {
+      await submitTimeEntry(t.id);
+      push("Zaman kaydı onaya gönderildi.");
+      await load();
+    } catch (err) {
+      push(err instanceof ApiError ? err.message : "Onaya gönderilemedi.", "error");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -183,12 +209,26 @@ export default function ZamanPage() {
         />
       ) : (
         <>
+          <TimerCard
+            cases={cases}
+            onStopped={(msg) => {
+              push(msg);
+              void load();
+            }}
+          />
+
           <QuickEntryForm
             cases={cases}
             onSaved={() => {
               push("Zaman kaydı eklendi.");
               void load();
             }}
+          />
+
+          <PendingApprovalsCard
+            refreshKey={entries}
+            onChanged={() => void load()}
+            notify={(m, tone) => push(m, tone)}
           />
 
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -296,6 +336,14 @@ export default function ZamanPage() {
                                   </Link>
                                 )}
                                 {t.user?.fullName && <span>{t.user.fullName}</span>}
+                                {t.status && t.status !== "ONAYLANDI" && (
+                                  <Badge tone={t.status === "REDDEDILDI" ? "red" : t.status === "ONAY_BEKLIYOR" ? "blue" : "gray"}>
+                                    {TIME_ENTRY_STATUS_LABELS[t.status] ?? t.status}
+                                  </Badge>
+                                )}
+                                {t.status === "REDDEDILDI" && t.rejectionReason && (
+                                  <span className="text-red-600">{t.rejectionReason}</span>
+                                )}
                                 {t.billable === false ? (
                                   <Badge tone="gray">Faturalanmaz</Badge>
                                 ) : t.invoiceId ? (
@@ -311,6 +359,17 @@ export default function ZamanPage() {
                               <span className="text-sm font-semibold tabular-nums text-slate-900">
                                 {fmtMinutes(t.minutes)}
                               </span>
+                              {(t.status === "TASLAK" || t.status === "REDDEDILDI") && !t.invoiceId && (
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  disabled={busyId === t.id}
+                                  onClick={() => void sendForApproval(t)}
+                                  title="Onaya gönder — yalnız onaylı kayıtlar faturalanır"
+                                >
+                                  Onaya gönder
+                                </Button>
+                              )}
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -335,7 +394,8 @@ export default function ZamanPage() {
             )}
             <p className="mt-4 text-[11px] leading-5 text-slate-500">
               Süreler tamsayı dakika olarak saklanır; saat karşılığı yalnızca gösterim içindir.
-              Fatura satırındaki saat × tarife hesabı sunucuda yapılır.
+              Fatura satırındaki saat × tarife hesabı sunucuda yapılır. Yeni kayıtlar TASLAK açılır;
+              onaya gönderilip ONAYLANAN kayıtlar faturaya girer.
             </p>
           </Card>
         </>
@@ -474,6 +534,228 @@ function QuickEntryForm({
 
         {error && <ErrorBox message={error} />}
       </form>
+    </Card>
+  );
+}
+
+// ---------- Faz 6: kronometre ----------
+
+function fmtElapsed(startedAt: string, now: number): string {
+  const sec = Math.max(0, Math.floor((now - new Date(startedAt).getTime()) / 1000));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function TimerCard({ cases, onStopped }: { cases: CaseSummary[]; onStopped: (message: string) => void }) {
+  const [timer, setTimer] = useState<TimerState | null>(null);
+  const [caseId, setCaseId] = useState("");
+  const [description, setDescription] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  const refresh = useCallback(async () => {
+    try {
+      setTimer(await fetchTimer());
+    } catch {
+      setTimer(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!timer?.calisiyor) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [timer]);
+
+  async function start() {
+    setBusy(true);
+    setError(null);
+    try {
+      setTimer(await startTimer({ caseId: caseId || null, description: description.trim() }));
+      setDescription("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Kronometre başlatılamadı.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function stop() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await stopTimer({});
+      setTimer({ calisiyor: false });
+      onStopped(res.mesaj);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Kronometre durdurulamadı.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancel() {
+    if (!window.confirm("Kronometre iptal edilsin mi? Süre kaydedilmez.")) return;
+    setBusy(true);
+    try {
+      await cancelTimer();
+      setTimer({ calisiyor: false });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "İptal edilemedi.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (timer === null) return null;
+
+  return (
+    <Card title="Kronometre">
+      {timer.calisiyor ? (
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="font-mono text-3xl font-semibold tabular-nums text-slate-900" data-testid="timer-elapsed">
+              {fmtElapsed(timer.startedAt, now)}
+            </p>
+            <p className="mt-1 text-sm text-slate-700">{timer.description}</p>
+            <p className="text-xs text-slate-500">
+              Başlangıç {new Date(timer.startedAt).toLocaleTimeString("tr-TR")}
+              {timer.caseId ? ` · ${cases.find((c) => c.id === timer.caseId)?.title ?? "dosya"}` : ""}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="gold" disabled={busy} onClick={() => void stop()}>
+              Durdur ve kaydet
+            </Button>
+            <Button variant="ghost" disabled={busy} onClick={() => void cancel()}>
+              İptal
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-4">
+          <div className="lg:col-span-2">
+            <Field label="Ne üzerinde çalışıyorsunuz?">
+              <Input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Ör. Cevap dilekçesi taslağı"
+                minLength={3}
+              />
+            </Field>
+          </div>
+          <Field label="Dosya (isteğe bağlı)">
+            <Select value={caseId} onChange={(e) => setCaseId(e.target.value)}>
+              <option value="">Dosyasız</option>
+              {cases.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.fileNumber ? `${c.fileNumber} — ` : ""}
+                  {c.title}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <div className="flex items-end">
+            <Button variant="gold" disabled={busy || description.trim().length < 3} onClick={() => void start()}>
+              ▶ Başlat
+            </Button>
+          </div>
+        </div>
+      )}
+      {error && <ErrorBox message={error} />}
+      <p className="mt-3 text-[11px] leading-5 text-slate-500">
+        Kullanıcı başına tek kronometre; durdurulunca dakikaya yuvarlanmış TASLAK zaman kaydı oluşur.
+      </p>
+    </Card>
+  );
+}
+
+// ---------- Faz 6: onay kuyruğu (büro yöneticisi) ----------
+
+function PendingApprovalsCard({
+  refreshKey,
+  onChanged,
+  notify,
+}: {
+  /** Kayıt listesi her yüklendiğinde kuyruk da tazelenir (onaya gönderilen kayıt hemen görünsün). */
+  refreshKey: unknown;
+  onChanged: () => void;
+  notify: (message: string, tone?: "error") => void;
+}) {
+  const [items, setItems] = useState<TimeEntry[] | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetchPendingTimeEntries<TimeEntry>();
+      setItems(res.items);
+    } catch {
+      // 403 (yetki yok) veya uç yok → kart gizlenir.
+      setItems(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh, refreshKey]);
+
+  async function decide(t: TimeEntry, approve: boolean) {
+    let reason = "";
+    if (!approve) {
+      reason = window.prompt("Ret gerekçesi (kayıt sahibine görünür):") ?? "";
+      if (!reason.trim()) return;
+    }
+    setBusyId(t.id);
+    try {
+      if (approve) await approveTimeEntry(t.id);
+      else await rejectTimeEntry(t.id, reason.trim());
+      notify(approve ? "Zaman kaydı onaylandı; faturalanabilir." : "Zaman kaydı reddedildi.");
+      await refresh();
+      onChanged();
+    } catch (err) {
+      notify(err instanceof ApiError ? err.message : "İşlem yapılamadı.", "error");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (items === null) return null;
+
+  return (
+    <Card title={`Onay Kuyruğu (${items.length})`}>
+      {items.length === 0 ? (
+        <EmptyState message="Onay bekleyen zaman kaydı yok." />
+      ) : (
+        <ul className="divide-y divide-slate-100">
+          {items.map((t) => (
+            <li key={t.id} className="flex flex-wrap items-start justify-between gap-3 py-2.5">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-slate-800">{t.description}</p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {fmtDate(t.date)} · {t.user?.fullName ?? "—"}
+                  {t.case ? ` · ${t.case.fileNumber ?? t.case.title}` : ""}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="text-sm font-semibold tabular-nums text-slate-900">{fmtMinutes(t.minutes)}</span>
+                <Button size="sm" variant="gold" disabled={busyId === t.id} onClick={() => void decide(t, true)}>
+                  Onayla
+                </Button>
+                <Button size="sm" variant="ghost" disabled={busyId === t.id} onClick={() => void decide(t, false)}>
+                  Reddet
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }

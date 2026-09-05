@@ -11,6 +11,7 @@
 export type UyapPageKind =
   | "DOSYA_LISTESI"
   | "DOSYA_DETAY"
+  | "ICRA_DOSYA"
   | "SAFAHAT"
   | "EVRAK_LISTESI"
   | "DURUSMA";
@@ -57,6 +58,24 @@ export interface UyapDosyaDetay extends UyapDosyaOzeti {
   readonly gorevli: string | null;
   /** Dosyadaki taraflar. */
   readonly taraflar: readonly UyapTaraf[];
+  /** Faz 6: icra dosyası ekranından okunan takip alanları; icra değilse yok/null. */
+  readonly icra?: UyapIcraDosya | null;
+}
+
+/** Faz 6: UYAP icra dosyası ekranındaki takip bilgileri. Okunamayan alan null (tahmin yok). */
+export interface UyapIcraDosya {
+  /** Takip türü metni, olduğu gibi (ör. "İlamsız Takip (Genel Haciz Yolu)"). */
+  readonly takipTuru: string | null;
+  /** Takip tarihi — ISO 8601 tarih; yoksa açılış tarihi. */
+  readonly takipTarihi: string | null;
+  /** Alacak tutarı — "12500.00" biçiminde ondalık metin; yoksa null. */
+  readonly alacakTutari: string | null;
+  /** Dosya aşaması metni (ör. "Haciz"). */
+  readonly asama: string | null;
+  /** Borçlu adı — künyeden ya da taraflar tablosundan. */
+  readonly borclu: string | null;
+  /** Alacaklı adı — künyeden ya da taraflar tablosundan. */
+  readonly alacakli: string | null;
 }
 
 /** Safahat (kronolojik işlem) kaydı. */
