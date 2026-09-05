@@ -6,10 +6,11 @@
  * Ödeme: SIMULASYON anında; iyzico ödeme sayfasına yönlendirir ve `?odeme=` ile döner.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { api, ApiError, getStoredUser } from "@/lib/api";
-import { Badge, Button, Card, EmptyState, ErrorBox, Input, Spinner, SuccessBox, type BadgeTone } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, ErrorBox, Input, Spinner, SuccessBox } from "@/components/ui";
+import type { BadgeTone } from "@/lib/labels";
 
 interface Summary {
   abonelik: {
@@ -60,7 +61,7 @@ const MODULE_LABEL: Record<string, string> = { dosya: "Dosya", sure: "Süre", go
 const money = (v: string | null | undefined) => (v === null || v === undefined ? "-" : `${Number(v).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ₺`);
 const date = (v: string | null | undefined) => (v ? new Date(v).toLocaleDateString("tr-TR") : "-");
 
-export default function AbonelikPage() {
+function AbonelikIcerik() {
   const params = useSearchParams();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [invoices, setInvoices] = useState<InvoiceDto[]>([]);
@@ -262,5 +263,14 @@ export default function AbonelikPage() {
         </Card>
       )}
     </div>
+  );
+}
+
+/** `useSearchParams` statik derlemede Suspense sınırı ister (Next.js). */
+export default function AbonelikPage() {
+  return (
+    <Suspense fallback={<Spinner label="Abonelik yükleniyor…" />}>
+      <AbonelikIcerik />
+    </Suspense>
   );
 }
