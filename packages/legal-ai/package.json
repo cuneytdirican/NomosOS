@@ -15,7 +15,7 @@
     "@nomosos/ai": "workspace:*",
     "@nomosos/legal-core": "workspace:*",
     "@nomosos/shared": "workspace:*",
-    "zod": "^3.24.1"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
