@@ -474,6 +474,8 @@ export default function DosyaDetayPage({ params }: { params: Promise<{ id: strin
       {actionError && <ErrorBox message={actionError} />}
 
       <ConfidentialityCard detail={detail} onChanged={() => void load()} />
+      {/* Faz 1: vekaletname yeterliliği dosya ekranında (Gereksinim 13) */}
+      <PoaStatusCard caseId={detail.id} />
 
       <Tabs tabs={tabsWithCounts} active={tab} onChange={setTab} ariaLabel="Dosya sekmeleri" idPrefix="dosya" />
 
@@ -1627,6 +1629,26 @@ function CaseEditModal({
  * Anahtarı ve listeyi yalnız yönetici/ortak ya da sorumlu avukat düzenler
  * (sunucu `canManageConfidentiality` ile söyler; asıl yaptırım API'dedir).
  */
+function PoaStatusCard({ caseId }: { caseId: string }) {
+  const [status, setStatus] = useState<{ hasValidPoa: boolean; banner: string | null; powerOfAttorneys: Array<{ id: string; type?: string; notary?: string | null; number?: string | null; daysRemaining: number | null; usable: boolean }> } | null>(null);
+  useEffect(() => {
+    void api<{ hasValidPoa: boolean; banner: string | null; powerOfAttorneys: Array<{ id: string; type?: string; notary?: string | null; number?: string | null; daysRemaining: number | null; usable: boolean }> }>(`/cases/${caseId}/poa-status`)
+      .then(setStatus)
+      .catch(() => setStatus(null));
+  }, [caseId]);
+  if (!status) return null;
+  const soon = status.powerOfAttorneys.filter((p) => p.usable && p.daysRemaining !== null && p.daysRemaining <= 30);
+  if (status.hasValidPoa && soon.length === 0) return null;
+  return (
+    <div className={`rounded-lg border px-4 py-3 text-sm ${status.hasValidPoa ? "border-amber-300 bg-amber-50 text-amber-900" : "border-red-300 bg-red-50 text-red-900"}`}>
+      <p className="font-semibold">{status.hasValidPoa ? "Vekaletname süresi yaklaşıyor" : "Vekaletname eksik"}</p>
+      <p className="mt-1 text-xs leading-5">
+        {status.banner ?? soon.map((p) => `${p.notary ?? "Noter"} ${p.number ?? ""} — ${p.daysRemaining} gün kaldı`).join(" · ")}
+      </p>
+    </div>
+  );
+}
+
 function ConfidentialityCard({ detail, onChanged }: { detail: CaseDetail; onChanged: () => void }) {
   const [users, setUsers] = useState<Array<{ id: string; fullName: string; role?: string }>>([]);
   const [busy, setBusy] = useState(false);

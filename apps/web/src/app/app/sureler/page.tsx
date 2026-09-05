@@ -30,6 +30,7 @@ import {
 } from "@/components/ui";
 import { RemoteSelect } from "@/components/remote-select";
 import { ComputeNote } from "@/components/compute-note";
+import { ReadingModal } from "@/components/reading-modal";
 import { DeadlineWizard } from "@/components/deadline-wizard";
 import {
   DEADLINE_SOURCE_LABELS,
@@ -72,6 +73,17 @@ export default function SurelerPage() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const [wizardOpen, setWizardOpen] = useState(false);
+  // Faz 1: AI önerisinin kaynak belgesi yan yana okunur (onay öncesi teyit).
+  const [reading, setReading] = useState<{ title: string; text: string; note?: string } | null>(null);
+  async function readSource(doc: { id: string; name: string }) {
+    setActionError(null);
+    try {
+      const res = await api<{ text: string | null; note?: string; ocrStatus?: string | null }>(`/documents/${doc.id}/text`);
+      setReading({ title: doc.name, text: res.text ?? "", note: res.text ? undefined : res.note ?? "Belgenin metni çıkarılamadı." });
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : "Kaynak belge okunamadı.");
+    }
+  }
   const [manualOpen, setManualOpen] = useState(false);
 
   /**
@@ -319,6 +331,11 @@ export default function SurelerPage() {
                     >
                       <DeadlineRow deadline={d} />
                       <div className="mt-3 flex flex-wrap gap-2">
+                        {d.sourceDocument && (
+                          <Button size="sm" variant="secondary" onClick={() => void readSource(d.sourceDocument!)}>
+                            Kaynak belgeyi oku
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="gold"
@@ -420,6 +437,14 @@ export default function SurelerPage() {
         open={manualOpen}
         onClose={() => setManualOpen(false)}
         onSaved={() => void load(filters, page)}
+      />
+      <ReadingModal
+        open={!!reading}
+        onClose={() => setReading(null)}
+        title={reading?.title ?? "Kaynak belge"}
+        subtitle="AI önerisinin çıktığı belge — süreyi onaylamadan önce tebliğ tarihini ve yöntemi teyit edin."
+        text={reading?.text ?? ""}
+        note={reading?.note}
       />
     </div>
   );

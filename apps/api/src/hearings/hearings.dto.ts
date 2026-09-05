@@ -15,8 +15,18 @@ export const createHearingSchema = z.object({
   courtroom: nullableText(100, "Duruşma salonu"),
   note: nullableText(5000, "Duruşma notu"),
   prepSummary: nullableText(5000, "Hazırlık notu"),
+  /** Faz 1: duruşmaya girecek sorumlu avukat (büro kullanıcısı). */
+  attendeeUserId: z.string().uuid("Geçersiz avukat kimliği.").nullable().optional(),
+  /** Aynı avukatın ±2 saatte başka duruşması varsa 409; bilerek eklemek için true. */
+  force: z.boolean().optional(),
 });
 export type CreateHearingInput = z.infer<typeof createHearingSchema>;
+
+/** POST /hearings/:id/prep — HEARING_PREP hazırlık paketi. */
+export const hearingPrepSchema = z.object({
+  piiApproved: z.boolean().optional(),
+});
+export type HearingPrepInput = z.infer<typeof hearingPrepSchema>;
 
 /** PATCH /hearings/:id */
 export const updateHearingSchema = z
@@ -27,6 +37,8 @@ export const updateHearingSchema = z
     courtroom: nullableText(100, "Duruşma salonu"),
     note: nullableText(5000, "Duruşma notu"),
     prepSummary: nullableText(5000, "Hazırlık notu"),
+    attendeeUserId: z.string().uuid("Geçersiz avukat kimliği.").nullable().optional(),
+    force: z.boolean().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, "Güncellenecek en az bir alan gönderilmelidir.");
 export type UpdateHearingInput = z.infer<typeof updateHearingSchema>;

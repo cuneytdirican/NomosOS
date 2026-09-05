@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import type { DeadlineStatus as DbDeadlineStatus, Prisma } from "@nomosos/db";
 import { DEADLINE_SOURCES, DEADLINE_STATUSES, type DeadlineStatus } from "@nomosos/shared";
 import {
+  DEADLINE_RULES_VERSION,
   computeDeadline,
   findSystemRule,
   type DeadlineComputationResult,
@@ -36,6 +37,8 @@ const OPEN_STATUSES: DbDeadlineStatus[] = ["BEKLIYOR", "ONAYLANDI"];
 
 const DEADLINE_INCLUDE = {
   owner: { select: { id: true, fullName: true } },
+  // Faz 1: AI önerisinin kaynak belgesi (onay ekranında "kaynak belgeyi oku").
+  sourceDocument: { select: { id: true, name: true } },
   // denetim bulgusu K-14 — girdiyi düzelten kişi yanıtta görünür; düzeltme izi
   // yalnız AuditLog'da kalmaz, avukatın baktığı kayıtta da durur.
   correctedBy: { select: { id: true, fullName: true } },
@@ -355,6 +358,7 @@ export class DeadlinesService {
           legalBasis: result.legalBasis,
           computeNote,
           ruleKey: rule.key,
+          rulesVersion: DEADLINE_RULES_VERSION,
           ...(isFirstCorrection
             ? {
                 originalTriggerDate: existing.triggerDate,
@@ -536,6 +540,7 @@ export class DeadlinesService {
           legalBasis: result.legalBasis,
           computeNote,
           ruleKey: rule.key,
+          rulesVersion: DEADLINE_RULES_VERSION,
           triggerDate: input.triggerDate,
           serviceMethod: input.serviceMethod,
         },

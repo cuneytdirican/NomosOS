@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, asList } from "@/lib/api";
 import type { CaseSummary, Hearing } from "@/lib/types";
 import { Button, ErrorBox, Field, Input, Modal, Select, Textarea } from "@/components/ui";
 import { RemoteSelect } from "@/components/remote-select";
@@ -31,6 +31,8 @@ interface HearingFormState {
   courtroom: string;
   note: string;
   prepSummary: string;
+  /** Faz 1: sorumlu avukat ("" = atanmamış). */
+  attendeeUserId: string;
 }
 
 function emptyForm(caseId?: string): HearingFormState {
@@ -41,6 +43,7 @@ function emptyForm(caseId?: string): HearingFormState {
     courtroom: "",
     note: "",
     prepSummary: "",
+    attendeeUserId: "",
   };
 }
 
@@ -63,6 +66,16 @@ export function HearingFormModal({
   const [caseLabel, setCaseLabel] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [users, setUsers] = useState<Array<{ id: string; fullName: string; role?: string }>>([]);
+  /** 409 çakışma sonrası "yine de kaydet" — force ile yeniden gönderilir. */
+  const [conflict, setConflict] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    void api<unknown>("/users")
+      .then((rows) => setUsers(asList<{ id: string; fullName: string; role?: string; isActive?: boolean }>(rows).filter((u) => u.isActive !== false)))
+      .catch(() => undefined);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -75,6 +88,7 @@ export function HearingFormModal({
         courtroom: hearing.courtroom ?? "",
         note: hearing.note ?? "",
         prepSummary: hearing.prepSummary ?? "",
+        attendeeUserId: hearing.attendeeUserId ?? "",
       });
     } else {
       setForm(emptyForm(caseId));
@@ -82,7 +96,7 @@ export function HearingFormModal({
     setCaseLabel(hearing?.case?.title ?? "");
   }, [open, hearing, caseId]);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>, force = false) {
     e.preventDefault();
     setSaving(true);
     setError(null);
@@ -94,6 +108,8 @@ export function HearingFormModal({
         courtroom: form.courtroom.trim() || undefined,
         note: form.note.trim() || undefined,
         prepSummary: form.prepSummary.trim() || undefined,
+        attendeeUserId: form.attendeeUserId || null,
+        ...(force ? { force: true } : {}),
       };
       if (hearing) {
         await api(`/hearings/${hearing.id}`, { method: "PATCH", body });
@@ -104,6 +120,7 @@ export function HearingFormModal({
       onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Duruşma kaydedilemedi.");
+      setConflict(err instanceof ApiError && err.status === 409 && /Çakışma/.test(err.message));
     } finally {
       setSaving(false);
     }
@@ -164,13 +181,25 @@ export function HearingFormModal({
           </Field>
         </div>
 
-        <Field label="Salon / Duruşma yeri">
-          <Input
-            value={form.courtroom}
-            onChange={(e) => setForm({ ...form, courtroom: e.target.value })}
-            placeholder="Örn. 3 No'lu Duruşma Salonu"
-          />
-        </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Salon / Duruşma yeri">
+            <Input
+              value={form.courtroom}
+              onChange={(e) => setForm({ ...form, courtroom: e.target.value })}
+              placeholder="Örn. 3 No'lu Duruşma Salonu"
+            />
+          </Field>
+          <Field label="Sorumlu avukat" hint="Aynı avukatın ±2 saatte başka duruşması varsa uyarı verilir.">
+            <Select value={form.attendeeUserId} onChange={(e) => { setForm({ ...form, attendeeUserId: e.target.value }); setConflict(false); }}>
+              <option value="">— Atanmadı —</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.fullName}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
 
         <Field label="Hazırlık notu" hint="Duruşmaya girmeden önce hatırlanacaklar.">
           <Textarea
@@ -196,6 +225,16 @@ export function HearingFormModal({
           <Button variant="secondary" onClick={onClose}>
             Vazgeç
           </Button>
+          {conflict && (
+            <Button
+              type="button"
+              variant="danger"
+              disabled={saving}
+              onClick={(e) => void handleSubmit(e as unknown as React.FormEvent<HTMLFormElement>, true)}
+            >
+              Çakışmaya rağmen kaydet
+            </Button>
+          )}
           <Button type="submit" disabled={saving || !form.caseId || !form.date}>
             {saving ? "Kaydediliyor…" : "Kaydet"}
           </Button>

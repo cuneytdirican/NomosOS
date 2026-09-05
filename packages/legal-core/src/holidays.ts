@@ -161,14 +161,68 @@ export const TR_HOLIDAYS_2027: TrHoliday[] = [
   { date: "2027-10-29", name: "Cumhuriyet Bayramı", type: "RESMI_TATIL" },
 ];
 
+/**
+ * ÖNGÖRÜLEN yıl takvimi üretici (Faz 1): sabit tarihli günler kesindir; dinî
+ * bayramlar hicri takvime göre ÖNGÖRÜDÜR ve Diyanet ilanıyla kesinleşir —
+ * hepsi `isApproximate: true` taşır, motor bu günlere denk gelen her hesapta
+ * uyarı üretir. Arife günleri yarım gündür (2429 s.K. m.2/A).
+ *
+ * @param ramazanArife  Ramazan Bayramı arifesi (YYYY-AA-GG); bayram 3 gün.
+ * @param kurbanArife   Kurban Bayramı arifesi (YYYY-AA-GG); bayram 4 gün.
+ */
+export function projectedYearHolidays(year: number, ramazanArife: string, kurbanArife: string): TrHoliday[] {
+  const shift = (isoDate: string, days: number) => toIsoDateKey(addDays(parseDateOnly(isoDate), days));
+  const religious: TrHoliday[] = [
+    {
+      date: ramazanArife,
+      name: `Ramazan Bayramı Arifesi ${HALF_DAY_HOLIDAY_MARKER} ${APPROXIMATE_HOLIDAY_MARKER}`,
+      type: "RESMI_TATIL",
+      isHalfDay: true,
+      isApproximate: true,
+    },
+    ...[1, 2, 3].map<TrHoliday>((n) => ({
+      date: shift(ramazanArife, n),
+      name: `Ramazan Bayramı ${n}. gün ${APPROXIMATE_HOLIDAY_MARKER}`,
+      type: "RESMI_TATIL",
+      isApproximate: true,
+    })),
+    {
+      date: kurbanArife,
+      name: `Kurban Bayramı Arifesi ${HALF_DAY_HOLIDAY_MARKER} ${APPROXIMATE_HOLIDAY_MARKER}`,
+      type: "RESMI_TATIL",
+      isHalfDay: true,
+      isApproximate: true,
+    },
+    ...[1, 2, 3, 4].map<TrHoliday>((n) => ({
+      date: shift(kurbanArife, n),
+      name: `Kurban Bayramı ${n}. gün ${APPROXIMATE_HOLIDAY_MARKER}`,
+      type: "RESMI_TATIL",
+      isApproximate: true,
+    })),
+  ];
+  return [...fixedOfficialHolidays(year), ...religious].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** 2028-2032 — öngörülen dinî bayram tarihleri (Diyanet ilanıyla teyit edilmelidir). */
+export const TR_HOLIDAYS_2028: TrHoliday[] = projectedYearHolidays(2028, "2028-02-25", "2028-05-04");
+export const TR_HOLIDAYS_2029: TrHoliday[] = projectedYearHolidays(2029, "2029-02-13", "2029-04-23");
+export const TR_HOLIDAYS_2030: TrHoliday[] = projectedYearHolidays(2030, "2030-02-03", "2030-04-12");
+export const TR_HOLIDAYS_2031: TrHoliday[] = projectedYearHolidays(2031, "2031-01-23", "2031-04-01");
+export const TR_HOLIDAYS_2032: TrHoliday[] = projectedYearHolidays(2032, "2032-01-13", "2032-03-21");
+
 /** Yıl → takvim eşlemesi. Tohum ve zamanlayıcı buradan okur (tek kaynak). */
 export const TR_HOLIDAYS_BY_YEAR: Record<number, TrHoliday[]> = {
   2026: TR_HOLIDAYS_2026,
   2027: TR_HOLIDAYS_2027,
+  2028: TR_HOLIDAYS_2028,
+  2029: TR_HOLIDAYS_2029,
+  2030: TR_HOLIDAYS_2030,
+  2031: TR_HOLIDAYS_2031,
+  2032: TR_HOLIDAYS_2032,
 };
 
 /** Takvimi elde bulunan yıllar. Diğer yıllarda motor `warnings[]` üretir. */
-export const SUPPORTED_HOLIDAY_YEARS: number[] = [2026, 2027];
+export const SUPPORTED_HOLIDAY_YEARS: number[] = [2026, 2027, 2028, 2029, 2030, 2031, 2032];
 
 /**
  * Herhangi bir yıl için **sabit tarihli** (kanunla belirli, hicri takvime bağlı

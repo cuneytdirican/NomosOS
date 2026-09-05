@@ -763,7 +763,11 @@ describe("sistem kural seti", () => {
     // sette kural silinmesini yakalamıyordu (denetim bulgusu 15).
     // F2 A4: 22 → 29 (İİK m.89 üçlüsü, İİK m.33, İİK m.363, HMK m.394, HMK m.317/2).
     // D2 A2: 29 → 30 (6325 s.K. m.18 — arabuluculuk sonrası dava süresi).
-    expect(SYSTEM_DEADLINE_RULES).toHaveLength(30);
+    // Faz 1 (5 Eylül 2026): 30 → 52 (AYM, AİHM, İYUK kanun yolları, İİK satış
+    // isteme/kıymet takdiri/sıra cetveli/ihtiyati haciz/ilam zamanaşımı/itirazın
+    // kaldırılması/tahliye, CMK itiraz + eski hâle getirme, KVKK ×2, TMK m.606,
+    // TTK m.749, SMK m.18, HMK m.377, İş K. m.20 arabulucu başvurusu).
+    expect(SYSTEM_DEADLINE_RULES).toHaveLength(52);
     expect(new Set(SYSTEM_DEADLINE_RULE_KEYS).size).toBe(SYSTEM_DEADLINE_RULES.length);
   });
 
@@ -839,6 +843,29 @@ describe("sistem kural seti", () => {
       ["HMK_BASIT_YARGILAMA_CEVAP", 2, "HAFTA", "HMK m.317/2 — 2 hafta"],
       // ── D2 A2: arabuluculuk sonrası dava süresi ───────────────────────────
       ["ARABULUCULUK_DAVA", 2, "HAFTA", "6325 sayılı Hukuk Uyuşmazlıklarında Arabuluculuk Kanunu m.18 — 2 hafta"],
+      // Faz 1 paketi — her satır madde metninden elle doğrulanmıştır.
+      ["AYM_BIREYSEL_BASVURU", 30, "GUN", "6216 sayılı Kanun m.47/5 — 30 gün"],
+      ["AIHM_BASVURU", 4, "AY", "AİHS m.35/1 — 4 ay"],
+      ["IYUK_SAVUNMA", 30, "GUN", "İYUK m.16/3 — 30 gün"],
+      ["IYUK_ISTINAF", 30, "GUN", "İYUK m.45/1 — 30 gün"],
+      ["IYUK_TEMYIZ", 30, "GUN", "İYUK m.46/2 — 30 gün"],
+      ["IYUK_YD_ITIRAZ", 7, "GUN", "İYUK m.27/7 — 7 gün"],
+      ["IIK_SATIS_ISTEME", 1, "YIL", "İİK m.106 — 1 yıl"],
+      ["IIK_KIYMET_TAKDIRI_ITIRAZ", 7, "GUN", "İİK m.128/a — 7 gün"],
+      ["IIK_SIRA_CETVELI_SIKAYET", 7, "GUN", "İİK m.142 — 7 gün"],
+      ["IIK_IHTIYATI_HACZE_ITIRAZ", 7, "GUN", "İİK m.265 — 7 gün"],
+      ["IIK_ILAM_ZAMANASIMI", 10, "YIL", "İİK m.39 — 10 yıl"],
+      ["IIK_ITIRAZIN_KALDIRILMASI", 6, "AY", "İİK m.68 — 6 ay"],
+      ["IIK_TAHLIYE_EMRI_ITIRAZ", 7, "GUN", "İİK m.272 — 7 gün"],
+      ["CMK_ITIRAZ", 7, "GUN", "CMK m.268/1 — 7 gün"],
+      ["CMK_ESKI_HALE_GETIRME", 7, "GUN", "CMK m.41 — 7 gün"],
+      ["KVKK_VERI_SORUMLUSU_CEVAP", 30, "GUN", "6698 sayılı KVKK m.13/2 — 30 gün"],
+      ["KVKK_KURUL_SIKAYET", 30, "GUN", "6698 sayılı KVKK m.14/2 — 30 gün"],
+      ["TMK_MIRASIN_REDDI", 3, "AY", "TMK m.606 — 3 ay"],
+      ["TTK_KAMBIYO_ZAMANASIMI", 3, "YIL", "TTK m.749/1 — 3 yıl"],
+      ["SMK_BULTEN_ITIRAZ", 2, "AY", "6769 sayılı SMK m.18/1 — 2 ay"],
+      ["HMK_YARGILAMANIN_YENILENMESI", 3, "AY", "HMK m.377 — 3 ay"],
+      ["IS_ISE_IADE_ARABULUCU_BASVURU", 1, "AY", "4857 sayılı İş K. m.20/1 — 1 ay"],
     ];
     expect(beklenen).toHaveLength(SYSTEM_DEADLINE_RULES.length);
     for (const [key, value, unit, basis] of beklenen) {
@@ -900,7 +927,14 @@ describe("sistem kural seti", () => {
   });
 
   it("dosya türüne göre kural süzer ve bilinmeyen anahtarda hata verir", () => {
-    expect(systemRulesForCaseType("CEZA").map((r) => r.key)).toEqual(["CMK_ISTINAF", "CMK_TEMYIZ"]);
+    expect(systemRulesForCaseType("CEZA").map((r) => r.key)).toEqual([
+      "CMK_ISTINAF",
+      "CMK_TEMYIZ",
+      "AYM_BIREYSEL_BASVURU",
+      "AIHM_BASVURU",
+      "CMK_ITIRAZ",
+      "CMK_ESKI_HALE_GETIRME",
+    ]);
     expect(systemRulesForCaseType("ICRA").length).toBeGreaterThan(0);
     expect(findSystemRule("YOK_BOYLE_BIR_KURAL")).toBeUndefined();
     expect(() => getSystemRule("YOK_BOYLE_BIR_KURAL")).toThrow(/Bilinmeyen süre kuralı/);

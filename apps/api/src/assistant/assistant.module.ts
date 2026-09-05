@@ -30,6 +30,6 @@ import { AiModule } from "../ai/ai.module";
     RetrievalService,
     OfficeQueryService,
   ],
-  exports: [AssistantService, AssistantLlmService, IndexingService, RetrievalService],
+  exports: [AssistantService, AssistantLlmService, IndexingService, RetrievalService, CaseContextBuilder],
 })
 export class AssistantModule {}

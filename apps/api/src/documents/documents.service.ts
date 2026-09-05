@@ -221,11 +221,13 @@ export class DocumentsService {
       if (enqueued.queued) {
         pipeline = { runId: null, status: "KUYRUKTA", proposalCount: 0 };
       } else {
-        pipeline = await this.pipeline.run({
-          tenantId: user.tenantId,
-          userId: user.userId,
-          documentId: document.id,
-        });
+        // Kuyruk yok: hat yine de HTTP isteğinin DIŞINDA koşar (Faz 1 — OCR ve
+        // AI adımları dakikalar sürebilir; vekil 504 döner, iş yarım kalırdı).
+        // Yükleme yanıtı hemen döner; durum koşum kaydından izlenir.
+        pipeline = { runId: null, status: "ARKA_PLAN", proposalCount: 0 };
+        void this.pipeline
+          .run({ tenantId: user.tenantId, userId: user.userId, documentId: document.id })
+          .catch((err) => this.logger.warn(`Belge hattı arka planda düştü (${document.id}): ${(err as Error).message}`));
       }
     } catch (err) {
       this.logger.warn(`Belge hattı koşulamadı (${document.id}): ${(err as Error).message}`);

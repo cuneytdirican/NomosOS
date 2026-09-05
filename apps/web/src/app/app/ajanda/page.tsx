@@ -14,7 +14,7 @@
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
-import { Button, Card, EmptyState, ErrorBox, Spinner } from "@/components/ui";
+import { Button, Card, CopyOnceField, EmptyState, ErrorBox, Modal, Spinner } from "@/components/ui";
 
 interface AgendaEvent {
   id: string;
@@ -73,6 +73,18 @@ export default function AjandaPage() {
     new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1)),
   );
   const [data, setData] = useState<AgendaResponse | null>(null);
+  // Faz 1: ICS takvim aboneliği (Google/Outlook/Apple "URL ile abone ol").
+  const [icsUrl, setIcsUrl] = useState<string | null>(null);
+  const [icsError, setIcsError] = useState<string | null>(null);
+  async function subscribeIcs() {
+    setIcsError(null);
+    try {
+      const res = await api<{ url: string; expiresInDays: number }>("/agenda/feed-token", { method: "POST", body: {} });
+      setIcsUrl(res.url);
+    } catch (err) {
+      setIcsError(err instanceof ApiError ? err.message : "Takvim bağlantısı üretilemedi.");
+    }
+  }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(isoDay(today));
@@ -159,6 +171,9 @@ export default function AjandaPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => void subscribeIcs()}>
+            Takvime abone ol
+          </Button>
           <Button
             variant="secondary"
             onClick={() => setCursor(new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() - 1, 1)))}
@@ -345,6 +360,19 @@ export default function AjandaPage() {
       <p className="text-center text-[11px] text-slate-500">
         ● resmî tatil · ▲ adli tatil · Süreler gün sonuna kadandır (HMK m.93); duruşma ve randevular saat iledir.
       </p>
+      <Modal open={!!icsUrl || !!icsError} onClose={() => { setIcsUrl(null); setIcsError(null); }} title="Takvime abone ol (ICS)">
+        {icsError ? (
+          <ErrorBox message={icsError} />
+        ) : icsUrl ? (
+          <div className="space-y-3">
+            <CopyOnceField label="Takvim bağlantınız (kişisel — paylaşmayın)" value={icsUrl} />
+            <p className="text-xs text-slate-500">
+              Google Takvim: Diğer takvimler → URL ile ekle. Outlook: Takvim ekle → İnternet'ten abone ol. Apple: Dosya → Yeni takvim aboneliği.
+              Bağlantı 1 yıl geçerlidir; duruşma, randevu, süre ve görev teslimleri tek yönlü (NomosOS → takvim) akar.
+            </p>
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }

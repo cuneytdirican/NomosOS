@@ -88,16 +88,30 @@ export class NotificationOutboxService {
     }
   }
 
-  private async inAppDisabled(entry: OutboxEntry): Promise<boolean> {
+  /**
+   * Kullanıcının bu bildirim türü için kanal tercihleri (Faz 1). Kayıt yoksa
+   * hepsi AÇIK (fail-open: bildirim sessizce yutulmaz). E-posta/push kanalları
+   * Faz 2'de gerçek sağlayıcıya bağlanır; dağıtıcı bu tek yerden okur.
+   */
+  async preferredChannels(
+    tenantId: string,
+    userId: string,
+    kind: NotificationKind,
+  ): Promise<{ inApp: boolean; email: boolean; push: boolean }> {
     try {
       const pref = await this.prisma.client.notificationPreference.findUnique({
-        where: { tenantId_userId_kind: { tenantId: entry.tenantId, userId: entry.userId, kind: entry.kind } },
-        select: { inApp: true },
+        where: { tenantId_userId_kind: { tenantId, userId, kind } },
+        select: { inApp: true, email: true, push: true },
       });
-      return pref?.inApp === false;
+      return { inApp: pref?.inApp !== false, email: pref?.email !== false, push: pref?.push !== false };
     } catch {
-      return false;
+      return { inApp: true, email: true, push: true };
     }
+  }
+
+  private async inAppDisabled(entry: OutboxEntry): Promise<boolean> {
+    const channels = await this.preferredChannels(entry.tenantId, entry.userId, entry.kind);
+    return !channels.inApp;
   }
 
   /**

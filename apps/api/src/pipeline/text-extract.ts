@@ -11,13 +11,15 @@
  *            yoktur; bu durumda gerçek OCR gerekir → BASARISIZ + açık not.
  *   - TXT  → doğrudan UTF-8.
  *   - DOCX → word/document.xml içindeki <w:t> metin düğümleri (F2 · B2).
- *   - Görsel (JPEG/PNG) → gerçek OCR yok → BASARISIZ + açık not
- *            (taranmış görüntü için OCR henüz kurulmadı; yanlış metin
- *            üretmemek sessiz kalmaktan iyidir).
+ *   - Görsel (JPEG/PNG) → tesseract.js OCR (Faz 1; `ocr.ts`). OCR kapalıysa
+ *            ya da metin çıkmazsa BASARISIZ + açık not — METİN UYDURULMAZ.
+ *   - Taranmış PDF (metin katmanı yok) → gömülü JPEG sayfa görüntüleri
+ *            ayıklanıp OCR'lanır; JPEG yoksa (CCITT/JBIG2) BASARISIZ + not.
  *   - UDF  → @nomosos/udf parser'ı, CDATA ham metni (rawText) (F2 · B2).
  */
 
 import { readUdf } from "@nomosos/udf";
+import { OCR_MAX_PAGES, extractJpegStreamsFromPdf, ocrEnabled, ocrImages } from "./ocr";
 
 export type TextExtractOutcome = "TAMAM" | "BASARISIZ" | "GEREKSIZ";
 
@@ -62,13 +64,7 @@ export async function extractText(params: {
       // (paket zaten @nomosos/udf üzerinden bağımlılık ağacındaydı).
       return extractFromDocx(params.buffer);
     case "image":
-      return {
-        outcome: "BASARISIZ",
-        note:
-          "Görsel belgelerde OCR henüz kurulu değil. " +
-          "Belge saklandı; metni okunamadığı için sınıflandırma ve süre tespiti yapılmadı. " +
-          "Metin katmanı olan bir PDF yüklerseniz hat tam çalışır.",
-      };
+      return extractFromImage(params.buffer);
     case "udf":
       // F2 · B2: UDF arşivi @nomosos/udf ile ayrıştırılır. PII taraması ve
       // indeksleme DAİMA ham CDATA metni (rawText) üzerinden yapılır.
@@ -96,14 +92,8 @@ async function extractFromPdf(buffer: Buffer): Promise<TextExtractResult> {
     const truncatedByPages = (parsed.numpages ?? 0) > MAX_PDF_PAGES;
 
     if (text.length < MIN_MEANINGFUL_TEXT_LENGTH) {
-      return {
-        outcome: "BASARISIZ",
-        pageCount: parsed.numpages,
-        note:
-          "PDF'te okunabilir metin katmanı bulunamadı (büyük olasılıkla taranmış görüntü). " +
-          "Görüntü OCR'ı Faz 3 kapsamındadır; belge saklandı ancak metni çıkarılamadı. " +
-          "UYDURMA METİN ÜRETİLMEDİ.",
-      };
+      // Metin katmanı yok → taranmış görüntü: OCR (Faz 1).
+      return ocrScannedPdf(buffer, parsed.numpages);
     }
 
     return {
@@ -118,10 +108,89 @@ async function extractFromPdf(buffer: Buffer): Promise<TextExtractResult> {
           : ""),
     };
   } catch (err) {
+    // Bazı tarayıcı PDF'leri pdf-parse'ı düşürür; gömülü JPEG'ler yine OCR'lanabilir.
+    const ocr = await ocrScannedPdf(buffer, undefined);
+    if (ocr.outcome === "TAMAM") return ocr;
     return {
       outcome: "BASARISIZ",
-      note: `PDF ayrıştırılamadı: ${(err as Error).message}`,
+      note: `PDF ayrıştırılamadı: ${(err as Error).message}. ${ocr.note}`,
     };
+  }
+}
+
+/** Görsel belge (JPEG/PNG) → OCR. */
+async function extractFromImage(buffer: Buffer): Promise<TextExtractResult> {
+  if (!ocrEnabled()) {
+    return {
+      outcome: "BASARISIZ",
+      note: "Görsel belge: OCR kapalı (OCR_ENABLED=false). Belge saklandı; metni çıkarılmadı. UYDURMA METİN ÜRETİLMEDİ.",
+    };
+  }
+  try {
+    const [page] = await ocrImages([buffer]);
+    const text = normalizeWhitespace(page?.text ?? "");
+    if (text.length < MIN_MEANINGFUL_TEXT_LENGTH) {
+      return {
+        outcome: "BASARISIZ",
+        pageCount: 1,
+        note: `Görselden OCR ile okunabilir metin çıkarılamadı (güven %${page?.confidence ?? 0}; düşük çözünürlük ya da boş sayfa). UYDURMA METİN ÜRETİLMEDİ.`,
+      };
+    }
+    return {
+      outcome: "TAMAM",
+      text: truncate(text),
+      pageCount: 1,
+      note: `Görselden OCR ile ${text.length} karakter okundu (ortalama güven %${page.confidence}).`,
+    };
+  } catch (err) {
+    return { outcome: "BASARISIZ", note: `OCR başarısız: ${(err as Error).message}` };
+  }
+}
+
+/** Taranmış PDF → gömülü JPEG sayfa görüntüleri → OCR. */
+async function ocrScannedPdf(buffer: Buffer, numPages: number | undefined): Promise<TextExtractResult> {
+  if (!ocrEnabled()) {
+    return {
+      outcome: "BASARISIZ",
+      pageCount: numPages,
+      note:
+        "PDF'te okunabilir metin katmanı bulunamadı (taranmış görüntü) ve OCR kapalı (OCR_ENABLED=false). " +
+        "UYDURMA METİN ÜRETİLMEDİ.",
+    };
+  }
+  const images = extractJpegStreamsFromPdf(buffer, OCR_MAX_PAGES);
+  if (images.length === 0) {
+    return {
+      outcome: "BASARISIZ",
+      pageCount: numPages,
+      note:
+        "PDF'te metin katmanı yok ve OCR için gömülü JPEG sayfa görüntüsü bulunamadı (CCITT/JBIG2 taramalar " +
+        "desteklenmiyor). Belgeyi JPEG/PNG olarak ya da yeniden tarayarak yükleyin. UYDURMA METİN ÜRETİLMEDİ.",
+    };
+  }
+  try {
+    const pages = await ocrImages(images);
+    const text = normalizeWhitespace(pages.map((p) => p.text).join("\n\n"));
+    const avg = Math.round(pages.reduce((a, p) => a + p.confidence, 0) / Math.max(1, pages.length));
+    const pageCount = numPages ?? images.length;
+    if (text.length < MIN_MEANINGFUL_TEXT_LENGTH) {
+      return {
+        outcome: "BASARISIZ",
+        pageCount,
+        note: `OCR ${images.length} sayfa görüntüsünü işledi ancak okunabilir metin çıkaramadı (güven %${avg}). UYDURMA METİN ÜRETİLMEDİ.`,
+      };
+    }
+    const capped = pageCount > images.length;
+    return {
+      outcome: "TAMAM",
+      text: truncate(text),
+      pageCount,
+      note:
+        `Taranmış PDF: OCR ile ${images.length} sayfa okundu, ${text.length} karakter (ortalama güven %${avg}).` +
+        (capped ? ` UYARI: yalnız ilk ${images.length} sayfa OCR'landı (OCR_MAX_PAGES); kalan sayfalar okunmadı.` : ""),
+    };
+  } catch (err) {
+    return { outcome: "BASARISIZ", pageCount: numPages, note: `OCR başarısız: ${(err as Error).message}` };
   }
 }
 

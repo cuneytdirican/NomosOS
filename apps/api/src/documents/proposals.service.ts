@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import type { DocumentActionProposal, Prisma, ProposalStatus, ProposalType, TaskPriority } from "@nomosos/db";
-import { formatTrDate } from "@nomosos/legal-core";
+import { DEADLINE_RULES_VERSION, formatTrDate } from "@nomosos/legal-core";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 // D2 C3: AI eğitim verisi (opt-in kiracı) — karar anları örnek üretir.
@@ -390,8 +390,11 @@ export class ProposalsService {
           legalBasis: outcome.legalBasis,
           computeNote,
           ruleKey: outcome.ruleKey,
+          rulesVersion: DEADLINE_RULES_VERSION,
           triggerDate,
           serviceMethod: input.serviceMethod,
+          // Faz 1: önerinin çıktığı belge — onay/inceleme ekranında yan yana okunur.
+          sourceDocumentId: proposal.documentId,
         },
       });
       await tx.timelineEvent.create({

@@ -105,6 +105,7 @@ export interface AiCreditsMeta {
 
 /** `parentCaseId` ile çözülebilen üst kayıt türleri. */
 export type ParentCaseKind =
+  | "HEARING"
   | "STRATEGY"
   | "PETITION"
   | "ENFORCEMENT"

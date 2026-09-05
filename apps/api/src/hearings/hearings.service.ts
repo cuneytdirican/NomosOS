@@ -13,7 +13,16 @@ import { assertRole, ROLE_SETS } from "../common/roles";
 import { parseDateParam, parseRangeEnd } from "../common/dates";
 import { paged, resolvePage } from "../common/pagination";
 import { refreshCaseDenormals } from "../common/case-denormals";
-import { HEARING_STATUSES, type CreateHearingInput, type HearingResultInput, type UpdateHearingInput } from "./hearings.dto";
+import { HEARING_STATUSES, type CreateHearingInput, type HearingPrepInput, type HearingResultInput, type UpdateHearingInput } from "./hearings.dto";
+import { HearingPrepOutputSchema, buildHearingPrepMessages } from "@nomosos/legal-ai";
+import { AssistantLlmService } from "../assistant/assistant-llm.service";
+import { CaseContextBuilder } from "../assistant/case-context.builder";
+import { RetrievalService } from "../assistant/retrieval.service";
+
+/** Çakışma penceresi: aynı avukat, ±2 saat (adliyeler arası yol dâhil). */
+const ATTENDEE_CONFLICT_WINDOW_MS = 2 * 3_600_000;
+const PREP_CONTEXT_BUDGET = 3000;
+const PREP_CHUNK_BUDGET = 5000;
 
 const CASE_SELECT = {
   id: true,
@@ -26,17 +35,156 @@ const CASE_SELECT = {
   responsibleUser: { select: { id: true, fullName: true } },
 } satisfies Prisma.CaseSelect;
 
+/** Liste/detay yanıtı: dosya künyesi + sorumlu avukat (Faz 1). */
+const HEARING_INCLUDE = {
+  case: { select: CASE_SELECT },
+  attendee: { select: { id: true, fullName: true } },
+} satisfies Prisma.HearingInclude;
+
 @Injectable()
 export class HearingsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly audit: AuditService
+    private readonly audit: AuditService,
+    private readonly llm: AssistantLlmService,
+    private readonly contextBuilder: CaseContextBuilder,
+    private readonly retrieval: RetrievalService,
   ) {}
+
+  /* ---------------- Faz 1: sorumlu avukat + çakışma ---------------- */
+
+  /** Sorumlu avukat bu büroda aktif bir kullanıcı olmalı; null = atanmamış. */
+  private async resolveAttendee(tenantId: string, id: string | null | undefined): Promise<string | null> {
+    if (!id) return null;
+    const u = await this.prisma.client.user.findFirst({ where: { id, tenantId, isActive: true }, select: { id: true } });
+    if (!u) throw new BadRequestException("Sorumlu avukat bu büroda aktif bir kullanıcı olmalıdır.");
+    return u.id;
+  }
+
+  /**
+   * ÇAKIŞMA KONTROLÜ: aynı avukatın ±2 saat içinde iptal edilmemiş başka
+   * duruşması varsa 409 (sekreter iki celseyi üst üste yazamaz). Bilinçli
+   * ekleme `force: true` ile geçer; karar avukatındır, sistem yalnız uyarır.
+   */
+  private async assertNoAttendeeConflict(
+    tenantId: string,
+    attendeeUserId: string | null,
+    date: Date,
+    excludeId: string | null,
+    force?: boolean,
+  ): Promise<void> {
+    if (!attendeeUserId || force) return;
+    const clash = await this.prisma.client.hearing.findFirst({
+      where: {
+        tenantId,
+        attendeeUserId,
+        date: { gte: new Date(date.getTime() - ATTENDEE_CONFLICT_WINDOW_MS), lte: new Date(date.getTime() + ATTENDEE_CONFLICT_WINDOW_MS) },
+        status: { not: "IPTAL" },
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
+      include: { case: { select: { title: true, fileNumber: true, courtName: true } } },
+      orderBy: { date: "asc" },
+    });
+    if (clash) {
+      const when = clash.date.toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" });
+      throw new ConflictException(
+        `Çakışma: sorumlu avukatın ${when} tarihinde "${clash.case.title}" duruşması var` +
+          `${clash.case.courtName ? ` (${clash.case.courtName})` : ""}. ` +
+          "Bilerek ekliyorsanız çakışmayı onaylayarak kaydedin (force).",
+      );
+    }
+  }
+
+  /** Tarihi geçmiş ama sonucu girilmemiş duruşmalar (disiplin listesi). */
+  async pendingResults(tenantId: string, viewer?: AuthUser) {
+    const items = await this.prisma.client.hearing.findMany({
+      where: {
+        tenantId,
+        ...(viewer ? relatedCaseVisibilityWhere(viewer) : {}),
+        status: "PLANLANDI",
+        date: { lt: new Date() },
+      },
+      orderBy: { date: "desc" },
+      take: 100,
+      include: HEARING_INCLUDE,
+    });
+    return { items, total: items.length };
+  }
+
+  /* ---------------- Faz 1: HEARING_PREP hazırlık paketi ---------------- */
+
+  /**
+   * "Duruşmayı hazırla": 9 sabit bölümlü paket (packages/legal-ai hearing-prep).
+   * Prompt, şema, ajan kaydı ve kredi fiyatı vardı; çağıran uç yoktu (ölü özellik).
+   * Bağlam = dosya künyesi + RAG parçaları; çıktı output-guard'dan geçer, Hearing.prepJson'a yazılır.
+   */
+  async prepare(user: AuthUser, id: string, input: HearingPrepInput) {
+    assertRole(user, ROLE_SETS.HUKUKI, "duruşma hazırlık paketi üretme");
+    const hearing = await this.prisma.client.hearing.findFirst({
+      where: { id, tenantId: user.tenantId },
+      include: { case: { select: { id: true, title: true, fileNumber: true, courtName: true } } },
+    });
+    if (!hearing) throw new NotFoundException("Duruşma bulunamadı.");
+
+    const context = await this.contextBuilder.buildFor(user.tenantId, hearing.caseId, "HEARING_PREP", PREP_CONTEXT_BUDGET);
+    const query = [context.caseTitle, context.caseFileNumber, "duruşma ara karar tanık bilirkişi delil süre"].filter(Boolean).join(" ");
+    const retrieved = await this.retrieval.retrieveContext(user.tenantId, hearing.caseId, query, {
+      topK: 12,
+      tokenBudget: PREP_CHUNK_BUDGET,
+    });
+    const chunkBlock = retrieved.chunks.length
+      ? retrieved.chunks.map((c, i) => `[BELGE ${i + 1}] ${c.sourceLabel} (id: ${c.documentId})\n${c.content}`).join("\n\n")
+      : "(İndekslenmiş belge parçası bulunamadı.)";
+
+    const messages = buildHearingPrepMessages({
+      hearingDate: hearing.date.toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" }),
+      courtName: hearing.case.courtName ?? "Mahkeme belirtilmemiş",
+      hearingType: hearing.type,
+      purpose: hearing.note ?? undefined,
+      caseContextText: `${context.built.text}\n\nBAĞLAM PARÇALARI:\n${chunkBlock}`,
+    });
+
+    const run = await this.llm.runTask({
+      user,
+      routeKeys: ["HEARING_PREP", "CASE_FULL_ANALYSIS", "CASE_CHAT"],
+      logTaskType: "HEARING_PREP",
+      messages,
+      schema: HearingPrepOutputSchema,
+      findingPaths: [],
+      piiApproved: input.piiApproved,
+      maxTokens: 8192,
+      auditDetail: `hearingId=${id} caseId=${hearing.caseId} parca=${retrieved.chunks.length}`,
+      policyOverrides: context.built.policyOverrides,
+    });
+
+    const prepJson = JSON.stringify(run.data);
+    await this.prisma.client.hearing.update({ where: { id }, data: { prepJson, preparedAt: new Date() } });
+    await this.audit.log({
+      tenantId: user.tenantId,
+      userId: user.userId,
+      action: "HEARING_PREP",
+      entity: "Hearing",
+      entityId: id,
+      detail: `model=${run.model} parca=${retrieved.chunks.length} dosya=${hearing.case.fileNumber ?? hearing.case.title}`,
+    });
+    const sections = run.data.sections;
+    const unsourced = Object.entries(sections)
+      .filter(([, s]) => !s.noData && (!s.sourceRefs || s.sourceRefs.length === 0))
+      .map(([k]) => k);
+    return {
+      hearingId: id,
+      prep: run.data,
+      model: run.model,
+      advisory: run.advisory,
+      warnings: unsourced.length ? [`Kaynaksız (teyitsiz) bölümler: ${unsourced.join(", ")}`] : [],
+      retrievalMode: retrieved.mode,
+    };
+  }
 
   /** GET /hearings — tarih aralığı + dosya + durum süzgeçleri. */
   async list(
     tenantId: string,
-    params: { from?: string; to?: string; caseId?: string; status?: string; page?: string; limit?: string },
+    params: { from?: string; to?: string; caseId?: string; status?: string; page?: string; limit?: string; attendeeUserId?: string },
     viewer?: AuthUser
   ) {
     const where: Prisma.HearingWhereInput = { tenantId, ...(viewer ? relatedCaseVisibilityWhere(viewer) : {}) };
@@ -50,6 +198,7 @@ export class HearingsService {
     if (params.from || params.to) where.date = dateFilter;
 
     if (params.caseId) where.caseId = params.caseId;
+    if (params.attendeeUserId) where.attendeeUserId = params.attendeeUserId;
     if (params.status) {
       if (!(HEARING_STATUSES as readonly string[]).includes(params.status)) {
         throw new BadRequestException("Geçersiz duruşma durumu.");
@@ -61,7 +210,7 @@ export class HearingsService {
       this.prisma.client.hearing.findMany({
         where,
         orderBy: { date: "asc" },
-        include: { case: { select: CASE_SELECT } },
+        include: HEARING_INCLUDE,
         skip: pageParams.skip,
         take: pageParams.take,
       }),
@@ -73,7 +222,7 @@ export class HearingsService {
   async detail(tenantId: string, id: string) {
     const hearing = await this.prisma.client.hearing.findFirst({
       where: { id, tenantId },
-      include: { case: { select: CASE_SELECT } },
+      include: HEARING_INCLUDE,
     });
     if (!hearing) {
       throw new NotFoundException("Duruşma bulunamadı.");
@@ -117,6 +266,10 @@ export class HearingsService {
       );
     }
 
+    // Faz 1: sorumlu avukat + çakışma kontrolü.
+    const attendeeUserId = await this.resolveAttendee(user.tenantId, input.attendeeUserId);
+    await this.assertNoAttendeeConflict(user.tenantId, attendeeUserId, input.date, null, input.force);
+
     const hearing = await this.prisma.client.hearing.create({
       data: {
         tenantId: user.tenantId,
@@ -128,8 +281,9 @@ export class HearingsService {
         note: input.note ?? undefined,
         prepSummary: input.prepSummary ?? undefined,
         preparedAt: input.prepSummary ? new Date() : undefined,
+        attendeeUserId,
       },
-      include: { case: { select: CASE_SELECT } },
+      include: HEARING_INCLUDE,
     });
 
     await this.prisma.client.timelineEvent.create({
@@ -160,15 +314,24 @@ export class HearingsService {
     assertRole(user, ROLE_SETS.OPERASYON, "duruşma güncelleme");
     const existing = await this.requireHearing(user.tenantId, id);
 
-    const data: Prisma.HearingUncheckedUpdateInput = { ...(input as Prisma.HearingUncheckedUpdateInput) };
+    // `force` ve `attendeeUserId` veri değil, karar alanlarıdır — ayrı işlenir.
+    const { force, attendeeUserId: attendeeInput, ...rest } = input;
+    const data: Prisma.HearingUncheckedUpdateInput = { ...(rest as Prisma.HearingUncheckedUpdateInput) };
     if (input.prepSummary && !existing.preparedAt) {
       data.preparedAt = new Date();
+    }
+    if (attendeeInput !== undefined) {
+      data.attendeeUserId = await this.resolveAttendee(user.tenantId, attendeeInput);
+    }
+    if (attendeeInput !== undefined || input.date) {
+      const effectiveAttendee = attendeeInput !== undefined ? (data.attendeeUserId as string | null) : existing.attendeeUserId;
+      await this.assertNoAttendeeConflict(user.tenantId, effectiveAttendee, input.date ?? existing.date, id, force);
     }
 
     const hearing = await this.prisma.client.hearing.update({
       where: { id },
       data,
-      include: { case: { select: CASE_SELECT } },
+      include: HEARING_INCLUDE,
     });
 
     if (input.date && input.date.getTime() !== existing.date.getTime()) {
@@ -285,7 +448,7 @@ export class HearingsService {
   private async requireHearing(tenantId: string, id: string) {
     const hearing = await this.prisma.client.hearing.findFirst({
       where: { id, tenantId },
-      select: { id: true, caseId: true, date: true, status: true, type: true, courtroom: true, preparedAt: true },
+      select: { id: true, caseId: true, date: true, status: true, type: true, courtroom: true, preparedAt: true, attendeeUserId: true },
     });
     if (!hearing) {
       throw new NotFoundException("Duruşma bulunamadı.");

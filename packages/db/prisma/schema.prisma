@@ -141,6 +141,8 @@ model User {
   ssoSubject      String?
   /// Enterprise++: cihaz bazlı oturum kayıtları (JWT jti).
   sessions        UserSession[]
+  /// Faz 1: sorumlu avukat olduğu duruşmalar.
+  attendedHearings Hearing[] @relation("HearingAttendee")
   /// Son kullanılan TOTP adımı — tekrar oynatma koruması (platformla aynı desen).
   lastTotpCounter Int?
 
@@ -470,11 +472,17 @@ model Hearing {
   preparedAt  DateTime?
   /// Duruşma hazırlık notu / brifing özeti
   prepSummary String?
+  /// Faz 1: duruşmaya girecek sorumlu avukat — "benim duruşmalarım" + çakışma kontrolü.
+  attendeeUserId String?
+  attendee       User?  @relation("HearingAttendee", fields: [attendeeUserId], references: [id], onDelete: SetNull)
+  /// Faz 1: HEARING_PREP ajanının 9 bölümlü hazırlık paketi (JSON).
+  prepJson    String?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
   @@index([tenantId, date])
   @@index([tenantId, status, date])
+  @@index([tenantId, attendeeUserId, date])
   @@index([caseId])
 }
 
@@ -511,6 +519,11 @@ model Deadline {
   computeNote   String? // Hesap izi: tebliğ tarihi, yöntem, tatil kaydırması
   /// Hesabın dayandığı DeadlineRule.key (örn. "HMK_CEVAP")
   ruleKey       String?
+  /// Faz 1: hesabın dayandığı kural seti sürümü (@nomosos/legal-core DEADLINE_RULES_VERSION).
+  rulesVersion  String?
+  /// Faz 1: AI önerisinin çıktığı kaynak belge — onay ekranında belge yan yana okunur.
+  sourceDocumentId String?
+  sourceDocument   Document? @relation("DeadlineSourceDocument", fields: [sourceDocumentId], references: [id], onDelete: SetNull)
   /// Süreyi başlatan olay tarihi (tebliğ/karar/olay)
   triggerDate   DateTime?
   /// Tebligat yöntemi — bazı sürelerde başlangıç gününü etkiler
@@ -760,6 +773,8 @@ model Document {
   @@index([caseId])
   @@index([tenantId, hash])
   @@index([tenantId, ocrStatus])
+  /// Faz 1: bu belgeden türeyen süre önerileri.
+  sourcedDeadlines Deadline[] @relation("DeadlineSourceDocument")
 }
 
 /// Belgenin RAG için bölünmüş parçası. İÇERİK MASKELİ SAKLANIR (KVKK):

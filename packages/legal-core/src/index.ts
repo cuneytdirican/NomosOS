@@ -64,6 +64,11 @@ export {
   SUPPORTED_HOLIDAY_YEARS,
   TR_HOLIDAYS_2026,
   TR_HOLIDAYS_2027,
+  TR_HOLIDAYS_2028,
+  TR_HOLIDAYS_2029,
+  TR_HOLIDAYS_2030,
+  TR_HOLIDAYS_2031,
+  TR_HOLIDAYS_2032,
   TR_HOLIDAYS_BY_YEAR,
   buildHolidayIndex,
   expandJudicialRecess,
@@ -78,12 +83,14 @@ export {
   nextWorkingDay,
   officialHolidaysOn,
   previousWorkingDay,
+  projectedYearHolidays,
   strictNextWorkingDay,
   toHolidayInputs,
 } from "./holidays";
 
 // ── Kural seti ──────────────────────────────────────────────────────────────
 export {
+  DEADLINE_RULES_VERSION,
   PLANNED_RULE_KEYS,
   SYSTEM_DEADLINE_RULES,
   SYSTEM_DEADLINE_RULE_KEYS,

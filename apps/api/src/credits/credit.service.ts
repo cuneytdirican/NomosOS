@@ -309,6 +309,13 @@ export class CreditService implements OnModuleInit {
 
     try {
       switch (kind) {
+        case "HEARING": {
+          const rows = await p.hearing.findMany({
+            where: { id: { in: unique }, tenantId },
+            select: { caseId: true },
+          });
+          return rows.map((r) => r.caseId);
+        }
         case "STRATEGY": {
           const rows = await p.strategy.findMany({
             where: { id: { in: unique }, tenantId },

@@ -118,6 +118,11 @@ export interface Hearing {
   note?: string | null;
   preparedAt?: string | null;
   prepSummary?: string | null;
+  /** Faz 1: duruşmaya girecek sorumlu avukat. */
+  attendeeUserId?: string | null;
+  attendee?: { id: string; fullName: string } | null;
+  /** Faz 1: HEARING_PREP hazırlık paketi (JSON). */
+  prepJson?: string | null;
   case?: CaseSummary | null;
 }
 
@@ -135,6 +140,9 @@ export interface Deadline {
   serviceMethod?: ServiceMethod | null;
   owner?: { id: string; fullName?: string } | null;
   case?: CaseSummary | null;
+  /** Faz 1: AI önerisinin kaynak belgesi (onayda yan yana okunur). */
+  sourceDocument?: { id: string; name: string } | null;
+  rulesVersion?: string | null;
 }
 
 export interface DeadlineRule {

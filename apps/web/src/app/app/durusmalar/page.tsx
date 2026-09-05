@@ -12,8 +12,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ApiError, api, fetchPaged, SERVER_MAX_PAGE_SIZE } from "@/lib/api";
+import { ApiError, api, fetchPaged, getStoredUser, SERVER_MAX_PAGE_SIZE } from "@/lib/api";
 import type { Hearing } from "@/lib/types";
+import { HearingPrepModal, parsePrep, type HearingPrepPackage } from "@/components/hearing-prep-modal";
 import {
   Badge,
   Button,
@@ -53,6 +54,35 @@ export default function DurusmalarPage() {
   const [resultHearing, setResultHearing] = useState<Hearing | null>(null);
   const [total, setTotal] = useState(0);
   const [truncated, setTruncated] = useState(false);
+  // Faz 1: "benim duruşmalarım", sonuç girilmemiş liste, AI hazırlık paketi.
+  const [onlyMine, setOnlyMine] = useState(false);
+  const [pending, setPending] = useState<Hearing[]>([]);
+  const [prepBusy, setPrepBusy] = useState<string | null>(null);
+  const [prepView, setPrepView] = useState<{ title: string; prep: HearingPrepPackage | null; model?: string | null; warnings?: string[] } | null>(null);
+  const myId = getStoredUser()?.id ?? null;
+
+  const loadPending = useCallback(async () => {
+    try {
+      const res = await api<{ items: Hearing[] }>("/hearings/pending-results");
+      setPending(res.items);
+    } catch {
+      setPending([]);
+    }
+  }, []);
+
+  async function prepare(h: Hearing) {
+    setActionError(null);
+    setPrepBusy(h.id);
+    try {
+      const res = await api<{ prep: HearingPrepPackage; model?: string; warnings?: string[] }>(`/hearings/${h.id}/prep`, { method: "POST", body: {} });
+      setPrepView({ title: `Hazırlık paketi — ${h.case?.title ?? "Duruşma"}`, prep: res.prep, model: res.model, warnings: res.warnings });
+      reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : "Hazırlık paketi üretilemedi.");
+    } finally {
+      setPrepBusy(null);
+    }
+  }
 
   /**
    * SAYFALAMA ZARFI OKUNUR (denetim bulgusu K-15).
@@ -84,11 +114,15 @@ export default function DurusmalarPage() {
 
   useEffect(() => {
     void load(from, to);
+    void loadPending();
     // İlk yükleme — içinde bulunulan hafta.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const reload = useCallback(() => void load(from, to), [load, from, to]);
+  const reload = useCallback(() => {
+    void load(from, to);
+    void loadPending();
+  }, [load, from, to, loadPending]);
 
   function shiftWeek(offset: number) {
     const next = addDays(weekStart, offset * 7);
@@ -121,7 +155,11 @@ export default function DurusmalarPage() {
     }
   }
 
-  const grouped = useMemo(() => groupByDay(hearings), [hearings]);
+  const visibleHearings = useMemo(
+    () => (onlyMine && myId ? hearings.filter((h) => h.attendeeUserId === myId) : hearings),
+    [hearings, onlyMine, myId],
+  );
+  const grouped = useMemo(() => groupByDay(visibleHearings), [visibleHearings]);
   const planned = hearings.filter((h) => h.status === "PLANLANDI").length;
   const done = hearings.filter((h) => h.status === "YAPILDI").length;
   const postponed = hearings.filter((h) => h.status === "ERTELENDI").length;
@@ -154,6 +192,23 @@ export default function DurusmalarPage() {
           + Yeni Duruşma
         </Button>
       </div>
+
+      {pending.length > 0 && (
+        <Card title={`Sonucu girilmemiş duruşmalar (${pending.length})`}>
+          <ul className="divide-y divide-slate-100">
+            {pending.slice(0, 10).map((h) => (
+              <li key={h.id} className="flex flex-wrap items-center justify-between gap-2 py-2 first:pt-0 last:pb-0">
+                <div className="min-w-0 text-sm">
+                  <span className="font-medium text-slate-900">{h.case?.title ?? "Dosya"}</span>
+                  <span className="text-slate-500"> · {fmtDayHeading(h.date)} {fmtTime(h.date)}</span>
+                  {h.attendee && <span className="text-slate-500"> · {h.attendee.fullName}</span>}
+                </div>
+                <Button size="sm" onClick={() => setResultHearing(h)}>Sonuç gir</Button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Aralıktaki Duruşma" value={total} tone="navy" hint={weekLabel} />
@@ -191,6 +246,12 @@ export default function DurusmalarPage() {
             <Button type="submit" disabled={loading}>
               Listele
             </Button>
+            {myId && (
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input type="checkbox" checked={onlyMine} onChange={(e) => setOnlyMine(e.target.checked)} />
+                Yalnız benim duruşmalarım
+              </label>
+            )}
           </form>
         </div>
 
@@ -204,8 +265,8 @@ export default function DurusmalarPage() {
           <Spinner />
         ) : error ? (
           <ErrorBox message={error} />
-        ) : hearings.length === 0 ? (
-          <EmptyState message="Seçili aralıkta duruşma bulunmuyor." />
+        ) : visibleHearings.length === 0 ? (
+          <EmptyState message={onlyMine ? "Bu aralıkta size atanmış duruşma yok." : "Seçili aralıkta duruşma bulunmuyor."} />
         ) : (
           <div className="space-y-6">
             {/* Sessiz kırpma yasak (denetim bulgusu K-15). */}
@@ -258,6 +319,7 @@ export default function DurusmalarPage() {
                               {h.case?.courtName ?? "—"}
                               {h.courtroom ? ` · Salon ${h.courtroom}` : ""}
                               {h.case?.client?.name ? ` · ${h.case.client.name}` : ""}
+                              {h.attendee ? ` · Av. ${h.attendee.fullName}` : " · sorumlu avukat atanmadı"}
                             </p>
                             {h.prepSummary && (
                               <p className="mt-1 rounded bg-slate-50 px-2 py-1 text-xs text-slate-600">
@@ -275,6 +337,18 @@ export default function DurusmalarPage() {
                         <Button size="sm" onClick={() => setResultHearing(h)}>
                           Sonuç Gir
                         </Button>
+                        <Button size="sm" variant="secondary" disabled={prepBusy === h.id} onClick={() => void prepare(h)}>
+                          {prepBusy === h.id ? "Hazırlanıyor…" : "AI ile hazırla"}
+                        </Button>
+                        {h.prepJson && (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => setPrepView({ title: `Hazırlık paketi — ${h.case?.title ?? "Duruşma"}`, prep: parsePrep(h.prepJson) })}
+                          >
+                            Paketi gör
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="secondary"
@@ -321,6 +395,14 @@ export default function DurusmalarPage() {
         hearing={resultHearing}
         onClose={() => setResultHearing(null)}
         onSaved={reload}
+      />
+      <HearingPrepModal
+        open={!!prepView}
+        onClose={() => setPrepView(null)}
+        title={prepView?.title ?? "Hazırlık paketi"}
+        prep={prepView?.prep ?? null}
+        model={prepView?.model}
+        warnings={prepView?.warnings}
       />
     </div>
   );

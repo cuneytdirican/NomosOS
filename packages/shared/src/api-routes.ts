@@ -226,6 +226,9 @@ export const HEARINGS_ROUTES = {
   create: "/hearings",
   detail: (id: string) => `/hearings/${id}`,
   result: (id: string) => `/hearings/${id}/result`,
+  /** Faz 1: sonucu girilmemiş duruşmalar + HEARING_PREP hazırlık paketi. */
+  pendingResults: "/hearings/pending-results",
+  prep: (id: string) => `/hearings/${id}/prep`,
 } as const;
 
 export const TASKS_ROUTES = {
@@ -551,6 +554,9 @@ export const JUDICIAL_ROUTES = {
 /** Birleşik ajanda — dört kaynak tek takvimde. */
 export const AGENDA_ROUTES = {
   list: "/agenda",
+  /** Faz 1: ICS takvim aboneliği (token üret / beslemeyi çek). */
+  feedToken: "/agenda/feed-token",
+  feedIcs: "/agenda/feed.ics",
 } as const;
 
 /** Dosya giderleri (İİK m.202 kapatma hesabı dâhil). */

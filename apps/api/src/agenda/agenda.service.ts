@@ -14,6 +14,10 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { officialHolidaysOn, isInJudicialRecess } from "@nomosos/legal-core";
 import { PrismaService } from "../prisma/prisma.service";
+import { JwtService } from "@nestjs/jwt";
+import { UnauthorizedException } from "@nestjs/common";
+import { apiPublicUrl } from "../common/public-urls";
+import { buildIcs } from "./ics";
 import { relatedCaseVisibilityWhere } from "../common/case-visibility";
 import type { AuthUser } from "../common/types";
 import { parseDateParam, parseRangeEnd } from "../common/dates";
@@ -62,9 +66,62 @@ export interface AgendaResponse {
 
 const MAX_RANGE_DAYS = 62;
 
+/** ICS beslemesi token'ı — kiracı JWT'sinden AYRI audience; API oturumu açmaz. */
+export const AGENDA_ICS_AUDIENCE = "agenda-ics";
+const ICS_LOOKBACK_DAYS = 7;
+const ICS_LOOKAHEAD_DAYS = 55;
+
 @Injectable()
 export class AgendaService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwt: JwtService,
+  ) {}
+
+  /** Faz 1: kişisel ICS token'ı + abone adresi. */
+  async issueFeedToken(user: AuthUser): Promise<{ token: string; url: string; expiresInDays: number }> {
+    const token = await this.jwt.signAsync(
+      { sub: user.userId, tenantId: user.tenantId, role: user.role },
+      { audience: AGENDA_ICS_AUDIENCE, expiresIn: "365d" },
+    );
+    return { token, url: `${apiPublicUrl()}/api/v1/agenda/feed.ics?token=${encodeURIComponent(token)}`, expiresInDays: 365 };
+  }
+
+  /** Faz 1: token → kullanıcının ajandası (7 gün geri, 55 gün ileri) → ICS metni. */
+  async feedIcs(token: string): Promise<string> {
+    let payload: { sub: string; tenantId: string; role: AuthUser["role"] };
+    try {
+      payload = await this.jwt.verifyAsync(token, { audience: AGENDA_ICS_AUDIENCE });
+    } catch {
+      throw new UnauthorizedException("Takvim bağlantısı geçersiz ya da süresi dolmuş; Ajanda'dan yeni bağlantı üretin.");
+    }
+    const active = await this.prisma.client.user.findFirst({
+      where: { id: payload.sub, tenantId: payload.tenantId, isActive: true },
+      select: { id: true, role: true },
+    });
+    if (!active) throw new UnauthorizedException("Takvim bağlantısının sahibi artık aktif değil.");
+    const user: AuthUser = { userId: active.id, tenantId: payload.tenantId, role: active.role as AuthUser["role"] };
+    const now = new Date();
+    const from = new Date(now.getTime() - ICS_LOOKBACK_DAYS * 86_400_000).toISOString().slice(0, 10);
+    const to = new Date(now.getTime() + ICS_LOOKAHEAD_DAYS * 86_400_000).toISOString().slice(0, 10);
+    const agenda = await this.agenda(user, { from, to });
+    return buildIcs(
+      agenda.events.map((e) => ({
+        id: e.id,
+        kind: e.kind,
+        title: e.title,
+        date: e.date,
+        endAt: e.endAt,
+        caseTitle: e.caseTitle ?? null,
+        clientName: e.clientName ?? null,
+        location: e.location ?? null,
+        note: e.note ?? null,
+        legalBasis: e.legalBasis ?? null,
+      })),
+      "NomosOS Ajanda",
+      now,
+    );
+  }
 
   /**
    * GET /agenda?from=&to=&assigneeId=
