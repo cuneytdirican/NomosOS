@@ -23,7 +23,39 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 5 Eylül 2026, 20:30
+# 🔖 KALDIĞIM YER — 5 Eylül 2026, 23:30
+
+> Üç persona planı (`~/.claude/plans/wiggly-giggling-lighthouse.md`) yürüyor:
+> **Faz 0 ✅ (`eaccbb4`) · Faz 1 ✅ (`8889048` + `524afaf`)** · sırada Faz 2.
+
+**FAZ 1 — AVUKAT ÇEKİRDEĞİ TAMAMLANDI** (belge: `docs/faz1-avukat-cekirdegi.md`; canlı doğrulandı):
+1. **OCR** tesseract.js sunucu içi — görsel + taranmış PDF (gömülü JPEG sayfa akışları);
+   canlı: taranmış JPEG tebligat 10 sn'de doğru Türkçe metin (`ocrStatus=TAMAM`). Hat
+   kuyruksuz da HTTP dışında koşar.
+2. **HEARING_PREP canlı:** `POST /hearings/:id/prep` → 9 bölüm, output-guard, `prepJson`;
+   canlı: Gemma 4 ile 2.5 dk, 9/9 bölüm, 0 uyarı, `SourceRefSchema` null toleransı.
+3. **Duruşma:** sorumlu avukat (`attendeeUserId`), ±2 sa çakışma → 409 / `force`,
+   `GET /hearings/pending-results`; web: "yalnız benim duruşmalarım", bekleyen sonuç
+   listesi, "AI ile hazırla" + paket modalı.
+4. **ICS:** `POST /agenda/feed-token` + `GET /agenda/feed.ics` (canlı: 41 VEVENT).
+5. **Süre kuralları 30 → 52** (AYM/AİHM/İYUK/İİK 106 vd./CMK/KVKK/TMK/TTK/SMK/HMK 377/İş K.
+   m.20), tatiller 2028-2032, `DEADLINE_RULES_VERSION` → `Deadline.rulesVersion`;
+   seed: 52 kural, 419 tatil günü.
+6. `Deadline.sourceDocumentId` + Süreler'de "Kaynak belgeyi oku"; `preferredChannels`;
+   dosya detayında vekaletname kartı.
+Testler: legal-core 120, legal-ai 81, api 1283, web 100; lint 0.
+
+**SIRADA: FAZ 2 — bildirim gerçek kanallar:** SMTP (nodemailer, tam çalışır), SMS
+(Netgsm) + WhatsApp Cloud API adaptörleri + fixture sözleşme testleri, `ExpoPushProvider`
++ mobil jeton, büro parola sıfırlama (`/auth/forgot-password`, `/auth/reset-password`),
+demo talebi → platform e-postası, Announcement → `GET /announcements` + web şeridi, outbox
+budama işi. Mevcut registry: `communication/channel-providers.ts` (Noop/Portal),
+`scheduler/push/push-provider.ts` (Noop), portal parola sıfırlama deseni
+(`portal-auth.service.ts` forgot/reset, PortalInvite token).
+
+---
+
+## 🔖 ÖNCEKİ KALDIĞIM YER — 5 Eylül 2026, 20:30
 
 > **ÜÇ PERSONA BOŞLUK ANALİZİ → 9 FAZLI PLAN** onaylandı (plan dosyası:
 > `~/.claude/plans/wiggly-giggling-lighthouse.md`; ~150 kanıtlı bulgu: firma sahibi /
