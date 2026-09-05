@@ -7,6 +7,7 @@ import {
   SectionHeading,
 } from "@/components/marketing/primitives";
 import { pricing } from "@/components/marketing/content";
+import { PublicPlans } from "@/components/marketing/PublicPlans";
 
 /** 3.10 Fiyatlandırma — üç plan tablosu + kredi sistemi açıklaması. */
 
@@ -16,12 +17,17 @@ export const metadata: Metadata = {
     "Solo, Büro ve Kurumsal planlar; yapay zekâ kredisi nasıl çalışır, kredi tüketmeyen işlemler ve krediniz biterse ne olur.",
 };
 
+export const revalidate = 300;
+
 export default function FiyatlandirmaPage() {
   return (
     <MarketingShell>
       <Section>
         <Container>
           <SectionHeading kicker={pricing.kicker} title={pricing.title} lead={pricing.lead} />
+
+          {/* Faz 8A: fiyatlar PlanTier kataloğundan (GET /public/plans); API yoksa teklif notu. */}
+          <PublicPlans />
 
           {/* Plan karşılaştırma tablosu — mobilde yatay kaydırılır */}
           <div className="mt-12 overflow-x-auto rounded-[5px] border border-[var(--rule)] bg-white">

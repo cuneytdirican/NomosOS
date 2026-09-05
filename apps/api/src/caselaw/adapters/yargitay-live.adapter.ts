@@ -32,7 +32,7 @@ export interface LiveCaseLawHit {
   status?: string;
   sourceUrl: string;
   sourceKind: "CANLI";
-  sourceAdapter: "YARGITAY_CANLI" | "EMSAL_UYAP";
+  sourceAdapter: "YARGITAY_CANLI" | "EMSAL_UYAP" | "DANISTAY_CANLI";
   totalFound?: number;
 }
 
@@ -50,9 +50,24 @@ interface LiveListRow {
 export interface LiveAdapterConfig {
   baseUrl: string;
   /** Hit'lerde tasinan kaynak anahtari (rozet/rota icin). */
-  adapterKey: "YARGITAY_CANLI" | "EMSAL_UYAP";
+  adapterKey: "YARGITAY_CANLI" | "EMSAL_UYAP" | "DANISTAY_CANLI";
   /** `daire` alaninin basina eklenen ek (Yargitay'da "Yargitay "; Emsal'da tam ad gelir). */
   courtPrefix: string;
+  /**
+   * FAZ 8D - arama govdesi (varsayilan Yargitay/Emsal sozlesmesi: aranan/arananKelime).
+   * Danistay ayni saglayicinin urunudur ama govde anahtar kelime DIZILERI ister
+   * (andKelimeler/orKelimeler/...). Sozlesme fixture testiyle korunur; canli
+   * dogrulama ag erisimi olan ortamda yapilir (docs/faz8-buyume.md).
+   */
+  searchBody?: (q: string, pageSize: number, pageNumber: number) => Record<string, unknown>;
+  /** /arama on-adimi atlanir mi (Danistay'da oturum kabugu gerekmez). */
+  skipAramaStep?: boolean;
+  /**
+   * getDokuman ek sorgu parametreleri. CANLI BULGU (5 Eylul 2026): Danistay ucu
+   * `arananKelime` parametresi olmadan "Required request parameter 'arananKelime'
+   * ... is not present" hatasi doner (vurgulama icin kullanilir; bos deger kabul edilmez).
+   */
+  documentQuery?: string;
 }
 
 /** Kaynak 1: Yargitay Karar Arama. */
@@ -73,6 +88,33 @@ export const EMSAL_LIVE_CONFIG: LiveAdapterConfig = {
 export const EMSAL_LIVE = "EMSAL_LIVE_ADAPTER";
 
 /**
+ * Kaynak 3 (FAZ 8D): Danistay Karar Arama - idari yargi. Ayni saglayici
+ * (karararama.*.gov.tr), ayni /aramalist + /getDokuman zarfi; arama govdesi
+ * anahtar kelime dizileriyle. Sonuc satirlari daire/esasNo/kararNo/kararTarihi
+ * tasir (durum alani yok).
+ */
+export const DANISTAY_LIVE_CONFIG: LiveAdapterConfig = {
+  baseUrl: "https://karararama.danistay.gov.tr",
+  adapterKey: "DANISTAY_CANLI",
+  courtPrefix: "Dan\u0131\u015ftay ",
+  skipAramaStep: true,
+  documentQuery: "&arananKelime=karar",
+  searchBody: (q, pageSize, pageNumber) => ({
+    data: {
+      andKelimeler: [q],
+      orKelimeler: [],
+      notAndKelimeler: [],
+      notOrKelimeler: [],
+      pageSize,
+      pageNumber,
+    },
+  }),
+};
+
+/** DI anahtari: Danistay orneklemesi. */
+export const DANISTAY_LIVE = "DANISTAY_LIVE_ADAPTER";
+
+/**
  * Resmi belge govdesini (XML zarfi + gomulu HTML) TEMIZ METNE cevirir.
  *
  * Girdi bicimi (getDokuman): `<html>...</html>` - kunye koyu `<b>` blogunda,
@@ -87,19 +129,13 @@ export function cleanOfficialDocument(raw: string): string {
   // XML bildirimi ve zarflar.
   s = s.replace(/<\?xml[^>]*\?>/gi, "");
   s = s.replace(/<\/?data[^>]*>/gi, "");
-  // Kunye/karar bloklari satir sonuna.
-  s = s.replace(/<br\s*\/?>/gi, "\n");
-  s = s.replace(/<\/(p|div|li|ul|ol|tr|h[1-6])>/gi, "\n");
-  // Kalan tum etiketler dusar.
-  s = s.replace(/<[^>]+>/g, "");
-  // HTML varliklari.
-  s = s
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&apos;/gi, "'");
+  s = stripTags(s);
+  s = decodeEntities(s);
+  // FAZ 8D canli bulgu: Danistay zarfi karar govdesini HTML-KACISLI (&lt;html&gt;...) tasir;
+  // varliklar cozulunce etiketler yeniden ortaya cikar -> ikinci temizlik turu.
+  if (/<(html|body|p|div|br|span|font|table)\b/i.test(s)) {
+    s = decodeEntities(stripTags(s));
+  }
   // Bosluk/satir duzeni.
   s = s.replace(/\r/g, "");
   s = s
@@ -108,6 +144,28 @@ export function cleanOfficialDocument(raw: string): string {
     .join("\n");
   s = s.replace(/\n{3,}/g, "\n\n").trim();
   return s;
+}
+
+function stripTags(input: string): string {
+  let s = input;
+  // <style>/<script> bloklari (vurgulama CSS'i, tema betigi) metne sizmasin.
+  s = s.replace(/<style[\s\S]*?<\/style>/gi, "");
+  s = s.replace(/<script[\s\S]*?<\/script>/gi, "");
+  // Kunye/karar bloklari satir sonuna.
+  s = s.replace(/<br\s*\/?>/gi, "\n");
+  s = s.replace(/<\/(p|div|li|ul|ol|tr|h[1-6])>/gi, "\n");
+  // Kalan tum etiketler dusar.
+  return s.replace(/<[^>]+>/g, "");
+}
+
+function decodeEntities(input: string): string {
+  return input
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&amp;/gi, "&");
 }
 
 export interface LiveCaseLawDocument {
@@ -144,7 +202,7 @@ export class YargitayLiveAdapter {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ARAMA_TIMEOUT_MS);
     try {
-      const res = await fetch(`${this.cfg.baseUrl}/getDokuman?id=${externalId}`, {
+      const res = await fetch(`${this.cfg.baseUrl}/getDokuman?id=${externalId}${this.cfg.documentQuery ?? ""}`, {
         signal: controller.signal,
         // Icerik uzlasmasi: resmi uc Accept basligina bakar - application/json
         // istenirse JSON zarfi, text/xml istenirse HAM XML doner. Zarf istiyoruz.
@@ -179,6 +237,11 @@ export class YargitayLiveAdapter {
       if (text.trim().length < 40) {
         throw new Error("Karar belgesi bo\u015f ya da okunamad\u0131.");
       }
+      // FAZ 8D canli bulgu: Danistay gecersiz kimlikte 200 + HTML hata sayfasi doner
+      // ("Hata! Hata tarafimiza ulasmis olup..."). Bunu karar metni diye gostermeyelim.
+      if (/^Hata!/.test(text) || /Ana sayfaya gitmek i\u00e7in/.test(text.slice(0, 400))) {
+        throw new Error("Karar belgesi al\u0131namad\u0131: resm\u00ee kaynak hata sayfas\u0131 d\u00f6nd\u00fcrd\u00fc (kimlik ge\u00e7ersiz olabilir).");
+      }
       return { externalId, text, sourceUrl: `${this.cfg.baseUrl}/getDokuman?id=${externalId}` };
     } finally {
       clearTimeout(timer);
@@ -203,14 +266,15 @@ export class YargitayLiveAdapter {
 
     // 1) /arama - oturumu baslatir. Bu uc HER ZAMAN HTML dondurur (sonuc
     //    sayfasi kabugu); govdesi kullanilmaz, yalniz 200 beklenir.
-    await this.postText(`${this.cfg.baseUrl}/arama`, { data: { aranan: q, arananKelime: q } }, cookie);
+    if (!this.cfg.skipAramaStep) {
+      await this.postText(`${this.cfg.baseUrl}/arama`, { data: { aranan: q, arananKelime: q } }, cookie);
+    }
 
     // 2) /aramalist - sonuc listesi (JSON), ISTENEN SAYFA.
-    const res = await this.post(
-      `${this.cfg.baseUrl}/aramalist`,
-      { data: { aranan: q, arananKelime: q, pageSize: pageNumber * pageSize, pageNumber } },
-      cookie,
-    );
+    const searchBody = this.cfg.searchBody
+      ? this.cfg.searchBody(q, pageNumber * pageSize, pageNumber)
+      : { data: { aranan: q, arananKelime: q, pageSize: pageNumber * pageSize, pageNumber } };
+    const res = await this.post(`${this.cfg.baseUrl}/aramalist`, searchBody, cookie);
     const payload = (res.data ?? {}) as {
       data?: LiveListRow[];
       recordsFiltered?: number;

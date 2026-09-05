@@ -15,7 +15,7 @@
  * kiracıya ait olan tek şey CaseLawReference'tır ve her sorgusunda tenantId süzgeci vardır.
  */
 
-import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadGatewayException, BadRequestException, HttpException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import type { CaseLawDocument } from "@nomosos/db";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
@@ -32,6 +32,7 @@ import {
 } from "./prompts/caselaw-search";
 import {
   EMSAL_LIVE,
+  DANISTAY_LIVE,
   LiveCaseLawHit,
   YargitayLiveAdapter,
 } from "./adapters/yargitay-live.adapter";
@@ -75,6 +76,8 @@ export class CaselawService {
     private readonly liveAdapter: YargitayLiveAdapter,
     /** CANLI kaynak 2: Emsal/UYAP — tüm mahkeme dereceleri (emsal.uyap.gov.tr). */
     @Inject(EMSAL_LIVE) private readonly emsalAdapter: YargitayLiveAdapter,
+    /** CANLI kaynak 3 (Faz 8D): Danıştay Karar Arama — idari yargı. */
+    @Inject(DANISTAY_LIVE) private readonly danistayAdapter: YargitayLiveAdapter,
   ) {}
 
   // ------------------------------------------------------------------ //
@@ -120,7 +123,9 @@ export class CaselawService {
       const q = params.q ?? "";
       const run = (adapter: YargitayLiveAdapter) =>
         q.trim().length >= 3 ? adapter.search(q, liveLimit, livePage) : Promise.resolve({ hits: [] as LiveCaseLawHit[] });
-      const settled = await Promise.allSettled([run(this.liveAdapter), run(this.emsalAdapter)]);
+      // Faz 8D: ÜÇ resmî kaynak (Yargıtay + Emsal/UYAP + Danıştay). Hepsi düşerse liveError.
+      const sources = [this.liveAdapter, this.emsalAdapter, this.danistayAdapter];
+      const settled = await Promise.allSettled(sources.map((a) => run(a)));
       const hits: LiveCaseLawHit[] = [];
       const errors: string[] = [];
       for (const s of settled) {
@@ -128,10 +133,10 @@ export class CaselawService {
         else errors.push(s.reason instanceof Error ? s.reason.message : String(s.reason));
       }
       live = hits;
-      if (errors.length === 2) {
+      if (errors.length === sources.length) {
         liveError = `Canlı aramalar yapılamadı: ${errors.join(" · ")}`;
-      } else if (errors.length === 1) {
-        liveError = `Bir canlı kaynak erişilemedi: ${errors[0]}`;
+      } else if (errors.length > 0) {
+        liveError = `${errors.length} canlı kaynak erişilemedi: ${errors.join(" · ")}`;
       }
     }
 
@@ -145,10 +150,11 @@ export class CaselawService {
 
   /**
    * Canlı karar belgesi — temiz metin; havuza yazılmaz.
-   * `source` parametresi kaynağı seçer: YARGITAY_CANLI (varsayılan) | EMSAL_UYAP.
+   * `source` parametresi kaynağı seçer: YARGITAY_CANLI (varsayılan) | EMSAL_UYAP | DANISTAY_CANLI.
    */
   async liveDocument(externalId: string, source?: string) {
-    const adapter = source === "EMSAL_UYAP" ? this.emsalAdapter : this.liveAdapter;
+    const adapter =
+      source === "EMSAL_UYAP" ? this.emsalAdapter : source === "DANISTAY_CANLI" ? this.danistayAdapter : this.liveAdapter;
     // Kısa süreli bellek önbelleği: aynı karar art arda açıldığında resmî
     // kaynağı yormamak için (10 dk). Anahtar kaynak+kimlik.
     const cacheKey = `${source ?? "YARGITAY_CANLI"}:${externalId}`;
@@ -156,7 +162,14 @@ export class CaselawService {
     if (cached && Date.now() - cached.at < 10 * 60 * 1000) {
       return cached.doc;
     }
-    const doc = await adapter.fetchDocument(externalId);
+    let doc: Awaited<ReturnType<YargitayLiveAdapter["fetchDocument"]>>;
+    try {
+      doc = await adapter.fetchDocument(externalId);
+    } catch (err) {
+      // Faz 8D: resmî kaynağın hatası bizim hatamız değil — 500 yerine 502 + okunur mesaj.
+      if (err instanceof HttpException) throw err;
+      throw new BadGatewayException(err instanceof Error ? err.message : "Canlı kaynak yanıt vermedi.");
+    }
     this.liveDocCache.set(cacheKey, { at: Date.now(), doc });
     return doc;
   }

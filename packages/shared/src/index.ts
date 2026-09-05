@@ -4,3 +4,6 @@ export * from "./ai-task-types";
 export * from "./agent-catalog";
 export * from "./schemas";
 export * from "./hepo-catalog";
+export * from "./legal-docs";
+export * from "./support";
+export * from "./import";

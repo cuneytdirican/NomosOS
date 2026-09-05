@@ -6,5 +6,6 @@ import { ReadinessService } from "./readiness.service";
 @Module({
   controllers: [HealthController],
   providers: [ReadinessService],
+  exports: [ReadinessService],
 })
 export class HealthModule {}

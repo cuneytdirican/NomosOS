@@ -38,6 +38,10 @@ import { TebligatModule } from "./tebligat/tebligat.module";
 import { MailIngestModule } from "./mail-ingest/mail-ingest.module";
 import { SearchModule } from "./search/search.module";
 import { WorkflowModule } from "./workflow/workflow.module";
+import { PublicModule } from "./public/public.module";
+import { TermsModule } from "./terms/terms.module";
+import { SupportTicketsModule } from "./support-tickets/support-tickets.module";
+import { ImportModule } from "./import/import.module";
 import { ModuleAccessGuard } from "./common/guards/module-access.guard";
 import { GlobalRateLimitGuard } from "./common/guards/global-rate-limit.guard";
 import { RandevuModule } from "./randevu/randevu.module";
@@ -232,6 +236,10 @@ function requireJwtSecret(config: ConfigService): string {
     MailIngestModule,
     SearchModule,
     WorkflowModule,
+    PublicModule,
+    TermsModule,
+    SupportTicketsModule,
+    ImportModule,
     // --- Faz 5 modülleri ---
     // İletişim merkezi (Modül 19). CaselawModule'den SONRA: MESSAGE_DRAFT ve
     // MESSAGE_CASE_MATCH koşuları ortak AiRunnerService üzerinden gider.

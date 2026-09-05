@@ -89,6 +89,9 @@ export type AdminAction =
   /** Demo talepleri (tanıtım sitesi) — panelden izleme ve durum yönetimi. */
   | "demoRequests.view"
   | "demoRequests.update"
+  /** FAZ 8C — destek talepleri (kiracı → platform) + SLA sayacı. */
+  | "support.tickets.view"
+  | "support.tickets.update"
   | "audit.view"
   | "audit.export"
   | "board_report.view"
@@ -359,6 +362,20 @@ export const PERMISSION_MATRIX: Matrix = {
     OPS_ADMIN: "full",
     BILLING_ADMIN: N,
     SUPPORT_AGENT: "read",
+    ANALYST_READONLY: N,
+  },
+  "support.tickets.view": {
+    SUPER_ADMIN: "full",
+    OPS_ADMIN: "full",
+    BILLING_ADMIN: "read",
+    SUPPORT_AGENT: "full",
+    ANALYST_READONLY: N,
+  },
+  "support.tickets.update": {
+    SUPER_ADMIN: "full",
+    OPS_ADMIN: "full",
+    BILLING_ADMIN: N,
+    SUPPORT_AGENT: "full",
     ANALYST_READONLY: N,
   },
   "audit.export": {
@@ -634,6 +651,8 @@ export const ACTION_LABELS: Record<AdminAction, string> = {
   "audit.view": "Platform denetim izi görüntüleme",
   "demoRequests.view": "Demo taleplerini görüntüleme",
   "demoRequests.update": "Demo talebi durum güncelleme",
+  "support.tickets.view": "Destek taleplerini görüntüleme",
+  "support.tickets.update": "Destek talebi yanıtlama/durum güncelleme",
   "audit.export": "Platform denetim izi dışa aktarma",
   "board_report.view": "Kurul (yatırımcı) raporu",
   "metrics.overview.view": "Platform genel bakış KPI'ları",

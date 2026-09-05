@@ -55,6 +55,8 @@ export const EP = {
     suspend: (id: string) => `/tenants/${encodeURIComponent(id)}/suspend`,
     activate: (id: string) => `/tenants/${encodeURIComponent(id)}/activate`,
     supportAccess: (id: string) => `/tenants/${encodeURIComponent(id)}/support-access`,
+    /** FAZ 8B — sözleşme kabul geçmişi (üstveri). */
+    terms: (id: string) => `/tenants/${encodeURIComponent(id)}/terms`,
   },
   subscriptions: {
     list: "/subscriptions",
@@ -122,6 +124,12 @@ export const EP = {
   },
   audit: "/audit",
   /** Tanıtım sitesi demo talepleri — kayıt olarak izlenir (e-posta yok). */
+  /** FAZ 8C — destek talepleri + SLA sayacı. */
+  supportTickets: {
+    list: "/support-tickets",
+    detail: (id: string) => `/support-tickets/${encodeURIComponent(id)}`,
+    messages: (id: string) => `/support-tickets/${encodeURIComponent(id)}/messages`,
+  },
   demoRequests: {
     list: "/demo-requests",
     detail: (id: string) => `/demo-requests/${id}`,

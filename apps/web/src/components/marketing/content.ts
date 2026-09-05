@@ -30,6 +30,7 @@ export const nav = {
     { href: "/#moduller", label: "Özellikler" },
     { href: "/guvenlik", label: "Güvenlik" },
     { href: "/fiyatlandirma", label: "Fiyatlandırma" },
+    { href: "/blog", label: "Blog" },
     { href: "/#sss", label: "SSS" },
   ],
   login: { href: "/giris", label: "Giriş Yap" },
@@ -461,27 +462,30 @@ export const footer = {
         { href: "/#moduller", label: "Özellikler" },
         { href: "/guvenlik", label: "Güvenlik" },
         { href: "/fiyatlandirma", label: "Fiyatlandırma" },
-        { href: "/#uyap", label: "UYAP Eklentisi" },
+        { href: "/eklenti", label: "UYAP Eklentisi" },
       ],
     },
     {
       title: "Kaynaklar",
       links: [
+        { href: "/blog", label: "Blog" },
         { href: "/#sss", label: "SSS" },
         { href: "/demo", label: "Demo" },
-        { href: "/#sss", label: "Yardım" },
+        { href: "/hakkimizda", label: "Hakkımızda" },
+        { href: "/iletisim", label: "İletişim" },
+        { href: "/durum", label: "Sistem Durumu" },
       ],
     },
     {
-      // Dört bağlantı da eskiden AYNI üç cümlelik kutuya iniyordu ("tam
-      // metinler sözleşme sürecinde paylaşılır"). Üçü artık gerçek metin
-      // sayfalarına gider; veri işleme protokolü gerçekten sözleşmeye bağlı
-      // olduğu için güvenlik sayfasındaki açıklamasında kalır.
+      // Dört bağlantı da gerçek metin sayfalarına gider. Faz 8B: veri işleme
+      // protokolü + hizmet/SLA/mesafeli satış metinleri /sozlesmeler altında
+      // (taslak uyarısıyla; avukat onayı gerekir).
       title: "Yasal",
       links: [
         { href: "/kvkk-aydinlatma", label: "KVKK Aydınlatma Metni" },
         { href: "/kullanim-kosullari", label: "Kullanım Koşulları" },
-        { href: "/guvenlik#veri-isleme", label: "Veri İşleme Protokolü" },
+        { href: "/sozlesmeler/veri-isleme-protokolu", label: "Veri İşleme Protokolü" },
+        { href: "/sozlesmeler", label: "Sözleşme Seti" },
         { href: "/cerez-politikasi", label: "Çerez Politikası" },
       ],
     },
@@ -700,4 +704,70 @@ export const demo = {
       "Ekip rolleri, onay akışı ve yetki düzeyleri",
     ],
   },
+} as const;
+
+/* --------------------------------------------------------------------------
+ * Faz 8A — Hakkımızda (/hakkimizda)
+ * ----------------------------------------------------------------------- */
+
+export const about = {
+  kicker: "HAKKIMIZDA",
+  title: "Dosya merkezdedir; yapay zekâ onun etrafında çalışır.",
+  lead: "NomosOS, Türk hukuk bürolarının günlük işini tek sistemde toplamak için yapıldı: müvekkil, dosya, duruşma, süre, icra, finans. Yapay zekâ bu omurganın üstünde öneri üretir; kararı avukat verir.",
+  principles: [
+    { title: "AI önerir, avukat onaylar", text: "Süre, dilekçe, atıf ve müvekkil metinleri onaysız hiçbir yere gitmez. Her öneri kaynağını ve hesap izini gösterir; doğrulanamayan atıf dilekçeye giremez." },
+    { title: "Veri büroda kalır", text: "Kendi yapay zekâ modelinizi bağlayabilirsiniz; dış sağlayıcıya çıkacak her çağrı maskeleme katmanından ve açık onaydan geçer, denetim günlüğüne yazılır." },
+    { title: "Uydurma yok", text: "Faiz oranı, harç tarifesi, tebliğ tarihi gibi sonuç doğuran değerler ya resmî kaynaktan ya avukattan gelir; sistem tahmin yürütmez, bilmediğini söyler." },
+  ],
+  story: [
+    "Ürün, bir hukuk bürosunun günlük işini uçtan uca izleyerek tasarlandı: UYAP'tan gelen dosya, tebligatla başlayan süre, duruşma notu, müvekkile giden mesaj, kesilen fatura. Bunların hiçbiri tek bir ekranda değildi; aralarındaki bağ avukatın hafızasında duruyordu.",
+    "NomosOS bu bağı sisteme taşır. Süre kural motorundan açılır, görev zinciri şablondan doğar, belge yükleme OCR ve sınıflandırmadan geçip öneriye dönüşür, müvekkil portalda yalnız yayınladığınızı görür.",
+    "Geliştirme MindAeon AI tarafından yürütülür. Ürün bir hukuk bürosu değildir ve hukuki danışmanlık vermez; ürettiği her çıktı avukat denetimine tabidir.",
+  ],
+  footnote: "Ticari unvan, sicil bilgileri ve tebligat adresi şirket kuruluş süreci tamamlandığında bu sayfada yayımlanacaktır; talep hâlinde iletisim@nomosos.com adresinden yazılı olarak paylaşılır.",
+} as const;
+
+/* --------------------------------------------------------------------------
+ * Faz 8A — İletişim (/iletisim)
+ * ----------------------------------------------------------------------- */
+
+export const contact = {
+  kicker: "İLETİŞİM",
+  title: "Yazın; gerçek bir insan yanıtlar.",
+  lead: "Demo ve satış için ayrı, destek ve KVKK başvuruları için ayrı kanallar. Yanıt süreleri iş günü esasına göre verilir; aciliyeti konu satırında belirtin.",
+  channels: [
+    { title: "Demo ve satış", text: "Büronuzun büyüklüğüne göre teklif ve canlı demo.", email: "demo@nomosos.com", sla: "İş günü içinde yanıt" },
+    { title: "Destek", text: "Kurulum, UYAP eklentisi, faturalama ve kullanım soruları. Aboneler uygulama içinden destek talebi de açabilir.", email: "destek@nomosos.com", sla: "Öncelik seviyesine göre 2–72 saat içinde ilk yanıt" },
+    { title: "KVKK başvuruları", text: "6698 sayılı Kanun'un 11. maddesi kapsamındaki başvurular (bilgi, düzeltme, silme, itiraz).", email: "kvkk@nomosos.com", sla: "En geç 30 gün içinde yanıt (Kanun m.13)" },
+    { title: "Genel", text: "Basın, iş birliği ve diğer konular.", email: "iletisim@nomosos.com", sla: null },
+  ],
+} as const;
+
+/* --------------------------------------------------------------------------
+ * Faz 8A — UYAP eklentisi indirme (/eklenti)
+ * ----------------------------------------------------------------------- */
+
+export const extension = {
+  kicker: "UYAP KÖPRÜSÜ",
+  title: "Eklenti NomosOS'tan indirilir; UYAP'ı okur, sizin adınıza imzalamaz.",
+  lead: "UYAP Avukat Portalı'nda açtığınız dosya, safahat, duruşma ve evrak listesini NomosOS'a taşır. Eşleştirme koduyla büronuza bağlanır; e-imza ve gönderim UYAP'ta, sizin elinizde kalır.",
+  version: "0.1.0",
+  downloadHref: "/downloads/nomosos-uyap-koprusu-v0.1.0.zip",
+  downloadLabel: "Eklentiyi indir (.zip)",
+  checksumHref: "/downloads/nomosos-uyap-koprusu-v0.1.0.zip.sha256",
+  sizeNote: "Kendi sunucumuzdan dağıtılır",
+  storeNote: "Eklenti tarayıcı mağazasında değildir; paket açık kaynak kodla derlenir ve SHA-256 özeti yanında yayımlanır. Mağaza yayını ayrıca duyurulacaktır.",
+  steps: [
+    "ZIP dosyasını indirip bir klasöre çıkarın.",
+    "Tarayıcıda chrome://extensions (Edge: edge://extensions) adresini açın ve Geliştirici modunu etkinleştirin.",
+    "\"Paketlenmemiş yükle\" ile çıkardığınız klasörü seçin.",
+    "NomosOS'ta UYAP Köprüsü sayfasından eşleştirme kodu üretin; eklenti simgesine tıklayıp kodu girin.",
+    "UYAP Avukat Portalı'nda dosya ya da safahat ekranını açın; sayfaya eklenen düğmeyle aktarın.",
+  ],
+  guarantees: [
+    "Sistem sizin adınıza hiçbir evrak göndermez; e-imza ve gönderim avukattadır.",
+    "UYAP şifrenizi görmez, oturumunuzu saklamaz; yalnız açık sayfayı okur.",
+    "Sayfa düzeni değişirse tahmin etmez; okuma durur ve görünür uyarı verir.",
+    "Aktarılan her kayıt eşleştirme kuyruğunda onayınızı bekler; kimliksiz dosya açılmaz.",
+  ],
 } as const;

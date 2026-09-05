@@ -10,6 +10,7 @@ import { getDemoRole } from "@/lib/api";
 // Modül 26 — üst çubuktaki kredi göstergesi ve %80 uyarı şeridi.
 import { CreditErrorAlert, CreditMeter, CreditWarningBanner, useWallet } from "@/components/credits";
 import { AnnouncementBanner } from "@/components/announcement-banner";
+import { TermsBanner } from "@/components/terms-banner";
 // Faz 6 — üst çubuktaki bildirim zili (tüm /app sayfalarında).
 import { NotificationBell } from "./_components/notification-bell";
 // Modül 27 — her sayfada bağlamsal yardım (özet + bölüme tek tık + Yardım Merkezi araması).
@@ -504,6 +505,17 @@ const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
     ),
   },
   {
+    // Faz 8C: platform destek talepleri + SLA ilk yanıt hedefi (tüm roller).
+    href: "/app/ayarlar/destek",
+    label: "Destek",
+    roles: ["ADMIN", "PARTNER", "AVUKAT", "SEKRETER"],
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 0 1-4.083-.98L2.5 17.5l1.16-3.19A6.66 6.66 0 0 1 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7Zm-8-3.5a.75.75 0 0 0-.75.75v.5a.75.75 0 0 0 1.5 0v-.5A.75.75 0 0 0 10 6.5Zm0 3a.75.75 0 0 0-.75.75v3a.75.75 0 0 0 1.5 0v-3A.75.75 0 0 0 10 9.5Z" clipRule="evenodd" />
+      </svg>
+    ),
+  },
+  {
     // Enterprise++: büronun denetim izi — kim, ne zaman, neyi (ADMIN/PARTNER).
     href: "/app/ayarlar/denetim",
     label: "Denetim İzi",
@@ -511,6 +523,29 @@ const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
         <path fillRule="evenodd" d="M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm2.25 8.5a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z" clipRule="evenodd" />
+      </svg>
+    ),
+  },
+  {
+    // Faz 8B: sözleşme seti (Hizmet/DPA/SLA/Mesafeli satış) + büro adına kabul (ADMIN/PARTNER).
+    href: "/app/ayarlar/sozlesmeler",
+    label: "Sözleşmeler",
+    roles: ["ADMIN", "PARTNER"],
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path fillRule="evenodd" d="M3 4.75A.75.75 0 0 1 3.75 4h8.5a.75.75 0 0 1 0 1.5h-8.5A.75.75 0 0 1 3 4.75Zm0 3.5A.75.75 0 0 1 3.75 7.5h12.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 8.25Zm0 3.5a.75.75 0 0 1 .75-.75h12.5a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75Zm0 3.5a.75.75 0 0 1 .75-.75h6.5a.75.75 0 0 1 0 1.5h-6.5a.75.75 0 0 1-.75-.75Z" clipRule="evenodd" />
+      </svg>
+    ),
+  },
+  {
+    // Faz 8E: veri göçü sihirbazı — dosya/duruşma CSV, belge ZIP (ADMIN/PARTNER).
+    href: "/app/ayarlar/veri-gocu",
+    label: "Veri Göçü",
+    roles: ["ADMIN", "PARTNER"],
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z" />
+        <path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" />
       </svg>
     ),
   },
@@ -804,6 +839,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         </header>
         <main className="flex-1 space-y-4 p-6 print:p-0">
           <AnnouncementBanner />
+          <TermsBanner />
           <CreditWarningBanner wallet={wallet} />
           <CreditErrorAlert />
           {children}

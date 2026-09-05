@@ -10,7 +10,7 @@ import { AiRunnerService } from "./ai-runner.service";
 import { CaseLawAdapterRegistry } from "./adapters/registry.service";
 import { LocalDbCaseLawAdapter } from "./adapters/local-db.adapter";
 import { ManualEntryCaseLawAdapter } from "./adapters/manual-entry.adapter";
-import { YargitayLiveAdapter, EMSAL_LIVE, EMSAL_LIVE_CONFIG } from "./adapters/yargitay-live.adapter";
+import { YargitayLiveAdapter, EMSAL_LIVE, EMSAL_LIVE_CONFIG, DANISTAY_LIVE, DANISTAY_LIVE_CONFIG } from "./adapters/yargitay-live.adapter";
 import { AymLiveAdapter } from "./adapters/aym-live.adapter";
 import { UyusmazlikLiveAdapter } from "./adapters/uyusmazlik-live.adapter";
 // D1.3: BYO yetkisi + platform sağlayıcı yedeği için.
@@ -38,6 +38,8 @@ import { LegislationModule } from "../legislation/legislation.module";
     // CANLI katman 2: Emsal/UYAP — tüm mahkeme dereceleri (aynı sözleşme,
     // ayrı yapılandırma; DI anahtarıyla ayrılır).
     { provide: EMSAL_LIVE, useValue: new YargitayLiveAdapter(EMSAL_LIVE_CONFIG) },
+    // FAZ 8D — Danıştay (idari yargı) canlı kaynağı; aynı sınıf, üçüncü yapılandırma.
+    { provide: DANISTAY_LIVE, useValue: new YargitayLiveAdapter(DANISTAY_LIVE_CONFIG) },
     CaselawService,
     CitationVerifyService,
     AiRunnerService,

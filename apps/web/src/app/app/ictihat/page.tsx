@@ -333,6 +333,10 @@ export default function IctihatPage() {
                             <span className="inline-flex items-center rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-teal-800">
                               EMSAL · UYAP
                             </span>
+                          ) : hit.sourceAdapter === "DANISTAY_CANLI" ? (
+                            <span className="inline-flex items-center rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-indigo-800">
+                              DANIŞTAY CANLI
+                            </span>
                           ) : (
                             <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-emerald-800">
                               YARGITAY CANLI
@@ -453,6 +457,10 @@ export default function IctihatPage() {
             liveDoc.hit?.sourceAdapter === "EMSAL_UYAP" ? (
               <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-semibold text-teal-800">
                 EMSAL · UYAP
+              </span>
+            ) : liveDoc.hit?.sourceAdapter === "DANISTAY_CANLI" ? (
+              <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold text-indigo-800">
+                DANIŞTAY CANLI
               </span>
             ) : (
               <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">

@@ -9,6 +9,22 @@ import type { PlatformAuthUser } from "../platform.types";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * FAZ 8D — aya normalize plan fiyatı: YILLIK abonelik `annualPricePerUser / 12`
+ * (yoksa aylık fiyat), AYLIK abonelik `monthlyPricePerUser`. MRR bu değerle hesaplanır;
+ * yıllık peşin ödeyen büro MRR'ı 12 ay boyunca eşit taşır (ARR = MRR × 12 tutarlı).
+ */
+function monthlyEquivalent(
+  plan: { monthlyPricePerUser: Prisma.Decimal | string | null; annualPricePerUser: Prisma.Decimal | string | null } | undefined,
+  billingInterval: string,
+): Prisma.Decimal | null {
+  if (!plan || plan.monthlyPricePerUser === null) return null;
+  if (billingInterval === "YILLIK" && plan.annualPricePerUser) {
+    return new Prisma.Decimal(plan.annualPricePerUser).div(12);
+  }
+  return new Prisma.Decimal(plan.monthlyPricePerUser);
+}
+
 /** AI analitiğinde "en çok tüketen" listesinin uzunluğu. */
 const TOP_TENANTS = 20;
 
@@ -54,7 +70,7 @@ export class PlatformMetricsService {
       this.prisma.client.tenant.count(),
       this.prisma.client.tenant.count({ where: { createdAt: { gte: monthStart } } }),
       this.prisma.client.subscription.findMany({
-        select: { status: true, planKey: true, seats: true, trialEndsAt: true },
+        select: { status: true, planKey: true, seats: true, trialEndsAt: true, billingInterval: true },
       }),
       this.prisma.client.planTier.findMany(),
       this.prisma.client.aiUsageLog.aggregate({
@@ -65,7 +81,7 @@ export class PlatformMetricsService {
       this.prisma.client.paymentRecord.count({ where: { status: "BASARISIZ" } }),
     ]);
 
-    const priceByPlan = new Map(plans.map((p) => [p.key, p.monthlyPricePerUser]));
+    const priceByPlan = new Map(plans.map((p) => [p.key, p]));
     const byStatus = new Map<string, number>();
     let mrr = new Prisma.Decimal(0);
     let trialEndingSoon = 0;
@@ -73,10 +89,11 @@ export class PlatformMetricsService {
     for (const s of subscriptions) {
       byStatus.set(s.status, (byStatus.get(s.status) ?? 0) + 1);
       if (s.status === "ACTIVE") {
-        const price = priceByPlan.get(s.planKey);
+        // Faz 8D: yıllık abonelik aya normalize edilir (annualPricePerUser / 12).
+        const price = monthlyEquivalent(priceByPlan.get(s.planKey), s.billingInterval);
         // Plan katalogdan kalkmışsa fiyat bilinmez; 0 varsaymak MRR'ı sessizce
         // düşürürdü. Bu abonelikler `mrrUnknownSubscriptions` ile ayrıca sayılır.
-        if (price) mrr = mrr.plus(new Prisma.Decimal(price).mul(s.seats));
+        if (price) mrr = mrr.plus(price.mul(s.seats));
       }
       if (
         s.status === "TRIAL" &&
@@ -379,7 +396,7 @@ export class PlatformMetricsService {
     const [subscriptions, plans, tenantTotal, newTenants, aiAgg, dau, wau, funnel] =
       await Promise.all([
         this.prisma.client.subscription.findMany({
-          select: { status: true, planKey: true, seats: true, canceledAt: true },
+          select: { status: true, planKey: true, seats: true, canceledAt: true, billingInterval: true },
         }),
         this.prisma.client.planTier.findMany(),
         this.prisma.client.tenant.count(),
@@ -394,8 +411,10 @@ export class PlatformMetricsService {
         this.activationFunnel(),
       ]);
 
-    const priceByPlan = new Map(plans.map((p) => [p.key, p.monthlyPricePerUser]));
+    const priceByPlan = new Map(plans.map((p) => [p.key, p]));
     let mrr = new Prisma.Decimal(0);
+    /** Faz 8D — son 30 günde iptal edilen aboneliklerin aya normalize geliri (gelir churn payı). */
+    let churnedMrr = new Prisma.Decimal(0);
     let seats = 0;
     const byPlan = new Map<string, number>();
     let active = 0;
@@ -403,16 +422,22 @@ export class PlatformMetricsService {
     let canceledLast30 = 0;
 
     for (const s of subscriptions) {
+      const price = monthlyEquivalent(priceByPlan.get(s.planKey), s.billingInterval);
       if (s.status === "ACTIVE") {
         active += 1;
         seats += s.seats;
         byPlan.set(s.planKey, (byPlan.get(s.planKey) ?? 0) + 1);
-        const price = priceByPlan.get(s.planKey);
-        if (price) mrr = mrr.plus(new Prisma.Decimal(price).mul(s.seats));
+        if (price) mrr = mrr.plus(price.mul(s.seats));
       }
       if (s.status === "TRIAL") trial += 1;
-      if (s.status === "CANCELED" && s.canceledAt && s.canceledAt >= since30) canceledLast30 += 1;
+      if (s.status === "CANCELED" && s.canceledAt && s.canceledAt >= since30) {
+        canceledLast30 += 1;
+        if (price) churnedMrr = churnedMrr.plus(price.mul(s.seats));
+      }
     }
+    // Gelir churn (30g) = iptal edilen MRR / (mevcut MRR + iptal edilen MRR). Yüzde.
+    const revenueChurnBase = mrr.plus(churnedMrr);
+    const revenueChurnRate = revenueChurnBase.isZero() ? "0.00" : churnedMrr.div(revenueChurnBase).mul(100).toFixed(2);
 
     const churnBase = active + canceledLast30;
     const churnRate = churnBase === 0 ? "0.00" : new Prisma.Decimal(canceledLast30)
@@ -444,6 +469,9 @@ export class PlatformMetricsService {
         newTenantsThisMonth: newTenants,
         canceledLast30Days: canceledLast30,
         logoChurnRate30d: churnRate,
+        /** Faz 8D — gelir churn: iptal edilen aya normalize gelir / (MRR + iptal edilen). */
+        revenueChurnRate30d: revenueChurnRate,
+        churnedMrr30d: churnedMrr.toFixed(2),
         totalSeats: seats,
       },
       planDistribution: [...byPlan].map(([planKey, count]) => ({ planKey, count })),

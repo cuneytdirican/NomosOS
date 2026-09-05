@@ -62,7 +62,7 @@ export class CaselawController {
 
   /**
    * CANLI KARAR BELGESİ — resmî getDokuman yanıtı (JSON zarfı + gömülü HTML)
-   * TEMİZ METNE çevrilerek döner. `?source=YARGITAY_CANLI|EMSAL_UYAP` kaynağı
+   * TEMİZ METNE çevrilerek döner. `?source=YARGITAY_CANLI|EMSAL_UYAP|DANISTAY_CANLI` kaynağı
    * seçer (varsayılan Yargıtay). Havuza YAZMAZ.
    */
   @Get("live/:externalId")

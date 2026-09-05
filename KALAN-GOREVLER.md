@@ -23,7 +23,44 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 6 Eylül 2026, 22:30
+# 🔖 KALDIĞIM YER — 7 Eylül 2026, 03:30
+
+> Üç persona planı (`~/.claude/plans/wiggly-giggling-lighthouse.md`):
+> **Faz 0 ✅ · 1 ✅ · 2 ✅ · 3 ✅ · 4 ✅ · 5 ✅ · 6 ✅ · 7 ✅ · 8 ✅ (bu commit)** — plan TAMAMLANDI.
+
+**FAZ 8 — BÜYÜME (self-signup HARİÇ) TAMAMLANDI** (belge: `docs/faz8-buyume.md`):
+- **8A vitrin/SEO:** `GET /public/plans` (PlanTier'dan, yıllık = aylık×10 seed) + `GET /public/status` (readiness);
+  `/fiyatlandirma` DB'den, `/hakkimizda`, `/iletisim`, `/eklenti` (indirme + SHA-256), `/durum`, `/blog` (3 yazı);
+  `sitemap.ts`/`robots.ts`/OG görseli/metadataBase.
+- **8B sözleşme seti:** Hizmet/EULA, DPA, SLA, Mesafeli satış tek kaynakta (`shared/legal-docs.ts`, taslak uyarısı —
+  AVUKAT ONAYI GEREKİR); `/sozlesmeler[/slug]`; `TermsAcceptance` ekleme-yalnız (sürüm + SHA-256 özet + IP);
+  `GET/POST /terms`, ONAY rolü; Ayarlar→Sözleşmeler + uygulama şeridi; platform `GET /tenants/:id/terms` + admin kartı.
+- **8C destek + SLA:** `SupportTicket`/`SupportTicketMessage`; ilk yanıt SLA'sı Kritik 2 sa · Yüksek 8 · Normal 24 ·
+  Düşük 72 (takvim saati, `shared/support.ts`); kiracı `/support/tickets*`, platform `/support-tickets*` (iç not
+  kiracıya dönmez, SLA'yı durdurmaz); yetkiler `support.tickets.view/update` (iki matris birebir); admin `/destek`,
+  web Ayarlar→Destek.
+- **8D Danıştay + gelir:** `DANISTAY_LIVE_CONFIG` (aynı sınıf, `andKelimeler` gövdesi, `/arama` yok); içtihat
+  araması ÜÇ kaynağı paralel çalıştırır; rozet DANIŞTAY CANLI. Canlı doğrulandı: 15 sonuç/3 kaynak, Danıştay metni
+  okunuyor (bulgular: getDokuman `arananKelime` ister; geçersiz kimlikte 200+HTML hata sayfası → 502). MRR yıllığı aya böler; yatırımcı raporuna
+  `revenueChurnRate30d`/`churnedMrr30d`. `usage-snapshot-daily` işi zaten kayıtlı (doğrulandı). Mevzuat/AAÜT seed'e
+  UYDURMA rakam eklenmedi (platform girer).
+- **8E veri göçü:** `shared/import.ts` kolon sözleşmesi + şablon; API `/import/template/:kind`, `/import/preview`
+  (dry-run, yazmaz), `/import/run` (ONAY), `/import/zip?dryRun=`; bağımlılıksız CSV ayrıştırıcı (ayırıcı otomatik,
+  tırnak, BOM, Türkçe başlık); dosya/duruşma/belge; belgeler `DocumentsService.upload` hattından. Ayarlar→Veri Göçü.
+Testler: api 1500+ (faz8-contract 8A–8E + 4 birim dosyası), web 100, admin 3, lint 0.
+Canlı doğrulama (Docker test yığını): smoke_faz8 + Playwright faz8-web.
+Bulgular: bu Bash oturumunda dış ağ yok (curl 000) ama Docker konteyneri internete çıkıyor → resmî kaynak
+doğrulaması yığın üzerinden yapılır; `api-route-catalog` testi rota fonksiyonlarında `encodeURIComponent` istemez; Prisma `Tenant`
+ilişkisi `model Tenant {` bloğuna eklenmeli (2571. satırdaki `supportGrants` başka modelde).
+
+**SIRADA (plan dışı, adaylar):** sözleşme metinlerinin avukat
+onayı sonrası `version` v2 + yeniden kabul; destek bildirimleri (SMTP ile kiracıya yanıt e-postası);
+AAÜT/mevzuat tarifelerinin platformca girilmesi; veri göçü: müvekkil ilişkisi (kişi/kurum) ve görev göçü;
+self-signup (kullanıcı kararı: manuel kalır).
+
+---
+
+## 🔖 ÖNCEKİ KALDIĞIM YER — 6 Eylül 2026, 22:30
 
 > Üç persona planı (`~/.claude/plans/wiggly-giggling-lighthouse.md`):
 > **Faz 0 ✅ · 1 ✅ · 2 ✅ · 3 ✅ · 4 ✅ · 5 ✅ · 6 ✅ · 7 ✅ (bu commit)** · sırada Faz 8 (büyüme; self-signup HARİÇ).

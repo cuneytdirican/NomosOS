@@ -28,6 +28,7 @@ import { EP } from "@/lib/endpoints";
 import { can, isMasked } from "@/lib/rbac";
 import { PageGate, RoleGate, NoAccessInline } from "@/components/RoleGate";
 import { ApprovalBadge, ApprovalNotice } from "@/components/ApprovalBadge";
+import { TenantTermsCard } from "@/components/TenantTermsCard";
 import {
   AI_PROVIDER_TYPE_LABELS,
   AI_PROVIDER_TYPE_TONES,
@@ -334,6 +335,8 @@ function GenelTab({
           )}
         </Card>
       </div>
+
+      <TenantTermsCard tenantId={tenant.id} />
 
       <Card
         title="Yaşam döngüsü işlemleri"

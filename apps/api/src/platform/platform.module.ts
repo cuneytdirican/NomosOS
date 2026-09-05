@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { TermsModule } from "../terms/terms.module";
 import { LoginThrottleGuard } from "../auth/login-throttle.guard";
 import { PlatformJwtGuard } from "./guards/platform-jwt.guard";
 import { PlatformPermissionGuard } from "./guards/platform-permission.guard";
@@ -57,6 +58,8 @@ import { PlatformSupportService } from "./support/platform-support.service";
 import { PlatformAuditController } from "./audit/platform-audit.controller";
 import { PlatformDemoRequestsController } from "./demo-requests/platform-demo-requests.controller";
 import { PlatformDemoRequestsService } from "./demo-requests/platform-demo-requests.service";
+import { PlatformSupportTicketsController } from "./support-tickets/platform-support-tickets.controller";
+import { PlatformSupportTicketsService } from "./support-tickets/platform-support-tickets.service";
 import { PlatformAuditQueryService } from "./audit/platform-audit-query.service";
 import { PlatformUsersController } from "./users/platform-users.controller";
 import { PlatformUsersService } from "./users/platform-users.service";
@@ -81,6 +84,8 @@ import { PlatformUsersService } from "./users/platform-users.service";
  * özeldir, tenant girişleriyle karışmaz.
  */
 @Module({
+  // FAZ 8B — kiracı sözleşme kabul geçmişi (TermsService).
+  imports: [TermsModule],
   controllers: [
     PlatformAuthController,
     PlatformTenantsController,
@@ -97,6 +102,7 @@ import { PlatformUsersService } from "./users/platform-users.service";
     PlatformSupportController,
     PlatformAuditController,
     PlatformDemoRequestsController,
+    PlatformSupportTicketsController,
     PlatformUsersController,
     FineTuneController,
     CaselawPoolController,
@@ -133,6 +139,7 @@ import { PlatformUsersService } from "./users/platform-users.service";
     PlatformSupportService,
     PlatformAuditQueryService,
     PlatformDemoRequestsService,
+    PlatformSupportTicketsService,
     PlatformUsersService,
   ],
   // UsageSnapshotService dışa açılır: Faz 6'da BullMQ repeatable job bu

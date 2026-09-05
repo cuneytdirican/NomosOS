@@ -261,6 +261,19 @@ export const DOCUMENTS_ROUTES = {
   publicShare: (token: string) => `/public/paylasim/${token}`,
 } as const;
 
+/** Faz 8A — kimliksiz kamusal uçlar (tanıtım sitesi / durum sayfası). */
+export const PUBLIC_ROUTES = {
+  plans: "/public/plans",
+  status: "/public/status",
+} as const;
+
+/** FAZ 8B — sözleşme seti + kabul kaydı (TermsAcceptance). */
+export const TERMS_ROUTES = {
+  docs: "/terms/docs",
+  status: "/terms",
+  accept: "/terms/accept",
+} as const;
+
 /** Faz 7G — dosya detayı sekmeleri: kapanış kontrol listesi (tanık/harç/vekâlet/finans mevcut uçları kullanır). */
 export const CASE_TABS_ROUTES = {
   closingChecklist: (caseId: string) => `/cases/${caseId}/closing-checklist`,

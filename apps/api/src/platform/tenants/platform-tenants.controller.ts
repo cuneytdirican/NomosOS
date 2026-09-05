@@ -11,6 +11,7 @@ import { RequiresSupportGrant } from "../decorators/requires-support-grant.decor
 import { ADMIN_ROUTE_PREFIX } from "../platform.constants";
 import type { PlatformAuthUser } from "../platform.types";
 import { PlatformTenantsService } from "./platform-tenants.service";
+import { TermsService } from "../../terms/terms.service";
 import {
   supportAccessSchema,
   tenantCreateSchema,
@@ -29,7 +30,10 @@ import {
 /** `/api/admin/v1/tenants` */
 @PlatformController(`${ADMIN_ROUTE_PREFIX}/tenants`)
 export class PlatformTenantsController {
-  constructor(private readonly tenants: PlatformTenantsService) {}
+  constructor(
+    private readonly tenants: PlatformTenantsService,
+    private readonly terms: TermsService
+  ) {}
 
   @Get()
   @ReadPermission("tenant.view")
@@ -63,6 +67,14 @@ export class PlatformTenantsController {
   @RequiresSupportGrant("SADECE_USTVERI")
   detail(@CurrentPlatformUser() user: PlatformAuthUser, @Param("id") id: string) {
     return this.tenants.detail(user, id);
+  }
+
+  /** FAZ 8B — kiracının sözleşme kabul geçmişi (Hizmet/DPA/SLA/Mesafeli satış). Üstveri; metin içermez. */
+  @Get(":id/terms")
+  @ReadPermission("tenant.view")
+  @RequiresSupportGrant("SADECE_USTVERI")
+  termsHistory(@Param("id") id: string) {
+    return this.terms.historyForPlatform(id);
   }
 
   /**

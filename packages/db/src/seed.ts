@@ -605,6 +605,8 @@ const PLAN_TIERS: Array<{
   key: string;
   name: string;
   monthlyPricePerUser: string | null;
+  /** Faz 8A: yıllık ödeme (kullanıcı başına/yıl). Varsayılan aylık × 10 = iki ay bedava; platform panelinden değiştirilir. */
+  annualPricePerUser: string | null;
   maxUsers: number | null;
   features: Record<string, unknown>;
 }> = [
@@ -612,6 +614,7 @@ const PLAN_TIERS: Array<{
     key: "SOLO",
     name: "Solo",
     monthlyPricePerUser: "1500.00",
+    annualPricePerUser: "15000.00",
     maxUsers: 2,
     features: { aiCallQuota: 1000, storageGb: 10, modules: ["dosya", "sure", "gorev", "ai"] },
   },
@@ -619,6 +622,7 @@ const PLAN_TIERS: Array<{
     key: "BURO",
     name: "Büro",
     monthlyPricePerUser: "1200.00",
+    annualPricePerUser: "12000.00",
     maxUsers: 25,
     features: {
       aiCallQuota: 10000,
@@ -630,6 +634,7 @@ const PLAN_TIERS: Array<{
     key: "ENTERPRISE",
     name: "Kurumsal",
     monthlyPricePerUser: "950.00",
+    annualPricePerUser: "9500.00",
     maxUsers: null,
     features: {
       aiCallQuota: null,
@@ -643,12 +648,20 @@ async function seedPlanTiers(): Promise<number> {
   let created = 0;
   for (const p of PLAN_TIERS) {
     const existing = await prisma.planTier.findUnique({ where: { key: p.key } });
-    if (existing) continue;
+    if (existing) {
+      // Faz 8A: yıllık fiyat alanı sonradan geldi; platform bir değer girmediyse tohumu yaz
+      // (aylık fiyat ve özellikler platformun elindedir, onlara DOKUNULMAZ).
+      if (existing.annualPricePerUser === null && p.annualPricePerUser) {
+        await prisma.planTier.update({ where: { key: p.key }, data: { annualPricePerUser: p.annualPricePerUser } });
+      }
+      continue;
+    }
     await prisma.planTier.create({
       data: {
         key: p.key,
         name: p.name,
         monthlyPricePerUser: p.monthlyPricePerUser,
+        annualPricePerUser: p.annualPricePerUser,
         maxUsers: p.maxUsers,
         featuresJson: JSON.stringify(p.features),
         isActive: true,
