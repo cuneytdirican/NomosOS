@@ -23,7 +23,40 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 5 Eylül 2026, 17:30
+# 🔖 KALDIĞIM YER — 5 Eylül 2026, 20:30
+
+> **ÜÇ PERSONA BOŞLUK ANALİZİ → 9 FAZLI PLAN** onaylandı (plan dosyası:
+> `~/.claude/plans/wiggly-giggling-lighthouse.md`; ~150 kanıtlı bulgu: firma sahibi /
+> yazılımcı+sistem yöneticisi / avukat+büro). Sıra: Faz 0 kritikler → 1 avukat çekirdeği →
+> 2 bildirim kanalları → 3 gelir hattı → 4 operasyon → 5 RAG/test → 6 UYAP/icra/finans →
+> 7 büro yönetimi → 8 büyüme. Kararlar: dış entegrasyonlar adaptör + sözleşme testi (SMTP
+> tam çalışır), OCR tesseract.js sunucu içi, self-signup MANUEL kalır.
+
+**FAZ 0 TAMAMLANDI (`eaccbb4`, canlı doğrulandı):**
+1. `docker-compose.prod.yml` çift `AI_TIMEOUT_MS` (ikincisi 60 sn'ye eziyordu) → tek 180 sn;
+   `API_PUBLIC_URL` zorunlu, `METRICS_TOKEN`, web `NEXT_PUBLIC_DISABLE_DEMO=1` build arg
+   (Dockerfile ARG/ENV); prod env örneği güncel.
+2. Sohbet eki: Multer `limits` (60 MB → 413) + `validateUpload` beyaz listesi multipart ve
+   presign yolunda (.svg/.html → 415).
+3. Seed üretim kapısı (`NODE_ENV=production` → `SEED_ALLOW_PROD=true` olmadan durur);
+   test compose migrate servisinde açıkça geçilir.
+4. Kiracı açılışında `CreditWallet` + TAHSIS aynı işlemde; API açılışında cüzdansız
+   kiracı yedeklemesi (`ensureWalletsForAllTenants`, canlı: 2 kiracıya açıldı, 3/3).
+5. Koltuk sınırı: `users.create` ve yeniden etkinleştirmede `seats`/`plan.maxUsers`
+   (canlı: 5/5 → 409).
+6. `TenantStatusGuard`: süresi dolmuş TRIAL ve 14 gün (SUBSCRIPTION_GRACE_DAYS) sonrası
+   PAST_DUE yazma isteklerinde 402; GET, /auth, /billing, /credits açık.
+7. Sözleşme testi: seed fiyat listesi 33 görev tipinin tamamını kapsıyor.
+Testler: tenant-status.guard 5, users.seat-limit 4, faz0 sözleşme 8; api 1265/1265, lint 0.
+
+**SIRADA: FAZ 1 — avukat çekirdeği** (OCR tesseract.js kuyrukta, `POST /hearings/:id/prep`,
+duruşma sorumlu avukat + çakışma + sonuç girilmemiş listesi, ICS beslemesi, süre kural paketi
+[AYM/AİHM/İYUK/İİK 106-110/CMK 268/KVKK 14/TMK 605…] + tatiller 2028-2032, öneri ekranında
+kaynak belge, bildirim tercihlerinde email/push, dosya detayında vekaletname kartı).
+
+---
+
+## 🔖 ÖNCEKİ KALDIĞIM YER — 5 Eylül 2026, 17:30
 
 > **LM STUDIO (yerel Gemma 4) ENTEGRASYONU + RAG kullanımı** — kullanıcı isteği:
 > "sistemdeki RAG ile AI modelini kullanmamız lazım; avukat tarafında kendi LLM sunucusu
