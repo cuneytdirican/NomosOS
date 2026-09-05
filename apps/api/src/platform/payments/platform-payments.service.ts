@@ -181,6 +181,15 @@ export class PlatformPaymentsService {
         status: r.status,
         hasPdf: Boolean(r.pdfKey),
         createdAt: r.createdAt,
+        // Faz 3
+        type: r.type,
+        description: r.description,
+        periodStart: r.periodStart,
+        periodEnd: r.periodEnd,
+        discountAmount: money(r.discountAmount),
+        couponCode: r.couponCode,
+        dueDate: r.dueDate,
+        paidAt: r.paidAt,
       })),
       total,
       page

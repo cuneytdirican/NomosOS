@@ -149,3 +149,14 @@ export function hepoReminderKey(
 export function hepoOverdueKey(rowId: string, userId: string, dueDate: Date): string {
   return build("SURE_GECTI", `HEPO:${rowId}`, `${dayTag(dueDate)}:ilk`, userId);
 }
+
+/** Faz 3 — dunning: abonelik + dönem sonu + kaçıncı gün + alıcı. */
+export function dunningKey(subscriptionId: string, periodEnd: Date, day: number, userId: string): string {
+  return `ODEME_GECIKTI:${subscriptionId}:${dayTag(periodEnd)}:g${day}:${userId}`;
+}
+export function trialEndingKey(subscriptionId: string, trialEndsAt: Date, userId: string): string {
+  return `DENEME_BITIYOR:${subscriptionId}:${dayTag(trialEndsAt)}:${userId}`;
+}
+export function invoiceIssuedKey(invoiceId: string, userId: string): string {
+  return `FATURA_KESILDI:${invoiceId}:${userId}`;
+}

@@ -81,6 +81,8 @@ model Tenant {
   auditLogs         AuditLog[]
   /// Kiracının kendi model eğitim işleri (kullanıcı tanımlı model).
   fineTuneJobs      FineTuneJob[]
+  /// Faz 3: e-Fatura entegratör ayarı.
+  eInvoiceSettings EInvoiceSettings?
 }
 
 enum UserRole {
@@ -2383,6 +2385,8 @@ model PlanTier {
   key                 String   @unique // SOLO | BURO | ENTERPRISE
   name                String
   monthlyPricePerUser Decimal? @db.Decimal(18, 2)
+  /// Faz 3: yıllık peşin fiyat (kullanıcı başına, 12 ay). null = yıllık seçenek yok.
+  annualPricePerUser  Decimal? @db.Decimal(18, 2)
   maxUsers            Int? // null = sınırsız
   /// Özellik listesi (JSON): { "aiCallQuota": 5000, "modules": [...] }
   featuresJson        String
@@ -2391,12 +2395,65 @@ model PlanTier {
   @@index([isActive])
 }
 
+enum BillingInterval {
+  AYLIK
+  YILLIK
+}
+
 enum SubscriptionStatus {
   TRIAL
   ACTIVE
   PAST_DUE
   SUSPENDED
   CANCELED
+}
+
+/// Faz 3: indirim kuponu (platform satışı). YUZDE → value = %, SABIT → value = TRY.
+model Coupon {
+  id             String      @id @default(uuid())
+  code           String      @unique
+  kind           CouponKind
+  value          Decimal     @db.Decimal(18, 2)
+  appliesTo      CouponScope @default(TUM)
+  validFrom      DateTime?
+  validUntil     DateTime?
+  maxRedemptions Int?
+  redeemedCount  Int         @default(0)
+  isActive       Boolean     @default(true)
+  note           String?
+  createdBy      String // PlatformUser id
+  createdAt      DateTime    @default(now())
+
+  @@index([isActive])
+}
+
+enum CouponKind {
+  YUZDE
+  SABIT
+}
+
+enum CouponScope {
+  TUM
+  ABONELIK
+  KREDI
+}
+
+/// Faz 3: büronun e-Fatura entegratör bağlantısı. Kimlik bilgisi AES-256-GCM
+/// (`MASTER_ENCRYPTION_KEY`) ile şifreli; API yanıtına ASLA yazılmaz.
+model EInvoiceSettings {
+  id                   String   @id @default(uuid())
+  tenantId             String   @unique
+  tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// Kayıtlı adaptör anahtarı (`rest`, ileride `logo`, `sovos`…). `noop` = kapalı.
+  providerKey          String
+  baseUrl              String?
+  credentialsEncrypted String?
+  /// e-Fatura gönderici etiketi (urn:mail:…).
+  senderAlias          String?
+  isActive             Boolean  @default(true)
+  updatedBy            String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 }
 
 /// Tenant aboneliği — tenant başına tek kayıt.
@@ -2408,6 +2465,10 @@ model Subscription {
   planKey            String // PlanTier.key — skaler (plan silinse abonelik ayakta kalır)
   status             SubscriptionStatus @default(TRIAL)
   seats              Int                @default(1)
+  /// Faz 3: AYLIK (monthlyPricePerUser) / YILLIK (annualPricePerUser).
+  billingInterval    BillingInterval    @default(AYLIK)
+  /// Aboneliğe bağlı kupon (her dönem faturasına uygulanır; geçerliliği fatura anında denetlenir).
+  couponCode         String?
   trialEndsAt        DateTime?
   currentPeriodStart DateTime?
   currentPeriodEnd   DateTime?
@@ -2443,12 +2504,18 @@ model PaymentRecord {
   method         String? // Ödeme sağlayıcısı yöntemi (serbest metin)
   providerRef    String? // Sağlayıcı işlem referansı
   paidAt         DateTime?
+  /// Faz 3: ödenen platform faturası + sağlayıcı checkout jetonu (geri dönüş eşlemesi).
+  invoiceRecordId String?
+  invoiceRecord   InvoiceRecord? @relation(fields: [invoiceRecordId], references: [id], onDelete: SetNull)
+  checkoutToken   String?        @unique
+  providerPayload String?
   failureReason  String?
   createdAt      DateTime              @default(now())
 
   @@index([tenantId, createdAt])
   @@index([status, createdAt])
   @@index([subscriptionId])
+  @@index([invoiceRecordId])
 }
 
 /// PLATFORM faturası (NomosOS → büro). Tenant'ın kendi Invoice'ından ayrıdır.
@@ -2456,17 +2523,40 @@ model InvoiceRecord {
   id        String        @id @default(uuid())
   tenantId  String
   number    String? // Platform fatura numarası
+  /// Faz 3: ABONELIK (dönem faturası) / KREDI_PAKETI / PLAN_FARKI (pro-rata).
+  type        InvoiceRecordType @default(KREDI_PAKETI)
+  description String?
+  /// ABONELIK: faturalanan dönem; aynı büro+tür+dönem için TEK fatura.
+  periodStart DateTime?
+  periodEnd   DateTime?
   amount    Decimal       @db.Decimal(18, 2)
+  /// Kupon / BYO-LLM indirimi (amount indirim SONRASI net tutardır).
+  discountAmount Decimal  @default(0) @db.Decimal(18, 2)
+  couponCode     String?
   vatAmount Decimal       @db.Decimal(18, 2)
   total     Decimal       @db.Decimal(18, 2)
   issueDate DateTime
+  dueDate   DateTime?
+  paidAt    DateTime?
   status    InvoiceStatus @default(TASLAK)
   pdfKey    String? // S3/MinIO nesne anahtarı
+  /// Serbest üstveri (paket anahtarı, koltuk, aralık, indirim gerekçesi…).
+  metaJson  String?
   createdAt DateTime      @default(now())
 
+  payments PaymentRecord[]
+
   @@unique([number])
+  @@unique([tenantId, type, periodStart])
   @@index([tenantId, issueDate])
   @@index([status])
+  @@index([type, status])
+}
+
+enum InvoiceRecordType {
+  ABONELIK
+  KREDI_PAKETI
+  PLAN_FARKI
 }
 
 /// D5 / M4 — FINE-TUNING İŞ YÖNETİMİ.
@@ -4342,6 +4432,12 @@ enum NotificationKind {
   SOZLESME_KRITIK_SHERH
   /// KVKK: saklama süresi dolan dosya adayları / süresi geçen veri öznesi talebi (aylık, ADMIN).
   KVKK_SAKLAMA
+  /// Faz 3 (gelir hattı): gecikmiş abonelik ödemesi (dunning 1/3/7. gün) — ADMIN/PARTNER.
+  ODEME_GECIKTI
+  /// Deneme süresi 3 gün içinde bitiyor.
+  DENEME_BITIYOR
+  /// Dönem faturası kesildi (ödeme bağlantısı uygulamada).
+  FATURA_KESILDI
 }
 
 enum NotificationStatus {

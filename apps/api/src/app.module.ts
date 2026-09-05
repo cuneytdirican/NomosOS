@@ -32,6 +32,8 @@ import { BillingModule } from "./billing/billing.module";
 import { VekaletUcretiModule } from "./vekalet-ucreti/vekalet-ucreti.module";
 import { DemoTalepModule } from "./demo-talep/demo-talep.module";
 import { MailModule } from "./mail/mail.module";
+import { PlatformBillingModule } from "./platform-billing/platform-billing.module";
+import { ModuleAccessGuard } from "./common/guards/module-access.guard";
 import { RandevuModule } from "./randevu/randevu.module";
 import { UyapModule } from "./uyap/uyap.module";
 import { ChatModule } from "./chat/chat.module";
@@ -215,6 +217,9 @@ function requireJwtSecret(config: ConfigService): string {
     // kalmasına yol açardı. Global kapı + açık dekoratör, "unutulursa
     // ücretlendirilmez" hatasını tek bir görünür satıra indirger.
     CreditsModule,
+    // Faz 3 — gelir hattı (abonelik faturası, checkout, kupon). CreditsModule ve
+    // BillingModule'den SONRA.
+    PlatformBillingModule,
     // --- Faz 5 modülleri ---
     // İletişim merkezi (Modül 19). CaselawModule'den SONRA: MESSAGE_DRAFT ve
     // MESSAGE_CASE_MATCH koşuları ortak AiRunnerService üzerinden gider.
@@ -267,6 +272,8 @@ function requireJwtSecret(config: ConfigService): string {
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: TenantStatusGuard },
+    // 2b. Faz 3: plan modülü kapısı (@RequiresModule) — abonelik durumundan sonra.
+    { provide: APP_GUARD, useClass: ModuleAccessGuard },
     // 3. `CaseAccessGuard` → istek bir dosyaya işaret ediyorsa (rota/sorgu/gövde
     //    caseId, /cases/:id) kullanıcının o dosyayı GÖREBİLDİĞİNİ doğrular
     //    (gizli dosya). `request.user` gerektiği için kimlik guard'ından sonra.

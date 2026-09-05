@@ -1,5 +1,11 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Res } from "@nestjs/common";
+import type { Response } from "express";
+import { PrismaService } from "../prisma/prisma.service";
+import { EInvoiceService, eInvoiceSettingsSchema, type EInvoiceSettingsInput } from "./e-invoice/e-invoice.service";
+import { renderInvoicePdf } from "./pdf/invoice-pdf";
+import { FINANCE_ACCESS, assertFinanceAccess } from "../finance/finance-access";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
+import { RequiresModule } from "../common/decorators/requires-module.decorator";
 import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe";
 import type { AuthUser } from "../common/types";
 import { FeeAgreementsService } from "./fee-agreements.service";
@@ -37,6 +43,7 @@ import {
  *
  * Rol kapıları servis katmanındadır (`finance-access.ts`).
  */
+@RequiresModule("faturalama")
 @Controller("billing")
 export class BillingController {
   constructor(
@@ -44,6 +51,8 @@ export class BillingController {
     private readonly timeEntries: TimeEntriesService,
     private readonly invoices: InvoicesService,
     private readonly payments: PaymentsService,
+    private readonly prisma: PrismaService,
+    private readonly eInvoice: EInvoiceService,
   ) {}
 
   // =================================================== ÜCRET SÖZLEŞMELERİ
@@ -162,6 +171,19 @@ export class BillingController {
     return this.invoices.describeProvider(user);
   }
 
+  /** Faz 3: tenant başına entegratör ayarı (kimlik bilgisi şifreli; yanıtta yer almaz). */
+  @Get("e-invoice/settings")
+  eInvoiceSettings(@CurrentUser() user: AuthUser) {
+    assertFinanceAccess(user, FINANCE_ACCESS.INVOICE_ISSUE, "e-Fatura ayarlarını görüntüleme");
+    return this.eInvoice.describe(user.tenantId);
+  }
+
+  @Put("e-invoice/settings")
+  saveEInvoiceSettings(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(eInvoiceSettingsSchema)) body: EInvoiceSettingsInput) {
+    assertFinanceAccess(user, FINANCE_ACCESS.INVOICE_ISSUE, "e-Fatura ayarı");
+    return this.eInvoice.saveSettings(user, body);
+  }
+
   /** GET /billing/taxpayer-check?vkn=1234567890 */
   @Get("taxpayer-check")
   taxpayerCheck(@CurrentUser() user: AuthUser, @Query("vkn") vkn: string) {
@@ -205,6 +227,32 @@ export class BillingController {
   @Get("invoices/:id")
   invoiceDetail(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.invoices.detail(user, id);
+  }
+
+  /** Faz 3: büro → müvekkil fatura PDF dökümü (resmî e-belge değildir). */
+  @Get("invoices/:id/pdf")
+  async invoicePdf(@CurrentUser() user: AuthUser, @Param("id") id: string, @Res() res: Response) {
+    const inv = await this.invoices.detail(user, id);
+    const tenant = await this.prisma.client.tenant.findUnique({ where: { id: user.tenantId }, select: { name: true, address: true, taxNumber: true, taxOffice: true } });
+    const buffer = await renderInvoicePdf({
+      title: tenant?.name ?? "Fatura",
+      documentLabel: "Avukatlık hizmeti faturası (bilgi amaçlı döküm)",
+      number: inv.invoiceNo,
+      issueDate: inv.issueDate,
+      dueDate: inv.dueDate,
+      status: inv.status,
+      supplier: { name: tenant?.name ?? "Büro", address: tenant?.address, taxNumber: tenant?.taxNumber, taxOffice: tenant?.taxOffice },
+      customer: { name: inv.client.name, taxNumber: inv.client.taxNumber ?? inv.client.tcknMasked, taxOffice: inv.client.taxOffice },
+      lines: inv.lines.map((l) => ({ description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, vatRate: l.vatRate, lineTotal: l.lineTotal })),
+      subtotal: inv.subtotal,
+      vatAmount: inv.vatAmount,
+      total: inv.total,
+      currency: inv.currency,
+      note: inv.note ?? (Number(inv.remaining) > 0 ? `Kalan bakiye: ${inv.remainingFormatted}` : "Ödeme alınmıştır."),
+    });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${(inv.invoiceNo ?? inv.id).replace(/[^A-Za-z0-9_-]/g, "_")}.pdf"`);
+    res.send(buffer);
   }
 
   @Patch("invoices/:id")

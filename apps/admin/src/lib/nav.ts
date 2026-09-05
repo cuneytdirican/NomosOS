@@ -18,6 +18,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { href: "/tenantlar", label: "Tenantlar", action: "tenant.view" },
   { href: "/abonelikler", label: "Abonelikler", action: "subscription.view" },
   { href: "/odemeler", label: "Ödemeler", action: "payment.view" },
+  { href: "/faturalar", label: "Platform Faturaları", action: "invoice.view" },
+  { href: "/kuponlar", label: "Kuponlar", action: "coupon.view" },
   { href: "/kullanim", label: "AI Kullanımı", action: "ai.analytics.platform" },
   { href: "/krediler", label: "Kredi & Fiyatlar", action: "credits.tenant.view" },
   { href: "/yargi", label: "Yargı & Noter Kataloğu", action: "judicial.view" },

@@ -62,7 +62,7 @@ const BLOCKED_STATUSES = ["SUSPENDED", "CANCELED"] as const;
  * kapanmaz). Askı (403) ayrı ve daha sert bir karardır, olduğu gibi durur.
  */
 const PAST_DUE_GRACE_DAYS = SUBSCRIPTION_GRACE_DAYS;
-const PAYMENT_OPEN_PREFIXES = ["/api/v1/auth/", "/api/v1/billing", "/api/v1/credits"];
+const PAYMENT_OPEN_PREFIXES = ["/api/v1/auth/", "/api/v1/billing", "/api/v1/credits", "/api/v1/subscription"];
 
 interface CachedStatus {
   status: string | null;

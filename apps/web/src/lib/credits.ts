@@ -182,10 +182,11 @@ export function fetchTransactions(query: {
   return api("/credits/transactions", { query });
 }
 
-export function purchasePackage(packageKey: string) {
-  return api<{ paket: { key: string; credits: number }; cuzdan: CreditWalletDto; fatura: Record<string, unknown>; mesaj: string }>(
+/** Faz 3: satın alma bir ÖDEME başlatır; SIMULASYON'da anında, iyzico'da ödeme sayfasına yönlendirir. */
+export function purchasePackage(packageKey: string, couponCode?: string | null) {
+  return api<{ odendi: boolean; odemeSayfasi: string | null; fatura: Record<string, unknown>; odemeId: string; mesaj: string }>(
     "/credits/purchase",
-    { method: "POST", body: { packageKey } },
+    { method: "POST", body: { packageKey, couponCode: couponCode ?? null } },
   );
 }
 

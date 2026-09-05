@@ -3,6 +3,10 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { PlatformAuditService } from "../../platform/platform-audit.service";
 import { canTransition } from "../../platform/subscriptions/subscription-state";
 import { addDays } from "../../common/dates";
+import { SubscriptionInvoiceService, INVOICE_LEAD_DAYS } from "../../platform-billing/subscription-invoice.service";
+import { NotificationOutboxService, type OutboxEntry } from "../notification-outbox.service";
+import { TenantRecipientsService } from "../tenant-recipients";
+import { dunningKey, invoiceIssuedKey, trialEndingKey } from "../dedupe-key";
 import {
   JOB_AUDIT_ACTIONS,
   JOB_KEYS,
@@ -42,15 +46,27 @@ export class SubscriptionRenewalJob implements ScheduledJobHandler {
   readonly name = "Abonelik dönem yenileme denetimi";
   readonly defaultCron = "0 3 * * *";
   readonly description =
-    "Dönemi biten ACTIVE abonelikleri PAST_DUE olarak işaretler; askıya alma ve " +
-    "iptal ÖNERİLERİNİ raporlar (otomatik tahsilat/askıya alma YAPMAZ — dört-göz).";
+    "Dönem sonuna 7 gün kala DÖNEM FATURASI keser ve yöneticilere bildirir (Faz 3); dönemi biten " +
+    "ACTIVE abonelikleri PAST_DUE işaretler; gecikmiş ödemede 1/3/7. gün DUNNING bildirimi, deneme " +
+    "bitişine 3 gün kala uyarı üretir; askıya alma/iptal ÖNERİLERİNİ raporlar (dört-göz).";
 
   private readonly logger = new Logger(SubscriptionRenewalJob.name);
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly audit: PlatformAuditService
+    private readonly audit: PlatformAuditService,
+    private readonly invoices: SubscriptionInvoiceService,
+    private readonly outbox: NotificationOutboxService,
+    private readonly recipients: TenantRecipientsService,
   ) {}
+
+  /** Faz 3: büronun ADMIN/PARTNER kullanıcılarına bildirim satırları üretir. */
+  private async notifyAdmins(tenantId: string, build: (userId: string) => OutboxEntry): Promise<number> {
+    const audience = await this.recipients.load(tenantId);
+    if (audience.fallbackUserIds.length === 0) return 0;
+    const res = await this.outbox.enqueueMany(audience.fallbackUserIds.map(build));
+    return res.created;
+  }
 
   async run(ctx: JobExecutionContext): Promise<JobResult> {
     const now = ctx.now;
@@ -59,6 +75,50 @@ export class SubscriptionRenewalJob implements ScheduledJobHandler {
     let skipped = 0;
     let failed = 0;
     const errors: string[] = [];
+
+    // ---- 0) Faz 3: dönem sonuna INVOICE_LEAD_DAYS kala DÖNEM FATURASI --------
+    // İdempotent: [tenantId, ABONELIK, periodStart] tekil; ikinci koşu "zaten var".
+    const faturaAdaylari = await this.prisma.client.subscription.findMany({
+      where: {
+        status: { in: ["ACTIVE", "PAST_DUE"] },
+        currentPeriodEnd: { not: null, lte: addDays(now, INVOICE_LEAD_DAYS) },
+      },
+    });
+    let faturaKesilen = 0;
+    let faturaBildirim = 0;
+    for (const sub of faturaAdaylari) {
+      if (!sub.currentPeriodEnd) continue;
+      try {
+        const res = await this.invoices.issueForPeriod({ subscription: sub, periodStart: sub.currentPeriodEnd, now });
+        if (!res.created) continue;
+        faturaKesilen += 1;
+        const inv = res.invoice;
+        faturaBildirim += await this.notifyAdmins(sub.tenantId, (userId) => ({
+          tenantId: sub.tenantId,
+          userId,
+          kind: "FATURA_KESILDI",
+          title: `Abonelik faturası kesildi: ${inv.number ?? ""} — ${inv.total.toFixed(2)} TRY`,
+          body:
+            `${inv.description ?? "Dönem faturası"}. Son ödeme tarihi ${inv.dueDate?.toISOString().slice(0, 10) ?? "-"}. ` +
+            "Ayarlar → Abonelik ekranından çevrimiçi ödeyebilir ya da havale/EFT ile gönderebilirsiniz.",
+          resourceType: "InvoiceRecord",
+          resourceId: inv.id,
+          dedupeKey: invoiceIssuedKey(inv.id, userId),
+        }));
+        await this.audit.log({
+          actor: null,
+          action: "SUBSCRIPTION_INVOICE_ISSUED",
+          entity: "InvoiceRecord",
+          entityId: inv.id,
+          tenantId: sub.tenantId,
+          detail: `Dönem faturası ${inv.number} kesildi: ${inv.total.toFixed(2)} TRY (${inv.description ?? ""}).`,
+        });
+      } catch (err) {
+        failed += 1;
+        if (errors.length < 5) errors.push(`fatura ${sub.tenantId}: ${(err as Error).message}`);
+        this.logger.warn(`Dönem faturası kesilemedi (${sub.tenantId}): ${(err as Error).message}`);
+      }
+    }
 
     // ---- 1) Dönemi biten ACTIVE abonelikler → PAST_DUE ---------------------
     const expired = await this.prisma.client.subscription.findMany({
@@ -113,6 +173,61 @@ export class SubscriptionRenewalJob implements ScheduledJobHandler {
       }
     }
 
+    // ---- 1b) Faz 3: DUNNING — PAST_DUE 1/3/7. gün bildirimi (e-posta dağıtım işiyle çıkar)
+    const pastDue = await this.prisma.client.subscription.findMany({
+      where: { status: "PAST_DUE", currentPeriodEnd: { not: null } },
+      select: { id: true, tenantId: true, currentPeriodEnd: true },
+    });
+    let dunningBildirim = 0;
+    for (const sub of pastDue) {
+      if (!sub.currentPeriodEnd) continue;
+      const periodEnd = sub.currentPeriodEnd;
+      const gun = Math.floor((now.getTime() - periodEnd.getTime()) / 86_400_000);
+      if (![1, 3, 7].includes(gun)) continue;
+      const acik = await this.prisma.client.invoiceRecord.findFirst({
+        where: { tenantId: sub.tenantId, type: "ABONELIK", status: { in: ["GONDERILDI", "TASLAK", "KISMI_ODENDI"] } },
+        orderBy: { issueDate: "desc" },
+        select: { id: true, number: true, total: true },
+      });
+      const kalan = Math.max(0, SUBSCRIPTION_GRACE_DAYS - gun);
+      dunningBildirim += await this.notifyAdmins(sub.tenantId, (userId) => ({
+        tenantId: sub.tenantId,
+        userId,
+        kind: "ODEME_GECIKTI",
+        title: `Abonelik ödemesi ${gun} gündür gecikmiş${acik ? ` — ${acik.number ?? ""} ${acik.total.toFixed(2)} TRY` : ""}`,
+        body:
+          `Dönem ${periodEnd.toISOString().slice(0, 10)} tarihinde bitti; ödeme alınamadı. ` +
+          (kalan > 0
+            ? `${kalan} gün içinde ödenmezse yazma işlemleri kapanır (veriler silinmez).`
+            : "Ödeme süresi doldu; yazma işlemleri ödeme tamamlanana kadar kapalı.") +
+          " Ayarlar → Abonelik ekranından ödeyebilirsiniz.",
+        resourceType: acik ? "InvoiceRecord" : "Subscription",
+        resourceId: acik?.id ?? sub.id,
+        dedupeKey: dunningKey(sub.id, periodEnd, gun, userId),
+      }));
+    }
+
+    // ---- 1c) Faz 3: deneme bitişine 3 gün kala uyarı -------------------------
+    const trialSoon = await this.prisma.client.subscription.findMany({
+      where: { status: "TRIAL", trialEndsAt: { gt: now, lte: addDays(now, 3) } },
+      select: { id: true, tenantId: true, trialEndsAt: true },
+    });
+    let denemeBildirim = 0;
+    for (const sub of trialSoon) {
+      if (!sub.trialEndsAt) continue;
+      const trialEndsAt = sub.trialEndsAt;
+      denemeBildirim += await this.notifyAdmins(sub.tenantId, (userId) => ({
+        tenantId: sub.tenantId,
+        userId,
+        kind: "DENEME_BITIYOR",
+        title: `Deneme süreniz ${trialEndsAt.toISOString().slice(0, 10)} tarihinde bitiyor`,
+        body: "Aboneliği başlatmak için Ayarlar → Abonelik ekranından plan seçip ilk dönem faturasını ödeyin. Verileriniz korunur.",
+        resourceType: "Subscription",
+        resourceId: sub.id,
+        dedupeKey: trialEndingKey(sub.id, trialEndsAt, userId),
+      }));
+    }
+
     // ---- 2) RAPOR: askıya alma önerilenler (MUTASYON YOK) -----------------
     const graceCutoff = addDays(now, -SUBSCRIPTION_GRACE_DAYS);
     const suspendCandidates = await this.prisma.client.subscription.findMany({
@@ -145,6 +260,10 @@ export class SubscriptionRenewalJob implements ScheduledJobHandler {
       failed,
       errors,
       detail: {
+        faturaKesilen,
+        faturaBildirim,
+        dunningBildirim,
+        denemeBildirim,
         pastDueYapilan: transitioned,
         /**
          * DÖRT-GÖZ BEKLEYENLER — iş bunlara DOKUNMAZ. Operatör panelden

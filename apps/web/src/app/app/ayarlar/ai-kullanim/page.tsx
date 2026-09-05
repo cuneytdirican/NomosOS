@@ -97,6 +97,11 @@ export default function AiKullanimPage() {
     setError(null);
     try {
       const res = await purchasePackage(key);
+      if (!res.odendi && res.odemeSayfasi) {
+        // iyzico: ödeme sayfasına git; sonuç Ayarlar → Abonelik ekranına döner.
+        window.location.href = res.odemeSayfasi;
+        return;
+      }
       setNotice(res.mesaj);
       setBuyKey(null);
       notifyCreditsChanged();
@@ -368,8 +373,8 @@ export default function AiKullanimPage() {
             ))}
           </div>
           <p className="-mx-5 -mb-5 mt-0 border-t border-slate-100 px-5 py-3 text-xs text-slate-500">
-            Satın alma bir <strong>fatura taslağı</strong> oluşturur; e-Fatura akışına muhasebe
-            tarafından gönderilir. Krediler ödemeyi beklemeden anında kullanılabilir.
+            Satın alma bir <strong>fatura</strong> keser ve ödemeyi başlatır; krediler{" "}
+            <strong>ödeme kesinleşince</strong> cüzdana yüklenir. Faturalar ve ödeme geçmişi Ayarlar → Abonelik ekranındadır.
           </p>
         </Card>
       )}
@@ -561,9 +566,9 @@ export default function AiKullanimPage() {
                 (KDV hariç)
               </p>
               <p>
-                Krediler cüzdanınıza <strong>anında</strong> eklenir ve{" "}
-                <strong>süresi dolmaz</strong>. İşlem için bir fatura taslağı oluşturulur; ödeme
-                muhasebe akışında tamamlanır.
+                Fatura kesilir ve ödeme başlatılır; krediler <strong>ödeme kesinleşince</strong> cüzdanınıza
+                eklenir ve <strong>süresi dolmaz</strong>. Kartla ödemede sağlayıcının ödeme sayfasına
+                yönlendirilirsiniz.
               </p>
               <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
                 <Button variant="secondary" onClick={() => setBuyKey(null)} disabled={busy}>

@@ -703,7 +703,7 @@ export class InvoicesService {
     // F2-Ö-17 (Modül 09, kural 3): sağlayıcıya GÖNDERİLMİŞ bir e-belge iptal
     // edilirken GİB'e de iptal bildirimi gönderilmeliydi. Gönderilmiş = GIB
     // durumu GONDERILDI/KABUL olan VE eInvoiceUuid'si olan belge.
-    const adapter = this.eInvoice.resolve(user.tenantId);
+    const adapter = await this.eInvoice.resolve(user.tenantId);
     const wasSentToProvider =
       Boolean(existing.eInvoiceUuid) &&
       (existing.eInvoiceStatus === "GONDERILDI" || existing.eInvoiceStatus === "KABUL");
@@ -779,7 +779,7 @@ export class InvoicesService {
     if (digits.length !== 10 && digits.length !== 11) {
       throw new BadRequestException("VKN 10 hane, TCKN 11 hane olmalıdır.");
     }
-    const adapter = this.eInvoice.resolve(user.tenantId);
+    const adapter = await this.eInvoice.resolve(user.tenantId);
     return adapter.checkTaxpayer(digits);
   }
 
@@ -819,7 +819,7 @@ export class InvoicesService {
       );
     }
 
-    const adapter = this.eInvoice.resolve(user.tenantId);
+    const adapter = await this.eInvoice.resolve(user.tenantId);
     const identification = resolveCustomerIdentification(invoice.client);
 
     // (1) Mükellef sorgusu — e-Fatura mı e-Arşiv mi? Yapılandırılmamış
@@ -922,7 +922,7 @@ export class InvoicesService {
       );
     }
 
-    const adapter = this.eInvoice.resolve(user.tenantId);
+    const adapter = await this.eInvoice.resolve(user.tenantId);
     const gibStatus = await adapter.getStatus(invoice.eInvoiceUuid);
 
     // GİB durumu yerel kayda YANSITILIR — yalnız KESİN durumlar yazılır;
@@ -990,7 +990,7 @@ export class InvoicesService {
       );
     }
 
-    const adapter = this.eInvoice.resolve(user.tenantId);
+    const adapter = await this.eInvoice.resolve(user.tenantId);
     const totals = computeInvoiceTotals(
       invoice.lines.map((l) => ({
         description: l.description,

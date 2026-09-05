@@ -302,6 +302,15 @@ services:
       WHATSAPP_BUSINESS_ACCOUNT_ID: ${WHATSAPP_BUSINESS_ACCOUNT_ID:-}
       PUSH_PROVIDER: ${PUSH_PROVIDER:-}
       EXPO_ACCESS_TOKEN: ${EXPO_ACCESS_TOKEN:-}
+      # Faz 3 — platform tahsilatı (iyzico) + fatura PDF satıcı bilgisi.
+      ODEME_SAGLAYICI: ${ODEME_SAGLAYICI:-}
+      IYZICO_API_KEY: ${IYZICO_API_KEY:-}
+      IYZICO_SECRET_KEY: ${IYZICO_SECRET_KEY:-}
+      IYZICO_BASE_URL: ${IYZICO_BASE_URL:-https://api.iyzipay.com}
+      PLATFORM_LEGAL_NAME: ${PLATFORM_LEGAL_NAME:-}
+      PLATFORM_LEGAL_ADDRESS: ${PLATFORM_LEGAL_ADDRESS:-}
+      PLATFORM_TAX_NUMBER: ${PLATFORM_TAX_NUMBER:-}
+      PLATFORM_TAX_OFFICE: ${PLATFORM_TAX_OFFICE:-}
 
       # --- Zaman aşımı ---
       # Uzun sözleşme analiz parçaları tek AI çağrısında 60 sn'yi aşabilir;

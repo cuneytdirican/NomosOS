@@ -23,7 +23,38 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 6 Eylül 2026, 01:30
+# 🔖 KALDIĞIM YER — 6 Eylül 2026, 04:30
+
+> Üç persona planı (`~/.claude/plans/wiggly-giggling-lighthouse.md`) yürüyor:
+> **Faz 0 ✅ · Faz 1 ✅ · Faz 2 ✅ · Faz 3 ✅ (bu commit)** · sırada Faz 4 (operasyon/SRE).
+
+**FAZ 3 — GELİR HATTI TAMAMLANDI** (belge: `docs/faz3-gelir-hatti.md`):
+1. **Dönem faturası**: `subscription-renewal-daily` dönem sonuna 7 gün kala `InvoiceRecord(ABONELIK)`
+   keser (tekil `[tenantId,type,periodStart]`), yöneticilere FATURA_KESILDI; **dunning** PAST_DUE
+   1/3/7. gün ODEME_GECIKTI, deneme bitişi DENEME_BITIYOR (Faz 2 dağıtım işi e-postalar).
+2. **Checkout/kesinleştirme** (`platform-billing/`): kredi paketi ve abonelik faturası ödemesi →
+   `PaymentRecord` → SIMULASYON anında / **iyzico** Checkout Form (IYZWSv2 + Webhook V3 imza,
+   callback/webhook uçları) / tanımsız 503. **Krediler ödeme kesinleşince yüklenir** (gelir kaçağı
+   kapandı); abonelik ödenince dönem ilerler + ACTIVE; tutar uyuşmazlığı reddedilir; idempotent.
+3. **Kupon** (`Coupon`, panel CRUD), **BYO-LLM %30** otomatik (kuponla birleşmez), **yıllık fiyat**
+   (`annualPricePerUser`), **pro-rata** plan farkı faturası (executor).
+4. **`@RequiresModule` guard**: plan `features.modules` zorlaması (icra/finans/faturalama/sso; 60 sn önbellek).
+5. **Fatura PDF** (pdfkit + DejaVu Sans): büro→müvekkil ve platform→büro. **e-Fatura ayarı tenant
+   başına** (`EInvoiceSettings`, şifreli kimlik; `RestEInvoiceAdapter` köprü sözleşmesi; `resolve` async).
+6. Web **Ayarlar → Abonelik** (plan, önizleme, aralık, kupon, faturalar Öde/PDF); AI Kullanımı satın
+   alma → ödeme akışı. Admin **Kuponlar** + **Platform Faturaları** (ödendi işaretle).
+Migration `20260926100000_faz3_gelir_hatti`. Testler: api 1354 (152 dosya), web 100; lint 0.
+Açık not: otomatik kredi yükleme (`tryAutoTopUp`) hâlâ ödemesiz yükler (iş kuralı 12, açık onaylı);
+iyzico canlı doğrulama sandbox anahtarı gerektirir (sözleşme sonrası).
+
+**SIRADA: FAZ 4 — operasyon/SRE:** `/health/ready` (DB/Redis/S3) + compose healthcheck; pino JSON
+log + `x-request-id`; 12 metrik + `prometheus/alerts.yml`; backup cron servisi + `prod-restore.sh` +
+tatbikat; `deploy.yml` (tag → GHCR → SSH); `Caddyfile`; global oran sınırı, parola gücü, anahtar
+rotasyonu; README/`docs/uretim-dagitimi.md` §0, OpenAPI (dev), CHANGELOG/CONTRIBUTING.
+
+---
+
+## 🔖 ÖNCEKİ KALDIĞIM YER — 6 Eylül 2026, 01:30
 
 > Üç persona planı (`~/.claude/plans/wiggly-giggling-lighthouse.md`) yürüyor:
 > **Faz 0 ✅ · Faz 1 ✅ · Faz 2 ✅ (bu commit)** · sırada Faz 3 (gelir hattı).

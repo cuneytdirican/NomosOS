@@ -571,3 +571,20 @@ export interface AdminCreditAnomaly {
   saatlikOrtalama: number;
   kat: number | null;
 }
+
+/** Faz 3 — kupon. */
+export interface AdminCoupon {
+  id: string;
+  code: string;
+  kind: "YUZDE" | "SABIT";
+  value: string;
+  appliesTo: "TUM" | "ABONELIK" | "KREDI";
+  validFrom: Iso | null;
+  validUntil: Iso | null;
+  maxRedemptions: number | null;
+  redeemedCount: number;
+  isActive: boolean;
+  note: string | null;
+  createdAt: Iso;
+  label: string;
+}

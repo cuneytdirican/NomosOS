@@ -68,6 +68,20 @@ export const EP = {
     failed: "/payments/failed",
     refund: (id: string) => `/payments/${encodeURIComponent(id)}/refund`,
   },
+  /** Faz 3 — gelir hattı: platform faturaları, elle ödendi işaretleme, kuponlar. */
+  invoices: {
+    list: "/invoices",
+    issue: (id: string) => `/invoices/${encodeURIComponent(id)}/issue`,
+    markPaid: (id: string) => `/invoices/${encodeURIComponent(id)}/mark-paid`,
+  },
+  coupons: {
+    list: "/coupons",
+    create: "/coupons",
+    patch: (id: string) => `/coupons/${encodeURIComponent(id)}`,
+  },
+  subscriptionInvoices: {
+    issue: (id: string) => `/subscriptions/${encodeURIComponent(id)}/issue-invoice`,
+  },
   approvals: {
     list: "/approvals",
     approve: (id: string) => `/approvals/${encodeURIComponent(id)}/approve`,

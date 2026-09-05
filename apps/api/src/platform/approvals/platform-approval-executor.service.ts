@@ -9,6 +9,8 @@ import { superAdminFloorViolation } from "../users/super-admin-floor";
 import { PURGE_ESCAPE_HATCH_GUC } from "../audit/append-only";
 import { topologicalDeleteOrder, type ForeignKeyEdge } from "../tenants/tenant-purge-order";
 import { assertTransition } from "../subscriptions/subscription-state";
+import { periodListPrice, proRataDelta, type BillingInterval } from "../../billing/subscription-pricing";
+import { isUniqueViolation, nextPlatformInvoiceNumber } from "../../platform-billing/platform-invoice-number";
 import type { PlatformAuthUser } from "../platform.types";
 import {
   APPROVAL_ACTIONS,
@@ -295,6 +297,10 @@ export class PlatformApprovalExecutorService {
       },
     });
 
+    // Faz 3: dönem ortasında YÜKSELTME → kalan gün oranında PLAN_FARKI faturası.
+    // Düşürmede fark yok (iade yok; sonraki dönem yeni fiyattan).
+    const proRata = await this.issueProRataInvoice(subscription, updated, new Date());
+
     await this.audit.log({
       actor: approver,
       action: "SUBSCRIPTION_PLAN_CHANGE",
@@ -304,9 +310,62 @@ export class PlatformApprovalExecutorService {
       detail:
         `Plan ${subscription.planKey} → ${updated.planKey}, koltuk ` +
         `${subscription.seats} → ${updated.seats}. Gerekçe: ${payload.reason}. ` +
-        "Fiyat farkı (proration) bu fazda hesaplanmaz; cari dönem sonunda yansır.",
+        (proRata ? `Plan farkı faturası ${proRata.number}: ${proRata.total} TRY (kalan gün oranında).` : "Fiyat farkı yok (düşürme ya da dönem dışı); yeni fiyat sonraki dönemde."),
     });
-    return `Abonelik güncellendi: plan ${updated.planKey}, ${updated.seats} koltuk.`;
+    return `Abonelik güncellendi: plan ${updated.planKey}, ${updated.seats} koltuk.` + (proRata ? ` Plan farkı faturası ${proRata.number} (${proRata.total} TRY) kesildi.` : "");
+  }
+
+  /** Faz 3 — pro-rata: kalan gün × (yeni − eski) dönem fiyatı; yalnız artışta. */
+  private async issueProRataInvoice(
+    before: { tenantId: string; planKey: string; seats: number; status: string; billingInterval: string; currentPeriodStart: Date | null; currentPeriodEnd: Date | null },
+    after: { planKey: string; seats: number },
+    now: Date,
+  ): Promise<{ number: string | null; total: string } | null> {
+    if (before.status !== "ACTIVE" || !before.currentPeriodStart || !before.currentPeriodEnd) return null;
+    const [oldPlan, newPlan] = await Promise.all([
+      this.prisma.client.planTier.findUnique({ where: { key: before.planKey } }),
+      this.prisma.client.planTier.findUnique({ where: { key: after.planKey } }),
+    ]);
+    if (!oldPlan || !newPlan) return null;
+    const interval = before.billingInterval as BillingInterval;
+    const delta = proRataDelta({
+      oldPeriodPrice: periodListPrice(oldPlan, before.seats, interval),
+      newPeriodPrice: periodListPrice(newPlan, after.seats, interval),
+      periodStart: before.currentPeriodStart,
+      periodEnd: before.currentPeriodEnd,
+      now,
+    });
+    if (!delta) return null;
+    const vatAmount = delta.amount.mul("0.20").toDecimalPlaces(2);
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        const inv = await this.prisma.client.$transaction(async (tx) => {
+          const number = await nextPlatformInvoiceNumber(tx, now.getUTCFullYear());
+          return tx.invoiceRecord.create({
+            data: {
+              tenantId: before.tenantId,
+              type: "PLAN_FARKI",
+              number,
+              description: `Plan farkı: ${oldPlan.name} (${before.seats}) → ${newPlan.name} (${after.seats}); kalan ${delta.remainingDays}/${delta.totalDays} gün oranında.`,
+              periodStart: now,
+              periodEnd: before.currentPeriodEnd,
+              amount: delta.amount,
+              vatAmount,
+              total: delta.amount.add(vatAmount),
+              issueDate: now,
+              dueDate: new Date(now.getTime() + 7 * 86_400_000),
+              status: "GONDERILDI",
+              metaJson: JSON.stringify({ oldPlanKey: oldPlan.key, newPlanKey: newPlan.key, oldSeats: before.seats, newSeats: after.seats, remainingDays: delta.remainingDays, totalDays: delta.totalDays }),
+            },
+          });
+        });
+        return { number: inv.number, total: inv.total.toFixed(2) };
+      } catch (err) {
+        if (!isUniqueViolation(err)) throw err;
+      }
+    }
+    this.logger.warn(`Plan farkı faturası üretilemedi (${before.tenantId}).`);
+    return null;
   }
 
   private async cancelSubscription(

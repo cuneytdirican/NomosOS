@@ -12,6 +12,7 @@ import { Body, Controller, Get, HttpCode, Post, Put, Query, Req, Res, UseGuards 
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { Public } from "../common/decorators/public.decorator";
+import { RequiresModule } from "../common/decorators/requires-module.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe";
 import { AUTH_COOKIE_NAME, authCookieOptions } from "../common/auth-cookie";
@@ -82,11 +83,13 @@ export class SsoController {
     return this.sso.getConfig(user);
   }
 
+  @RequiresModule("sso")
   @Put("security/sso")
   updateConfig(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(configSchema)) body: z.infer<typeof configSchema>) {
     return this.sso.updateConfig(user, body);
   }
 
+  @RequiresModule("sso")
   @Post("security/sso/test")
   @HttpCode(200)
   test(@CurrentUser() user: AuthUser) {

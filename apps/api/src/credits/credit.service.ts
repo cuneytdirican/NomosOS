@@ -1027,50 +1027,29 @@ export class CreditService implements OnModuleInit {
   }
 
   /**
-   * Ek paket satın alma.
-   *
-   * FATURA MODELİ SEÇİMİ — `InvoiceRecord`, `Invoice` DEĞİL:
-   * `Invoice` bürodan MÜVEKKİLE kesilen faturadır ve zorunlu bir `clientId`
-   * taşır. Kredi paketi ise NomosOS'tan BÜROYA satılır; müvekkil yoktur.
-   * `Invoice` kullanmak için sahte bir `Client` yaratmak gerekirdi ve bu,
-   * büronun müvekkil listesini kirletirdi. `InvoiceRecord` zaten "platform →
-   * büro" faturasıdır (Modül 25/09) ve e-Fatura akışına o taraftan girer.
+   * ÖDEMESİ KESİNLEŞMİŞ paketi cüzdana yükler (Faz 3). Fatura/ödeme kaydını
+   * `PlatformCheckoutService` üretir; bu yöntem yalnız cüzdan + hareket yazar ve
+   * çağıranın transaction'ı içinde koşar. Krediler ödeme olmadan YÜKLENMEZ.
    */
-  async purchase(user: AuthUser, packageKey: string) {
-    assertRole(user, ROLE_SETS.ONAY, "kredi paketi satın alma");
-
-    const pkg = await this.prisma.client.creditPackage.findUnique({ where: { key: packageKey } });
-    if (!pkg || !pkg.isActive) {
-      throw new BadRequestException(`"${packageKey}" anahtarlı satılabilir bir paket bulunamadı.`);
-    }
-
-    const wallet = await this.prisma.client.creditWallet.findUnique({
-      where: { tenantId: user.tenantId },
+  async loadPaidPackage(
+    tx: Prisma.TransactionClient,
+    input: { tenantId: string; packageKey: string; credits: number; invoiceId: string; total: string; userId?: string | null },
+  ) {
+    const wallet = await tx.creditWallet.update({
+      where: { tenantId: input.tenantId },
+      data: { purchasedCredits: { increment: input.credits } },
     });
-    if (!wallet) {
-      throw new BadRequestException(
-        "Büronuz için kredi cüzdanı tanımlı değil; bu modda kota uygulanmadığı için paket " +
-          "satın almanız gerekmiyor.",
-      );
-    }
-
-    const result = await this.applyPurchase({
-      tenantId: user.tenantId,
-      userId: user.userId,
-      pkg: { key: pkg.key, credits: pkg.credits, price: pkg.price, currency: pkg.currency },
-      note: `Ek kredi paketi (${pkg.key}) satın alındı.`,
+    await tx.creditTransaction.create({
+      data: {
+        tenantId: input.tenantId,
+        userId: input.userId ?? null,
+        type: "SATIN_ALMA",
+        amount: input.credits,
+        balanceAfter: settledBalance(wallet),
+        note: `Ek kredi paketi (${input.packageKey}) — fatura ${input.invoiceId} ödendi (${input.total} TRY, KDV dâhil). Satın alınan kredilerin süresi dolmaz.`,
+      },
     });
-
-    await this.audit.log({
-      tenantId: user.tenantId,
-      userId: user.userId,
-      action: "KREDI_PAKETI_SATIN_ALMA",
-      entity: "InvoiceRecord",
-      entityId: result.fatura.id,
-      detail: `${pkg.key} · ${pkg.credits} kredi · ${result.fatura.total} ${pkg.currency}`,
-    });
-
-    return result;
+    return this.walletDto(wallet);
   }
 
   /** Satın almanın gövdesi — elle satın alma ve otomatik yükleme aynı yoldan geçer. */

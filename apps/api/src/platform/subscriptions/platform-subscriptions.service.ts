@@ -238,6 +238,7 @@ export class PlatformSubscriptionsService {
         // Para STRING döner — JSON.stringify Decimal'i düz sayı gibi basıp
         // kuruş kaybettirmesin.
         monthlyPricePerUser: money(p.monthlyPricePerUser),
+        annualPricePerUser: money(p.annualPricePerUser),
         maxUsers: p.maxUsers,
         features: parseJson<Record<string, unknown>>(p.featuresJson, {}),
         isActive: p.isActive,
@@ -315,6 +316,7 @@ export class PlatformSubscriptionsService {
       const otherFields = Object.keys(input).filter(
         (k) =>
           k !== "monthlyPricePerUser" &&
+          k !== "annualPricePerUser" &&
           k !== "reason" &&
           input[k as keyof PlanPatchInput] !== undefined
       );
@@ -341,6 +343,7 @@ export class PlatformSubscriptionsService {
 
     const data: Prisma.PlanTierUpdateInput = {};
     if (input.name !== undefined) data.name = input.name;
+    if (input.annualPricePerUser !== undefined) data.annualPricePerUser = input.annualPricePerUser ?? null;
     if (input.maxUsers !== undefined) data.maxUsers = input.maxUsers ?? null;
     if (input.features !== undefined) data.featuresJson = JSON.stringify(input.features);
     if (input.isActive !== undefined) data.isActive = input.isActive;

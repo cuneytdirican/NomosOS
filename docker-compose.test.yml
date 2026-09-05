@@ -168,6 +168,7 @@ services:
       # modunda: gerçek para hareketi yok, ödeme kaydı düşer. Üretimde gerçek
       # sanal POS sözleşmesi bağlanana kadar tanımsız bırakılır (dürüst 503).
       ODEME_SAGLAYICI: "SIMULASYON"
+      PLATFORM_LEGAL_NAME: "NomosOS Test Platformu"
       # Faz 2 — e-posta kanalı test yığınında Mailpit'e gider (http://localhost:8025).
       SMTP_HOST: "mailpit"
       SMTP_PORT: "1025"

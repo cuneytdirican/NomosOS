@@ -49,6 +49,9 @@ export const BILLING_ROUTES = {
   payment: (id: string) => `/billing/payments/${id}`,
 
   eInvoiceProvider: "/billing/e-invoice/provider",
+  /** Faz 3: tenant başına entegratör ayarı + fatura PDF dökümü. */
+  eInvoiceSettings: "/billing/e-invoice/settings",
+  invoicePdf: (id: string) => `/billing/invoices/${id}/pdf`,
   taxpayerCheck: "/billing/taxpayer-check",
 } as const;
 
@@ -466,6 +469,19 @@ export const NOTIFICATION_ROUTES = {
   preferences: "/notifications/preferences",
   /** Faz 2: kiracıya ulaşan platform duyuruları (web şeridi). */
   announcements: "/notifications/announcements",
+} as const;
+
+/** Faz 3 — gelir hattı: abonelik, platform faturaları, ödeme. */
+export const SUBSCRIPTION_ROUTES = {
+  summary: "/subscription",
+  invoices: "/subscription/invoices",
+  pay: (id: string) => `/subscription/invoices/${id}/pay`,
+  pdf: (id: string) => `/subscription/invoices/${id}/pdf`,
+  coupon: "/subscription/coupon",
+  interval: "/subscription/interval",
+  /** Sağlayıcı geri dönüşleri (public). */
+  paymentCallback: "/billing/odeme/callback",
+  paymentWebhook: "/billing/odeme/webhook",
 } as const;
 
 /** Mobil cihaz push token'ları (Faz 6). */

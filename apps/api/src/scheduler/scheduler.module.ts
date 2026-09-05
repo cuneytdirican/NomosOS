@@ -13,6 +13,7 @@ import { NotificationOutboxService } from "./notification-outbox.service";
 import { TenantRecipientsService } from "./tenant-recipients";
 import { IoredisProbe, REDIS_PROBE } from "./redis-connection";
 import { NoopPushProvider, PUSH_PROVIDER } from "./push/push-provider";
+import { PlatformBillingModule } from "../platform-billing/platform-billing.module";
 import { ExpoPushProvider } from "./push/expo-push.provider";
 import { BildirimDagitimiJob } from "./jobs/bildirim-dagitimi.job";
 import { BildirimTemizligiJob } from "./jobs/bildirim-temizligi.job";
@@ -77,7 +78,7 @@ import { DeviceTokensService } from "./device-tokens.service";
  * ajanının işidir.
  */
 @Module({
-  imports: [PlatformModule, CreditsModule, RiskModule, VekaletUcretiModule, SecurityModule, IntegrationsModule, AuthModule],
+  imports: [PlatformModule, CreditsModule, RiskModule, VekaletUcretiModule, SecurityModule, IntegrationsModule, AuthModule, PlatformBillingModule],
   controllers: [
     // Platform (/api/admin/v1/jobs) — PlatformJwtGuard + yetki matrisi.
     PlatformJobsController,

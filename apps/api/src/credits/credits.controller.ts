@@ -24,10 +24,8 @@ import { MAX_CREDITS_PER_REQUEST } from "./credit-plans";
 import {
   autoTopUpSchema,
   estimateCreditsSchema,
-  purchaseCreditsSchema,
   type AutoTopUpInput,
   type EstimateCreditsInput,
-  type PurchaseCreditsInput,
 } from "./credits.dto";
 
 @Controller("credits")
@@ -101,14 +99,8 @@ export class CreditsController {
     return this.credits.listPackages();
   }
 
-  /** Ek paket satın alma → `InvoiceRecord` (platform faturası) üretir. */
-  @Post("purchase")
-  purchase(
-    @CurrentUser() user: AuthUser,
-    @Body(new ZodValidationPipe(purchaseCreditsSchema)) body: PurchaseCreditsInput,
-  ) {
-    return this.credits.purchase(user, body.packageKey);
-  }
+  // `POST /credits/purchase` Faz 3 ile `platform-billing/subscription.controller.ts`e taşındı:
+  // satın alma artık ödeme kesinleşince kredi yükler (checkout akışı).
 
   /** Otomatik yükleme aç/kapat. Açarken AÇIK ONAY zorunludur (iş kuralı 12). */
   @Patch("auto-topup")

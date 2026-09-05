@@ -26,6 +26,8 @@ export const planUpsertSchema = z.object({
     .regex(/^[A-Z0-9_]{2,32}$/, "Plan anahtarı 2-32 karakter, yalnız A-Z, 0-9 ve _ olabilir."),
   name: z.string().trim().min(2, "Plan adı zorunludur.").max(100),
   monthlyPricePerUser: decimalString("Kullanıcı başına aylık fiyat").nullable().optional(),
+  /** Faz 3: yıllık peşin fiyat (kullanıcı başına, 12 ay). Katalog düzeni alanıdır (doğrudan uygulanır). */
+  annualPricePerUser: decimalString("Kullanıcı başına yıllık fiyat").nullable().optional(),
   maxUsers: z.coerce
     .number()
     .int()

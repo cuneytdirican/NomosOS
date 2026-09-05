@@ -83,6 +83,12 @@ export function buildPushPayload(kind: NotificationKind): PushPayload {
       };
     case "DURUSMA_YARIN":
       return { title: "NomosOS", body: "Yarın duruşmanız var. Ayrıntı için uygulamayı açın." };
+    case "ODEME_GECIKTI":
+      return { title: "NomosOS", body: "Abonelik ödemeniz gecikti. Ayrıntı için uygulamayı açın." };
+    case "DENEME_BITIYOR":
+      return { title: "NomosOS", body: "Deneme süreniz yakında bitiyor. Ayrıntı için uygulamayı açın." };
+    case "FATURA_KESILDI":
+      return { title: "NomosOS", body: "Yeni bir abonelik faturanız var. Ayrıntı için uygulamayı açın." };
     default:
       return { title: "NomosOS", body: "Yeni bir bildiriminiz var." };
   }

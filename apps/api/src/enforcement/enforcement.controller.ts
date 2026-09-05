@@ -9,6 +9,7 @@
  */
 
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
+import { RequiresModule } from "../common/decorators/requires-module.decorator";
 import { z } from "zod";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AiThrottle } from "../common/guards/ai-rate-limit.guard";
@@ -71,6 +72,7 @@ const createSaleSchema = z.object({
 });
 export type CreateSaleInput = z.infer<typeof createSaleSchema>;
 
+@RequiresModule("icra")
 @Controller("enforcement")
 export class EnforcementController {
   constructor(
@@ -250,6 +252,7 @@ export class EnforcementController {
 }
 
 /** Safahat kayıtları dosyadan bağımsız da adreslenir. */
+@RequiresModule("icra")
 @Controller("enforcement-actions")
 export class EnforcementActionsController {
   constructor(private readonly enforcement: EnforcementService) {}
@@ -270,6 +273,7 @@ export class EnforcementActionsController {
 }
 
 /** Malvarlığı kayıtları dosyadan bağımsız da adreslenir. */
+@RequiresModule("icra")
 @Controller("assets")
 export class AssetsController {
   constructor(

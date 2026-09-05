@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { RequiresModule } from "../common/decorators/requires-module.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe";
 import { AiThrottle } from "../common/guards/ai-rate-limit.guard";
@@ -22,6 +23,7 @@ import {
  * Rol kapıları servis katmanındadır (denetim kaydıyla birlikte); controller
  * yalnızca doğrulama ve yönlendirme yapar.
  */
+@RequiresModule("finans")
 @Controller("finance")
 export class FinanceController {
   constructor(

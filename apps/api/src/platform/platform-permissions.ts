@@ -116,6 +116,9 @@ export type AdminAction =
   | "plan.catalog.price"
   | "invoice.view"
   | "invoice.issue"
+  /** Faz 3: indirim kuponları — okuma / yönetim (BILLING_ADMIN + SUPER_ADMIN). */
+  | "coupon.view"
+  | "coupon.manage"
   | "support_grant.view"
   | "support_grant.request"
   | "support_grant.revoke"
@@ -444,6 +447,20 @@ export const PERMISSION_MATRIX: Matrix = {
     SUPPORT_AGENT: N,
     ANALYST_READONLY: N,
   },
+  "coupon.view": {
+    SUPER_ADMIN: "full",
+    OPS_ADMIN: N,
+    BILLING_ADMIN: "full",
+    SUPPORT_AGENT: "read",
+    ANALYST_READONLY: N,
+  },
+  "coupon.manage": {
+    SUPER_ADMIN: "full",
+    OPS_ADMIN: N,
+    BILLING_ADMIN: "full",
+    SUPPORT_AGENT: N,
+    ANALYST_READONLY: N,
+  },
   "support_grant.view": {
     SUPER_ADMIN: "full",
     OPS_ADMIN: "read",
@@ -629,6 +646,8 @@ export const ACTION_LABELS: Record<AdminAction, string> = {
   "plan.catalog.price": "Plan oluşturma / katalog fiyat değişikliği",
   "invoice.view": "Platform faturaları",
   "invoice.issue": "Fatura kesme",
+  "coupon.view": "Kupon listesi",
+  "coupon.manage": "Kupon oluşturma/düzenleme",
   "support_grant.view": "Destek erişim kayıtları",
   "support_grant.request": "Destek erişim penceresi açma",
   "support_grant.revoke": "Destek erişimini iptal etme",
