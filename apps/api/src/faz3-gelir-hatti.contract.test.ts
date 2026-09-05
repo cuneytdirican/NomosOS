@@ -55,6 +55,8 @@ describe("Faz 3 — gelir kaçağı kapandı", () => {
     const app = read("apps", "api", "src", "app.module.ts");
     expect(app).toContain("{ provide: APP_GUARD, useClass: ModuleAccessGuard }");
     expect(app).toContain("PlatformBillingModule");
+    // DI: checkout servisi OdemeSaglayici'yi BillingModule'den alır (canlıda açılış hatası yaşandı).
+    expect(read("apps", "api", "src", "billing", "billing.module.ts")).toMatch(/exports: \[[^\]]*OdemeSaglayici[^\]]*\]/);
     expect(read("apps", "api", "src", "enforcement", "enforcement.controller.ts")).toContain('@RequiresModule("icra")');
     expect(read("apps", "api", "src", "finance", "finance.controller.ts")).toContain('@RequiresModule("finans")');
     expect(read("apps", "api", "src", "billing", "billing.controller.ts")).toContain('@RequiresModule("faturalama")');

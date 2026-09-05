@@ -38,6 +38,7 @@ import { EInvoiceService } from "./e-invoice/e-invoice.service";
     OdemeSaglayici,
     OdemeLinkiService,
   ],
-  exports: [FeeAgreementsService, InvoicesService, TimeEntriesService, EInvoiceService, OdemeLinkiService],
+  // Faz 3: PlatformBillingModule (checkout) OdemeSaglayici'yi kullanır.
+  exports: [FeeAgreementsService, InvoicesService, TimeEntriesService, EInvoiceService, OdemeLinkiService, OdemeSaglayici],
 })
 export class BillingModule {}
