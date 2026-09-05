@@ -97,7 +97,7 @@ export function ReadingModal({ open, onClose, title, subtitle, text, note, heade
               >
                 A−
               </button>
-              <span className="px-1 text-[11px] tabular-nums text-slate-400">{fontSize}px</span>
+              <span className="px-1 text-[11px] tabular-nums text-slate-500">{fontSize}px</span>
               <button
                 type="button"
                 onClick={() => changeStep(Math.min(FONT_STEPS.length - 1, step + 1))}

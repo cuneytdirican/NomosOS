@@ -47,24 +47,29 @@ import type {
 // ------------------------------------------------------------ yol tablosu
 
 export const FAZ4_ROUTES = {
-  // Strateji (Modül 15)
+  // Strateji (Modül 15) — UÇ SÖZLEŞMESİ: dosya kapsamlı uçlar /cases/:caseId/strategy,
+  // kimlik kapsamlı uçlar /strategy/:id/* (denetleyici önekleriyle birebir).
   strategy: (caseId: string) => `/cases/${caseId}/strategy`,
-  strategyBuild: (caseId: string) => `/cases/${caseId}/strategy/build`,
-  strategyVersions: (strategyId: string) => `/strategies/${strategyId}/versions`,
-  strategyNodes: (strategyId: string) => `/strategies/${strategyId}/nodes`,
+  strategyDetail: (strategyId: string) => `/strategy/${strategyId}`,
+  strategyBuild: (strategyId: string) => `/strategy/${strategyId}/build`,
+  strategyVersions: (strategyId: string) => `/strategy/${strategyId}/versions`,
+  strategyNodes: (strategyId: string) => `/strategy/${strategyId}/nodes`,
   strategyNode: (strategyId: string, nodeId: string) =>
-    `/strategies/${strategyId}/nodes/${nodeId}`,
+    `/strategy/${strategyId}/nodes/${nodeId}`,
 
   // Simülasyon (Modül 16) — POST ucunun adı /simulate'dir; /simulations YALNIZ listeledir.
   simulate: (caseId: string) => `/cases/${caseId}/simulate`,
   simulations: (caseId: string) => `/cases/${caseId}/simulations`,
   simulation: (runId: string) => `/simulations/${runId}`,
 
-  // Risk (Modül 17)
+  // Risk (Modül 17) — yeniden hesap /compute; elle ezme gövdede dimension taşır,
+  // temizleme yol parametresiyle (denetleyiciyle birebir).
   risk: (caseId: string) => `/cases/${caseId}/risk`,
-  riskRecompute: (caseId: string) => `/cases/${caseId}/risk/recompute`,
-  riskOverride: (caseId: string, dimension: string) =>
-    `/cases/${caseId}/risk/${dimension}/override`,
+  riskHistory: (caseId: string) => `/cases/${caseId}/risk/history`,
+  riskRecompute: (caseId: string) => `/cases/${caseId}/risk/compute`,
+  riskOverride: (caseId: string) => `/cases/${caseId}/risk/override`,
+  riskOverrideClear: (caseId: string, dimension: string) =>
+    `/cases/${caseId}/risk/override/${dimension}`,
   riskOfficePrimary: "/risk/office",
   riskOfficeAlternate: "/risk/cases",
 
@@ -77,7 +82,7 @@ export const FAZ4_ROUTES = {
   claimLegalBasis: (claimId: string) => `/claims/${claimId}/legal-basis`,
   evidenceList: (caseId: string) => `/cases/${caseId}/evidence`,
   evidence: (evidenceId: string) => `/evidence/${evidenceId}`,
-  evidenceAiMatrix: (caseId: string) => `/cases/${caseId}/evidence/matrix/ai-generate`,
+  evidenceAiMatrix: (caseId: string) => `/cases/${caseId}/evidence/ai-matrix`,
   evidenceGapAnalysis: (caseId: string) => `/cases/${caseId}/evidence/gap-analysis`,
 
   // Bilirkişi (Modül 13)
@@ -190,16 +195,38 @@ export async function getStrategy(caseId: string): Promise<Strategy | null> {
   return res as Strategy;
 }
 
-/** STRATEGY_BUILD — AI taslağı üretir. Sonuç ÖNERİDİR, TASLAK statüsünde doğar. */
-export function buildStrategy(
+/** STRATEGY_BUILD — AI taslağı üretir. Sonuç ÖNERİDİR, TASLAK statüsünde doğar.
+ *
+ * Uç sözleşmesi: build kimlik kapsamlıdır (POST /strategy/:id/build). Dosyanın
+ * henüz stratejisi yoksa ÖNCE oluşturulur (POST /cases/:caseId/strategy),
+ * sonra build çalışır — çağıran arayüz yalnız caseId bilir.
+ */
+export async function buildStrategy(
   caseId: string,
   instruction?: string,
   piiApproved = false,
 ): Promise<Strategy> {
+  let strategy = await getStrategy(caseId);
+  if (!strategy) {
+    // Create ucu ZARF döner ({strategy:{…}, chain, …}); getStrategy aynı zarfı
+    // çözdüğü için oluşturmadan sonra yeniden okumak tek doğrulayıcı yoldur.
+    await api<unknown>(FAZ4_ROUTES.strategy(caseId), {
+      method: "POST",
+      body: { title: "Dosya Stratejisi" },
+    }).catch((err: unknown) => {
+      // Dosya başına tek strateji: varsa çakışma 409'dur — yok sayıp okumaya devam.
+      const msg = err instanceof ApiError ? err.message : String(err);
+      if (!/zaten bir strateji var/i.test(msg)) throw err;
+    });
+    strategy = await getStrategy(caseId);
+  }
+  if (!strategy?.id) {
+    throw new Error("Strateji kaydı açılamadı; üretim çalıştırılamıyor.");
+  }
   const body: Record<string, unknown> = {};
   if (instruction?.trim()) body.instruction = instruction.trim();
   if (piiApproved) body.piiApproved = true;
-  return api<Strategy>(FAZ4_ROUTES.strategyBuild(caseId), { method: "POST", body });
+  return api<Strategy>(FAZ4_ROUTES.strategyBuild(strategy.id), { method: "POST", body });
 }
 
 export function listStrategyVersions(strategyId: string): Promise<StrategyVersion[]> {
@@ -525,14 +552,16 @@ export function overrideRiskBand(
   band: string,
   reason: string,
 ): Promise<unknown> {
-  return api<unknown>(FAZ4_ROUTES.riskOverride(caseId, dimension), {
+  // Elle ezme: dimension GÖVDEDE taşınır (overrideRiskSchema); yol sabittir.
+  return api<unknown>(FAZ4_ROUTES.riskOverride(caseId), {
     method: "POST",
-    body: { band, reason: reason.trim() },
+    body: { dimension, band, reason: reason.trim() },
   });
 }
 
 export function clearRiskOverride(caseId: string, dimension: string): Promise<unknown> {
-  return api<unknown>(FAZ4_ROUTES.riskOverride(caseId, dimension), { method: "DELETE" });
+  // Temizleme: dimension YOL PARAMETRESİDİR (DELETE .../override/:dimension).
+  return api<unknown>(FAZ4_ROUTES.riskOverrideClear(caseId, dimension), { method: "DELETE" });
 }
 
 /**
