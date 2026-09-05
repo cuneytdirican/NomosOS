@@ -8,7 +8,7 @@ import type { AuthUser } from "../common/types";
 /** Okunmamış sayılan durumlar. `IPTAL` ve `OKUNDU` sayılmaz. */
 const UNREAD_STATUSES: NotificationStatus[] = ["BEKLIYOR", "GONDERILDI"];
 
-const KIND_LABELS: Record<NotificationKind, string> = {
+export const NOTIFICATION_KIND_LABELS: Record<NotificationKind, string> = {
   SURE_YAKLASIYOR: "Yaklaşan süre",
   SURE_GECTI: "Geçmiş süre",
   DURUSMA_YARIN: "Yarınki duruşma",
@@ -19,6 +19,14 @@ const KIND_LABELS: Record<NotificationKind, string> = {
   VEKALET_SURESI: "Vekalet süresi",
   SOZLESME_KRITIK_SHERH: "Kritik sözleşme şerhi",
 };
+const KIND_LABELS = NOTIFICATION_KIND_LABELS;
+
+export interface NotificationPreferenceInput {
+  kind: NotificationKind;
+  inApp: boolean;
+  email: boolean;
+  push: boolean;
+}
 
 /**
  * KİRACI BİLDİRİM UÇLARI.
@@ -38,6 +46,45 @@ const KIND_LABELS: Record<NotificationKind, string> = {
 @Injectable()
 export class NotificationsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  // ------------------------------------------------------------------ //
+  // Bildirim tercihleri (Enterprise++): tür × kanal; kayıt yoksa hepsi açık.
+  // ------------------------------------------------------------------ //
+
+  async getPreferences(user: AuthUser) {
+    const rows = await this.prisma.client.notificationPreference.findMany({
+      where: { tenantId: user.tenantId, userId: user.userId },
+    });
+    const byKind = new Map(rows.map((r) => [r.kind, r]));
+    return {
+      items: (Object.keys(KIND_LABELS) as NotificationKind[]).map((kind) => {
+        const r = byKind.get(kind);
+        return {
+          kind,
+          label: KIND_LABELS[kind],
+          inApp: r?.inApp ?? true,
+          email: r?.email ?? true,
+          push: r?.push ?? true,
+        };
+      }),
+      /** Dürüstlük: e-posta/push sağlayıcısı bağlı mı — tercih saklanır, dağıtım sağlayıcıya bağlı. */
+      channels: { inApp: true, email: false, push: false },
+    };
+  }
+
+  async setPreferences(user: AuthUser, items: NotificationPreferenceInput[]) {
+    for (const item of items) {
+      if (!(item.kind in KIND_LABELS)) {
+        throw new BadRequestException(`Geçersiz bildirim türü: ${item.kind}`);
+      }
+      await this.prisma.client.notificationPreference.upsert({
+        where: { tenantId_userId_kind: { tenantId: user.tenantId, userId: user.userId, kind: item.kind } },
+        create: { tenantId: user.tenantId, userId: user.userId, kind: item.kind, inApp: item.inApp, email: item.email, push: item.push },
+        update: { inApp: item.inApp, email: item.email, push: item.push },
+      });
+    }
+    return this.getPreferences(user);
+  }
 
   /** Kullanıcının görebileceği bildirimleri seçen süzgeç — TEK KAYNAK. */
   private visibleTo(user: AuthUser): Prisma.NotificationOutboxWhereInput {

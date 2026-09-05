@@ -40,10 +40,17 @@ model Tenant {
   /// AI EĞİTİM VERİSİ RIZASI (C3): onay/ret/düzeltme örnekleri NomosOS
   /// tarafından toplansın mı? Varsayılan KAPALI — KVKK açık rıza.
   aiTrainingOptIn Boolean  @default(false)
+  /// ── BÜRO GÜVENLİK POLİTİKASI (Enterprise++) ───────────────────────────
+  /// İki adımlı doğrulama ZORUNLU mu? Açıksa 2FA'sız kullanıcı girişte kuruluma
+  /// zorlanır ve 2FA'yı kapatamaz (yalnız yönetici sıfırlar). Yalnız ADMIN değiştirir.
+  require2fa      Boolean  @default(false)
+  /// Oturum ömrü (saat, 1-24). null = varsayılan 12 saat.
+  sessionMaxHours Int?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   users             User[]
+  notificationPreferences NotificationPreference[]
   clients           Client[]
   cases             Case[]
   deadlineRules     DeadlineRule[]
@@ -105,6 +112,13 @@ model User {
   /// artık ürün üzerinden kapatılabilir; eskiden tek çözüm `psql` ile elle
   /// `passwordHash` yazmaktı ve o bile açık token'ı düşürmüyordu.
   sessionsValidFrom DateTime?
+
+  /// ── İKİ ADIMLI DOĞRULAMA (TOTP, Enterprise++) ─────────────────────────
+  /// Gizli anahtar AES-256-GCM ile şifreli (MASTER_ENCRYPTION_KEY); düz metin
+  /// ASLA saklanmaz, hiçbir uçtan dönmez. null = 2FA kurulu değil.
+  twoFactorSecret String?
+  /// Son kullanılan TOTP adımı — tekrar oynatma koruması (platformla aynı desen).
+  lastTotpCounter Int?
 
   /// ── BÜRO İÇİ MESAJLAŞMA ──────────────────────────────────────────────────
   /// Profil fotoğrafı — MinIO nesne anahtarı (avatarlar/ öneki).
@@ -4410,6 +4424,25 @@ model NotificationOutbox {
   @@index([tenantId, status, scheduledFor])
   @@index([tenantId, userId, status])
   @@index([tenantId, kind, createdAt])
+}
+
+/// KULLANICI BİLDİRİM TERCİHİ (Enterprise++): bildirim türü × kanal.
+/// Kayıt yoksa TÜM kanallar AÇIK sayılır (varsayılan: hiçbir süre uyarısı
+/// sessizce kaybolmaz). inApp=false ise giden kutusuna hiç yazılmaz.
+/// email/push tercihleri sağlayıcı bağlandığında dağıtımda uygulanır.
+model NotificationPreference {
+  id       String  @id @default(uuid())
+  tenantId String
+  tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId   String
+  kind     NotificationKind
+  inApp    Boolean @default(true)
+  email    Boolean @default(true)
+  push     Boolean @default(true)
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, userId, kind])
+  @@index([tenantId, userId])
 }
 
 /// Mobil/tarayıcı bildirim jetonu. Jeton CİHAZA aittir; aynı jeton başka

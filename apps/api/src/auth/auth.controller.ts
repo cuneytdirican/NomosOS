@@ -7,6 +7,17 @@ import {
   type LoginInput,
 } from "@nomosos/shared";
 import { AuthService } from "./auth.service";
+import { TwoFactorService } from "./two-factor.service";
+import {
+  twoFactorDisableSchema,
+  twoFactorSetupSchema,
+  twoFactorSetupWithChallengeSchema,
+  twoFactorVerifySchema,
+  type TwoFactorDisableInput,
+  type TwoFactorSetupInput,
+  type TwoFactorSetupWithChallengeInput,
+  type TwoFactorVerifyInput,
+} from "./two-factor.schemas";
 import { LoginThrottleGuard } from "./login-throttle.guard";
 import { Public } from "../common/decorators/public.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
@@ -18,6 +29,7 @@ import type { AuthUser } from "../common/types";
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
+    private readonly twoFactor: TwoFactorService,
     private readonly loginThrottle: LoginThrottleGuard
   ) {}
 
@@ -41,8 +53,71 @@ export class AuthController {
   ) {
     const result = await this.authService.login(body);
     await this.loginThrottle.reset(request);
-    response.cookie(AUTH_COOKIE_NAME, result.accessToken, authCookieOptions());
+    // 2FA challenge yanıtında oturum yoktur — çerez yazılmaz.
+    if ("accessToken" in result) {
+      response.cookie(AUTH_COOKIE_NAME, result.accessToken, {
+        ...authCookieOptions(),
+        maxAge: result.cookieMaxAgeMs,
+      });
+      return { accessToken: result.accessToken, user: result.user };
+    }
     return result;
+  }
+
+  /* ---------------- İki adımlı doğrulama (Enterprise++) ---------------- */
+
+  /**
+   * İkinci adım: TOTP → oturum. Hem giriş challenge'ı hem kurulum token'ı
+   * için tek uç. @Public: kullanıcının henüz oturumu yoktur; challenge imzalı
+   * ve 10 dk ömürlüdür, deneme sayacı vardır.
+   */
+  @Public()
+  @UseGuards(LoginThrottleGuard)
+  @Post("auth/2fa/verify")
+  @HttpCode(200)
+  async verifyTwoFactor(
+    @Body(new ZodValidationPipe(twoFactorVerifySchema)) body: TwoFactorVerifyInput,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response
+  ) {
+    const result = await this.twoFactor.verify(body);
+    await this.loginThrottle.reset(request);
+    response.cookie(AUTH_COOKIE_NAME, result.accessToken, {
+      ...authCookieOptions(),
+      maxAge: result.cookieMaxAgeMs,
+    });
+    return { accessToken: result.accessToken, user: result.user };
+  }
+
+  /** Açık oturumla kurulum — mevcut parola zorunlu. */
+  @Post("auth/2fa/setup")
+  @HttpCode(200)
+  setupTwoFactor(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(twoFactorSetupSchema)) body: TwoFactorSetupInput
+  ) {
+    return this.twoFactor.setupWithSession(user, body.currentPassword);
+  }
+
+  /** Girişte zorunlu kurulum (büro politikası) — challenge ile. */
+  @Public()
+  @UseGuards(LoginThrottleGuard)
+  @Post("auth/2fa/setup-with-challenge")
+  @HttpCode(200)
+  setupTwoFactorWithChallenge(
+    @Body(new ZodValidationPipe(twoFactorSetupWithChallengeSchema)) body: TwoFactorSetupWithChallengeInput
+  ) {
+    return this.twoFactor.setupWithChallenge(body.challengeToken);
+  }
+
+  /** Kapatma — parola + güncel kod; büro politikası zorunluysa 403. */
+  @Post("auth/2fa/disable")
+  @HttpCode(200)
+  disableTwoFactor(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(twoFactorDisableSchema)) body: TwoFactorDisableInput
+  ) {
+    return this.twoFactor.disable(user, body);
   }
 
   @Get("me")

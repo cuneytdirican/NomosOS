@@ -7,6 +7,8 @@ import { AuditModule } from "./audit/audit.module";
 import { HealthModule } from "./health/health.module";
 import { AuthModule } from "./auth/auth.module";
 import { UsersModule } from "./users/users.module";
+// Enterprise++: büro güvenlik politikası + denetim izi ekranı.
+import { SecurityModule } from "./security/security.module";
 import { ClientsModule } from "./clients/clients.module";
 import { CasesModule } from "./cases/cases.module";
 import { HearingsModule } from "./hearings/hearings.module";
@@ -112,6 +114,7 @@ function requireJwtSecret(config: ConfigService): string {
     HealthModule,
     AuthModule,
     UsersModule,
+    SecurityModule,
     ClientsModule,
     CasesModule,
     HearingsModule,

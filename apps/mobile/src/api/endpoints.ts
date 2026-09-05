@@ -42,6 +42,15 @@ export function login(email: string, password: string): Promise<LoginResponse> {
   });
 }
 
+/** 2FA ikinci adımı — challenge + 6 haneli kod → oturum. */
+export function verifyTwoFactor(challengeToken: string, code: string): Promise<LoginResponse> {
+  return api<LoginResponse>("/auth/2fa/verify", {
+    method: "POST",
+    body: { challengeToken, code },
+    skipAuth: true,
+  });
+}
+
 export function fetchMe(): Promise<MeResponse> {
   return api<MeResponse>("/me");
 }

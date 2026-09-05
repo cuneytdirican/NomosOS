@@ -9,10 +9,20 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 import { setAuthToken, setUnauthorizedHandler } from "@/api/client";
-import { login as loginRequest, revokeDevice } from "@/api/endpoints";
+import { login as loginRequest, revokeDevice, verifyTwoFactor as verifyTwoFactorRequest } from "@/api/endpoints";
 import type { AuthUser } from "@/api/types";
 import { clearSnapshot } from "@/cache/today-cache";
 import { secureStorage } from "./secure-storage";
+
+/** signIn: hesapta 2FA kurulu — ekran kodu sorup verifyTwoFactor çağırır. */
+export class TwoFactorRequiredError extends Error {
+  readonly challengeToken: string;
+  constructor(challengeToken: string, message?: string) {
+    super(message ?? "Doğrulama uygulamanızdaki 6 haneli kodu girin.");
+    this.name = "TwoFactorRequiredError";
+    this.challengeToken = challengeToken;
+  }
+}
 
 /**
  * Arka planda bu süreden uzun kalınırsa kilit devreye girer.
@@ -58,6 +68,8 @@ interface SessionValue {
   setBiometricEnabled: (enabled: boolean) => Promise<void>;
 
   signIn: (email: string, password: string, remember: boolean) => Promise<AuthUser>;
+  /** 2FA ikinci adımı (signIn TwoFactorRequiredError fırlattıysa). */
+  verifyTwoFactor: (challengeToken: string, code: string, remember: boolean, email: string) => Promise<AuthUser>;
   signOut: () => Promise<void>;
   rememberedEmail: string | null;
 }
@@ -178,23 +190,53 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
 
   // --- Eylemler -----------------------------------------------------------
 
-  const signIn = useCallback(async (email: string, password: string, remember: boolean): Promise<AuthUser> => {
-    const result = await loginRequest(email.trim(), password);
-    setAuthToken(result.accessToken);
-    await Promise.all([secureStorage.setToken(result.accessToken), secureStorage.setUser(result.user)]);
-    if (remember) {
-      await secureStorage.setRememberedEmail(email.trim());
-      setRememberedEmail(email.trim());
-    } else {
-      await secureStorage.clearRememberedEmail();
-      setRememberedEmail(null);
-    }
-    // Yeni kullanıcı → eski kullanıcının önbelleği hiçbir koşulda kalmamalı.
-    await clearSnapshot();
-    setUser(result.user);
-    setLocked(false);
-    return result.user;
-  }, []);
+  const completeSignIn = useCallback(
+    async (result: { accessToken?: string; user?: AuthUser }, email: string, remember: boolean): Promise<AuthUser> => {
+      if (!result.accessToken || !result.user) {
+        throw new Error("Sunucu geçerli bir oturum döndürmedi.");
+      }
+      setAuthToken(result.accessToken);
+      await Promise.all([secureStorage.setToken(result.accessToken), secureStorage.setUser(result.user)]);
+      if (remember) {
+        await secureStorage.setRememberedEmail(email.trim());
+        setRememberedEmail(email.trim());
+      } else {
+        await secureStorage.clearRememberedEmail();
+        setRememberedEmail(null);
+      }
+      // Yeni kullanıcı → eski kullanıcının önbelleği hiçbir koşulda kalmamalı.
+      await clearSnapshot();
+      setUser(result.user);
+      setLocked(false);
+      return result.user;
+    },
+    [],
+  );
+
+  const signIn = useCallback(
+    async (email: string, password: string, remember: boolean): Promise<AuthUser> => {
+      const result = await loginRequest(email.trim(), password);
+      // Enterprise++ 2FA: kurulu ise ekran ikinci adımı sorar.
+      if (result.twoFactorRequired && result.challengeToken) {
+        throw new TwoFactorRequiredError(result.challengeToken, result.message);
+      }
+      if (result.twoFactorSetupRequired) {
+        throw new Error(
+          "Büronuzun güvenlik politikası iki adımlı doğrulamayı zorunlu kılıyor. Kurulumu (QR) web uygulamasından bir kez tamamlayın; sonra mobilden kodla giriş yapabilirsiniz.",
+        );
+      }
+      return completeSignIn(result, email, remember);
+    },
+    [completeSignIn],
+  );
+
+  const verifyTwoFactor = useCallback(
+    async (challengeToken: string, code: string, remember: boolean, email: string): Promise<AuthUser> => {
+      const result = await verifyTwoFactorRequest(challengeToken, code);
+      return completeSignIn(result, email, remember);
+    },
+    [completeSignIn],
+  );
 
   const signOut = useCallback(async () => {
     await wipeLocalSession();
@@ -223,6 +265,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
       lockNow,
       setBiometricEnabled,
       signIn,
+      verifyTwoFactor,
       signOut,
       rememberedEmail,
     }),
@@ -236,6 +279,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
       lockNow,
       setBiometricEnabled,
       signIn,
+      verifyTwoFactor,
       signOut,
       rememberedEmail,
     ],

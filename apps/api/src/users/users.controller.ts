@@ -76,4 +76,11 @@ export class UsersController {
   unlock(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.users.unlock(user, id);
   }
+
+  /** Yönetici 2FA sıfırlaması (cihaz kaybı) — oturumlar düşer. */
+  @Post(":id/reset-2fa")
+  @HttpCode(200)
+  resetTwoFactor(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.users.resetTwoFactor(user, id);
+  }
 }

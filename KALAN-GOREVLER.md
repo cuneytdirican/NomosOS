@@ -23,7 +23,41 @@
 
 ---
 
-# 🔖 KALDIĞIM YER — 5 Eylül 2026, 07:45
+# 🔖 KALDIĞIM YER — 5 Eylül 2026, 08:30
+
+> **ENTERPRISE++ GÜVENLİK & YÖNETİŞİM PAKETİ** (iki gözle boşluk analizi: sistem
+> yöneticisi + avukat/büro). Belgede söz verilip kodda olmayan güvenlik katmanı
+> kapatıldı — belge: `docs/enterprise-guvenlik.md`.
+
+1. **Kiracı 2FA (TOTP):** `User.twoFactorSecret` (şifreli) + `lastTotpCounter`;
+   `POST /auth/2fa/verify|setup|setup-with-challenge|disable`; login challenge
+   döner (çerez yazılmaz); yönetici sıfırlama `POST /users/:id/reset-2fa`;
+   web giriş 2FA adımı + zorunlu kurulum (QR), `/app/ayarlar/guvenlik`,
+   kullanıcılar ekranında rozet + sıfırla; mobil kod adımı.
+2. **Büro güvenlik politikası:** `Tenant.require2fa`, `sessionMaxHours` (1-24 sa);
+   `GET/PATCH /security/policy` (yalnız ADMIN yazar); oturum tek kapı
+   `SessionService` (JWT expiresIn + çerez maxAge politikadan).
+3. **Büro denetim izi:** `GET /security/audit` (+actions, +export.csv formül
+   korumalı, AUDIT_EXPORT izi), `/app/ayarlar/denetim`.
+4. **Bildirim tercihleri:** `NotificationPreference` (tür × kanal); giden kutusu
+   inApp=false'ta yazmaz; `/notifications/preferences`; `/app/ayarlar/bildirimler`.
+5. **Doğrulama:** api 1162+ (yeni: two-factor 7, security 8, preferences 5,
+   sözleşme 8), web 100, typecheck api/web/mobil, lint temiz.
+6. **Envanter bulgusu:** FINAL raporundaki "~50 İ- açık" iddiası bayat — F2 İ-14,
+   16, 18, 19, 38, 46, 47, 49 vb. zaten kapalı; Q4 gelişim planı D1-D8 tamam.
+   Kalan Enterprise++ adayları (karar/kapsam ister): dosya bazlı erişim kısıtı,
+   KVKK saklama/imha politikası, API anahtarı/webhook, SSO, cihaz bazlı oturum.
+
+## Sırada
+
+1. Enterprise++ ikinci paket (ürün kararı sonrası): gizli dosya erişimi, KVKK
+   saklama politikası, API anahtarı/webhook, SSO.
+2. Veri operasyonu (Aşama 4 içtihat havuzu) — dış kaynak sözleşmesi.
+3. Üretim ön koşulları (FINAL §18): POS/GİB/SMS, yük ve sızma testi.
+
+---
+
+## 🔖 ÖNCEKİ KALDIĞIM YER — 5 Eylül 2026, 07:45
 
 > **AÇIK GÖREVLER KAPATILDI:** kullanıcı tanımlı model eğitimi planı (7/7 adım),
 > AAÜT platform tarifesi (Aşama 2), FINAL-COMPLETION-REPORT güncellemesi (Aşama 9).

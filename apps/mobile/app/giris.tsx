@@ -19,12 +19,12 @@ import {
 } from "react-native";
 import { API_BASE, errorMessage } from "@/api/client";
 import { getBiometricCapability } from "@/auth/biometrics";
-import { useSession } from "@/auth/session";
+import { TwoFactorRequiredError, useSession } from "@/auth/session";
 import { Button } from "@/ui/components";
 import { colors, font, radius, space, TOUCH } from "@/ui/theme";
 
 export default function LoginScreen(): React.JSX.Element {
-  const { signIn, rememberedEmail, setBiometricEnabled, biometricEnabled } = useSession();
+  const { signIn, verifyTwoFactor, rememberedEmail, setBiometricEnabled, biometricEnabled } = useSession();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -33,6 +33,9 @@ export default function LoginScreen(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [biometricLabel, setBiometricLabel] = useState<string | null>(null);
   const [offerBiometric, setOfferBiometric] = useState(false);
+  // Enterprise++ 2FA: parola doğrulandı, kod bekleniyor.
+  const [challenge, setChallenge] = useState<{ token: string; message: string } | null>(null);
+  const [code, setCode] = useState("");
 
   useEffect(() => {
     if (rememberedEmail) {
@@ -63,11 +66,37 @@ export default function LoginScreen(): React.JSX.Element {
       }
       // Yönlendirmeyi kök düzen yapar (oturum durumu değişince).
     } catch (caught) {
+      if (caught instanceof TwoFactorRequiredError) {
+        setChallenge({ token: caught.challengeToken, message: caught.message });
+        setCode("");
+        return;
+      }
       setError(errorMessage(caught));
     } finally {
       setBusy(false);
     }
   }, [busy, email, password, remember, signIn, biometricLabel, biometricEnabled]);
+
+  const submitCode = useCallback(async () => {
+    if (busy || !challenge) return;
+    if (code.replace(/\s/g, "").length !== 6) {
+      setError("6 haneli doğrulama kodunu girin.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await verifyTwoFactor(challenge.token, code, remember, email);
+      setChallenge(null);
+      if (biometricLabel !== null && !biometricEnabled) setOfferBiometric(true);
+    } catch (caught) {
+      const msg = errorMessage(caught);
+      setError(msg);
+      if (/iptal edildi|süresi dolmuş/i.test(msg)) setChallenge(null);
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, challenge, code, verifyTwoFactor, remember, email, biometricLabel, biometricEnabled]);
 
   if (offerBiometric && biometricLabel) {
     return (
@@ -91,6 +120,46 @@ export default function LoginScreen(): React.JSX.Element {
           <Button title="Şimdilik geç" variant="ghost" onPress={() => setOfferBiometric(false)} style={styles.offerAction} />
         </View>
       </View>
+    );
+  }
+
+  if (challenge) {
+    return (
+      <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <Text style={styles.brand}>NomosOS</Text>
+          <Text style={styles.tagline}>İki adımlı doğrulama</Text>
+          <View style={styles.form}>
+            <Text style={styles.label}>{challenge.message}</Text>
+            <TextInput
+              style={styles.input}
+              value={code}
+              onChangeText={setCode}
+              keyboardType="number-pad"
+              textContentType="oneTimeCode"
+              autoComplete="one-time-code"
+              placeholder="123 456"
+              placeholderTextColor={colors.textMuted}
+              editable={!busy}
+              returnKeyType="go"
+              onSubmitEditing={() => void submitCode()}
+              autoFocus
+            />
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+            <Button title="Doğrula" onPress={() => void submitCode()} loading={busy} style={styles.submit} />
+            <Button
+              title="Farklı hesapla giriş"
+              variant="ghost"
+              onPress={() => {
+                setChallenge(null);
+                setCode("");
+                setError(null);
+              }}
+              style={styles.submit}
+            />
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     );
   }
 

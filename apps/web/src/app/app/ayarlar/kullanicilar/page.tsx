@@ -40,6 +40,8 @@ interface ManagedUser {
   barNumber: string | null;
   isActive: boolean;
   isLocked: boolean;
+  /** Enterprise++: TOTP kurulu mu (gizli anahtar dönmez). */
+  twoFactorEnabled?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -139,7 +141,7 @@ export default function KullanicilarPage() {
     }
   }
 
-  async function action(id: string, action_: "revoke-sessions" | "unlock", msg: string) {
+  async function action(id: string, action_: "revoke-sessions" | "unlock" | "reset-2fa", msg: string) {
     setError(null);
     try {
       await api(`/users/${id}/${action_}`, { method: "POST" });
@@ -224,6 +226,7 @@ export default function KullanicilarPage() {
         <span className="flex flex-wrap gap-1">
           <Badge tone={u.isActive ? "green" : "gray"}>{u.isActive ? "Aktif" : "Pasif"}</Badge>
           {u.isLocked && <Badge tone="danger">Kilitli</Badge>}
+          <Badge tone={u.twoFactorEnabled ? "navy" : "gray"}>{u.twoFactorEnabled ? "2FA açık" : "2FA yok"}</Badge>
         </span>
       ),
     },
@@ -267,6 +270,18 @@ export default function KullanicilarPage() {
           <Button variant="secondary" onClick={() => void action(u.id, "revoke-sessions", "Oturumlar düşürüldü.")}>
             Oturumları Düşür
           </Button>
+          {u.twoFactorEnabled && canManage(u) && (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                if (window.confirm(`${u.fullName} için 2FA sıfırlansın mı? Tüm oturumları düşer; büro politikası zorunluysa girişte yeniden kurar.`)) {
+                  void action(u.id, "reset-2fa", "2FA sıfırlandı; oturumlar düşürüldü.");
+                }
+              }}
+            >
+              2FA Sıfırla
+            </Button>
+          )}
         </span>
       ),
     },

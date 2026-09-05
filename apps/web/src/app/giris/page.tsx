@@ -11,6 +11,19 @@ interface LoginResponse {
   accessToken?: string;
   access_token?: string;
   user?: { id?: string; fullName?: string; email?: string; role?: string };
+  /** Enterprise++: 2FA kurulu → ikinci adım; büro politikası zorunlu → kurulum. */
+  twoFactorRequired?: boolean;
+  twoFactorSetupRequired?: boolean;
+  challengeToken?: string;
+  message?: string;
+}
+
+interface SetupResponse {
+  setupToken: string;
+  otpauthUrl: string;
+  qrDataUrl: string;
+  manualEntryKey: string;
+  message: string;
 }
 
 export default function GirisPage() {
@@ -19,10 +32,46 @@ export default function GirisPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 2FA adımı (Enterprise++)
+  const [challenge, setChallenge] = useState<{ token: string; mode: "verify" | "setup"; message: string } | null>(null);
+  const [setup, setSetup] = useState<SetupResponse | null>(null);
+  const [code, setCode] = useState("");
 
   useEffect(() => {
     if (getToken()) router.replace("/app");
   }, [router]);
+
+  function finishLogin(data: LoginResponse) {
+    const token = data.token ?? data.accessToken ?? data.access_token;
+    if (!token) {
+      setError("Sunucu geçerli bir oturum anahtarı döndürmedi.");
+      return;
+    }
+    setToken(token);
+    if (data.user) setStoredUser(data.user);
+    router.replace("/app");
+  }
+
+  async function handleVerify(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!challenge) return;
+    setError(null);
+    setLoading(true);
+    try {
+      const token = setup?.setupToken ?? challenge.token;
+      const data = await api<LoginResponse>("/auth/2fa/verify", { method: "POST", body: { challengeToken: token, code } });
+      finishLogin(data);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Doğrulama başarısız.");
+      if (err instanceof ApiError && /iptal edildi|süresi dolmuş/i.test(err.message)) {
+        setChallenge(null);
+        setSetup(null);
+        setCode("");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -33,14 +82,20 @@ export default function GirisPage() {
         method: "POST",
         body: { email, password },
       });
-      const token = data.token ?? data.accessToken ?? data.access_token;
-      if (!token) {
-        setError("Sunucu geçerli bir oturum anahtarı döndürmedi.");
+      if (data.twoFactorRequired && data.challengeToken) {
+        setChallenge({ token: data.challengeToken, mode: "verify", message: data.message ?? "" });
         return;
       }
-      setToken(token);
-      if (data.user) setStoredUser(data.user);
-      router.replace("/app");
+      if (data.twoFactorSetupRequired && data.challengeToken) {
+        const s = await api<SetupResponse>("/auth/2fa/setup-with-challenge", {
+          method: "POST",
+          body: { challengeToken: data.challengeToken },
+        });
+        setSetup(s);
+        setChallenge({ token: data.challengeToken, mode: "setup", message: data.message ?? "" });
+        return;
+      }
+      finishLogin(data);
     } catch (err) {
       // İ-49: kilit durumu ayrıca bildirilir — sunucu 423/kilit mesajı döndürse
       // de "giriş yapılamadı" genel metni kilit sebebini gizliyordu.
@@ -77,6 +132,51 @@ export default function GirisPage() {
           <p className="mt-2 text-sm text-slate-500">Hukuk büronuzun işletim sistemine giriş yapın</p>
         </div>
 
+        {challenge ? (
+          <form onSubmit={handleVerify} className="space-y-4 rounded-2xl border border-slate-200 bg-white p-8 shadow-2xl">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">
+                {challenge.mode === "setup" ? "İki adımlı doğrulamayı kurun" : "İki adımlı doğrulama"}
+              </h2>
+              <p className="mt-1 text-sm text-slate-600">{challenge.message}</p>
+            </div>
+            {setup ? (
+              <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-center">
+                <img src={setup.qrDataUrl} alt="2FA QR kodu" className="mx-auto h-44 w-44" />
+                <p className="text-xs text-slate-600">
+                  QR okutamıyorsanız elle girin: <code className="select-all font-mono">{setup.manualEntryKey}</code>
+                </p>
+              </div>
+            ) : null}
+            <Field label="6 haneli doğrulama kodu">
+              <Input
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="123 456"
+                autoFocus
+                required
+              />
+            </Field>
+            {error && <ErrorBox message={error} />}
+            <Button type="submit" variant="gold" className="w-full" disabled={loading || code.replace(/\s/g, "").length !== 6}>
+              {loading ? "Doğrulanıyor…" : challenge.mode === "setup" ? "Kur ve giriş yap" : "Doğrula"}
+            </Button>
+            <button
+              type="button"
+              className="w-full text-center text-xs text-slate-500 hover:text-slate-800"
+              onClick={() => {
+                setChallenge(null);
+                setSetup(null);
+                setCode("");
+                setError(null);
+              }}
+            >
+              ← Farklı hesapla giriş
+            </button>
+          </form>
+        ) : (
         <form
           onSubmit={handleSubmit}
           className="space-y-4 rounded-2xl border border-slate-200 bg-white p-8 shadow-2xl"
@@ -118,6 +218,7 @@ export default function GirisPage() {
             Ürünü merak mı ettiniz? Demo&apos;yu bir rol seçerek inceleyin →
           </Link>
         </form>
+        )}
 
         <p className="mt-6 text-center text-xs text-slate-500">
           <Link href="/" className="hover:text-amber-400">

@@ -1,7 +1,23 @@
-import { Controller, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, Patch, Post, Put, Query } from "@nestjs/common";
+import { z } from "zod";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
+import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe";
 import type { AuthUser } from "../common/types";
-import { NotificationsService } from "./notifications.service";
+import { NotificationsService, type NotificationPreferenceInput } from "./notifications.service";
+
+const preferencesSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        kind: z.string().min(1).max(60),
+        inApp: z.boolean(),
+        email: z.boolean(),
+        push: z.boolean(),
+      }),
+    )
+    .min(1)
+    .max(50),
+});
 
 /**
  * `/api/v1/notifications` — KİRACI bildirim uçları.
@@ -28,6 +44,20 @@ export class NotificationsController {
     @Query("limit") limit?: string
   ) {
     return this.notifications.list(user, { status, kind, unreadOnly, page, limit });
+  }
+
+  /** Bildirim tercihleri — tür × kanal (Enterprise++). */
+  @Get("preferences")
+  preferences(@CurrentUser() user: AuthUser) {
+    return this.notifications.getPreferences(user);
+  }
+
+  @Put("preferences")
+  setPreferences(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(preferencesSchema)) body: { items: NotificationPreferenceInput[] },
+  ) {
+    return this.notifications.setPreferences(user, body.items);
   }
 
   /** Rozet sayacı — liste ucunu çekmeden okunmamış adedini verir. */

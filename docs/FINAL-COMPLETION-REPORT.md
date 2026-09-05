@@ -245,7 +245,17 @@ typecheck api/web/admin temiz · `eslint --max-warnings 0` temiz · migration sa
 - **§18 ön koşulları** aynen geçerli: sanal POS, GİB entegratör, SMS sözleşmeleri; yük testi; sızma testi; JWT httpOnly cookie geçişi.
 - **AAÜT rakamları:** platform tarifesi altyapısı hazır; yılın rakamları platform görevlisince Resmî Gazete'den girilecek (sistem üretmez).
 
-### 19.5 Karar
+### 19.5 Enterprise++ güvenlik ve yönetişim paketi (5 Eylül, ikinci tur)
+
+İki gözle (sistem yöneticisi · avukat/büro) yapılan boşluk analizinde belgede söz
+verilip kodda olmayan güvenlik katmanı kapatıldı — `docs/enterprise-guvenlik.md`:
+kiracı 2FA (TOTP, şifreli anahtar, tekrar oynatma koruması, zorunlu kurulum),
+büro güvenlik politikası (2FA zorunluluğu, oturum ömrü), büro denetim izi ekranı
+(+CSV, formül enjeksiyonu korumalı), bildirim tercihleri (tür × kanal), parola
+değiştirme ekranı, mobil 2FA adımı. Bu turda ayrıca §17'deki "~50 İYİLEŞTİRME açık"
+kaydının bayat olduğu doğrulandı (İ-14/16/18/19/38/46/47/49 ve Q4 dalgaları kapalı).
+
+### 19.6 Karar
 
 Depo içinde kodla kapatılabilecek açık iş kalmadı; `KALAN-GOREVLER.md` Aşama 8 ve 9 ✅. Üretim kararı §18'deki dış sözleşmeler ve testler tamamlanınca yeniden verilir.
 

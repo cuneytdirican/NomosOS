@@ -99,6 +99,19 @@ export const AUTH_ROUTES = {
   /** Sunucu tarafı çıkış — oturum damgası tüm cihazları düşürür (Ö-34). */
   logout: "/auth/logout",
   changePassword: "/auth/change-password",
+  /** Enterprise++ 2FA (TOTP): ikinci adım / kurulum / kapatma. */
+  twoFactorVerify: "/auth/2fa/verify",
+  twoFactorSetup: "/auth/2fa/setup",
+  twoFactorSetupWithChallenge: "/auth/2fa/setup-with-challenge",
+  twoFactorDisable: "/auth/2fa/disable",
+} as const;
+
+/** Enterprise++: büro güvenlik politikası + denetim izi. */
+export const SECURITY_ROUTES = {
+  policy: "/security/policy",
+  audit: "/security/audit",
+  auditActions: "/security/audit/actions",
+  auditExportCsv: "/security/audit/export.csv",
 } as const;
 
 export const USERS_ROUTES = {
@@ -109,6 +122,8 @@ export const USERS_ROUTES = {
   resetPassword: (id: string) => `/users/${id}/reset-password`,
   revokeSessions: (id: string) => `/users/${id}/revoke-sessions`,
   unlock: (id: string) => `/users/${id}/unlock`,
+  /** Enterprise++: yönetici 2FA sıfırlaması (cihaz kaybı). */
+  resetTwoFactor: (id: string) => `/users/${id}/reset-2fa`,
 } as const;
 
 export const CLIENTS_ROUTES = {
@@ -411,6 +426,8 @@ export const NOTIFICATION_ROUTES = {
   unreadCount: "/notifications/unread-count",
   readAll: "/notifications/read-all",
   read: (id: string) => `/notifications/${id}/read`,
+  /** Enterprise++: bildirim tercihleri (tür × kanal). */
+  preferences: "/notifications/preferences",
 } as const;
 
 /** Mobil cihaz push token'ları (Faz 6). */

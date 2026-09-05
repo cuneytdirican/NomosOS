@@ -15,8 +15,13 @@ export interface AuthUser {
 }
 
 export interface LoginResponse {
-  accessToken: string;
-  user: AuthUser;
+  accessToken?: string;
+  user?: AuthUser;
+  /** Enterprise++ 2FA: kurulu ise ikinci adım; büro politikası zorunlu ve kurulu değilse setup. */
+  twoFactorRequired?: boolean;
+  twoFactorSetupRequired?: boolean;
+  challengeToken?: string;
+  message?: string;
 }
 
 export interface MeResponse extends AuthUser {

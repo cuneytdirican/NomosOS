@@ -7,13 +7,13 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
-import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
 import type { ChangePasswordInput, LoginInput } from "@nomosos/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
-import type { AuthUser, JwtPayload } from "../common/types";
-import { TENANT_JWT_AUDIENCE } from "../common/jwt-audience";
+import type { AuthUser } from "../common/types";
+import { SessionService } from "./session.service";
+import { TwoFactorService } from "./two-factor.service";
 import {
   CLEARED_LOCKOUT,
   lockRemainingSeconds,
@@ -48,8 +48,9 @@ export class AuthService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly jwtService: JwtService,
-    private readonly audit: AuditService
+    private readonly audit: AuditService,
+    private readonly session: SessionService,
+    private readonly twoFactor: TwoFactorService
   ) {}
 
   async login(input: LoginInput) {
@@ -115,34 +116,19 @@ export class AuthService {
       );
     }
 
-    const payload: JwtPayload = { sub: user.id, tenantId: user.tenantId, role: user.role };
-    // GÜVENLİK: token'a audience damgası basılır (`aud: "tenant"`).
-    // Platform paneli token'ı `aud: "platform"` taşır; iki taraf birbirinin
-    // token'ını audience aşamasında da reddeder (ayrı imza anahtarının üstüne
-    // konan ikinci kapı — bkz. common/jwt-audience.ts).
-    const accessToken = await this.jwtService.signAsync(payload, {
-      audience: TENANT_JWT_AUDIENCE,
-    });
+    // İKİ ADIMLI DOĞRULAMA (Enterprise++): kullanıcıda 2FA kuruluysa oturum
+    // burada ÜRETİLMEZ — challenge döner, oturumu /auth/2fa/verify üretir.
+    // Büro politikası 2FA'yı zorunlu kılıyor ve kullanıcı kurmamışsa kurulum
+    // challenge'ı döner (parola doğrulanmış olduğu için güvenli).
+    const challenge = await this.twoFactor.loginChallenge(user);
+    if (challenge) return challenge;
 
-    await this.audit.log({
-      tenantId: user.tenantId,
-      userId: user.id,
-      action: "LOGIN_SUCCESS",
-      entity: "User",
-      entityId: user.id,
-      detail: user.email,
-    });
-
-    return {
-      accessToken,
-      user: {
-        id: user.id,
-        tenantId: user.tenantId,
-        email: user.email,
-        fullName: user.fullName,
-        role: user.role,
-      },
-    };
+    // Oturum tek kapıdan (SessionService): audience damgası + büro oturum ömrü
+    // politikası + LOGIN_SUCCESS denetim kaydı orada.
+    return this.session.issue(
+      { id: user.id, tenantId: user.tenantId, email: user.email, fullName: user.fullName, role: user.role },
+      "parola",
+    );
   }
 
   /**
@@ -293,12 +279,15 @@ export class AuthService {
         role: true,
         barNumber: true,
         isActive: true,
-        tenant: { select: { id: true, name: true } },
+        twoFactorSecret: true,
+        tenant: { select: { id: true, name: true, require2fa: true, sessionMaxHours: true } },
       },
     });
     if (!user) {
       throw new NotFoundException("Kullanıcı bulunamadı.");
     }
-    return user;
+    // twoFactorSecret ASLA dönmez — yalnız kurulu olup olmadığı.
+    const { twoFactorSecret, ...rest } = user;
+    return { ...rest, twoFactorEnabled: Boolean(twoFactorSecret) };
   }
 }

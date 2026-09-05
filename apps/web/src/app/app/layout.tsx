@@ -471,6 +471,37 @@ const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
     ),
   },
   {
+    // Enterprise++: kişisel güvenlik (2FA, parola) + büro politikası (ADMIN).
+    href: "/app/ayarlar/guvenlik",
+    label: "Güvenlik",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path fillRule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clipRule="evenodd" />
+      </svg>
+    ),
+  },
+  {
+    // Enterprise++: bildirim tercihleri (tür × kanal).
+    href: "/app/ayarlar/bildirimler",
+    label: "Bildirimler",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path fillRule="evenodd" d="M10 2a6 6 0 0 0-6 6c0 1.887-.454 3.665-1.257 5.234a.75.75 0 0 0 .515 1.076 32.91 32.91 0 0 0 3.256.508 3.5 3.5 0 0 0 6.972 0 32.903 32.903 0 0 0 3.256-.508.75.75 0 0 0 .515-1.076A11.448 11.448 0 0 1 16 8a6 6 0 0 0-6-6ZM8.05 14.943a33.54 33.54 0 0 0 3.9 0 2 2 0 0 1-3.9 0Z" clipRule="evenodd" />
+      </svg>
+    ),
+  },
+  {
+    // Enterprise++: büronun denetim izi — kim, ne zaman, neyi (ADMIN/PARTNER).
+    href: "/app/ayarlar/denetim",
+    label: "Denetim İzi",
+    roles: ["ADMIN", "PARTNER"],
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path fillRule="evenodd" d="M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm2.25 8.5a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z" clipRule="evenodd" />
+      </svg>
+    ),
+  },
+  {
     // Kullanıcı tanımlı model eğitimi — lisanslı büro kendi modelini/RAG'ını eğitir.
     href: "/app/ayarlar/model-egitimi",
     label: "Model Eğitimi",

@@ -56,6 +56,13 @@ export class NotificationOutboxService {
   constructor(private readonly prisma: PrismaService) {}
 
   async enqueue(entry: OutboxEntry): Promise<OutboxOutcome> {
+    // KULLANICI TERCİHİ (Enterprise++): uygulama içi kanal kapalıysa yazılmaz.
+    // Tercih bir konfor katmanıdır — okunamazsa VARSAYILAN (açık) uygulanır;
+    // süre uyarısı tercih tablosu yüzünden kaybolmaz.
+    if (await this.inAppDisabled(entry)) {
+      this.logger.debug(`Bildirim tercihle atlandı (${entry.kind}): ${entry.dedupeKey}`);
+      return "atlandi";
+    }
     try {
       await this.prisma.client.notificationOutbox.create({
         data: {
@@ -78,6 +85,18 @@ export class NotificationOutboxService {
         return "atlandi";
       }
       throw err;
+    }
+  }
+
+  private async inAppDisabled(entry: OutboxEntry): Promise<boolean> {
+    try {
+      const pref = await this.prisma.client.notificationPreference.findUnique({
+        where: { tenantId_userId_kind: { tenantId: entry.tenantId, userId: entry.userId, kind: entry.kind } },
+        select: { inApp: true },
+      });
+      return pref?.inApp === false;
+    } catch {
+      return false;
     }
   }
 

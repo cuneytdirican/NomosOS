@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -11,6 +12,7 @@ import { AuditService } from "../audit/audit.service";
 import { assertRole, ROLE_SETS } from "../common/roles";
 import { CLEARED_LOCKOUT } from "../common/account-lockout";
 import { PASSWORD_HASH_ROUNDS } from "../auth/auth.constants";
+import { TwoFactorService } from "../auth/two-factor.service";
 import type { AuthUser } from "../common/types";
 import type { CreateUserInput, ResetUserPasswordInput, UpdateUserInput } from "./users.dto";
 
@@ -51,7 +53,8 @@ const USER_PUBLIC_SELECT = {
 export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly audit: AuditService
+    private readonly audit: AuditService,
+    private readonly twoFactor: TwoFactorService
   ) {}
 
   /**
@@ -79,16 +82,33 @@ export class UsersService {
     assertRole(user, ROLE_SETS.ONAY, "büro kullanıcı yönetimi");
     const rows = await this.prisma.client.user.findMany({
       where: { tenantId: user.tenantId },
-      select: { ...USER_PUBLIC_SELECT, lockedUntil: true },
+      select: { ...USER_PUBLIC_SELECT, lockedUntil: true, twoFactorSecret: true },
       orderBy: [{ isActive: "desc" }, { fullName: "asc" }],
       take: 200, // İ-05: sunucu tavanına (200) uydur
     });
     const now = Date.now();
-    return rows.map(({ lockedUntil, ...rest }) => ({
+    return rows.map(({ lockedUntil, twoFactorSecret, ...rest }) => ({
       ...rest,
       /** Hesap şu anda kilitli mi — sayaç değerleri yanıta konmaz. */
       isLocked: lockedUntil !== null && lockedUntil.getTime() > now,
+      /** 2FA kurulu mu — gizli anahtar ASLA dönmez. */
+      twoFactorEnabled: twoFactorSecret !== null,
     }));
+  }
+
+  /**
+   * YÖNETİCİ 2FA SIFIRLAMASI (cihaz kaybı). Anahtar silinir, oturumlar düşer;
+   * büro politikası zorunluysa kullanıcı bir sonraki girişte yeniden kurar.
+   * Kendi 2FA'sını yönetici bu yoldan sıfırlayamaz (kapatma ucu parola+kod ister).
+   */
+  async resetTwoFactor(user: AuthUser, id: string) {
+    assertRole(user, ROLE_SETS.ONAY, "büro kullanıcısının 2FA sıfırlaması");
+    if (id === user.userId) {
+      throw new ForbiddenException("Kendi iki adımlı doğrulamanızı buradan sıfırlayamazsınız; Güvenlik ayarlarından parola + kod ile kapatın.");
+    }
+    const target = await this.requireUser(user.tenantId, id);
+    await this.twoFactor.adminReset(user, target.id, target.email);
+    return { ok: true as const, message: `${target.fullName} için 2FA sıfırlandı; tüm oturumları düşürüldü.` };
   }
 
   /** POST /users */
