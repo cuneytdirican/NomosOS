@@ -20,7 +20,9 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  UnsupportedMediaTypeException,
 } from "@nestjs/common";
+import { validateUpload } from "../documents/documents.dto";
 import { randomBytes } from "node:crypto";
 import type { Prisma } from "@nomosos/db";
 import type { AuthUser } from "../common/types";
@@ -262,6 +264,9 @@ export class ChatService {
     if (input.sizeBytes > MAX_ATTACHMENT_BYTES) {
       throw new BadRequestException("Ek en fazla 50 MB olabilir.");
     }
+    // TÜR KAPISI (belge yüklemeyle aynı beyaz liste): .html/.svg gibi dosyalar
+    // ön-imzalı bağlantıyla açılıp depolanan XSS'e dönüşemez.
+    this.assertAttachmentType(input.fileName, input.mimeType);
     // Kota kapısı — ek de disk kotasına işler.
     await this.diskQuota.assertCanStore(user.tenantId, input.sizeBytes);
     const key = `chat/${user.tenantId}/${Date.now()}-${randomBytes(6).toString("hex")}-${input.fileName.replace(/[^\w.\-ğüşöçıİĞÜŞÖÇ ]/g, "_").slice(0, 120)}`;
@@ -341,11 +346,18 @@ export class ChatService {
     if (meta.sizeBytes > MAX_ATTACHMENT_BYTES) {
       throw new BadRequestException("Ek en fazla 50 MB olabilir.");
     }
+    this.assertAttachmentType(meta.fileName, meta.mimeType);
     await this.diskQuota.assertCanStore(user.tenantId, meta.sizeBytes);
     const key = `chat/${user.tenantId}/${Date.now()}-${randomBytes(6).toString("hex")}-${meta.fileName.replace(/[^\w.\-ğüşöçıİĞÜŞÖÇ ]/g, "_").slice(0, 120)}`;
     await this.storage.putObject(key, meta.buffer, meta.mimeType);
     const doc = await this.createAttachmentDocument(user, key, meta);
     return { documentId: doc.id };
+  }
+
+  /** Sohbet eki de belge yükleme beyaz listesinden geçer (uzantı + MIME uyumu). */
+  private assertAttachmentType(fileName: string, mimeType: string | undefined): void {
+    const validation = validateUpload(fileName, mimeType);
+    if (validation) throw new UnsupportedMediaTypeException(validation.message);
   }
 
   private async createAttachmentDocument(

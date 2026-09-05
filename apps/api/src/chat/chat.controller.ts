@@ -44,6 +44,7 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import { MAX_UPLOAD_BYTES } from "../documents/documents.dto";
 import { Observable } from "rxjs";
 import { z } from "zod";
 import { randomBytes } from "node:crypto";
@@ -136,7 +137,9 @@ export class ChatController {
   }
 
   @Post("messages")
-  @UseInterceptors(FileInterceptor("file"))
+  // Boyut sınırı MULTER'DA: sınır olmadan gövde önce tamamen belleğe alınıp
+  // sonra serviste ölçülüyordu (kimlikli tek kullanıcı API'yi belleğe boğabilirdi).
+  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: MAX_UPLOAD_BYTES } }))
   async send(
     @CurrentUser() user: AuthUser,
     @Body(new ZodValidationPipe(sendMessageSchema)) body: SendMessageInput,

@@ -121,6 +121,9 @@ services:
     container_name: nomosos-test-migrate
     working_dir: /repo
     environment:
+      # Test yığını bilinçli DEMO ortamıdır: seed'in üretim kapısı (Faz 0,
+      # packages/db/src/seed.ts) burada açıkça geçilir. Üretim compose'unda YOK.
+      SEED_ALLOW_PROD: "true"
       <<: *test-db
     depends_on:
       postgres:

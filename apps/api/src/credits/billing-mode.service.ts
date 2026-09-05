@@ -18,7 +18,9 @@
  *      Liste platform panelinden, DÖRT-GÖZ onayıyla değişir ve PlatformAuditLog'a
  *      yazılır. Muafiyet "bir sağlayıcı eklemiş olmanın" yan etkisi değil,
  *      kaydedilmiş bir ticari karardır.
- *   2. `CreditWallet` satırı olmayan tenant → SINIRSIZ. Sayaç yoksa ölçüm de
+ *   2. `CreditWallet` satırı olmayan tenant → SINIRSIZ. (Faz 0: kiracı açılışı
+ *      cüzdanı aynı işlemde açar, API açılışı cüzdansız kiracıları yedekler —
+ *      bu dal artık yalnız kısa geçiş penceresinde görülür.) Sayaç yoksa ölçüm de
  *      yoktur; hiç sağlanmamış bir kotayı "sıfır" sayıp bürodaki bütün AI'ı
  *      kilitlemek, spec'in "asla engellenmeyecekler" ilkesine aykırıdır.
  *   3. Diğer herkes → YONETILEN.

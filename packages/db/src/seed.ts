@@ -2220,6 +2220,17 @@ async function seedSavedReports(createdBy: string): Promise<number> {
 // ---------------------------------------------------------------------------
 
 async function main() {
+  // ÜRETİM KAPISI: bu betik sabit parolalı (Demo1234!) demo büro, platform
+  // yöneticisi ve portal hesapları açar. Üretimde yanlışlıkla çalışması
+  // yönetici hesabı açmak demektir; yalnız açık niyetle (SEED_ALLOW_PROD=true)
+  // geçilebilir. Sistem tohumu (süre kuralları, tatiller) ayrı betiğe alınana
+  // kadar bu kapı belge uyarısının yerini alır.
+  if (process.env.NODE_ENV === "production" && process.env.SEED_ALLOW_PROD !== "true") {
+    throw new Error(
+      "seed.ts ÜRETİMDE ÇALIŞTIRILMAZ: demo hesapları (Demo1234!) açar. " +
+        "Bilinçli bir demo/staging kurulumu ise SEED_ALLOW_PROD=true ile yeniden çalıştırın.",
+    );
+  }
   const tenant = await prisma.tenant.upsert({
     where: { id: TENANT_ID },
     update: {},

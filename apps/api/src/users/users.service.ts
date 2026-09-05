@@ -111,6 +111,31 @@ export class UsersService {
     return { ok: true as const, message: `${target.fullName} için 2FA sıfırlandı; tüm oturumları düşürüldü.` };
   }
 
+  /**
+   * KOLTUK SINIRI (Faz 0 gelir kaçağı): büro, aboneliğindeki koltuk sayısından
+   * ve planın `maxUsers` tavanından fazla AKTİF kullanıcı açamaz. Aboneliği
+   * olmayan kiracı sınırlanmaz (kayıt eksikliği erişim kararı değildir).
+   */
+  private async assertSeatAvailable(tenantId: string): Promise<void> {
+    const subscription = await this.prisma.client.subscription.findUnique({
+      where: { tenantId },
+      select: { seats: true, planKey: true },
+    });
+    if (!subscription) return;
+    const plan = await this.prisma.client.planTier.findUnique({
+      where: { key: subscription.planKey },
+      select: { maxUsers: true, name: true },
+    });
+    const limit = plan?.maxUsers != null ? Math.min(subscription.seats, plan.maxUsers) : subscription.seats;
+    const active = await this.prisma.client.user.count({ where: { tenantId, isActive: true } });
+    if (active >= limit) {
+      throw new ConflictException(
+        `Koltuk sınırı: aboneliğiniz ${limit} aktif kullanıcı içeriyor (şu an ${active}). ` +
+          "Kullanıcı eklemek için bir kullanıcıyı pasifleştirin ya da koltuk sayısını artırın.",
+      );
+    }
+  }
+
   /** POST /users */
   async create(user: AuthUser, input: CreateUserInput) {
     assertRole(user, ROLE_SETS.ONAY, "büro kullanıcısı oluşturma");
@@ -125,6 +150,7 @@ export class UsersService {
     if (existing) {
       throw new ConflictException("Bu e-posta adresi zaten kullanılıyor.");
     }
+    await this.assertSeatAvailable(user.tenantId);
 
     const created = await this.prisma.client.user.create({
       data: {
@@ -164,6 +190,8 @@ export class UsersService {
     }
 
     const deactivating = input.isActive === false && target.isActive;
+    // Yeniden etkinleştirme de koltuk tüketir.
+    if (input.isActive === true && !target.isActive) await this.assertSeatAvailable(user.tenantId);
 
     const updated = await this.prisma.client.user.update({
       where: { id: target.id },

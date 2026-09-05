@@ -2,6 +2,8 @@ import {
   CanActivate,
   ExecutionContext,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   ServiceUnavailableException,
 } from "@nestjs/common";
@@ -10,6 +12,7 @@ import type { Request } from "express";
 import { IS_PUBLIC_KEY } from "../decorators/public.decorator";
 import { PrismaService } from "../../prisma/prisma.service";
 import { MAINTENANCE_SETTING_KEY } from "../../platform/platform.constants";
+import { SUBSCRIPTION_GRACE_DAYS } from "../../scheduler/scheduler.constants";
 import type { AuthUser } from "../types";
 
 /**
@@ -51,8 +54,20 @@ const STATUS_CACHE_TTL_MS = 30_000;
 /** Erişimi kesilen abonelik durumları. */
 const BLOCKED_STATUSES = ["SUSPENDED", "CANCELED"] as const;
 
+/**
+ * ÖDEME GEREKLİ (402) — Faz 0 gelir kaçağı: süresi dolan TRIAL ve toleransı
+ * (`SUBSCRIPTION_GRACE_DAYS`) aşan PAST_DUE büro, iki insan elle askıya alana
+ * kadar tam yetkiyle çalışıyordu. Artık YAZMA istekleri 402 döner; okuma,
+ * kimlik ve ödeme/kredi uçları açık kalır (veri rehin alınmaz, ödeme yolu
+ * kapanmaz). Askı (403) ayrı ve daha sert bir karardır, olduğu gibi durur.
+ */
+const PAST_DUE_GRACE_DAYS = SUBSCRIPTION_GRACE_DAYS;
+const PAYMENT_OPEN_PREFIXES = ["/api/v1/auth/", "/api/v1/billing", "/api/v1/credits"];
+
 interface CachedStatus {
   status: string | null;
+  trialEndsAt: Date | null;
+  currentPeriodEnd: Date | null;
   expiresAt: number;
 }
 
@@ -119,13 +134,23 @@ export class TenantStatusGuard implements CanActivate {
     const user = request.user;
     if (!user?.tenantId) return true;
 
-    const status = await this.readSubscriptionStatus(user.tenantId);
-    if (!status || !(BLOCKED_STATUSES as readonly string[]).includes(status)) return true;
+    const sub = await this.readSubscriptionStatus(user.tenantId);
+    const status = sub.status;
+    if (!status) return true;
 
     // Kimlik uçları ve salt-okur erişim açık kalır (veri rehin alınmaz).
     const method = (request.method ?? "GET").toUpperCase();
-    if (method === "GET" || method === "HEAD" || method === "OPTIONS") return true;
-    if (request.path?.startsWith("/api/v1/auth/")) return true;
+    const readOnly = method === "GET" || method === "HEAD" || method === "OPTIONS";
+    const path = request.path ?? "";
+
+    if (!(BLOCKED_STATUSES as readonly string[]).includes(status)) {
+      const paymentDue = this.paymentDueMessage(sub, Date.now());
+      if (!paymentDue || readOnly || PAYMENT_OPEN_PREFIXES.some((p) => path.startsWith(p))) return true;
+      throw new HttpException(paymentDue, HttpStatus.PAYMENT_REQUIRED);
+    }
+
+    if (readOnly) return true;
+    if (path.startsWith("/api/v1/auth/")) return true;
 
     throw new ForbiddenException(
       status === "CANCELED"
@@ -139,27 +164,52 @@ export class TenantStatusGuard implements CanActivate {
     );
   }
 
-  /** Kiracının abonelik durumu — kısa ömürlü önbellekle. */
-  private async readSubscriptionStatus(tenantId: string): Promise<string | null> {
+  /** Süresi dolmuş TRIAL / toleransı aşmış PAST_DUE için kullanıcı mesajı; yoksa null. */
+  private paymentDueMessage(sub: CachedStatus, nowMs: number): string | null {
+    if (sub.status === "TRIAL" && sub.trialEndsAt && sub.trialEndsAt.getTime() < nowMs) {
+      return (
+        "Deneme süreniz sona erdi. Kayıtlarınız SİLİNMEMİŞTİR ve görüntülenebilir; yeni kayıt " +
+        "oluşturmak ve değişiklik yapmak için aboneliğinizi başlatın (Ayarlar → Abonelik)."
+      );
+    }
+    if (sub.status === "PAST_DUE" && sub.currentPeriodEnd) {
+      const graceEnd = sub.currentPeriodEnd.getTime() + PAST_DUE_GRACE_DAYS * 24 * 3_600_000;
+      if (graceEnd < nowMs) {
+        return (
+          `Abonelik ödemeniz ${PAST_DUE_GRACE_DAYS} günü aşkın süredir gecikmiş. Kayıtlarınız ` +
+          "SİLİNMEMİŞTİR ve görüntülenebilir; yazma işlemleri ödeme tamamlanana kadar kapalıdır."
+        );
+      }
+    }
+    return null;
+  }
+
+  /** Kiracının abonelik durumu (+ tarihler) — kısa ömürlü önbellekle. */
+  private async readSubscriptionStatus(tenantId: string): Promise<CachedStatus> {
     const now = Date.now();
     const cached = this.tenantCache.get(tenantId);
-    if (cached && cached.expiresAt > now) return cached.status;
+    if (cached && cached.expiresAt > now) return cached;
 
     const subscription = await this.prisma.client.subscription.findUnique({
       where: { tenantId },
-      select: { status: true },
+      select: { status: true, trialEndsAt: true, currentPeriodEnd: true },
     });
     // Aboneliği hiç olmayan kiracı ENGELLENMEZ: kayıt eksikliği bir erişim
     // kararı değildir ve bütün büroyu kilitlemek orantısız olurdu.
-    const status = subscription?.status ?? null;
+    const entry: CachedStatus = {
+      status: subscription?.status ?? null,
+      trialEndsAt: subscription?.trialEndsAt ?? null,
+      currentPeriodEnd: subscription?.currentPeriodEnd ?? null,
+      expiresAt: now + STATUS_CACHE_TTL_MS,
+    };
 
     if (this.tenantCache.size > 1_000) {
       for (const [key, value] of this.tenantCache) {
         if (value.expiresAt <= now) this.tenantCache.delete(key);
       }
     }
-    this.tenantCache.set(tenantId, { status, expiresAt: now + STATUS_CACHE_TTL_MS });
-    return status;
+    this.tenantCache.set(tenantId, entry);
+    return entry;
   }
 
   /** Bakım modu tam kilidi — dört-göz onayıyla açılır/kapanır. */

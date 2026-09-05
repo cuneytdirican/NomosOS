@@ -32,6 +32,14 @@ export class CreditsStartupService implements OnApplicationBootstrap {
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
+    // Cüzdansız kiracı = ölçülmeyen AI (gelir kaçağı). Açılışta kapatılır.
+    try {
+      const created = await this.credits.ensureWalletsForAllTenants();
+      if (created > 0) this.logger.warn(`${created} kiracının kredi cüzdanı yoktu; açılışta plan kotasıyla açıldı.`);
+    } catch (err) {
+      this.logger.error(`Cüzdan yedeklemesi başarısız: ${(err as Error).message}`);
+    }
+
     const declared = this.collectDeclaredTaskTypes();
     if (declared.size === 0) return;
 

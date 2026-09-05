@@ -1407,6 +1407,26 @@ export class CreditService implements OnModuleInit {
     });
   }
 
+  /**
+   * AÇILIŞ YEDEKLEMESİ: cüzdansız kiracı kalmasın. Kiracı açılışı artık
+   * cüzdanı aynı işlemde açar; bu yol daha önce açılmış (ya da elle/seed ile
+   * yaratılmış) kiracılar içindir. İdempotent; her açılışta ucuz (kiracı sayısı).
+   */
+  async ensureWalletsForAllTenants(): Promise<number> {
+    const [tenants, wallets] = await Promise.all([
+      this.prisma.client.tenant.findMany({ select: { id: true } }),
+      this.prisma.client.creditWallet.findMany({ select: { tenantId: true } }),
+    ]);
+    const has = new Set(wallets.map((w) => w.tenantId));
+    let created = 0;
+    for (const t of tenants) {
+      if (has.has(t.id)) continue;
+      await this.ensureWallet(t.id);
+      created += 1;
+    }
+    return created;
+  }
+
   /** Platform tarafı: cüzdanı olmayan tenant'a cüzdan açar. */
   async ensureWallet(tenantId: string) {
     const existing = await this.prisma.client.creditWallet.findUnique({ where: { tenantId } });

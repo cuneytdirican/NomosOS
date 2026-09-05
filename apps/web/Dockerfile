@@ -12,6 +12,9 @@ WORKDIR /repo
 
 ARG NEXT_PUBLIC_API_URL=http://localhost:3001
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# Demo giriş sayfası: 1 = derlemede kapalı (üretim). Varsayılan 0 (test yığını).
+ARG NEXT_PUBLIC_DISABLE_DEMO=0
+ENV NEXT_PUBLIC_DISABLE_DEMO=$NEXT_PUBLIC_DISABLE_DEMO
 ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY package.json pnpm-workspace.yaml ./

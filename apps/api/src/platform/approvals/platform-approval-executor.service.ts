@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { Prisma, type PlatformApprovalRequest, type PlatformRole, type SupportScope } from "@nomosos/db";
 import { PrismaService } from "../../prisma/prisma.service";
-import { adjustmentRejection } from "../../credits/credit-plans";
+import { adjustmentRejection, nextPeriod, planQuota } from "../../credits/credit-plans";
 import { PlatformAuditService } from "../platform-audit.service";
 import { MAINTENANCE_SETTING_KEY, SUPPORT_GRANT_MAX_HOURS } from "../platform.constants";
 import { ADMIN_ROLES } from "../platform-permissions";
@@ -181,6 +181,29 @@ export class PlatformApprovalExecutorService {
           trialEndsAt,
           currentPeriodStart: now,
           currentPeriodEnd: trialEndsAt,
+        },
+      });
+      // KREDİ CÜZDANI AYNI İŞLEMDE AÇILIR (gelir kaçağı bulgusu): cüzdansız
+      // kiracı `billing-mode.service` gereği SINIRSIZ ve ÖLÇÜLMEYEN AI ile
+      // başlıyordu. Kota plan + koltuktan (planQuota), dönem bugünden.
+      const quota = planQuota(plan.key, payload.seats, { includedCredits: 500, documentQuota: 200 });
+      const period = nextPeriod(now);
+      await tx.creditWallet.create({
+        data: {
+          tenantId: tenant.id,
+          periodStart: period.periodStart,
+          periodEnd: period.periodEnd,
+          includedCredits: quota.credits,
+          documentQuota: quota.documents,
+        },
+      });
+      await tx.creditTransaction.create({
+        data: {
+          tenantId: tenant.id,
+          type: "TAHSIS",
+          amount: quota.credits,
+          balanceAfter: quota.credits,
+          note: `Büro açılışı — dönem başı dahil kota. ${quota.basis}`,
         },
       });
       return { tenant, admin, subscription };

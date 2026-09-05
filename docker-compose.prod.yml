@@ -278,6 +278,13 @@ services:
       # Varsayılan http://localhost:3000'dür; üretilmiş web başka kökenden
       # istek yapamayacağı için ZORUNLU alan (bkz. docs/uretim-dagitimi.md §8.2).
       WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN zorunlu - ornek https://ornek-buro.com}
+      # API'nin kimlik sağlayıcıdan (SSO/OIDC) görülen genel adresi:
+      # redirect_uri = $API_PUBLIC_URL/api/v1/auth/sso/callback. Tanımsızsa
+      # üretimde kurumsal giriş yanlış geri dönüş adresiyle ÇALIŞMAZ.
+      API_PUBLIC_URL: ${API_PUBLIC_URL:?API_PUBLIC_URL zorunlu - ornek https://api.ornek-buro.com}
+      # Prometheus /metrics ucu: token tanımsızsa üretimde uç 404 döner
+      # (izleme fiilen kapalı). Kurulumla birlikte üretin: openssl rand -hex 24
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
 
       # --- Zaman aşımı ---
       # Uzun sözleşme analiz parçaları tek AI çağrısında 60 sn'yi aşabilir;
@@ -292,7 +299,8 @@ services:
       # --- AI / RAG ---
       AI_EMBEDDING_MODEL: ${AI_EMBEDDING_MODEL:-}
       AI_INTERNAL_HOSTS: ${AI_INTERNAL_HOSTS:-}
-      AI_TIMEOUT_MS: ${AI_TIMEOUT_MS:-60000}
+      # AI_TIMEOUT_MS yukarıda ("Zaman aşımı") TEK KEZ tanımlıdır — ikinci bir
+      # tanım YAML'de öncekini ezer ve 180 sn'lik düzeltmeyi sessizce 60'a çeker.
       AI_RATE_LIMIT_PER_MINUTE: ${AI_RATE_LIMIT_PER_MINUTE:-20}
       AI_RATE_LIMIT_PER_DAY: ${AI_RATE_LIMIT_PER_DAY:-300}
       # Büro (kiracı) başına, UÇTAN BAĞIMSIZ tavan — denetim bulgusu Ö-10.
@@ -375,6 +383,9 @@ services:
         # Next NEXT_PUBLIC_* değişkenlerini DERLEME ANINDA tarayıcı paketine gömer.
         # Değer, tarayıcının API'ye ulaşabildiği DIŞ adres olmalıdır.
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL zorunlu - ornek https://api.ornek-buro.com}
+        # Demo giriş sayfası (/demo-giris, Demo1234! hesapları) ÜRETİM PAKETİNE
+        # GÖMÜLMEZ. Derleme anı değişkenidir; çalışma anında verilmesi yetmez.
+        NEXT_PUBLIC_DISABLE_DEMO: "1"
     image: nomosos/web:${IMAGE_TAG:-latest}
     container_name: nomosos-prod-web
     environment:
