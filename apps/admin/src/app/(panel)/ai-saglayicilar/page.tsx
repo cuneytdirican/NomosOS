@@ -33,8 +33,12 @@ interface ProviderRow {
   hasApiKey: boolean;
   isDefault: boolean;
   isActive: boolean;
+  /** TANIMLI | IMPORTED — dışarıda eğitilmiş model kaydı içe aktarıldı. */
+  origin?: string;
   notes: string | null;
 }
+
+const EMPTY_IMPORT = { name: "", type: "OPENAI_COMPAT", apiKey: "", baseUrl: "", externalModelId: "", notes: "" };
 
 const TYPES = ["ANTHROPIC", "OPENAI_COMPAT", "GEMINI", "OLLAMA", "CUSTOM"] as const;
 const TYPE_LABELS: Record<string, string> = {
@@ -77,6 +81,36 @@ function PlatformAi() {
   const [modelsOf, setModelsOf] = useState<Record<string, string[]>>({});
   const [testing, setTesting] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Kullanıcı tanımlı model (gereksinim 3): eğitilmiş model KAYDI içe aktarma.
+  const [importOpen, setImportOpen] = useState(false);
+  const [importForm, setImportForm] = useState(EMPTY_IMPORT);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  async function importModel() {
+    setBusy(true);
+    setImportError(null);
+    try {
+      await adminApi(EP.platformAi.import, {
+        method: "POST",
+        body: {
+          name: importForm.name.trim(),
+          type: importForm.type,
+          externalModelId: importForm.externalModelId.trim(),
+          ...(importForm.apiKey.trim() ? { apiKey: importForm.apiKey.trim() } : {}),
+          ...(importForm.baseUrl.trim() ? { baseUrl: importForm.baseUrl.trim() } : {}),
+          ...(importForm.notes.trim() ? { notes: importForm.notes.trim() } : {}),
+        },
+      });
+      setImportOpen(false);
+      setImportForm(EMPTY_IMPORT);
+      setNotice(`Eğitilmiş model kaydı içe aktarıldı: ${importForm.externalModelId.trim()}. Görev rotalarına hemen atanabilir.`);
+      await load();
+    } catch (err) {
+      setImportError(errorMessage(err, "İçe aktarılamadı."));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -221,7 +255,12 @@ function PlatformAi() {
           <div className="flex items-center justify-between p-4">
             <p className="text-sm font-semibold text-slate-700">Sağlayıcılar ({rows.length})</p>
             {canManage && (
-              <Button onClick={openCreate}>+ Yeni Sağlayıcı</Button>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="secondary" onClick={() => { setImportError(null); setImportOpen(true); }}>
+                  Eğitilmiş Model İçe Aktar
+                </Button>
+                <Button onClick={openCreate}>+ Yeni Sağlayıcı</Button>
+              </div>
             )}
           </div>
           {loading ? (
@@ -241,6 +280,7 @@ function PlatformAi() {
                         {row.name}
                         {row.isDefault && <Badge tone="green">Varsayılan</Badge>}
                         <Badge tone={row.isActive ? "blue" : "gray"}>{row.isActive ? "Aktif" : "Pasif"}</Badge>
+                        {row.origin === "IMPORTED" && <Badge tone="yellow">İçe aktarıldı</Badge>}
                       </p>
                       <p className="mt-0.5 text-xs text-slate-500">
                         {TYPE_LABELS[row.type] ?? row.type} · model: {row.defaultModel} · anahtar:{" "}
@@ -350,6 +390,54 @@ function PlatformAi() {
               onClick={() => void save()}
             >
               {busy ? "Kaydediliyor…" : editId ? "Güncelle" : "Ekle"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={importOpen} onClose={() => setImportOpen(false)} title="Eğitilmiş Model Kaydı İçe Aktar">
+        <div className="space-y-4">
+          <p className="text-xs leading-5 text-slate-500">
+            İçe aktarılan şey model KAYDIDIR: sağlayıcının döndürdüğü eğitilmiş model kimliği + erişim adresi/anahtarı.
+            Ağırlık dosyası sisteme girmez. Kayıt, normal bir platform sağlayıcısı gibi görev rotalarına ve model eğitim
+            işlerine hemen bağlanabilir; listede &quot;İçe aktarıldı&quot; rozetiyle görünür.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Ad">
+              <Input value={importForm.name} onChange={(e) => setImportForm({ ...importForm, name: e.target.value })} placeholder="NomosOS hukuk-ft-v1" />
+            </Field>
+            <Field label="Tür">
+              <Select value={importForm.type} onChange={(e) => setImportForm({ ...importForm, type: e.target.value })}>
+                {TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {TYPE_LABELS[t]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+          <Field label="Eğitilmiş model kimliği" hint="Sağlayıcının eğitim sonunda döndürdüğü model adı (örn. ft:gpt-4o-mini:nomosos:hukuk:abc123).">
+            <Input value={importForm.externalModelId} onChange={(e) => setImportForm({ ...importForm, externalModelId: e.target.value })} />
+          </Field>
+          <Field label="API Anahtarı" hint="AES-256-GCM ile şifreli saklanır; listeye dönmez.">
+            <Input type="password" value={importForm.apiKey} onChange={(e) => setImportForm({ ...importForm, apiKey: e.target.value })} placeholder="sk-…" />
+          </Field>
+          <Field label="Base URL" hint="Kendi sunucunuzdaysa (vLLM/Ollama) adresi; boş bırakılırsa türün varsayılanı.">
+            <Input value={importForm.baseUrl} onChange={(e) => setImportForm({ ...importForm, baseUrl: e.target.value })} placeholder="https://…" />
+          </Field>
+          <Field label="Not">
+            <Input value={importForm.notes} onChange={(e) => setImportForm({ ...importForm, notes: e.target.value })} placeholder="eğitim işi no, tarih…" />
+          </Field>
+          {importError && <p className="text-xs text-red-700">{importError}</p>}
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setImportOpen(false)}>
+              Vazgeç
+            </Button>
+            <Button
+              disabled={busy || importForm.name.trim().length < 2 || importForm.externalModelId.trim().length < 1}
+              onClick={() => void importModel()}
+            >
+              {busy ? "İçe aktarılıyor…" : "İçe Aktar"}
             </Button>
           </div>
         </div>

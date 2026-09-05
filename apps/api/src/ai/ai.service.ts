@@ -71,6 +71,7 @@ const PROVIDER_PUBLIC_SELECT = {
   baseUrl: true,
   defaultModel: true,
   isActive: true,
+  origin: true, // TANIMLI | IMPORTED — arayüz rozeti
   createdAt: true,
   updatedAt: true,
   encryptedApiKey: true, // yalnız `hasApiKey` türetmek için okunur, DÖNDÜRÜLMEZ
@@ -85,6 +86,7 @@ type ProviderPublicRow = {
   baseUrl: string | null;
   defaultModel: string;
   isActive: boolean;
+  origin: string;
   createdAt: Date;
   updatedAt: Date;
   encryptedApiKey: string | null;
@@ -107,6 +109,7 @@ function toPublicProvider(config: ProviderPublicRow) {
     baseUrl: config.baseUrl,
     defaultModel: config.defaultModel,
     isActive: config.isActive,
+    origin: config.origin,
     createdAt: config.createdAt,
     updatedAt: config.updatedAt,
     hasApiKey: Boolean(config.encryptedApiKey),
@@ -155,7 +158,27 @@ export class AiService {
     return configs.map(toPublicProvider);
   }
 
-  async createProvider(user: AuthUser, input: AiProviderConfigInput) {
+  /**
+   * DIŞARIDA EĞİTİLMİŞ MODEL KAYDINI İÇE AKTARMA (kullanıcı tanımlı model,
+   * gereksinim 3). İçe aktarılan şey model KAYDIDIR (kimlik + adres + anahtar);
+   * ağırlık dosyası sisteme girmez. Kayıt normal bir sağlayıcı olarak görev
+   * rotalarına hemen bağlanabilir. Aynı BYO plan kapısı, SSRF kapısı ve
+   * şifreleme hattından geçer; denetim izinde MODEL_IMPORT olarak görünür.
+   */
+  async importTrainedModel(
+    user: AuthUser,
+    input: Omit<AiProviderConfigInput, "defaultModel"> & { externalModelId: string },
+  ) {
+    const { externalModelId, ...rest } = input;
+    return this.createProvider(user, { ...rest, defaultModel: externalModelId }, "IMPORTED");
+  }
+
+  async createProvider(
+    user: AuthUser,
+    input: AiProviderConfigInput,
+    origin: "TANIMLI" | "IMPORTED" = "TANIMLI",
+  ) {
+    // K-09 rol kapısı — içe aktarma da aynı kapıdan geçer (etiket denetim izinde ayrışır).
     assertRole(user, ROLE_SETS.ONAY, "AI sağlayıcı tanımlama");
 
     // D1.3 — BYO PLAN KAPISI: plan kendi LLM tanımlamayı kapsamıyorsa kiracı
@@ -200,16 +223,19 @@ export class AiService {
         // aynı korumayı alır — düz metin saklama denetim bulgusu K-08'di.
         headersJson: input.headers ? encryptSecret(JSON.stringify(input.headers)) : null,
         mappingJson: input.mapping ? JSON.stringify(input.mapping) : null,
+        origin,
       },
       select: PROVIDER_PUBLIC_SELECT,
     });
     await this.audit.log({
       tenantId: user.tenantId,
       userId: user.userId,
-      action: "AI_PROVIDER_CREATE",
+      action: origin === "IMPORTED" ? "MODEL_IMPORT" : "AI_PROVIDER_CREATE",
       entity: "AiProviderConfig",
       entityId: created.id,
-      detail: `${created.name} (${created.type}) · hedef=${external ? "DIŞ" : "BÜRO İÇİ"}`,
+      detail:
+        `${created.name} (${created.type}) · hedef=${external ? "DIŞ" : "BÜRO İÇİ"}` +
+        (origin === "IMPORTED" ? ` · içe aktarılan model=${created.defaultModel}` : ""),
     });
     return { ...toPublicProvider(created), externalDestination: external };
   }

@@ -251,7 +251,8 @@ Sistemin ayırt edici kararlarını görmek için:
 8. **Dilekçe sürüm farkı** — Bir dilekçede bölüm düzenleyip yeni sürüm kaydedin;
    detay penceresindeki sürüm ciplerinden iki sürüm seçip fark görün: değişen
    bölümler, eklenen (yeşil) / çıkarılan (kırmızı) satırlar.
-9. **Fine-tuning işi (dürüstlük ilkesi)** — Panel → AI Eğitim İşleri: iş açma,
+9. **Fine-tuning işi (dürüstlük ilkesi)** — Panel → Model Eğitim İşleri: iş açma (model
+   yalnız platform kataloğundan seçilir),
    manifest (JSONL) indirme ve şerit denetimli durum geçişleri vardır; sistemin
    sağlayıcıya **otomatik gönderimi yoktur** — manifest elle yüklenir.
 10. **UYAP eşleşme sonrası yeniden senkron** — Eşleşmeyen UYAP dosyasına sahnelenen

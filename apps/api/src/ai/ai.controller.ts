@@ -33,6 +33,19 @@ const updateAiPolicySchema = z
   });
 type UpdateAiPolicyInput = z.infer<typeof updateAiPolicySchema>;
 
+/**
+ * Eğitilmiş model KAYDI içe aktarma — sağlayıcı şemasının aynısı; model
+ * kimliği `externalModelId` (sağlayıcının döndürdüğü fine-tuned model adı).
+ */
+const importTrainedModelSchema = aiProviderConfigSchema.omit({ defaultModel: true }).extend({
+  externalModelId: z
+    .string()
+    .trim()
+    .min(1, "Eğitilmiş model kimliği zorunludur (sağlayıcının döndürdüğü model adı).")
+    .max(200, "Model kimliği en fazla 200 karakter olabilir."),
+});
+type ImportTrainedModelInput = z.infer<typeof importTrainedModelSchema>;
+
 /** Model önizleme girişi (kaydetmeden) — D1.3b. */
 const previewModelsSchema = z.object({
   type: z.enum(["ANTHROPIC", "OPENAI_COMPAT", "GEMINI", "OLLAMA", "CUSTOM"]),
@@ -82,6 +95,19 @@ export class AiController {
     @Body(new ZodValidationPipe(aiProviderConfigSchema)) body: AiProviderConfigInput
   ) {
     return this.aiService.createProvider(user, body);
+  }
+
+  /**
+   * POST /ai/providers/import — dışarıda eğitilmiş model KAYDINI içe aktar
+   * (kullanıcı tanımlı model, gereksinim 3). BYO plan kapısı + SSRF + şifreleme
+   * createProvider ile ortaktır; kayıt origin=IMPORTED rozetiyle listelenir.
+   */
+  @Post("providers/import")
+  importTrainedModel(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(importTrainedModelSchema)) body: ImportTrainedModelInput,
+  ) {
+    return this.aiService.importTrainedModel(user, body);
   }
 
   @Delete("providers/:id")

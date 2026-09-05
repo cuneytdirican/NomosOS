@@ -43,6 +43,16 @@ const createSchema = z.object({
 });
 export type PlatformProviderCreateInput = z.infer<typeof createSchema>;
 
+/** Eğitilmiş model KAYDI içe aktarma (platform kataloğu) — model kimliği externalModelId. */
+const importSchema = createSchema.omit({ defaultModel: true }).extend({
+  externalModelId: z
+    .string()
+    .trim()
+    .min(1, "Eğitilmiş model kimliği zorunludur.")
+    .max(200, "Model kimliği en fazla 200 karakter olabilir."),
+});
+type PlatformProviderImportInput = z.infer<typeof importSchema>;
+
 const updateSchema = z
   .object({
     name: z.string().trim().min(2).max(80).optional(),
@@ -82,6 +92,21 @@ export class PlatformAiProviderController {
     @Body(new ZodValidationPipe(createSchema)) body: PlatformProviderCreateInput,
   ) {
     return this.platformAi.createProvider(actor, body);
+  }
+
+  /**
+   * POST /import — dışarıda eğitilmiş model KAYDINI platform kataloğuna al
+   * (kullanıcı tanımlı model, gereksinim 3). Ağırlık dosyası sisteme girmez;
+   * kayıt origin=IMPORTED ile normal sağlayıcı olarak kullanılır.
+   */
+  @Post("import")
+  @WritePermission("aiProvider.manage")
+  importTrainedModel(
+    @CurrentPlatformUser() actor: PlatformAuthUser,
+    @Body(new ZodValidationPipe(importSchema)) body: PlatformProviderImportInput,
+  ) {
+    const { externalModelId, ...rest } = body;
+    return this.platformAi.createProvider(actor, { ...rest, defaultModel: externalModelId, origin: "IMPORTED" });
   }
 
   @Patch(":id")

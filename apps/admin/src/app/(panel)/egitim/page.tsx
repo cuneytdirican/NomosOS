@@ -1,7 +1,9 @@
 "use client";
 
 /**
- * AI EĞİTİM İŞLERİ (D5 / M4) — fine-tuning iş yönetimi.
+ * MODEL EĞİTİM İŞLERİ (D5 / M4 + kullanıcı tanımlı model eğitimi) — fine-tuning
+ * iş yönetimi. MODEL YALNIZ KATALOGDAN SEÇİLİR: platform AI sağlayıcıları
+ * ekranında tanımlı ve AKTİF kayıtlar; serbest metin sağlayıcı/model girişi YOKTUR.
  *
  * DÜRÜSTLÜK: sağlayıcıya otomatik iş gönderimi YOKTUR. Bu sayfa iş kaydını,
  * ONAYLANMIŞ örnek havuzunun anlık görüntüsünü, manifest (JSONL) indirmeyi ve
@@ -23,10 +25,21 @@ import {
   Modal,
   PageHeader,
   ResourceView,
+  Select,
   Table,
   Textarea,
   type Column,
 } from "@/components/ui";
+
+/** Platform kataloğu satırı (EP.platformAi.list) — model seçim listesi. */
+interface CatalogProvider {
+  id: string;
+  name: string;
+  type: string;
+  defaultModel: string;
+  isActive: boolean;
+  origin?: string;
+}
 
 interface FineTuneJobRow {
   id: string;
@@ -86,7 +99,8 @@ function Egitim() {
   const [createOpen, setCreateOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: "", provider: "OpenAI", baseModel: "gpt-4o-mini", note: "" });
+  const [form, setForm] = useState({ name: "", platformAiProviderId: "", note: "" });
+  const [catalog, setCatalog] = useState<CatalogProvider[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -96,6 +110,13 @@ function Egitim() {
       setJobs(data.items ?? []);
       setPool(data.pool ?? null);
       setMissing(false);
+      // Model seçim listesi: yalnız AKTİF platform sağlayıcıları (serbest metin yok).
+      try {
+        const rows = await adminApi<CatalogProvider[]>(EP.platformAi.list);
+        setCatalog((Array.isArray(rows) ? rows : []).filter((r) => r.isActive));
+      } catch {
+        setCatalog([]);
+      }
     } catch (err) {
       setMissing(true);
       setError(errorMessage(err, "Eğitim işleri yüklenemedi."));
@@ -116,13 +137,12 @@ function Egitim() {
         method: "POST",
         body: {
           name: form.name.trim(),
-          provider: form.provider.trim(),
-          baseModel: form.baseModel.trim(),
+          platformAiProviderId: form.platformAiProviderId,
           ...(form.note.trim() ? { note: form.note.trim() } : {}),
         },
       });
       setCreateOpen(false);
-      setForm({ name: "", provider: "OpenAI", baseModel: "gpt-4o-mini", note: "" });
+      setForm({ name: "", platformAiProviderId: "", note: "" });
       setNotice("İş açıldı (HAZIRLANDI). Manifesti indirip sağlayıcıya ELLE yükleyin; durumu buradan izleyin.");
       await load();
     } catch (err) {
@@ -225,8 +245,8 @@ function Egitim() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="AI Eğitim İşleri"
-        description="ONAYLANMIŞ örnek havuzundan fine-tuning işi açın, manifesti (JSONL) indirin, durumu izleyin. Sağlayıcıya otomatik gönderim YOKTUR — yükleme operatörün elindedir."
+        title="Model Eğitim İşleri"
+        description="Kullanıcı tanımlı model: ONAYLANMIŞ örnek havuzundan, platform kataloğunda tanımlı bir model üzerinde fine-tuning işi açın; manifesti (JSONL) indirin, durumu izleyin. Sağlayıcıya otomatik gönderim YOKTUR — yükleme operatörün elindedir."
         action={
           <Button onClick={() => setCreateOpen(true)} disabled={!pool || pool.approvedCount === 0}>
             Eğitim İşi Aç
@@ -303,14 +323,29 @@ function Egitim() {
           <Field label="İş adı">
             <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Örn. 2026-Q4 belge sınıflandırıcı" />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Sağlayıcı">
-              <Input value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })} />
-            </Field>
-            <Field label="Temel model">
-              <Input value={form.baseModel} onChange={(e) => setForm({ ...form, baseModel: e.target.value })} />
-            </Field>
-          </div>
+          <Field
+            label="Model (platform kataloğundan)"
+            hint="Yalnız Platform AI Sağlayıcıları ekranında tanımlı ve AKTİF modeller seçilebilir; serbest metin girişi yoktur."
+          >
+            {catalog.length === 0 ? (
+              <p className="text-xs text-amber-300">
+                Aktif platform sağlayıcısı yok. Önce Platform AI Sağlayıcıları ekranından bir model tanımlayın ya da eğitilmiş model kaydı içe aktarın.
+              </p>
+            ) : (
+              <Select
+                value={form.platformAiProviderId}
+                onChange={(e) => setForm({ ...form, platformAiProviderId: e.target.value })}
+              >
+                <option value="">Model seçin…</option>
+                {catalog.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} · {c.defaultModel}
+                    {c.origin === "IMPORTED" ? " (içe aktarıldı)" : ""}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
           <Field label="Not (isteğe bağlı)">
             <Textarea rows={2} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
           </Field>
@@ -318,7 +353,7 @@ function Egitim() {
             <Button variant="secondary" onClick={() => setCreateOpen(false)}>
               Vazgeç
             </Button>
-            <Button onClick={() => void create()} disabled={busy || form.name.trim().length < 3}>
+            <Button onClick={() => void create()} disabled={busy || form.name.trim().length < 3 || !form.platformAiProviderId}>
               {busy ? "Açılıyor…" : "Aç"}
             </Button>
           </div>

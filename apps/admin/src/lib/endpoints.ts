@@ -149,6 +149,13 @@ export const EP = {
     item: (id: string) => `/ai/providers/${encodeURIComponent(id)}`,
     test: (id: string) => `/ai/providers/${encodeURIComponent(id)}/test`,
     models: (id: string) => `/ai/providers/${encodeURIComponent(id)}/models`,
+    /** Dışarıda eğitilmiş model KAYDINI kataloğa al (kullanıcı tanımlı model, gereksinim 3). */
+    import: "/ai/providers/import",
+  },
+  /** AAÜT platform tarifesi — büro girmediyse kullanılan resmî (RG) tarife. */
+  vekaletTarife: {
+    list: "/vekalet-tarife",
+    save: (yil: number) => `/vekalet-tarife/${yil}`,
   },
   /** İçtihat havuz yönetimi (D1 — RAG havuzunu platform eliyle doldurma). */
   caseLawPool: {

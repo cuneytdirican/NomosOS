@@ -115,8 +115,14 @@ onay arası yarış korunur). **Askıda/iptalli büro girişi kapalıdır:** ten
 abonelik durumunu denetler, SUSPENDED/CANCELED → 403 (denetim izine yazılır; veri
 silinmez). Yalnız SUPER_ADMIN ve OPS_ADMIN (matris: `tenant.create` dört-göz).
 
-**D5 güncellemesi — AI Eğitim İşleri (`/egitim`):** ONAYLANMIŞ AI eğitim örneği
-havuzundan fine-tuning işi yönetimi. İş açılışı havuzun ANLIK GÖRÜNTÜSÜNÜ alır
+**D5 güncellemesi — Model Eğitim İşleri (`/egitim`, kullanıcı tanımlı model):**
+ONAYLANMIŞ AI eğitim örneği havuzundan fine-tuning işi yönetimi. Model YALNIZ
+platform kataloğundan (Platform AI Sağlayıcıları, aktif kayıtlar) seçilir —
+serbest metin sağlayıcı/model girişi yoktur; dışarıda eğitilmiş model KAYDI
+"Eğitilmiş Model İçe Aktar" ile kataloğa alınır (`origin=IMPORTED`, ağırlık
+dosyası girmez). Lisanslı bürolar (allowBYOLLM) kendi modelleri üzerinde
+işi web'den (`/app/ayarlar/model-egitimi`, `/ai-training/fine-tune-jobs`)
+açar; manifestleri yalnız kendi kiracılarının örneklerini içerir. İş açılışı havuzun ANLIK GÖRÜNTÜSÜNÜ alır
 (sayı + görev tipi kırılımı); manifest (JSONL) yalnız HAZIRLANDI/GONDERILDI
 durumunda iner; durum geçişleri şerit denetimlidir:
 `HAZIRLANDI → GONDERILDI → EGITILIYOR → TAMAMLANDI` (+BASARISIZ/IPTAL yan yolları),

@@ -2,24 +2,33 @@ import { z } from "zod";
 
 /** D5 / M4 — fine-tuning işi şemaları. */
 
+/**
+ * KULLANICI TANIMLI MODEL: sağlayıcı/temel model SERBEST METİN DEĞİLDİR —
+ * yalnız katalogda tanımlı (platform işi: PlatformAiProvider; kiracı işi:
+ * AiProviderConfig) bir model seçilebilir. Sağlayıcı adı ve model kimliği
+ * sunucuda katalogdan çözülüp iş kaydına anlık görüntü olarak yazılır.
+ */
 export const fineTuneCreateSchema = z.object({
   name: z
     .string()
     .trim()
     .min(3, "İş adı en az 3 karakter olmalıdır.")
     .max(120, "İş adı en fazla 120 karakter olabilir."),
-  provider: z
-    .string()
-    .trim()
-    .min(2, "Sağlayıcı adı zorunludur (örn. OpenAI, Yerel vLLM).")
-    .max(120, "Sağlayıcı adı en fazla 120 karakter olabilir."),
-  baseModel: z
-    .string()
-    .trim()
-    .min(2, "Temel model zorunludur (örn. gpt-4o-mini).")
-    .max(200, "Temel model adı en fazla 200 karakter olabilir."),
+  platformAiProviderId: z.string().uuid("Model seçimi zorunludur (platform kataloğundan)."),
   note: z.string().trim().max(2000, "Not en fazla 2000 karakter olabilir.").optional(),
 });
+
+/** Kiracı işi: yalnız büronun KENDİ tanımladığı sağlayıcılardan seçim. */
+export const tenantFineTuneCreateSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(3, "İş adı en az 3 karakter olmalıdır.")
+    .max(120, "İş adı en fazla 120 karakter olabilir."),
+  providerConfigId: z.string().uuid("Model seçimi zorunludur (kendi tanımladığınız sağlayıcılardan)."),
+  note: z.string().trim().max(2000, "Not en fazla 2000 karakter olabilir.").optional(),
+});
+export type TenantFineTuneCreateInput = z.infer<typeof tenantFineTuneCreateSchema>;
 export type FineTuneCreateInput = z.infer<typeof fineTuneCreateSchema>;
 
 /**

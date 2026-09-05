@@ -204,6 +204,7 @@ export class PlatformAiService {
       hasApiKey: r.encryptedApiKey !== null,
       isDefault: r.isDefault,
       isActive: r.isActive,
+      origin: r.origin,
       notes: r.notes,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
@@ -222,6 +223,8 @@ export class PlatformAiService {
       mapping?: CustomMapping;
       isDefault?: boolean;
       notes?: string;
+      /** IMPORTED = dışarıda eğitilmiş model kaydı (kullanıcı tanımlı model, gereksinim 3). */
+      origin?: "TANIMLI" | "IMPORTED";
     },
   ) {
     if (input.baseUrl) {
@@ -248,6 +251,7 @@ export class PlatformAiService {
           isDefault: input.isDefault ?? false,
           notes: input.notes ?? null,
           createdBy: actor.id,
+          origin: input.origin ?? "TANIMLI",
         },
       });
     } catch (err) {
@@ -265,10 +269,12 @@ export class PlatformAiService {
 
     await this.audit.log({
       actor: { id: actor.id, role: actor.role, ip: actor.ip },
-      action: "PLATFORM_AI_PROVIDER_CREATE",
+      action: input.origin === "IMPORTED" ? "MODEL_IMPORT" : "PLATFORM_AI_PROVIDER_CREATE",
       entity: "PlatformAiProvider",
       entityId: created.id,
-      detail: `${created.name} (${created.type}) · model=${created.defaultModel}`,
+      detail:
+        `${created.name} (${created.type}) · model=${created.defaultModel}` +
+        (input.origin === "IMPORTED" ? " · dışarıda eğitilmiş model kaydı içe aktarıldı" : ""),
     });
     return { id: created.id, ok: true };
   }

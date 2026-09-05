@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import type { Prisma } from "@nomosos/db";
 import { PrismaService } from "../../prisma/prisma.service";
 import { PlatformAuditService } from "../platform-audit.service";
 import type { PlatformAuthUser } from "../platform.types";
@@ -27,6 +28,9 @@ export class FineTuneService {
 
   async list() {
     const rows = await this.prisma.client.fineTuneJob.findMany({
+      // Yalnız PLATFORM işleri: kiracı işleri (tenantId dolu) büronun kendi
+      // ekranındadır; platform paneli kiracı eğitim verisine buradan bakmaz.
+      where: { tenantId: null },
       orderBy: { createdAt: "desc" },
       take: 200,
       select: {
@@ -34,6 +38,7 @@ export class FineTuneService {
         name: true,
         provider: true,
         baseModel: true,
+        platformAiProviderId: true,
         status: true,
         sampleCount: true,
         taskTypesJson: true,
@@ -58,6 +63,17 @@ export class FineTuneService {
     user: PlatformAuthUser,
     input: FineTuneCreateInput
   ) {
+    // KULLANICI TANIMLI MODEL: model yalnız platform kataloğundan seçilir;
+    // pasif/silinmiş kayıt ya da serbest metin kabul edilmez.
+    const catalog = await this.prisma.client.platformAiProvider.findFirst({
+      where: { id: input.platformAiProviderId, isActive: true },
+      select: { id: true, name: true, defaultModel: true, type: true },
+    });
+    if (!catalog) {
+      throw new BadRequestException(
+        "Seçilen model platform kataloğunda AKTİF değil. Platform AI Sağlayıcıları ekranından tanımlı ve aktif bir model seçin."
+      );
+    }
     const pool = await this.poolSnapshot();
     if (pool.approvedCount === 0) {
       throw new BadRequestException(
@@ -67,8 +83,11 @@ export class FineTuneService {
     const job = await this.prisma.client.fineTuneJob.create({
       data: {
         name: input.name,
-        provider: input.provider,
-        baseModel: input.baseModel,
+        // Anlık görüntü: katalog kaydı sonradan değişse de iş kaydı sabit.
+        provider: `${catalog.name} (${catalog.type})`,
+        baseModel: catalog.defaultModel,
+        platformAiProviderId: catalog.id,
+        tenantId: null,
         note: input.note ?? null,
         status: "HAZIRLANDI",
         sampleCount: pool.approvedCount,
@@ -149,12 +168,21 @@ export class FineTuneService {
           "Eğitim başladıysa güncel havuz için yeni iş açın."
       );
     }
+    // KAPSAM (kayıtlı karar — kullanıcı tanımlı model eğitimi planı):
+    // PLATFORM işi manifesti, opt-in vermiş TÜM kiracıların ONAYLANMIŞ
+    // örneklerini kapsar (kiracı rızası Tenant.aiTrainingOptIn'de, örnek onayı
+    // platform görevlisinde). Kiracı işleri (TenantFineTuneService) yalnız
+    // kendi kiracısının örneklerini görür. Kapsam denetim izine sayıyla yazılır.
+    const where: Prisma.AiTrainingSampleWhereInput = job.tenantId
+      ? { exportStatus: "ONAYLANDI", tenantId: job.tenantId }
+      : { exportStatus: "ONAYLANDI" };
     const samples = await this.prisma.client.aiTrainingSample.findMany({
-      where: { exportStatus: "ONAYLANDI" },
+      where,
       orderBy: { createdAt: "asc" },
       take: 10000,
-      select: { inputJson: true, outputJson: true, taskType: true, kind: true },
+      select: { tenantId: true, inputJson: true, outputJson: true, taskType: true, kind: true },
     });
+    const tenantCount = new Set(samples.map((s) => s.tenantId)).size;
     const jsonl = samples
       .map((s) => JSON.stringify({ task_type: s.taskType, kind: s.kind, input: safeParse(s.inputJson), output: safeParse(s.outputJson) }))
       .join("\n");
@@ -163,9 +191,11 @@ export class FineTuneService {
       action: "FINE_TUNE_MANIFEST_EXPORT",
       entity: "FineTuneJob",
       entityId: id,
-      detail: `"${job.name}" manifesti üretildi (${samples.length} ONAYLANMIŞ örnek, JSONL).`,
+      detail:
+        `"${job.name}" manifesti üretildi (${samples.length} ONAYLANMIŞ örnek, JSONL; ` +
+        `${job.tenantId ? "tek kiracı" : `${tenantCount} opt-in kiracı`}).`,
     });
-    return { jsonl, count: samples.length };
+    return { jsonl, count: samples.length, tenantCount };
   }
 
   /** ONAYLANMIŞ havuz anlık görüntüsü — sayı + görev tipi kırılımı. */

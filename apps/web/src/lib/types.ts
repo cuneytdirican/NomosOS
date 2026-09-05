@@ -274,6 +274,8 @@ export interface AiProvider {
   mappingJson?: string | null;
   isActive?: boolean;
   hasApiKey?: boolean;
+  /** TANIMLI | IMPORTED — dışarıda eğitilmiş model kaydı içe aktarıldı. */
+  origin?: string;
 }
 
 export interface AiTaskRoute {

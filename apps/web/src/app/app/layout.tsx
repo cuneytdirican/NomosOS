@@ -471,6 +471,17 @@ const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
     ),
   },
   {
+    // Kullanıcı tanımlı model eğitimi — lisanslı büro kendi modelini/RAG'ını eğitir.
+    href: "/app/ayarlar/model-egitimi",
+    label: "Model Eğitimi",
+    roles: ["ADMIN", "PARTNER"],
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+        <path d="M10 1a1 1 0 0 1 1 1v1.07A7.002 7.002 0 0 1 16.93 9H18a1 1 0 1 1 0 2h-1.07A7.002 7.002 0 0 1 11 16.93V18a1 1 0 1 1-2 0v-1.07A7.002 7.002 0 0 1 3.07 11H2a1 1 0 1 1 0-2h1.07A7.002 7.002 0 0 1 9 3.07V2a1 1 0 0 1 1-1Zm0 4a5 5 0 1 0 0 10 5 5 0 0 0 0-10Zm0 3a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z" />
+      </svg>
+    ),
+  },
+  {
     // Modül 27 — aranabilir yardım merkezi; üst çubuktaki ? düğmesi bulunduğu
     // sayfanın konusuna bağlamsal açılır.
     href: "/app/yardim",

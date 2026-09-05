@@ -52,6 +52,8 @@ model Tenant {
   aiProviderConfigs AiProviderConfig[]
   aiTaskRoutes      AiTaskRoute[]
   auditLogs         AuditLog[]
+  /// Kiracının kendi model eğitim işleri (kullanıcı tanımlı model).
+  fineTuneJobs      FineTuneJob[]
 }
 
 enum UserRole {
@@ -1005,10 +1007,15 @@ model PlatformAiProvider {
   isActive        Boolean   @default(true)
   notes           String?
   createdBy       String?
+  /// TANIMLI | IMPORTED (dışarıda eğitilmiş model kaydı içe aktarıldı).
+  origin          String    @default("TANIMLI")
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
+  fineTuneJobs FineTuneJob[]
+
   @@index([isActive, isDefault])
+  @@index([origin])
 }
 
 /// Büronun disk kotası — tenant başına tek kayıt.
@@ -1334,13 +1341,18 @@ model AiProviderConfig {
   headersJson     String? // CUSTOM: ek header'lar (JSON)
   mappingJson     String? // CUSTOM: istek/yanıt alan eşlemesi (JSON)
   isActive        Boolean        @default(true)
+  /// TANIMLI = büro elle tanımladı; IMPORTED = dışarıda eğitilmiş model KAYDI
+  /// içe aktarıldı (kimlik/adres; ağırlık dosyası sisteme GİRMEZ).
+  origin          String         @default("TANIMLI")
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
-  taskRoutes  AiTaskRoute[]
-  aiUsageLogs AiUsageLog[]
+  taskRoutes   AiTaskRoute[]
+  aiUsageLogs  AiUsageLog[]
+  fineTuneJobs FineTuneJob[]
 
   @@index([tenantId])
+  @@index([origin])
 }
 
 /// Görev tipi → sağlayıcı + model eşlemesi (görev başına model seçimi)
@@ -2381,7 +2393,19 @@ model InvoiceRecord {
 model FineTuneJob {
   id              String       @id @default(uuid())
   name            String
-  /// Sağlayıcı üstverisi — serbest metin (örn. "OpenAI", "Yerel vLLM").
+  /// null = PLATFORM işi (platform kataloğundaki model ile); dolu = kiracının
+  /// KENDİ tanımladığı model üzerinde eğitim işi (allowBYOLLM lisansı gerekir).
+  tenantId        String?
+  tenant          Tenant?      @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  /// Kiracı işi: büronun kendi sağlayıcı kaydı (tenantId ile eşleşmek ZORUNDA).
+  providerConfigId String?
+  providerConfig   AiProviderConfig? @relation(fields: [providerConfigId], references: [id], onDelete: SetNull)
+  /// Platform işi: platform kataloğundaki sağlayıcı (AKTİF olmalı).
+  platformAiProviderId String?
+  platformAiProvider   PlatformAiProvider? @relation(fields: [platformAiProviderId], references: [id], onDelete: SetNull)
+  /// Sağlayıcı/model ANLIK GÖRÜNTÜSÜ (denormalize): katalog kaydı sonradan
+  /// değişse/silinse de iş kaydı hangi modelle açıldığını söyler. Serbest
+  /// metin GİRİŞİ YOKTUR — sunucu katalogdan çözer.
   provider        String
   baseModel       String
   /// HAZIRLANDI → GONDERILDI → EGITILIYOR → TAMAMLANDI; BASARISIZ/IPTAL yan yolları.
@@ -2393,12 +2417,16 @@ model FineTuneJob {
   /// TAMAMLANDI'da zorunlu — sağlayıcının döndürdüğü model kimliği.
   resultModelName String?
   note            String?
-  requestedById   String
-  requestedBy     PlatformUser @relation(fields: [requestedById], references: [id])
+  /// Platform işini açan görevli (kiracı işinde null).
+  requestedById   String?
+  requestedBy     PlatformUser? @relation(fields: [requestedById], references: [id], onDelete: Restrict)
+  /// Kiracı işini açan büro kullanıcısı (User.id — denetim izi).
+  requestedByUserId String?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
   @@index([status, createdAt])
+  @@index([tenantId, createdAt])
 }
 
 /// Çalışma zamanı sistem ayarı (bakım modu, kota varsayılanları vb.)
@@ -2812,6 +2840,25 @@ model VekaletTarife {
   updatedAt  DateTime @updatedAt
 
   @@unique([tenantId, yil])
+}
+
+/// PLATFORM AAÜT TARİFESİ (açılış öncesi hazır veri planı, Aşama 2) — büro
+/// kendi tarifesini girmediyse o yılın RESMÎ tarifesi buradan kullanılır.
+/// Rakamlar platform görevlisi tarafından Resmî Gazete'den girilir; sistem
+/// rakam UYDURMAZ (motor: packages/legal-core/vekalet-ucreti.ts). Büro kaydı
+/// (VekaletTarife) her zaman önceliklidir.
+model PlatformVekaletTarife {
+  id                 String   @id @default(uuid())
+  yil                Int      @unique
+  maktuKademelerJson String
+  maktuTekrarJson    String?
+  nispiOranYuzde     Decimal  @db.Decimal(5, 2)
+  kdvOrani           Decimal  @db.Decimal(4, 2) @default(20)
+  /// Kaynak künyesi: Resmî Gazete tarih/sayı (kaynak gösterimi zorunlu).
+  rgKunye            String?
+  updatedBy          String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }
 
 /// TANITIM SİTESİ DEMO TALEBİ — platform yönetim panelinde izlenir.

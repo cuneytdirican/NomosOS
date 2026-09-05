@@ -67,6 +67,16 @@ const MODEL_PLACEHOLDERS: Record<AiProviderType, string> = {
 
 type TestState = { status: "idle" | "busy" | "ok" | "fail"; message?: string };
 
+/** Eğitilmiş model KAYDI içe aktarma formu (kullanıcı tanımlı model, gereksinim 3). */
+interface ImportForm {
+  name: string;
+  type: AiProviderType;
+  apiKey: string;
+  baseUrl: string;
+  externalModelId: string;
+}
+const EMPTY_IMPORT: ImportForm = { name: "", type: "OPENAI_COMPAT", apiKey: "", baseUrl: "", externalModelId: "" };
+
 export default function AiSaglayiciPage() {
   const { wallet } = useWallet();
   const [providers, setProviders] = useState<AiProvider[]>([]);
@@ -89,6 +99,9 @@ export default function AiSaglayiciPage() {
   const [form, setForm] = useState<ProviderForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importForm, setImportForm] = useState<ImportForm>(EMPTY_IMPORT);
+  const [importError, setImportError] = useState<string | null>(null);
 
   // Görev tipi → model eşleme
   const [routes, setRoutes] = useState<Record<string, AiTaskRoute>>({});
@@ -195,6 +208,33 @@ export default function AiSaglayiciPage() {
       void loadProviders();
     } catch (err) {
       setSaveError(err instanceof ApiError ? err.message : "Sağlayıcı kaydedilemedi.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /** Eğitilmiş model kaydını içe aktar — aynı BYO/SSRF/şifreleme kapılarından geçer. */
+  async function handleImport(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setSaving(true);
+    setImportError(null);
+    const rulesImport = FIELD_RULES[importForm.type];
+    try {
+      await api("/ai/providers/import", {
+        method: "POST",
+        body: {
+          name: importForm.name.trim(),
+          type: importForm.type,
+          externalModelId: importForm.externalModelId.trim(),
+          apiKey: rulesImport.apiKey && importForm.apiKey.trim() ? importForm.apiKey.trim() : undefined,
+          baseUrl: rulesImport.baseUrl && importForm.baseUrl.trim() ? importForm.baseUrl.trim() : undefined,
+        },
+      });
+      setImportOpen(false);
+      setImportForm(EMPTY_IMPORT);
+      void loadProviders();
+    } catch (err) {
+      setImportError(err instanceof ApiError ? err.message : "Model kaydı içe aktarılamadı.");
     } finally {
       setSaving(false);
     }
@@ -377,9 +417,14 @@ export default function AiSaglayiciPage() {
             büronuzdan çıkmaz.
           </p>
         </div>
-        <Button variant="gold" onClick={() => setModalOpen(true)}>
-          + Yeni Sağlayıcı
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => { setImportError(null); setImportOpen(true); }}>
+            Eğitilmiş Model İçe Aktar
+          </Button>
+          <Button variant="gold" onClick={() => setModalOpen(true)}>
+            + Yeni Sağlayıcı
+          </Button>
+        </div>
       </div>
 
       {/* ---------- Kredi modu (Modül 26) ---------- */}
@@ -439,6 +484,7 @@ export default function AiSaglayiciPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-sm font-semibold text-slate-900">{p.name}</p>
                       <Badge tone="navy">{labelOf(AI_PROVIDER_TYPE_LABELS, p.type)}</Badge>
+                      {p.origin === "IMPORTED" && <Badge tone="gold">İçe aktarıldı</Badge>}
                       {p.isActive === false && <Badge tone="gray">Pasif</Badge>}
                     </div>
                     <p className="mt-1 text-xs text-slate-500">
@@ -680,6 +726,71 @@ export default function AiSaglayiciPage() {
             </Button>
             <Button type="submit" disabled={saving}>
               {saving ? "Kaydediliyor…" : "Kaydet"}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Eğitilmiş model kaydı içe aktarma modalı (kullanıcı tanımlı model) */}
+      <Modal open={importOpen} title="Eğitilmiş Model Kaydı İçe Aktar" onClose={() => setImportOpen(false)}>
+        <form onSubmit={handleImport} className="space-y-4">
+          <p className="text-xs leading-5 text-slate-600">
+            Dışarıda (kendi sunucunuzda ya da sağlayıcınızda) eğittiğiniz modelin KAYDINI ekler: eğitilmiş model
+            kimliği + erişim adresi/anahtarı. Ağırlık dosyası sisteme girmez. Kayıt, normal bir sağlayıcı gibi görev
+            eşlemelerine ve model eğitim işlerine hemen bağlanabilir.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Ad" hint='Örn. "Büro hukuk-ft-v1"'>
+              <Input value={importForm.name} onChange={(e) => setImportForm({ ...importForm, name: e.target.value })} required />
+            </Field>
+            <Field label="Tip">
+              <Select
+                value={importForm.type}
+                onChange={(e) => setImportForm({ ...importForm, type: e.target.value as AiProviderType })}
+              >
+                {AI_PROVIDER_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {labelOf(AI_PROVIDER_TYPE_LABELS, t)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+          <Field label="Eğitilmiş model kimliği" hint="Sağlayıcının eğitim sonunda döndürdüğü model adı.">
+            <Input
+              value={importForm.externalModelId}
+              onChange={(e) => setImportForm({ ...importForm, externalModelId: e.target.value })}
+              placeholder="ft:…  /  hukuk-llama-3-8b-v1"
+              required
+            />
+          </Field>
+          {FIELD_RULES[importForm.type].apiKey && (
+            <Field label="API Anahtarı" hint="AES-256-GCM ile şifrelenerek saklanır.">
+              <Input
+                type="password"
+                value={importForm.apiKey}
+                onChange={(e) => setImportForm({ ...importForm, apiKey: e.target.value })}
+                autoComplete="off"
+              />
+            </Field>
+          )}
+          {FIELD_RULES[importForm.type].baseUrl && (
+            <Field label="Base URL" hint="Kendi sunucunuzdaysa (vLLM/Ollama) adresi.">
+              <Input
+                type="url"
+                value={importForm.baseUrl}
+                onChange={(e) => setImportForm({ ...importForm, baseUrl: e.target.value })}
+                placeholder="https://…"
+              />
+            </Field>
+          )}
+          {importError && <ErrorBox message={importError} />}
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="secondary" onClick={() => setImportOpen(false)}>
+              Vazgeç
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? "İçe aktarılıyor…" : "İçe Aktar"}
             </Button>
           </div>
         </form>

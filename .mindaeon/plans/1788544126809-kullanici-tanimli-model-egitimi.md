@@ -1,5 +1,34 @@
 # Kullanıcı Tanımlı Model Eğitimi — Kavram Netleştirme ve Uygulama Planı
 
+## UYGULAMA DURUMU (2026-09-05 — 7 adımın tamamı kodlandı, testler yeşil)
+
+- **Şema/migration** `20260923090000_kullanici_tanimli_model_ve_aaut_platform`: `FineTuneJob`
+  tenantId/providerConfigId/platformAiProviderId/requestedByUserId (provider/baseModel anlık
+  görüntü), `AiProviderConfig.origin` + `PlatformAiProvider.origin` (TANIMLI | IMPORTED).
+- **Gereksinim 1:** `fineTuneCreateSchema` serbest metin almaz (`platformAiProviderId` uuid);
+  `FineTuneService.create` kataloğu AKTİF doğrular ve anlık görüntü yazar; platform listesi
+  yalnız `tenantId: null` işleri. Admin `/egitim` → "Model Eğitim İşleri", model `Select`
+  (EP.platformAi.list, aktif kayıtlar).
+- **Gereksinim 2:** `TenantFineTuneService` + `/ai-training/fine-tune-jobs` (GET/POST/
+  :id/manifest/:id/status): allowBYOLLM lisans kapısı (403), providerConfig sahiplik kapısı
+  (403), manifest yalnız kendi kiracısının ONAYLANMIŞ örnekleri, kiracı denetim izi. Web
+  `/app/ayarlar/model-egitimi` (lisans kilidi, iş listesi, manifest, şerit geçişleri, RAG
+  yeniden indeksleme) + menü "Model Eğitimi" (ADMIN/PARTNER).
+  **Sapma:** RAG yeniden indeksleme için yeni uç AÇILMADI — mevcut
+  `POST /assistant/index/:caseId { force: true }` kullanılır (aynı iş; ikinci uç tekrar olurdu).
+- **Gereksinim 3:** `POST /ai/providers/import` (kiracı; createProvider ile aynı rol/BYO/SSRF/
+  şifreleme kapıları, origin=IMPORTED, denetim MODEL_IMPORT) ve
+  `POST /admin/v1/ai/providers/import` (platform). Web ve admin sağlayıcı ekranlarında
+  "Eğitilmiş Model İçe Aktar" modalı + "İçe aktarıldı" rozeti; içe aktarılan model eğitim
+  işi select'inde ve görev rotalarında otomatik seçilebilir.
+- **Açık nokta kararı (platform manifest):** plandaki kayıtlı karar korundu — platform işi
+  manifesti opt-in kiracıların ONAYLANMIŞ örneklerini kapsar; ŞEFFAFLIK eklendi: manifest
+  yanıtı `tenantCount` döner ve denetim izi "N opt-in kiracı" yazar. Kiracı işleri kesin
+  kiracı süzgeçlidir.
+- **Testler:** `tenant-fine-tune.service.test.ts` (lisans/rol/izolasyon ×7),
+  `provider-import.test.ts` (güvenlik sözleşmesi ×6), `kullanici-tanimli-model.contract.test.ts`
+  (şema/uçlar/ekranlar/terminoloji ×9); dalga5 sözleşme testleri geçmeye devam ediyor.
+
 ## Mevcut Durum (tespitler)
 
 - `FineTuneJob` (packages/db/prisma/schema.prisma:2381) platform düzeyindedir; `provider`/`baseModel` **serbest metin** alanlardır — model kataloğuna bağlı değildir.
