@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { MindAeonBanner } from "./MindAeonBanner";
 import { SiteHeader } from "./SiteHeader";
 import { Footer } from "./Footer";
 
@@ -19,6 +20,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
       >
         İçeriğe geç
       </a>
+      <MindAeonBanner />
       <SiteHeader />
       <main id="icerik">{children}</main>
       <Footer />

@@ -109,6 +109,39 @@ body {
   }
 }
 
+/* MindAeon üst reklam şeridi animasyonları */
+@keyframes mindaeon-shimmer {
+  from {
+    background-position: 0% 50%;
+  }
+  to {
+    background-position: -220% 50%;
+  }
+}
+@keyframes mindaeon-slogan-in {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes mindaeon-ping {
+  75%,
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mindaeon-banner *,
+  .mindaeon-banner {
+    animation: none !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .marketing .fade-in {
     animation: none;
