@@ -17,6 +17,7 @@ import { PlatformAuditService } from "../platform-audit.service";
 import {
   PLATFORM_2FA_AUDIENCE,
   PLATFORM_CHALLENGE_TTL,
+  PLATFORM_2FA_SETTING_KEY,
   PLATFORM_JWT_AUDIENCE,
   PLATFORM_LOCKOUT_MINUTES,
   PLATFORM_MAX_CHALLENGE_ATTEMPTS,
@@ -147,7 +148,7 @@ export class PlatformAuthService {
     }
 
     // 2) 2FA kurulu değil ama zorunlu kılınmış → yalnız kurulum yolu açık.
-    if (requireTwoFactor()) {
+    if (await this.isTwoFactorRequired()) {
       return {
         twoFactorRequired: true,
         twoFactorSetupRequired: true,
@@ -531,8 +532,27 @@ export class PlatformAuthService {
     return {
       ...rest,
       twoFactorReady: Boolean(twoFactorSecret),
-      twoFactorEnforced: requireTwoFactor(),
+      twoFactorEnforced: await this.isTwoFactorRequired(),
     };
+  }
+
+  /**
+   * 2FA zorunlu mu? Panelden ayarlanabilir: `SystemSetting.platform.require_two_factor`
+   * (boolean) env'i geçersiz kılar; kayıt yoksa env `PLATFORM_REQUIRE_2FA`.
+   */
+  async isTwoFactorRequired(): Promise<boolean> {
+    const row = await this.prisma.client.systemSetting.findUnique({
+      where: { key: PLATFORM_2FA_SETTING_KEY },
+      select: { valueJson: true },
+    });
+    if (row) {
+      try {
+        return JSON.parse(row.valueJson) === true;
+      } catch {
+        return false;
+      }
+    }
+    return requireTwoFactor();
   }
 
   // -------------------------------------------------------------- yardımcı

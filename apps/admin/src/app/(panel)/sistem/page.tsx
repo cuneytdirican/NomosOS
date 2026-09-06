@@ -118,6 +118,69 @@ function readableValue(valueJson: string | null | undefined): string {
   return String(parsed);
 }
 
+const TWO_FACTOR_SETTING_KEY = "platform.require_two_factor";
+
+/** Panel iki adımlı doğrulama (2FA) zorunluluğunu tek tıkla aç/kapat. */
+function TwoFactorToggle({
+  settings,
+  loaded,
+  onSaved,
+}: {
+  settings: AdminSetting[];
+  loaded: boolean;
+  onSaved: () => void;
+}) {
+  const mutation = useMutation();
+  const row = settings.find((s) => s.key === TWO_FACTOR_SETTING_KEY);
+  const enabled = row ? parseJson<boolean>(row.valueJson, false) === true : false;
+
+  async function toggle() {
+    await mutation.run(
+      EP.settingsDetail(TWO_FACTOR_SETTING_KEY),
+      {
+        method: "PUT",
+        body: {
+          value: !enabled,
+          description: "Panel iki adımlı doğrulama (2FA) zorunluluğu",
+        },
+      },
+      {
+        successMessage: !enabled
+          ? "İki adımlı doğrulama açıldı. Panel girişlerinde TOTP istenecek."
+          : "İki adımlı doğrulama kapatıldı. Panele e-posta ve parolayla girilebilir.",
+        onSuccess: onSaved,
+      },
+    );
+  }
+
+  return (
+    <Card title="İki Aşamalı Doğrulama (Panel Girişi)">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="max-w-2xl text-sm text-steel-300">
+          <p>
+            Açıkken platform paneline giriş için authenticator (TOTP) zorunludur. Kapalıyken yalnız
+            e-posta ve parola yeterlidir. Büro ve müvekkil portalı girişleri bu ayardan etkilenmez.
+          </p>
+          <p className="mt-2">
+            Durum:{" "}
+            <Badge tone={enabled ? "green" : "yellow"}>{enabled ? "Açık" : "Kapalı"}</Badge>
+          </p>
+          {mutation.error && <p className="mt-2 text-sm text-red-500">{mutation.error}</p>}
+        </div>
+        <RoleGate action="system.settings" mutation>
+          <Button
+            variant={enabled ? "secondary" : "primary"}
+            disabled={!loaded || mutation.loading}
+            onClick={toggle}
+          >
+            {mutation.loading ? "Kaydediliyor…" : enabled ? "Kapat" : "Aç"}
+          </Button>
+        </RoleGate>
+      </div>
+    </Card>
+  );
+}
+
 function SettingsTab() {
   const res = useListResource<AdminSetting>(EP.settings);
   const [editing, setEditing] = useState<AdminSetting | null>(null);
@@ -173,6 +236,7 @@ function SettingsTab() {
         <code className="font-mono text-xs">.env</code> içinde kalır. Bakım modu tam kilidi gibi
         yıkıcı ayarlar dört-göz kapsamındadır; sunucu doğrudan uygulamaz.
       </InfoBox>
+      <TwoFactorToggle settings={res.data} loaded={res.loaded} onSaved={() => res.reload()} />
       <Card title={res.loaded ? `${res.data.length} ayar` : "Ayarlar"}>
         <ResourceView
           loading={res.loading}

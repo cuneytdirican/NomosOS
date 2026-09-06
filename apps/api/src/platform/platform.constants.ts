@@ -126,6 +126,13 @@ export function requireTwoFactor(): boolean {
 }
 
 /**
+ * Panel 2FA zorunluluğu artık ÇALIŞMA ANINDA panelden yönetilir: bu anahtardaki
+ * `SystemSetting` (boolean) değeri env'i geçersiz kılar. Kayıt yoksa env'e
+ * (`PLATFORM_REQUIRE_2FA`) düşülür. Admin > Sistem > İki Aşamalı Doğrulama.
+ */
+export const PLATFORM_2FA_SETTING_KEY = "platform.require_two_factor";
+
+/**
  * ÜRETİMDE 2FA'SIZ PANEL AÇILMAZ.
  *
  * Yorumda "üretimde true olmalı" yazmak bir yaptırım değildir; unutulduğunda
@@ -133,11 +140,13 @@ export function requireTwoFactor(): boolean {
  * kontrolüyle aynı desen: eksikse uygulama HİÇ AÇILMAZ.
  */
 export function assertTwoFactorPolicy(): void {
+  // 2FA zorunluluğu artık panelden (SystemSetting `platform.require_two_factor`)
+  // yönetildiği için açılışta SERT KAPATMA YAPILMAZ; env yalnızca kayıt yokken
+  // varsayılan olur. Üretimde env kapalıysa yalnızca uyarı düşülür.
   if (process.env.NODE_ENV === "production" && !requireTwoFactor()) {
-    throw new Error(
-      "PLATFORM_REQUIRE_2FA=true olmadan üretim ortamında panel açılamaz. Platform paneli " +
-        "tüm büroların üstverisine ve faturalama kayıtlarına bakar; tek faktörle korunamaz. " +
-        "Ortam değişkenini ayarlayın ve en az iki panel hesabına TOTP kurun."
+    console.warn(
+      "[2FA] Açılış: PLATFORM_REQUIRE_2FA env kapalı. Panel 2FA zorunluluğu " +
+        "SystemSetting 'platform.require_two_factor' değerinden okunur (Admin > Sistem)."
     );
   }
 }
