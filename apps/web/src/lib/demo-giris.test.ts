@@ -56,6 +56,12 @@ describe("Demo giriş sayfası ayrı ve gerçek", () => {
   it("üretimde kapatılabilir (NEXT_PUBLIC_DISABLE_DEMO)", () => {
     expect(DEMO_PAGE).toContain("NEXT_PUBLIC_DISABLE_DEMO");
   });
+
+  it("müvekkil (portal) demo bağlantısı sunar — ayrı uygulamaya yönlenir", () => {
+    expect(DEMO_PAGE).toContain("NEXT_PUBLIC_PORTAL_URL");
+    expect(DEMO_PAGE).toContain("/demo-giris");
+    expect(DEMO_PAGE).toMatch(/Müvekkil/);
+  });
 });
 
 describe("Rol bazlı menü süzmesi", () => {

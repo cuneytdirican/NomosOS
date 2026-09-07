@@ -62,6 +62,10 @@ const DEMO_ACCOUNTS = [
 
 const DEMO_PASSWORD = "Demo1234!";
 
+/** Müvekkil portalı AYRI bir uygulamadır (ayrı subdomain/kimlik); demo girişi oraya yönlenir. */
+const PORTAL_DEMO_URL =
+  (process.env.NEXT_PUBLIC_PORTAL_URL ?? "http://localhost:3003").replace(/\/+$/, "") + "/demo-giris";
+
 export default function DemoGirisPage() {
   const router = useRouter();
   const [busyRole, setBusyRole] = useState<string | null>(null);
@@ -156,6 +160,31 @@ export default function DemoGirisPage() {
               <p className="mt-1 text-[11px] text-slate-300">{account.email}</p>
             </button>
           ))}
+        </div>
+
+        {/* Müvekkil (Portal) demosu — büro rolleri dışında AYRI uygulama. */}
+        <div className="mt-4">
+          <a
+            href={PORTAL_DEMO_URL}
+            className="group flex flex-col rounded-2xl border border-teal-700 bg-teal-950/40 p-5 text-left transition-colors hover:border-teal-400 hover:bg-teal-900/40 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-white">Müvekkil (Portal)</span>
+                <span className="rounded-full bg-teal-800 px-2.5 py-0.5 text-[11px] font-medium text-teal-200">
+                  Ayrı portal · demo girişi
+                </span>
+              </div>
+              <p className="mt-2 max-w-xl text-sm text-slate-300">
+                Müvekkilin gözünden portal: dosya durumu, duruşmalar, yapılacaklar, belge yükleme,
+                rıza kayıtları ve ödemeler. Örnek müvekkil hesabıyla otomatik açılır.
+              </p>
+            </div>
+            <span className="mt-3 inline-flex shrink-0 items-center gap-1 rounded-lg bg-teal-500 px-4 py-2 text-sm font-semibold text-teal-950 transition-colors group-hover:bg-teal-400 sm:mt-0">
+              Müvekkil demosunu aç
+              <span className="transition-transform duration-200 group-hover:translate-x-0.5">→</span>
+            </span>
+          </a>
         </div>
 
         {error && (
