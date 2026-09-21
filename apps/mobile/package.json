@@ -37,6 +37,6 @@
     "@babel/core": "^7.25.2",
     "@types/react": "~18.3.12",
     "expo-build-properties": "~0.13.3",
-    "typescript": "^5.3.3"
+    "typescript": "^7.0.2"
   }
 }
