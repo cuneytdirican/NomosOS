@@ -9,9 +9,9 @@ duruşma, süre, görev, icra ve finans yönetimini tek platformda toplayan, üz
 
 ---
 
-**Bu proje [MindAeon](https://mindaeon.ai) ile geliştirilmiştir.** Herkes güle güle
-kullansın — canlı test sürümünü burada inceleyebilirsiniz:
-👉 **[https://nomosos.mobilteg.com](https://nomosos.mobilteg.com)**
+**Bu proje [MindAeon](https://mindaeon.ai) ile geliştirilmiştir.** MIT lisansıyla
+yayımlanmıştır — ticari kullanım dahil herkesin kullanımına açıktır. Canlı test
+sürümü: 👉 **[https://nomosos.mobilteg.com](https://nomosos.mobilteg.com)**
 
 ---
 
