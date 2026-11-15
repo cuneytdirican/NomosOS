@@ -17,3 +17,9 @@ postgres-data/
 
 # Değerlendirici için demo giriş bilgileri (parola içerir — commit edilmez)
 avukat-test-bilgileri.md
+
+# Yerel ajan checkpoint verisi (commit edilmez)
+.mindcode/
+
+# pnpm baglayici ayari (ortam bagimli; commit edilmez)
+.npmrc
