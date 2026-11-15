@@ -7,6 +7,14 @@ duruşma, süre, görev, icra ve finans yönetimini tek platformda toplayan, üz
 > Merkez AI değil, **DOSYA**. AI, büronun bütün operasyonel verisinin üzerinde
 > çalışan zekâ katmanıdır.
 
+---
+
+**Bu proje [MindAeon](https://mindaeon.ai) ile geliştirilmiştir.** Herkes güle güle
+kullansın — canlı test sürümünü burada inceleyebilirsiniz:
+👉 **[https://nomosos.mobilteg.com](https://nomosos.mobilteg.com)**
+
+---
+
 ## Durum (Eylül 2026)
 
 Üç persona (firma sahibi · yazılımcı/sistem yöneticisi · avukat/büro) boşluk analizinin
