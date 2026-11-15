@@ -6,7 +6,7 @@
 
 NomosOS'un tüm AI yetenekleri, dağınık "AI butonları" olarak değil, **tanımlı bir ajan kataloğu** olarak inşa edilir. Ajan = tetikleyicisi (olay / manuel / zamanlı), girdi sözleşmesi, çıktı şeması, kullandığı AI görev tipleri ve **insan onay noktası** açıkça tanımlanmış bir iş birimidir. Her koşu `AgentRun` kaydıyla izlenir: hangi ajan, hangi tetikleyiciyle, hangi model üzerinde, hangi girdiyle koştu ve çıktısı kim tarafından onaylandı/reddedildi. Bu, hem denetlenebilirlik (AuditLog) hem maliyet takibi (`AiUsageLog`) hem de "AI ne yaptı?" sorusunun her zaman cevaplanabilir olması içindir.
 
-Ajanlar doğrudan LLM sağlayıcısına bağlanmaz; **BYO-LLM katmanı** üzerinden çalışır. Her tenant kendi sağlayıcısını bağlar (`AiProviderConfig`: Anthropic, OpenAI ve OpenAI-uyumlu, Gemini, Ollama/yerel, özel endpoint) ve her **AI görev tipi** bir model sınıfına eşlenir (görev tipi → model eşleme tablosu). Böylece aynı ajan, bir büroda Claude ile, KVKK-hassas başka büroda yerel Ollama modeliyle koşar; kod değişmez.
+Ajanlar doğrudan LLM sağlayıcısına bağlanmaz; **BYO-LLM katmanı** üzerinden çalışır. Her tenant kendi sağlayıcısını bağlar (`AiProviderConfig`: Anthropic, OpenAI ve OpenAI-uyumlu, Gemini, Ollama/yerel, özel endpoint) ve her **AI görev tipi** bir model sınıfına eşlenir (görev tipi → model eşleme tablosu). Böylece aynı ajan, bir büroda Mindaeon ile, KVKK-hassas başka büroda yerel Ollama modeliyle koşar; kod değişmez.
 
 Halüsinasyon savunması mimarinin parçasıdır: içtihat/mevzuat atıfı üretebilen her ajanın çıktısı **Teyit/Doğrulama Ajanı'ndan zorunlu geçer**; kaynak göstermeyen bulgular sunucu tarafında elenir; doğrulanamayan atıflar kullanıcıya işaretli gösterilir ve dilekçe/iletişim gibi dışa dönük çıktılara aktarılamaz.
 

@@ -191,7 +191,7 @@ export const DECISION_TYPE_TONES: Record<string, BadgeTone> = {
 export const CLIENT_CATEGORIES = ["Kurumsal", "Bireysel", "Kamu", "STK"] as const;
 
 export const AI_PROVIDER_TYPE_LABELS: Record<string, string> = {
-  ANTHROPIC: "Anthropic (Claude)",
+  ANTHROPIC: "Anthropic (Mindaeon)",
   OPENAI_COMPAT: "OpenAI / OpenAI-uyumlu",
   OLLAMA: "Ollama (yerel)",
   GEMINI: "Google Gemini",

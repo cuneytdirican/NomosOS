@@ -900,7 +900,7 @@ function ModelPricesTab() {
                 </Select>
               </Field>
               <Field label="Model" hint="AiUsageLog.model ile birebir aynı yazılmalıdır.">
-                <Input value={model} onChange={(e) => setModel(e.target.value)} placeholder="claude-sonnet-5" />
+                <Input value={model} onChange={(e) => setModel(e.target.value)} placeholder="mindaeon-sonnet-5" />
               </Field>
               <Field label="Girdi fiyatı / 1M token" hint="En fazla 4 ondalık hane.">
                 <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="2.0000" />

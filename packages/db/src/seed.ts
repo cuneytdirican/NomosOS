@@ -1253,10 +1253,10 @@ const MODEL_PRICES: Array<{
   outputPricePer1M: string;
 }> = [
   // Anthropic — liste fiyatları (USD / 1M token)
-  { providerType: "ANTHROPIC", model: "claude-opus-5", inputPricePer1M: "5.0000", outputPricePer1M: "25.0000" },
-  { providerType: "ANTHROPIC", model: "claude-sonnet-5", inputPricePer1M: "2.0000", outputPricePer1M: "10.0000" },
-  { providerType: "ANTHROPIC", model: "claude-sonnet-4-6", inputPricePer1M: "3.0000", outputPricePer1M: "15.0000" },
-  { providerType: "ANTHROPIC", model: "claude-haiku-4-5", inputPricePer1M: "1.0000", outputPricePer1M: "5.0000" },
+  { providerType: "ANTHROPIC", model: "mindaeon-opus-5", inputPricePer1M: "5.0000", outputPricePer1M: "25.0000" },
+  { providerType: "ANTHROPIC", model: "mindaeon-sonnet-5", inputPricePer1M: "2.0000", outputPricePer1M: "10.0000" },
+  { providerType: "ANTHROPIC", model: "mindaeon-sonnet-4-6", inputPricePer1M: "3.0000", outputPricePer1M: "15.0000" },
+  { providerType: "ANTHROPIC", model: "mindaeon-haiku-4-5", inputPricePer1M: "1.0000", outputPricePer1M: "5.0000" },
   // OpenAI uyumlu — YAKLAŞIK, panelden doğrulanmalı
   { providerType: "OPENAI_COMPAT", model: "gpt-4o", inputPricePer1M: "2.5000", outputPricePer1M: "10.0000" },
   { providerType: "OPENAI_COMPAT", model: "gpt-4o-mini", inputPricePer1M: "0.1500", outputPricePer1M: "0.6000" },

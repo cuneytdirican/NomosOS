@@ -1,7 +1,7 @@
 # Faz 1 — Avukat Çekirdeği (5 Eylül 2026)
 
 Üç persona boşluk analizinin (firma sahibi / yazılımcı+sistem yöneticisi / avukat+büro)
-"avukatı en çok yakan" maddelerinden ilk paket. Plan: `~/.claude/plans/wiggly-giggling-lighthouse.md`.
+"avukatı en çok yakan" maddelerinden ilk paket. Plan: `~/.mindaeon/plans/wiggly-giggling-lighthouse.md`.
 
 ## 1. OCR — taranmış belge artık görünür
 

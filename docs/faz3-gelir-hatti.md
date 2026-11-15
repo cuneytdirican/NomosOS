@@ -1,7 +1,7 @@
 # Faz 3 — Gelir Hattı (6 Eylül 2026)
 
 Firma sahibi personasının "para toplayamayan SaaS" bulgularını kapatan paket. Plan:
-`~/.claude/plans/wiggly-giggling-lighthouse.md` (Faz 3). Kararlar: iyzico **adaptör + sözleşme
+`~/.mindaeon/plans/wiggly-giggling-lighthouse.md` (Faz 3). Kararlar: iyzico **adaptör + sözleşme
 testi** (canlı doğrulama sandbox anahtarıyla), SIMULASYON test yığınında uçtan uca; sağlayıcı
 yoksa **dürüst 503 + havale/EFT + panelden "ödendi işaretle"**.
 

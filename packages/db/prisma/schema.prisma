@@ -1510,7 +1510,7 @@ model AiProviderConfig {
   id              String         @id @default(uuid())
   tenantId        String
   tenant          Tenant         @relation(fields: [tenantId], references: [id])
-  name            String // Kullanıcının verdiği ad, örn. "Büro Claude hesabı"
+  name            String // Kullanıcının verdiği ad, örn. "Büro Mindaeon hesabı"
   type            AiProviderType
   encryptedApiKey String? // AES-256-GCM ile şifreli (MASTER_ENCRYPTION_KEY)
   baseUrl         String? // OPENAI_COMPAT / OLLAMA / CUSTOM için

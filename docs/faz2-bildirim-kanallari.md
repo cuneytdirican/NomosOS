@@ -1,7 +1,7 @@
 # Faz 2 — Bildirim Gerçek Kanallar (5 Eylül 2026)
 
 Üç persona boşluk analizinin "hiçbir dış bildirim gitmiyor" bulgusunu kapatan paket.
-Plan: `~/.claude/plans/wiggly-giggling-lighthouse.md` (Faz 2). Karar: **SMTP tam çalışır**;
+Plan: `~/.mindaeon/plans/wiggly-giggling-lighthouse.md` (Faz 2). Karar: **SMTP tam çalışır**;
 SMS/WhatsApp **adaptör + fixture sözleşme testi** (sağlayıcı hesabı sözleşme sonrası).
 
 ## 1. E-posta — `MailService` (tek boğum noktası)

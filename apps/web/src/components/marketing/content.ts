@@ -297,7 +297,7 @@ export const byollm = {
   title: "Verileriniz kimin sunucusunda?",
   lead: "NomosOS'u kendi yapay zekâ aboneliğinizle kullanabilirsiniz. Hangi modeli kullanacağınıza siz karar verirsiniz — ve bu kararı sonradan değiştirebilirsiniz.",
   providers: [
-    "Anthropic Claude",
+    "Anthropic Mindaeon",
     "OpenAI",
     "Google Gemini",
     "OpenAI uyumlu her servis (Azure, OpenRouter, Groq, vLLM)",

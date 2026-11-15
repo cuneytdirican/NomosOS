@@ -61,7 +61,7 @@ docker-compose.prod.env
 .idea
 .DS_Store
 Thumbs.db
-.claude
+.mindaeon
 
 # --- Docker'ın kendisi (imaja gerek yok) ---
 Dockerfile

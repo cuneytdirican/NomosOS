@@ -260,7 +260,7 @@ Dört kart:
 > NomosOS'u kendi yapay zekâ aboneliğinizle kullanabilirsiniz. Hangi modeli
 > kullanacağınıza siz karar verirsiniz — ve bu kararı sonradan değiştirebilirsiniz.
 
-Sağlayıcı listesi (ince çerçeveli rozetler): **Anthropic Claude · OpenAI · Google Gemini ·
+Sağlayıcı listesi (ince çerçeveli rozetler): **Anthropic Mindaeon · OpenAI · Google Gemini ·
 OpenAI uyumlu her servis (Azure, OpenRouter, Groq, vLLM) · Ollama ile yerel model ·
 Kendi özel sunucunuz**
 

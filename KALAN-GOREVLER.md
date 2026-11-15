@@ -25,7 +25,7 @@
 
 # 🔖 KALDIĞIM YER — 7 Eylül 2026, 03:30
 
-> Üç persona planı (`~/.claude/plans/wiggly-giggling-lighthouse.md`):
+> Üç persona planı (`~/.mindaeon/plans/wiggly-giggling-lighthouse.md`):
 > **Faz 0 ✅ · 1 ✅ · 2 ✅ · 3 ✅ · 4 ✅ · 5 ✅ · 6 ✅ · 7 ✅ · 8 ✅ (bu commit)** — plan TAMAMLANDI.
 
 **FAZ 8 — BÜYÜME (self-signup HARİÇ) TAMAMLANDI** (belge: `docs/faz8-buyume.md`):
@@ -62,7 +62,7 @@ self-signup (kullanıcı kararı: manuel kalır).
 
 ## 🔖 ÖNCEKİ KALDIĞIM YER — 6 Eylül 2026, 22:30
 
-> Üç persona planı (`~/.claude/plans/wiggly-giggling-lighthouse.md`):
+> Üç persona planı (`~/.mindaeon/plans/wiggly-giggling-lighthouse.md`):
 > **Faz 0 ✅ · 1 ✅ · 2 ✅ · 3 ✅ · 4 ✅ · 5 ✅ · 6 ✅ · 7 ✅ (bu commit)** · sırada Faz 8 (büyüme; self-signup HARİÇ).
 
 **FAZ 7 — BÜRO YÖNETİMİ + BELGE + MOBİL/PORTAL TAMAMLANDI** (belge: `docs/faz7-buro-belge-mobil-portal.md`):
@@ -104,7 +104,7 @@ sihirbazı (dosya/duruşma/belge CSV+ZIP).
 
 ## 🔖 ÖNCEKİ KALDIĞIM YER — 6 Eylül 2026, 17:30
 
-> Üç persona planı (`~/.claude/plans/wiggly-giggling-lighthouse.md`):
+> Üç persona planı (`~/.mindaeon/plans/wiggly-giggling-lighthouse.md`):
 > **Faz 0 ✅ · 1 ✅ · 2 ✅ · 3 ✅ · 4 ✅ · 5 ✅ · 6 ✅ (bu commit)** · sırada Faz 7 (büro yönetimi/belge/mobil/portal).
 
 **FAZ 6 — UYAP / İCRA / FİNANS TAMAMLANDI** (belge: `docs/faz6-uyap-icra-finans.md`):
@@ -138,7 +138,7 @@ matrisi + toplu işlem; büro dilekçe şablonu yükleme + UDF'yi UYAP'a gönder
 
 ## 🔖 ÖNCEKİ KALDIĞIM YER — 6 Eylül 2026, 11:00
 
-> Üç persona planı (`~/.claude/plans/wiggly-giggling-lighthouse.md`):
+> Üç persona planı (`~/.mindaeon/plans/wiggly-giggling-lighthouse.md`):
 > **Faz 0 ✅ · 1 ✅ · 2 ✅ · 3 ✅ · 4 ✅ · 5 ✅ (bu commit)** · sırada Faz 6 (UYAP/icra/finans).
 
 **FAZ 4 canlı doğrulama (5aefeef + 05a432e):** readiness `ready` (pg/redis/s3 up), `x-request-id`
@@ -172,7 +172,7 @@ kronometre + timesheet onayı, storno, AAÜT yıllık iş, maktu harç tablosu, 
 
 ## 🔖 ÖNCEKİ KALDIĞIM YER — 6 Eylül 2026, 08:00
 
-> Üç persona planı (`~/.claude/plans/wiggly-giggling-lighthouse.md`) yürüyor:
+> Üç persona planı (`~/.mindaeon/plans/wiggly-giggling-lighthouse.md`) yürüyor:
 > **Faz 0 ✅ · Faz 1 ✅ · Faz 2 ✅ · Faz 3 ✅ · Faz 4 ✅ (bu commit)** · sırada Faz 5 (RAG ölçek + test altyapısı).
 
 **FAZ 4 — OPERASYON/SRE TAMAMLANDI** (CHANGELOG "Yayımlanmamış", `docs/uretim-dagitimi.md` §0/§3.4/§4.6/§5.1/§7.2/§7.3/§6.5 güncel):
@@ -204,7 +204,7 @@ Playwright dumanı CI'da.
 
 ## 🔖 ÖNCEKİ KALDIĞIM YER — 6 Eylül 2026, 04:30
 
-> Üç persona planı (`~/.claude/plans/wiggly-giggling-lighthouse.md`) yürüyor:
+> Üç persona planı (`~/.mindaeon/plans/wiggly-giggling-lighthouse.md`) yürüyor:
 > **Faz 0 ✅ · Faz 1 ✅ · Faz 2 ✅ · Faz 3 ✅ (bu commit)** · sırada Faz 4 (operasyon/SRE).
 
 **FAZ 3 — GELİR HATTI TAMAMLANDI** (belge: `docs/faz3-gelir-hatti.md`):
@@ -243,7 +243,7 @@ rotasyonu; README/`docs/uretim-dagitimi.md` §0, OpenAPI (dev), CHANGELOG/CONTRI
 
 ## 🔖 ÖNCEKİ KALDIĞIM YER — 6 Eylül 2026, 01:30
 
-> Üç persona planı (`~/.claude/plans/wiggly-giggling-lighthouse.md`) yürüyor:
+> Üç persona planı (`~/.mindaeon/plans/wiggly-giggling-lighthouse.md`) yürüyor:
 > **Faz 0 ✅ · Faz 1 ✅ · Faz 2 ✅ (bu commit)** · sırada Faz 3 (gelir hattı).
 
 **FAZ 2 — BİLDİRİM GERÇEK KANALLAR TAMAMLANDI** (belge: `docs/faz2-bildirim-kanallari.md`):
@@ -277,7 +277,7 @@ tekil), iyzico adaptörü + webhook imza + kredi satın alma `BEKLIYOR→ODENDI`
 
 ## 🔖 ÖNCEKİ KALDIĞIM YER — 5 Eylül 2026, 23:30
 
-> Üç persona planı (`~/.claude/plans/wiggly-giggling-lighthouse.md`) yürüyor:
+> Üç persona planı (`~/.mindaeon/plans/wiggly-giggling-lighthouse.md`) yürüyor:
 > **Faz 0 ✅ (`eaccbb4`) · Faz 1 ✅ (`8889048` + `524afaf`)** · sırada Faz 2.
 
 **FAZ 1 — AVUKAT ÇEKİRDEĞİ TAMAMLANDI** (belge: `docs/faz1-avukat-cekirdegi.md`; canlı doğrulandı):
@@ -310,7 +310,7 @@ budama işi. Mevcut registry: `communication/channel-providers.ts` (Noop/Portal)
 ## 🔖 ÖNCEKİ KALDIĞIM YER — 5 Eylül 2026, 20:30
 
 > **ÜÇ PERSONA BOŞLUK ANALİZİ → 9 FAZLI PLAN** onaylandı (plan dosyası:
-> `~/.claude/plans/wiggly-giggling-lighthouse.md`; ~150 kanıtlı bulgu: firma sahibi /
+> `~/.mindaeon/plans/wiggly-giggling-lighthouse.md`; ~150 kanıtlı bulgu: firma sahibi /
 > yazılımcı+sistem yöneticisi / avukat+büro). Sıra: Faz 0 kritikler → 1 avukat çekirdeği →
 > 2 bildirim kanalları → 3 gelir hattı → 4 operasyon → 5 RAG/test → 6 UYAP/icra/finans →
 > 7 büro yönetimi → 8 büyüme. Kararlar: dış entegrasyonlar adaptör + sözleşme testi (SMTP
@@ -1064,7 +1064,7 @@ GitHub'a gönderim, kapanış raporu).
 ## Workflow bilgisi (gerekirse)
 
 Ölen düzeltme workflow'u: `resumeFromRunId: "wf_e8e70670-0c4"`,
-script: `C:\Users\cdiri\.claude\projects\C--Projeler-NomosOS\f2f9eb96-2326-4f00-a47b-4a6c30f86d9c\workflows\scripts\nomosos-derin-denetim-wf_e8e70670-0c4.js`
+script: `C:\Users\cdiri\.mindaeon\projects\C--Projeler-NomosOS\f2f9eb96-2326-4f00-a47b-4a6c30f86d9c\workflows\scripts\nomosos-derin-denetim-wf_e8e70670-0c4.js`
 Tamamlanan ajanlar önbellekten döner. **Ama muhtemelen daha temizi: kalan 4 kritik bulgu için
 yeni ve dar kapsamlı bir workflow açmak** — denetim ve rapor zaten bitti.
 

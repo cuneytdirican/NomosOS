@@ -15,7 +15,7 @@ Kod: `packages/ai`. Bu doküman katmanın sözleşmesini ve kullanım kuralları
 
 | Tür | Adaptör | Not |
 |-----|---------|-----|
-| ANTHROPIC | `providers/anthropic.ts` | Claude API (`/v1/messages`) |
+| ANTHROPIC | `providers/anthropic.ts` | Mindaeon API (`/v1/messages`) |
 | OPENAI_COMPAT | `providers/openai-compat.ts` | OpenAI + Azure OpenAI, OpenRouter, Groq, vLLM, LM Studio… — tek fark `baseUrl` (+ gerekirse ek header) |
 | OLLAMA | `providers/ollama.ts` | Yerel modeller; varsayılan `http://localhost:11434`; **veri dışarı çıkmaz** |
 | GEMINI | `providers/gemini.ts` | Google `generateContent` |

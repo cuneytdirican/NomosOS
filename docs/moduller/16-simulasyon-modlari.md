@@ -32,7 +32,7 @@ ASCII wireframe — Koşu Sonucu (OPPONENT_SIMULATION):
 
 ```
 ┌─ 2026/145 — Karşı Taraf Avukatı Simülasyonu (koşu #4, bugün 09:12) ┐
-│ Model: (BYO-LLM: claude-*)  Girdi: 14 belge, strateji v5           │
+│ Model: (BYO-LLM: mindaeon-*)  Girdi: 14 belge, strateji v5           │
 ├────────────────────────────────────────────────────────────────────┤
 │ EN GÜÇLÜ 7 ARGÜMAN (güce göre sıralı)                              │
 │ 1. 🔴 Zamanaşımı def'i               Güç: 9/10                     │

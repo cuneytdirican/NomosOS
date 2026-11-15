@@ -317,7 +317,7 @@ export const ANNOUNCEMENT_AUDIENCE_LABELS: Record<string, string> = {
 // ---------- AI ----------
 
 const PROVIDER_LABEL_TEXT: Record<AiProviderType, string> = {
-  ANTHROPIC: "Anthropic (Claude)",
+  ANTHROPIC: "Anthropic (Mindaeon)",
   OPENAI_COMPAT: "OpenAI / OpenAI-uyumlu",
   OLLAMA: "Ollama (yerel)",
   GEMINI: "Google Gemini",

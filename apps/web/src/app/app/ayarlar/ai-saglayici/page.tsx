@@ -58,7 +58,7 @@ const FIELD_RULES: Record<AiProviderType, { apiKey: boolean; baseUrl: boolean; c
 };
 
 const MODEL_PLACEHOLDERS: Record<AiProviderType, string> = {
-  ANTHROPIC: "örn. claude-sonnet-4-5",
+  ANTHROPIC: "örn. mindaeon-sonnet-4-5",
   OPENAI_COMPAT: "örn. gpt-4o-mini",
   OLLAMA: "örn. llama3.1:70b",
   GEMINI: "örn. gemini-2.0-flash",
@@ -620,7 +620,7 @@ export default function AiSaglayiciPage() {
       <Modal open={modalOpen} title="Yeni AI Sağlayıcı" onClose={() => setModalOpen(false)} wide>
         <form onSubmit={handleCreate} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Ad" hint='Örn. "Büro Claude hesabı"'>
+            <Field label="Ad" hint='Örn. "Büro Mindaeon hesabı"'>
               <Input
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
