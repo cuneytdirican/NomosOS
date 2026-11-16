@@ -15,13 +15,13 @@
     "studio": "node scripts/with-root-env.mjs prisma studio"
   },
   "dependencies": {
-    "@prisma/client": "^6.2.1",
+    "@prisma/client": "^7.10.1",
     "bcryptjs": "^2.4.3",
     "@nomosos/legal-core": "workspace:*"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
-    "prisma": "^6.2.1",
+    "prisma": "^7.10.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
